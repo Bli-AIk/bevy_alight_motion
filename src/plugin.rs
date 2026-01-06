@@ -1,10 +1,16 @@
 //! Bevy plugin for Alight Motion support.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::image::Image;
 use bevy::prelude::*;
 
 use crate::animation::{AmPlayback, advance_playback, animate_opacity, animate_transform};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig, spawn_scene};
+
+/// Resource holding the white pixel texture used for solid color sprites.
+#[derive(Resource)]
+pub struct AmWhitePixel(pub Handle<Image>);
 
 /// Plugin providing Alight Motion support for Bevy.
 pub struct AlightMotionPlugin;
@@ -14,6 +20,7 @@ impl Plugin for AlightMotionPlugin {
         app.init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
+            .add_systems(Startup, setup_white_pixel)
             .add_systems(
                 Update,
                 (
@@ -27,13 +34,39 @@ impl Plugin for AlightMotionPlugin {
     }
 }
 
+/// Create a 1x1 white pixel texture for solid color sprites.
+fn setup_white_pixel(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+
+    let white_pixel = Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[255, 255, 255, 255], // RGBA white pixel
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+
+    let handle = images.add(white_pixel);
+    commands.insert_resource(AmWhitePixel(handle));
+}
+
 /// System to spawn entities when a project finishes loading.
 fn spawn_loaded_projects(
     mut commands: Commands,
     mut query: Query<(Entity, &mut AmProjectRoot)>,
     projects: Res<Assets<AmProject>>,
     mut playback: ResMut<AmPlayback>,
+    white_pixel: Option<Res<AmWhitePixel>>,
 ) {
+    // Wait for white pixel texture to be created
+    let Some(white_pixel) = white_pixel else {
+        return;
+    };
+
     for (entity, mut root) in query.iter_mut() {
         if root.spawned {
             continue;
@@ -69,6 +102,7 @@ fn spawn_loaded_projects(
                 &mut commands,
                 &project.scene,
                 &project.images,
+                &white_pixel.0,
                 entity,
                 &config,
             );

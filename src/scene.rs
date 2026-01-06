@@ -90,19 +90,29 @@ pub fn spawn_scene(
     commands: &mut Commands,
     scene: &AmScene,
     images: &HashMap<String, Handle<Image>>,
+    white_pixel: &Handle<Image>,
     parent: Entity,
     config: &AmSceneConfig,
 ) -> HashMap<u64, Entity> {
     let mut entity_map: HashMap<u64, Entity> = HashMap::new();
     let mut parent_relations: Vec<(Entity, u64)> = Vec::new();
 
+    // In AM, layers at the beginning of the XML are rendered on top (higher z).
+    // So we need to reverse the z-order: first layer gets highest z, last gets lowest.
+    let layer_count = scene.layers.len();
+    println!(
+        "spawn_scene: layer_count={}, z_spacing={}",
+        layer_count, config.z_spacing
+    );
+
     // First pass: create all entities and collect parent relationships
     for (idx, layer) in scene.layers.iter().enumerate() {
-        let z = idx as f32 * config.z_spacing;
+        // Reverse z order: first layer in XML = highest z (on top)
+        let z = (layer_count - 1 - idx) as f32 * config.z_spacing;
 
         match layer {
             AmLayer::Shape(shape) => {
-                let entity = spawn_shape(commands, shape, images, config, z);
+                let entity = spawn_shape(commands, shape, images, white_pixel, config, z);
                 entity_map.insert(shape.id, entity);
                 if shape.parent != 0 {
                     parent_relations.push((entity, shape.parent));
@@ -120,7 +130,7 @@ pub fn spawn_scene(
                 }
             }
             AmLayer::EmbedScene(embed) => {
-                let entity = spawn_embed_scene(commands, embed, images, config, z);
+                let entity = spawn_embed_scene(commands, embed, images, white_pixel, config, z);
                 entity_map.insert(embed.id, entity);
                 if embed.parent != 0 {
                     parent_relations.push((entity, embed.parent));
@@ -189,6 +199,7 @@ fn spawn_shape(
     commands: &mut Commands,
     shape: &AmShape,
     images: &HashMap<String, Handle<Image>>,
+    white_pixel: &Handle<Image>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -204,12 +215,13 @@ fn spawn_shape(
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
 
     println!(
-        "Spawning shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), fill={}, image={}",
+        "Spawning shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), fill={}, image={}",
         shape.label,
         shape.id,
         shape.parent,
         tx,
         ty,
+        z,
         sx,
         sy,
         opacity,
@@ -266,17 +278,34 @@ fn spawn_shape(
             println!("  -> Image not found: {}", shape.fill_image);
         }
     } else if shape.fill_type == "color" {
-        // Color fill - create a colored sprite
+        // Color fill - create a colored sprite using white pixel texture
         let color = if let Some(fill_color) = &shape.fill_color {
-            crate::schema::parse_color(&fill_color.value)
-                .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
-                .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
+            // Try static value first, then check keyframes
+            if !fill_color.value.is_empty() {
+                crate::schema::parse_color(&fill_color.value)
+                    .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
+                    .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
+            } else if !fill_color.keyframes.is_empty() {
+                // Get the initial color from keyframes (sorted by time)
+                let mut sorted: Vec<_> = fill_color.keyframes.iter().collect();
+                sorted.sort_by(|a, b| {
+                    a.time
+                        .partial_cmp(&b.time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                crate::schema::parse_color(&sorted[0].value)
+                    .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
+                    .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
+            } else {
+                Color::srgba(1.0, 1.0, 1.0, opacity)
+            }
         } else {
             Color::srgba(1.0, 1.0, 1.0, opacity)
         };
 
-        println!("  -> Added color sprite");
+        println!("  -> Added color sprite with white pixel texture");
         entity.insert(Sprite {
+            image: white_pixel.clone(),
             color,
             custom_size: Some(Vec2::new(width, height)),
             ..default()
@@ -345,6 +374,7 @@ fn spawn_embed_scene(
     commands: &mut Commands,
     embed: &crate::schema::AmEmbedScene,
     images: &HashMap<String, Handle<Image>>,
+    white_pixel: &Handle<Image>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -402,7 +432,14 @@ fn spawn_embed_scene(
         ..config.clone()
     };
 
-    spawn_scene(commands, &embed.scene, images, entity, &nested_config);
+    spawn_scene(
+        commands,
+        &embed.scene,
+        images,
+        white_pixel,
+        entity,
+        &nested_config,
+    );
 
     entity
 }

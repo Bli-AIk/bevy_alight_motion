@@ -525,12 +525,16 @@ pub struct AmEmbedScene {
     pub scene: Box<AmScene>,
 }
 
-/// Fill color definition.
+/// Fill color definition (can be static or animated).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AmFillColor {
-    /// Color value in #AARRGGBB format.
+    /// Static color value in #AARRGGBB format.
     #[serde(rename = "@value", default)]
     pub value: String,
+
+    /// Keyframes for animated fill color.
+    #[serde(rename = "kf", default)]
+    pub keyframes: Vec<AmKeyframe>,
 }
 
 /// Transform container with animated properties.
