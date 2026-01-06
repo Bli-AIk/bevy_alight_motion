@@ -128,6 +128,46 @@ pub fn spawn_scene(
                     commands.entity(parent).add_child(entity);
                 }
             }
+            AmLayer::Bookmark(_) => {
+                // Bookmarks are non-visual timeline markers, skip them
+            }
+            AmLayer::Text(text) => {
+                // TODO: Text rendering is not yet implemented, skip for now
+                println!(
+                    "Skipping text layer '{}' (id={}) - text rendering not implemented",
+                    text.label, text.id
+                );
+            }
+            AmLayer::Audio(audio) => {
+                // TODO: Audio playback is not yet implemented, skip for now
+                println!(
+                    "Skipping audio layer '{}' (id={}) - audio not implemented",
+                    audio.label, audio.id
+                );
+            }
+            AmLayer::Camera(camera) => {
+                // TODO: Camera layer is not yet implemented, skip for now
+                println!(
+                    "Skipping camera layer '{}' (id={}) - camera not implemented",
+                    camera.label, camera.id
+                );
+            }
+            AmLayer::Image(image) => {
+                let entity = spawn_image(commands, image, images, config, z);
+                entity_map.insert(image.id, entity);
+                if image.parent != 0 {
+                    parent_relations.push((entity, image.parent));
+                } else {
+                    commands.entity(parent).add_child(entity);
+                }
+            }
+            AmLayer::Video(video) => {
+                // TODO: Video playback is not yet implemented, skip for now
+                println!(
+                    "Skipping video layer '{}' (id={}) - video not implemented",
+                    video.label, video.id
+                );
+            }
         }
     }
 
@@ -365,6 +405,90 @@ fn spawn_embed_scene(
     spawn_scene(commands, &embed.scene, images, entity, &nested_config);
 
     entity
+}
+
+/// Spawn an image layer.
+fn spawn_image(
+    commands: &mut Commands,
+    image: &crate::schema::AmImage,
+    images: &HashMap<String, Handle<Image>>,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Entity {
+    let has_parent = image.parent != 0;
+    let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&image.transform.rotation);
+    let (sx, sy) = get_initial_scale(&image.transform.scale);
+    let opacity = get_initial_opacity(&image.transform.opacity);
+    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
+
+    // Get size from properties
+    let (width, height) = get_shape_size(&image.properties, &image.fill_type);
+
+    println!(
+        "Spawning image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), fill={}",
+        image.label,
+        image.id,
+        image.parent,
+        tx,
+        ty,
+        sx,
+        sy,
+        opacity,
+        width,
+        height,
+        image.fill_image
+    );
+
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+
+    let mut entity = commands.spawn((
+        AmLayerMarker {
+            id: image.id,
+            label: image.label.clone(),
+        },
+        AmAnimated {
+            layer_id: image.id,
+            start_time: image.start_time,
+            end_time: image.end_time,
+            time_offset: config.time_offset,
+            location: image.transform.location.clone(),
+            rotation: image.transform.rotation.clone(),
+            scale: image.transform.scale.clone(),
+            opacity: image.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x,
+            effect_pos_y,
+        },
+        transform,
+        GlobalTransform::default(),
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    ));
+
+    // Add sprite for media fill
+    if !image.fill_image.is_empty() {
+        if let Some(handle) = images.get(&image.fill_image) {
+            println!("  -> Added image sprite with handle");
+            entity.insert(Sprite {
+                image: handle.clone(),
+                color: Color::srgba(1.0, 1.0, 1.0, opacity),
+                custom_size: Some(Vec2::new(width, height)),
+                ..default()
+            });
+        } else {
+            println!("  -> Image not found: {}", image.fill_image);
+        }
+    }
+
+    entity.id()
 }
 
 /// Get initial location from animated property.

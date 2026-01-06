@@ -116,6 +116,254 @@ pub enum AmLayer {
     Nullobj(AmNullObj),
     /// Embedded sub-scene (pre-composition).
     EmbedScene(AmEmbedScene),
+    /// Timeline bookmark marker (non-visual, for organization).
+    Bookmark(AmBookmark),
+    /// Text layer.
+    Text(AmText),
+    /// Audio layer.
+    Audio(AmAudio),
+    /// Camera layer.
+    Camera(AmCamera),
+    /// Image layer (alternative to shape with media fill).
+    Image(AmImage),
+    /// Video layer.
+    Video(AmVideo),
+}
+
+/// Bookmark marker for timeline organization (non-visual).
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmBookmark {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Bookmark label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// Time position in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// End time in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+}
+
+/// Text layer.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmText {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Layer label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// In-point in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// Out-point in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+
+    /// Parent layer ID.
+    #[serde(rename = "@parent", default)]
+    pub parent: u64,
+
+    /// Fill type.
+    #[serde(rename = "@fillType", default)]
+    pub fill_type: String,
+
+    /// Transform data.
+    #[serde(default)]
+    pub transform: AmTransform,
+
+    /// Text content.
+    #[serde(rename = "@textContent", default)]
+    pub text_content: String,
+
+    /// Font family.
+    #[serde(rename = "@fontFamily", default)]
+    pub font_family: String,
+
+    /// Font size.
+    #[serde(rename = "@fontSize", default)]
+    pub font_size: f32,
+
+    /// Effects applied to this text.
+    #[serde(rename = "effect", default)]
+    pub effects: Vec<AmEffect>,
+
+    /// Fill color.
+    #[serde(rename = "fillColor", default)]
+    pub fill_color: Option<AmFillColor>,
+
+    /// Text properties.
+    #[serde(rename = "property", default)]
+    pub properties: Vec<AmProperty>,
+}
+
+/// Audio layer (non-visual, for audio playback).
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmAudio {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Layer label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// In-point in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// Out-point in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+
+    /// Parent layer ID.
+    #[serde(rename = "@parent", default)]
+    pub parent: u64,
+
+    /// Audio source URI.
+    #[serde(rename = "@source", default)]
+    pub source: String,
+
+    /// Volume level.
+    #[serde(rename = "@volume", default = "default_volume")]
+    pub volume: f32,
+
+    /// Audio properties.
+    #[serde(rename = "property", default)]
+    pub properties: Vec<AmProperty>,
+}
+
+fn default_volume() -> f32 {
+    1.0
+}
+
+/// Camera layer.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmCamera {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Layer label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// In-point in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// Out-point in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+
+    /// Parent layer ID.
+    #[serde(rename = "@parent", default)]
+    pub parent: u64,
+
+    /// Transform data.
+    #[serde(default)]
+    pub transform: AmTransform,
+
+    /// Camera properties.
+    #[serde(rename = "property", default)]
+    pub properties: Vec<AmProperty>,
+}
+
+/// Image layer (standalone image, similar to shape with media fill).
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmImage {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Layer label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// In-point in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// Out-point in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+
+    /// Parent layer ID.
+    #[serde(rename = "@parent", default)]
+    pub parent: u64,
+
+    /// Fill type.
+    #[serde(rename = "@fillType", default)]
+    pub fill_type: String,
+
+    /// Fill image URI.
+    #[serde(rename = "@fillImage", default)]
+    pub fill_image: String,
+
+    /// Transform data.
+    #[serde(default)]
+    pub transform: AmTransform,
+
+    /// Image properties.
+    #[serde(rename = "property", default)]
+    pub properties: Vec<AmProperty>,
+
+    /// Effects applied to this image.
+    #[serde(rename = "effect", default)]
+    pub effects: Vec<AmEffect>,
+}
+
+/// Video layer.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmVideo {
+    /// Unique identifier.
+    #[serde(rename = "@id", default)]
+    pub id: u64,
+
+    /// Layer label/name.
+    #[serde(rename = "@label", default)]
+    pub label: String,
+
+    /// In-point in milliseconds.
+    #[serde(rename = "@startTime", default)]
+    pub start_time: i32,
+
+    /// Out-point in milliseconds.
+    #[serde(rename = "@endTime", default)]
+    pub end_time: i32,
+
+    /// Parent layer ID.
+    #[serde(rename = "@parent", default)]
+    pub parent: u64,
+
+    /// Fill type.
+    #[serde(rename = "@fillType", default)]
+    pub fill_type: String,
+
+    /// Video source URI.
+    #[serde(rename = "@source", default)]
+    pub source: String,
+
+    /// Transform data.
+    #[serde(default)]
+    pub transform: AmTransform,
+
+    /// Video properties.
+    #[serde(rename = "property", default)]
+    pub properties: Vec<AmProperty>,
+
+    /// Effects applied to this video.
+    #[serde(rename = "effect", default)]
+    pub effects: Vec<AmEffect>,
 }
 
 /// Common layer properties.

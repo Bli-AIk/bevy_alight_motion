@@ -1,5 +1,14 @@
 //! Example player for Alight Motion projects.
 //!
+//! Usage:
+//!   cargo run -p bevy_alight_motion --example player -- <project_name>
+//!
+//! Available projects:
+//!   - simple_gb (default)
+//!   - complex_1
+//!   - complex_2
+//!   - complex_3
+//!
 //! Controls:
 //! - Space: Play/Pause toggle
 //! - R: Reset to beginning (keeps current play state)
@@ -11,11 +20,33 @@
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
 
+/// Get the project file based on CLI argument.
+fn get_project_file() -> String {
+    let args: Vec<String> = std::env::args().collect();
+    let project_name = args.get(1).map(|s| s.as_str()).unwrap_or("simple_gb");
+
+    let path = match project_name {
+        "simple_gb" => "am/simple_gb.amproj",
+        "complex_1" => "am/complex_examples_1.amproj",
+        "complex_2" => "am/complex_examples_2.amproj",
+        "complex_3" => "am/complex_examples_3.amproj",
+        other => {
+            // Try to use the argument directly as a path
+            return format!("am/{}.amproj", other);
+        }
+    };
+
+    path.to_string()
+}
+
 fn main() {
+    let project_file = get_project_file();
+    println!("Loading project: {}", project_file);
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Alight Motion Player".to_string(),
+                title: format!("Alight Motion Player - {}", project_file),
                 resolution: (1280, 960).into(),
                 resizable: false,
                 ..default()
@@ -24,22 +55,27 @@ fn main() {
         }))
         // Black background matching AM project
         .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ProjectFile(project_file))
         .add_plugins(AlightMotionPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (handle_input, update_ui, debug_sprites))
         .run();
 }
 
+/// Resource to store the project file path.
+#[derive(Resource)]
+struct ProjectFile(String);
+
 /// UI text component for status display.
 #[derive(Component)]
 struct StatusText;
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: Res<ProjectFile>) {
     // Spawn camera
     commands.spawn(Camera2d);
 
     // Load the AM project from assets folder
-    load_am_project(&mut commands, &asset_server, "am/project.amproj");
+    load_am_project(&mut commands, &asset_server, &project_file.0);
 
     // Spawn UI for status display
     commands.spawn((
