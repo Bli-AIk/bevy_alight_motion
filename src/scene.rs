@@ -249,7 +249,11 @@ fn spawn_shape(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
+    // Create entity name for inspector identification
+    let entity_name = format!("Shape[{}]: {}", shape.id, shape.label);
+
     let mut entity = commands.spawn((
+        Name::new(entity_name),
         AmLayerMarker {
             id: shape.id,
             label: shape.label.clone(),
@@ -358,8 +362,12 @@ fn spawn_null(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
+    // Create entity name for inspector identification
+    let entity_name = format!("Null[{}]: {}", null.id, null.label);
+
     commands
         .spawn((
+            Name::new(entity_name),
             AmLayerMarker {
                 id: null.id,
                 label: null.label.clone(),
@@ -415,8 +423,12 @@ fn spawn_embed_scene(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
+    // Create entity name for inspector identification
+    let entity_name = format!("Embed[{}]: {}", embed.id, embed.label);
+
     let entity = commands
         .spawn((
+            Name::new(entity_name),
             AmLayerMarker {
                 id: embed.id,
                 label: embed.label.clone(),
@@ -512,7 +524,11 @@ fn spawn_image(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
+    // Create entity name for inspector identification
+    let entity_name = format!("Image[{}]: {}", image.id, image.label);
+
     let mut entity = commands.spawn((
+        Name::new(entity_name),
         AmLayerMarker {
             id: image.id,
             label: image.label.clone(),
@@ -615,13 +631,8 @@ fn spawn_text(
     // 针对不同字体的Y轴偏移调整
     // 不同字体具有不同的基线/上升高度特性，导致AM和Bevy之间的垂直位置差异
     // 
-    // Testing with complex_3:
-    // - "8-bit Operator + Bold.ttf" (dialogue): works correctly with no offset
-    // - "Mars Needs Cunnilingus.ttf" (UI): needs downward adjustment (negative offset)
-    let font_y_offset = match font_name.as_str() {
-        "Mars Needs Cunnilingus.ttf" => -font_size * 0.35, // UI font needs larger downward adjustment
-        _ => 0.0, // Other fonts work with center anchor
-    };
+    // Testing with top-left anchor first, no offset
+    let font_y_offset = 0.0;
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -671,7 +682,15 @@ fn spawn_text(
         }
     }
 
+    // Create entity name for inspector identification
+    let entity_name = if text.label.is_empty() {
+        format!("Text[{}]: {}", text.id, truncate_string(&text.content, 20))
+    } else {
+        format!("Text[{}]: {}", text.id, text.label)
+    };
+
     let mut entity = commands.spawn((
+        Name::new(entity_name),
         AmLayerMarker {
             id: text.id,
             label: text.label.clone(),
@@ -727,9 +746,9 @@ fn spawn_text(
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        // Use left-center anchor for text (AM uses center Y as the pivot point)
-        // AM 使用中心 Y 作为轴点
-        Anchor(Vec2::new(-0.5, 0.0)),
+        // Use left-top anchor for text (AM text position may be from top-left)
+        // Testing different anchor to match AM coordinate system
+        Anchor(Vec2::new(-0.5, 0.5)),
     ));
 
     entity.id()
@@ -925,6 +944,15 @@ fn extract_effect_animations(effects: &[AmEffect]) -> (AmAnimatedFloat, AmAnimat
     }
 
     (pos_x, pos_y)
+}
+
+/// Truncate a string to a maximum length, adding "..." if truncated.
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //!
 //! Usage:
 //!   cargo run -p bevy_alight_motion --example player -- <project_name>
+//!   cargo run -p bevy_alight_motion --example player --features debug -- <project_name>
 //!
 //! Available projects:
 //!   - simple_gb (default)
@@ -16,9 +17,14 @@
 //! - Left/Right: Seek backward/forward by 50ms
 //! - Up/Down: Speed up/slow down playback
 //! - L: Toggle loop mode
+//! - F1: Toggle inspector window (requires --features debug)
+//! - F4: Toggle debug image overlay
 
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
+
+#[cfg(feature = "debug")]
+use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
 /// Get the project file based on CLI argument.
 fn get_project_file() -> String {
@@ -43,8 +49,9 @@ fn main() {
     let project_file = get_project_file();
     println!("Loading project: {}", project_file);
 
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+    let mut app = App::new();
+    
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: format!("Alight Motion Player - {}", project_file),
                 resolution: (1280, 960).into(),
@@ -62,8 +69,17 @@ fn main() {
         .add_systems(
             Update,
             (handle_input, update_ui, debug_sprites, toggle_debug_overlay),
-        )
-        .run();
+        );
+    
+    // Add inspector plugin when debug feature is enabled
+    #[cfg(feature = "debug")]
+    {
+        app.add_plugins(EguiPlugin::default());
+        app.add_plugins(WorldInspectorPlugin::default());
+        println!("Debug mode enabled: Inspector will be shown in the window");
+    }
+    
+    app.run();
 }
 
 /// Resource to store the project file path.
