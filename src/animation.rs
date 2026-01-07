@@ -185,6 +185,60 @@ pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated,
     }
 }
 
+/// System to animate text opacity (handles Text2d entities).
+/// Uses Visibility component for proper show/hide behavior and TextColor alpha for opacity animation.
+pub fn animate_text_opacity(
+    playback: Res<AmPlayback>,
+    mut query: Query<(&AmAnimated, &mut bevy::text::TextColor, &mut Visibility, &AmLayerMarker), With<Text2d>>,
+) {
+    let global_time = playback.current_time_ms;
+    let text_count = query.iter().count();
+
+    // Debug: log count of text entities being processed (only occasionally to avoid spam)
+    static mut FRAME_COUNT: u32 = 0;
+    unsafe {
+        FRAME_COUNT += 1;
+        if FRAME_COUNT % 300 == 1 {
+            println!("[TEXT] Processing {} text entities at time={:.0}", text_count, global_time);
+        }
+    }
+
+    for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
+        // Calculate local time (accounting for time offset from parent scene)
+        let local_time = global_time - animated.time_offset as f32;
+
+        // Check if layer is active
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            // Hide text when outside its time range
+            if *visibility != Visibility::Hidden {
+                println!(
+                    "[TEXT] Hiding '{}' (id={}): time={:.0}, range=[{}, {}]",
+                    marker.label, marker.id, local_time, animated.start_time, animated.end_time
+                );
+            }
+            *visibility = Visibility::Hidden;
+            text_color.0.set_alpha(0.0);
+            continue;
+        }
+
+        // Show text when within its time range
+        if *visibility == Visibility::Hidden {
+            println!(
+                "[TEXT] Showing '{}' (id={}): time={:.0}, range=[{}, {}]",
+                marker.label, marker.id, local_time, animated.start_time, animated.end_time
+            );
+        }
+        *visibility = Visibility::Inherited;
+
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Get opacity from keyframes, or default to 1.0 if no opacity animation
+        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+        text_color.0.set_alpha(opacity.clamp(0.0, 1.0));
+    }
+}
+
 /// Interpolate a Vec3 property at normalized time t.
 pub fn interpolate_vec3(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
     if prop.keyframes.is_empty() {

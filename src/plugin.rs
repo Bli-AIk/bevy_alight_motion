@@ -4,7 +4,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
 
-use crate::animation::{AmPlayback, advance_playback, animate_opacity, animate_transform};
+use crate::animation::{AmPlayback, advance_playback, animate_opacity, animate_text_opacity, animate_transform};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig, spawn_scene};
 
@@ -28,6 +28,7 @@ impl Plugin for AlightMotionPlugin {
                     advance_playback,
                     animate_transform,
                     animate_opacity,
+                    animate_text_opacity,
                 )
                     .chain(),
             );

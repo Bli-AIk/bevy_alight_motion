@@ -592,17 +592,6 @@ fn spawn_text(
         }
     };
 
-    // Y offset for text - adjust this to fine-tune vertical positioning
-    // 文本Y轴偏移 - 调整这个值来微调垂直位置
-    const TEXT_OFFSET_Y: f32 = 22.0;
-
-    // Parse font name from "imported?name=FontName.ttf" format
-    let font_name = text
-        .font
-        .strip_prefix("imported?name=")
-        .unwrap_or(&text.font)
-        .to_string();
-
     // Get font size (default to 16.0 if not specified)
     // AM font sizes appear to be in a different scale - use a larger multiplier
     // 文本大小乘数 - 调整这个值来修改字体大小
@@ -612,6 +601,13 @@ fn spawn_text(
     } else {
         48.0
     };
+
+    // Parse font name from "imported?name=FontName.ttf" format
+    let font_name = text
+        .font
+        .strip_prefix("imported?name=")
+        .unwrap_or(&text.font)
+        .to_string();
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -640,28 +636,22 @@ fn spawn_text(
         text.content
     );
 
-    // Y offset only for root text (not for text with parent)
-    // Y偏移只应用于根文本（没有父对象的）
-    let y_offset = if has_parent { 0.0 } else { TEXT_OFFSET_Y };
-
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty + y_offset, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    // Create a modified location with wrap_offset and Y offset applied
-    // 创建一个带有wrapWidth偏移和Y偏移的location副本
+    // Create a modified location with wrap_offset applied (no Y offset)
+    // 创建一个带有wrapWidth偏移的location副本（无Y偏移）
     let mut modified_location = text.transform.location.clone();
     if let Some(ref mut val) = modified_location.value {
         val[0] += wrap_offset_x;
-        val[1] -= y_offset; // Note: Y is inverted in AM coordinates
     }
     // Also modify keyframes if present
     for kf in &mut modified_location.keyframes {
         if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
             parsed[0] += wrap_offset_x;
-            parsed[1] -= y_offset;
             kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
         }
     }
@@ -722,8 +712,9 @@ fn spawn_text(
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        // Use top-left anchor for text to match AM behavior
-        Anchor(Vec2::new(-0.5, 0.5)),
+        // Use left-center anchor for text (AM uses center Y as the pivot point)
+        // AM 使用中心 Y 作为轴点
+        Anchor(Vec2::new(-0.5, 0.0)),
     ));
 
     entity.id()
