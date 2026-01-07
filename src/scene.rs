@@ -609,6 +609,20 @@ fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
+    // Font-specific Y offset adjustment
+    // Different fonts have different baseline/ascender characteristics
+    // that cause vertical positioning differences between AM and Bevy
+    // 针对不同字体的Y轴偏移调整
+    // 不同字体具有不同的基线/上升高度特性，导致AM和Bevy之间的垂直位置差异
+    // 
+    // Testing with complex_3:
+    // - "8-bit Operator + Bold.ttf" (dialogue): works correctly with no offset
+    // - "Mars Needs Cunnilingus.ttf" (UI): needs downward adjustment (negative offset)
+    let font_y_offset = match font_name.as_str() {
+        "Mars Needs Cunnilingus.ttf" => -font_size * 0.35, // UI font needs larger downward adjustment
+        _ => 0.0, // Other fonts work with center anchor
+    };
+
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
         if !fill_color.value.is_empty() {
@@ -623,7 +637,7 @@ fn spawn_text(
     };
 
     println!(
-        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, content='{}'",
+        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, y_offset={:.1}, content='{}'",
         text.label,
         text.id,
         text.parent,
@@ -633,11 +647,12 @@ fn spawn_text(
         wrap_offset_x,
         font_size,
         font_name,
+        font_y_offset,
         text.content
     );
 
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty + font_y_offset, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
