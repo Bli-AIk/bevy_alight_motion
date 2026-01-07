@@ -16,6 +16,8 @@ pub struct AmProject {
     pub scene: AmScene,
     /// Mapping from amproj URIs to image handles.
     pub images: HashMap<String, Handle<Image>>,
+    /// Mapping from font names to font handles.
+    pub fonts: HashMap<String, Handle<Font>>,
     /// Raw image data for embedded images (before loading).
     pub embedded_images: HashMap<String, Vec<u8>>,
 }
@@ -67,6 +69,7 @@ async fn load_amproj(
     // Find the XML file in the archive
     let mut xml_content = None;
     let mut embedded_images = HashMap::new();
+    let mut embedded_fonts: HashMap<String, Vec<u8>> = HashMap::new();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
@@ -86,6 +89,11 @@ async fn load_amproj(
             // Store with amproj: prefix for lookup
             let uri = format!("amproj:{}", name);
             embedded_images.insert(uri, data);
+        } else if name.ends_with(".ttf") || name.ends_with(".otf") {
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)?;
+            // Store font by filename
+            embedded_fonts.insert(name, data);
         }
     }
 
@@ -113,9 +121,20 @@ async fn load_amproj(
         }
     }
 
+    // Load embedded fonts as labeled assets
+    let mut fonts = HashMap::new();
+    for (name, data) in embedded_fonts {
+        let font = Font::try_from_bytes(data.clone())
+            .map_err(|e| AmError::InvalidFormat(format!("Failed to load font {}: {:?}", name, e)))?;
+        let label = format!("font_{}", name);
+        let handle = load_context.add_labeled_asset(label, font);
+        fonts.insert(name, handle);
+    }
+
     Ok(AmProject {
         scene,
         images,
+        fonts,
         embedded_images,
     })
 }
@@ -128,6 +147,7 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
     Ok(AmProject {
         scene,
         images: HashMap::new(),
+        fonts: HashMap::new(),
         embedded_images: HashMap::new(),
     })
 }

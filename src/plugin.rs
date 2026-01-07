@@ -102,6 +102,7 @@ fn spawn_loaded_projects(
                 &mut commands,
                 &project.scene,
                 &project.images,
+                &project.fonts,
                 &white_pixel.0,
                 entity,
                 &config,

@@ -181,17 +181,25 @@ pub struct AmText {
     #[serde(default)]
     pub transform: AmTransform,
 
-    /// Text content.
-    #[serde(rename = "@textContent", default)]
-    pub text_content: String,
+    /// Text content (from <content> child element).
+    #[serde(default)]
+    pub content: String,
 
-    /// Font family.
-    #[serde(rename = "@fontFamily", default)]
-    pub font_family: String,
+    /// Font specification (e.g., "imported?name=FontName.ttf").
+    #[serde(rename = "@font", default)]
+    pub font: String,
 
-    /// Font size.
-    #[serde(rename = "@fontSize", default)]
-    pub font_size: f32,
+    /// Font size in points.
+    #[serde(rename = "@size", default)]
+    pub size: f32,
+
+    /// Text wrap width.
+    #[serde(rename = "@wrapWidth", default)]
+    pub wrap_width: f32,
+
+    /// Text alignment (left, center, right).
+    #[serde(rename = "@align", default)]
+    pub align: String,
 
     /// Effects applied to this text.
     #[serde(rename = "effect", default)]
@@ -547,6 +555,10 @@ pub struct AmTransform {
     /// Location/position property.
     #[serde(default)]
     pub location: AmAnimatedVec3,
+
+    /// Pivot/anchor point property (affects rotation and scale center).
+    #[serde(default)]
+    pub pivot: AmAnimatedVec2,
 
     /// Rotation property (Z-axis, degrees).
     #[serde(default)]

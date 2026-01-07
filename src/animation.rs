@@ -18,6 +18,8 @@ pub struct AmAnimated {
     pub time_offset: i32,
     /// Location animation data.
     pub location: AmAnimatedVec3,
+    /// Pivot/anchor point animation data.
+    pub pivot: AmAnimatedVec2,
     /// Rotation animation data.
     pub rotation: AmAnimatedFloat,
     /// Scale animation data.

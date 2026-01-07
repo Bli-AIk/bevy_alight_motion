@@ -1,12 +1,14 @@
 //! Scene building and coordinate transformation.
 
 use bevy::prelude::*;
+use bevy::sprite::{Anchor, Text2d};
+use bevy::text::{TextColor, TextFont, TextLayout};
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::AmProject;
 use crate::schema::{
-    AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape,
+    AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape, AmText,
 };
 
 /// Component bundle for an AM project root.
@@ -90,6 +92,7 @@ pub fn spawn_scene(
     commands: &mut Commands,
     scene: &AmScene,
     images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
     white_pixel: &Handle<Image>,
     parent: Entity,
     config: &AmSceneConfig,
@@ -97,8 +100,8 @@ pub fn spawn_scene(
     let mut entity_map: HashMap<u64, Entity> = HashMap::new();
     let mut parent_relations: Vec<(Entity, u64)> = Vec::new();
 
-    // In AM, layers at the beginning of the XML are rendered on top (higher z).
-    // So we need to reverse the z-order: first layer gets highest z, last gets lowest.
+    // In AM, layers at the END of the XML are rendered on top (higher z).
+    // Last layer in XML = highest z (on top), first layer = lowest z (on bottom).
     let layer_count = scene.layers.len();
     println!(
         "spawn_scene: layer_count={}, z_spacing={}",
@@ -107,8 +110,8 @@ pub fn spawn_scene(
 
     // First pass: create all entities and collect parent relationships
     for (idx, layer) in scene.layers.iter().enumerate() {
-        // Reverse z order: first layer in XML = highest z (on top)
-        let z = (layer_count - 1 - idx) as f32 * config.z_spacing;
+        // Direct z order: last layer in XML = highest z (on top)
+        let z = idx as f32 * config.z_spacing;
 
         match layer {
             AmLayer::Shape(shape) => {
@@ -130,7 +133,7 @@ pub fn spawn_scene(
                 }
             }
             AmLayer::EmbedScene(embed) => {
-                let entity = spawn_embed_scene(commands, embed, images, white_pixel, config, z);
+                let entity = spawn_embed_scene(commands, embed, images, fonts, white_pixel, config, z);
                 entity_map.insert(embed.id, entity);
                 if embed.parent != 0 {
                     parent_relations.push((entity, embed.parent));
@@ -142,11 +145,13 @@ pub fn spawn_scene(
                 // Bookmarks are non-visual timeline markers, skip them
             }
             AmLayer::Text(text) => {
-                // TODO: Text rendering is not yet implemented, skip for now
-                println!(
-                    "Skipping text layer '{}' (id={}) - text rendering not implemented",
-                    text.label, text.id
-                );
+                let entity = spawn_text(commands, text, fonts, config, z);
+                entity_map.insert(text.id, entity);
+                if text.parent != 0 {
+                    parent_relations.push((entity, text.parent));
+                } else {
+                    commands.entity(parent).add_child(entity);
+                }
             }
             AmLayer::Audio(audio) => {
                 // TODO: Audio playback is not yet implemented, skip for now
@@ -210,12 +215,16 @@ fn spawn_shape(
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let opacity = get_initial_opacity(&shape.transform.opacity);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
 
+    // Convert pivot to Bevy anchor
+    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+
     println!(
-        "Spawning shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), fill={}, image={}",
+        "Spawning shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
         shape.label,
         shape.id,
         shape.parent,
@@ -227,6 +236,8 @@ fn spawn_shape(
         opacity,
         width,
         height,
+        pivot_x,
+        pivot_y,
         shape.fill_type,
         shape.fill_image
     );
@@ -248,6 +259,7 @@ fn spawn_shape(
             end_time: shape.end_time,
             time_offset: config.time_offset,
             location: shape.transform.location.clone(),
+            pivot: shape.transform.pivot.clone(),
             rotation: shape.transform.rotation.clone(),
             scale: shape.transform.scale.clone(),
             opacity: shape.transform.opacity.clone(),
@@ -268,12 +280,15 @@ fn spawn_shape(
     if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         if let Some(handle) = images.get(&shape.fill_image) {
             println!("  -> Added media sprite with handle");
-            entity.insert(Sprite {
-                image: handle.clone(),
-                color: Color::srgba(1.0, 1.0, 1.0, opacity),
-                custom_size: Some(Vec2::new(width, height)),
-                ..default()
-            });
+            entity.insert((
+                Sprite {
+                    image: handle.clone(),
+                    color: Color::srgba(1.0, 1.0, 1.0, opacity),
+                    custom_size: Some(Vec2::new(width, height)),
+                    ..default()
+                },
+                anchor.clone(),
+            ));
         } else {
             println!("  -> Image not found: {}", shape.fill_image);
         }
@@ -304,12 +319,15 @@ fn spawn_shape(
         };
 
         println!("  -> Added color sprite with white pixel texture");
-        entity.insert(Sprite {
-            image: white_pixel.clone(),
-            color,
-            custom_size: Some(Vec2::new(width, height)),
-            ..default()
-        });
+        entity.insert((
+            Sprite {
+                image: white_pixel.clone(),
+                color,
+                custom_size: Some(Vec2::new(width, height)),
+                ..default()
+            },
+            anchor,
+        ));
     }
 
     entity.id()
@@ -351,6 +369,7 @@ fn spawn_null(
                 end_time: null.end_time,
                 time_offset: config.time_offset,
                 location: null.transform.location.clone(),
+                pivot: null.transform.pivot.clone(),
                 rotation: null.transform.rotation.clone(),
                 scale: null.transform.scale.clone(),
                 opacity: null.transform.opacity.clone(),
@@ -374,6 +393,7 @@ fn spawn_embed_scene(
     commands: &mut Commands,
     embed: &crate::schema::AmEmbedScene,
     images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
     white_pixel: &Handle<Image>,
     config: &AmSceneConfig,
     z: f32,
@@ -406,6 +426,7 @@ fn spawn_embed_scene(
                 end_time: embed.end_time,
                 time_offset: config.time_offset,
                 location: embed.transform.location.clone(),
+                pivot: embed.transform.pivot.clone(),
                 rotation: embed.transform.rotation.clone(),
                 scale: embed.transform.scale.clone(),
                 opacity: embed.transform.opacity.clone(),
@@ -436,6 +457,7 @@ fn spawn_embed_scene(
         commands,
         &embed.scene,
         images,
+        fonts,
         white_pixel,
         entity,
         &nested_config,
@@ -458,12 +480,16 @@ fn spawn_image(
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let opacity = get_initial_opacity(&image.transform.opacity);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
+    let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
 
+    // Convert pivot to Bevy anchor
+    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+
     println!(
-        "Spawning image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), fill={}",
+        "Spawning image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}",
         image.label,
         image.id,
         image.parent,
@@ -474,6 +500,8 @@ fn spawn_image(
         opacity,
         width,
         height,
+        pivot_x,
+        pivot_y,
         image.fill_image
     );
 
@@ -494,6 +522,7 @@ fn spawn_image(
             end_time: image.end_time,
             time_offset: config.time_offset,
             location: image.transform.location.clone(),
+            pivot: image.transform.pivot.clone(),
             rotation: image.transform.rotation.clone(),
             scale: image.transform.scale.clone(),
             opacity: image.transform.opacity.clone(),
@@ -514,16 +543,138 @@ fn spawn_image(
     if !image.fill_image.is_empty() {
         if let Some(handle) = images.get(&image.fill_image) {
             println!("  -> Added image sprite with handle");
-            entity.insert(Sprite {
-                image: handle.clone(),
-                color: Color::srgba(1.0, 1.0, 1.0, opacity),
-                custom_size: Some(Vec2::new(width, height)),
-                ..default()
-            });
+            entity.insert((
+                Sprite {
+                    image: handle.clone(),
+                    color: Color::srgba(1.0, 1.0, 1.0, opacity),
+                    custom_size: Some(Vec2::new(width, height)),
+                    ..default()
+                },
+                anchor,
+            ));
         } else {
             println!("  -> Image not found: {}", image.fill_image);
         }
     }
+
+    entity.id()
+}
+
+/// Spawn a text layer.
+fn spawn_text(
+    commands: &mut Commands,
+    text: &AmText,
+    fonts: &HashMap<String, Handle<Font>>,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Entity {
+    let has_parent = text.parent != 0;
+    let (tx, ty) = get_initial_location(&text.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&text.transform.rotation);
+    let (sx, sy) = get_initial_scale(&text.transform.scale);
+    let opacity = get_initial_opacity(&text.transform.opacity);
+
+    // Parse font name from "imported?name=FontName.ttf" format
+    let font_name = text
+        .font
+        .strip_prefix("imported?name=")
+        .unwrap_or(&text.font)
+        .to_string();
+
+    // Get font size (default to 16.0 if not specified)
+    // AM font sizes appear to be in a different scale - use a larger multiplier
+    let font_size = if text.size > 0.0 { text.size * 3.0 } else { 48.0 };
+
+    // Get text color from fill_color
+    let color = if let Some(fill_color) = &text.fill_color {
+        if !fill_color.value.is_empty() {
+            crate::schema::parse_color(&fill_color.value)
+                .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
+                .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
+        } else {
+            Color::srgba(1.0, 1.0, 1.0, opacity)
+        }
+    } else {
+        Color::srgba(1.0, 1.0, 1.0, opacity)
+    };
+
+    println!(
+        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), size={:.1}, font={}, content='{}'",
+        text.label,
+        text.id,
+        text.parent,
+        tx,
+        ty,
+        font_size,
+        font_name,
+        text.content
+    );
+
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+
+    let mut entity = commands.spawn((
+        AmLayerMarker {
+            id: text.id,
+            label: text.label.clone(),
+        },
+        AmAnimated {
+            layer_id: text.id,
+            start_time: text.start_time,
+            end_time: text.end_time,
+            time_offset: config.time_offset,
+            location: text.transform.location.clone(),
+            pivot: text.transform.pivot.clone(),
+            rotation: text.transform.rotation.clone(),
+            scale: text.transform.scale.clone(),
+            opacity: text.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x: AmAnimatedFloat::default(),
+            effect_pos_y: AmAnimatedFloat::default(),
+        },
+        transform,
+        GlobalTransform::default(),
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    ));
+
+    // Add Text2d component
+    let text_font = if let Some(font_handle) = fonts.get(&font_name) {
+        println!("  -> Using embedded font: {}", font_name);
+        TextFont {
+            font: font_handle.clone(),
+            font_size,
+            ..default()
+        }
+    } else {
+        println!("  -> Font not found '{}', using default", font_name);
+        TextFont {
+            font_size,
+            ..default()
+        }
+    };
+
+    // Determine text justification based on align attribute
+    let justify = match text.align.as_str() {
+        "center" => bevy::text::Justify::Center,
+        "right" => bevy::text::Justify::Right,
+        _ => bevy::text::Justify::Left,
+    };
+
+    entity.insert((
+        Text2d::new(&text.content),
+        text_font,
+        TextColor(color),
+        TextLayout::new_with_justify(justify),
+        // Use top-left anchor for text to match AM behavior
+        Anchor(Vec2::new(-0.5, 0.5)),
+    ));
 
     entity.id()
 }
@@ -632,6 +783,64 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
         }
     }
     (100.0, 100.0)
+}
+
+/// Get initial pivot from animated property.
+/// Returns (pivot_x, pivot_y) in pixels. Default is (0, 0) which means center.
+fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
+    if let Some(val) = &prop.value {
+        (val[0], val[1])
+    } else if !prop.keyframes.is_empty() {
+        // Sort keyframes by time and get the first one
+        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        crate::schema::parse_vec2(&sorted[0].value)
+            .unwrap_or([0.0, 0.0])
+            .into()
+    } else {
+        (0.0, 0.0)
+    }
+}
+
+/// Convert AM pivot (in pixels, relative to center) to Bevy Anchor.
+/// AM pivot: (0, 0) = center, positive X = right, positive Y = down
+/// Bevy anchor: (0, 0) = center, range typically -0.5 to 0.5 for edges
+///
+/// The pivot in AM represents the offset from the center where the anchor point is.
+/// For example, pivot (-100, 0) means the anchor is 100 pixels to the left of center.
+/// In Bevy, we need to convert this to a normalized anchor value.
+///
+/// Bevy Anchor semantics:
+/// - Anchor(0, 0) = center
+/// - Anchor(-0.5, -0.5) = bottom-left corner
+/// - Anchor(0.5, 0.5) = top-right corner
+/// So Anchor.x = 0.5 means the anchor is at the right edge (half the width from center).
+fn pivot_to_anchor(pivot_x: f32, pivot_y: f32, width: f32, height: f32) -> bevy::sprite::Anchor {
+    if pivot_x == 0.0 && pivot_y == 0.0 {
+        return bevy::sprite::Anchor::CENTER;
+    }
+
+    // Convert pixel offset to normalized anchor
+    // AM: pivot (px, py) means: "the anchor point is at (center + pivot)"
+    // Bevy: anchor value of 0.5 corresponds to half the sprite size
+    // So anchor = pivot / size (where size is the full dimension)
+    let anchor_x = if width > 0.0 {
+        pivot_x / width
+    } else {
+        0.0
+    };
+    let anchor_y = if height > 0.0 {
+        // Y is inverted: AM Y-down, Bevy Y-up
+        -pivot_y / height
+    } else {
+        0.0
+    };
+
+    bevy::sprite::Anchor(Vec2::new(anchor_x, anchor_y))
 }
 
 /// Extract effect animation data (posx, posy) from transform2 effects.
