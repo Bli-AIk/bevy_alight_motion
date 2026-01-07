@@ -9,6 +9,26 @@ use std::io::{Cursor, Read};
 use crate::error::AmError;
 use crate::schema::AmScene;
 
+/// Font metrics extracted from TTF/OTF files.
+#[derive(Debug, Clone, Default)]
+pub struct FontMetrics {
+    /// Ascender height normalized to 1.0 = em height (from OS/2 usWinAscent).
+    pub win_ascent: f32,
+    /// Descender depth normalized to 1.0 = em height (from OS/2 usWinDescent).
+    pub win_descent: f32,
+    /// Units per em for normalization.
+    pub units_per_em: u16,
+}
+
+impl FontMetrics {
+    /// Calculate the vertical center offset relative to baseline.
+    /// This is (win_ascent - win_descent) / 2.
+    /// Note: win_descent is stored as positive value.
+    pub fn win_center(&self) -> f32 {
+        (self.win_ascent - self.win_descent) / 2.0
+    }
+}
+
 /// Asset representing a loaded Alight Motion project.
 #[derive(Asset, TypePath, Debug, Clone)]
 pub struct AmProject {
@@ -18,6 +38,8 @@ pub struct AmProject {
     pub images: HashMap<String, Handle<Image>>,
     /// Mapping from font names to font handles.
     pub fonts: HashMap<String, Handle<Font>>,
+    /// Mapping from font names to font metrics.
+    pub font_metrics: HashMap<String, FontMetrics>,
     /// Raw image data for embedded images (before loading).
     pub embedded_images: HashMap<String, Vec<u8>>,
 }
@@ -121,9 +143,40 @@ async fn load_amproj(
         }
     }
 
-    // Load embedded fonts as labeled assets
+    // Load embedded fonts as labeled assets and extract metrics
     let mut fonts = HashMap::new();
+    let mut font_metrics = HashMap::new();
     for (name, data) in embedded_fonts {
+        // Extract font metrics using ttf-parser
+        if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+            let upm = face.units_per_em();
+            let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+                (
+                    os2.windows_ascender() as f32 / upm as f32,
+                    // windows_descender() returns negative value, we store positive for easier calculation
+                    (-os2.windows_descender()) as f32 / upm as f32,
+                )
+            } else {
+                // Fallback to hhea metrics
+                (
+                    face.ascender() as f32 / upm as f32,
+                    (-face.descender()) as f32 / upm as f32,
+                )
+            };
+            font_metrics.insert(
+                name.clone(),
+                FontMetrics {
+                    win_ascent,
+                    win_descent,
+                    units_per_em: upm,
+                },
+            );
+            println!(
+                "Font '{}' metrics: win_ascent={:.4}, win_descent={:.4}, upm={}",
+                name, win_ascent, win_descent, upm
+            );
+        }
+
         let font = Font::try_from_bytes(data.clone()).map_err(|e| {
             AmError::InvalidFormat(format!("Failed to load font {}: {:?}", name, e))
         })?;
@@ -136,6 +189,7 @@ async fn load_amproj(
         scene,
         images,
         fonts,
+        font_metrics,
         embedded_images,
     })
 }
@@ -149,6 +203,7 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
         scene,
         images: HashMap::new(),
         fonts: HashMap::new(),
+        font_metrics: HashMap::new(),
         embedded_images: HashMap::new(),
     })
 }

@@ -6,7 +6,7 @@ use bevy::text::{TextColor, TextFont, TextLayout};
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::loader::AmProject;
+use crate::loader::{AmProject, FontMetrics};
 use crate::schema::{
     AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape, AmText,
 };
@@ -93,6 +93,7 @@ pub fn spawn_scene(
     scene: &AmScene,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
     white_pixel: &Handle<Image>,
     parent: Entity,
     config: &AmSceneConfig,
@@ -133,8 +134,16 @@ pub fn spawn_scene(
                 }
             }
             AmLayer::EmbedScene(embed) => {
-                let entity =
-                    spawn_embed_scene(commands, embed, images, fonts, white_pixel, config, z);
+                let entity = spawn_embed_scene(
+                    commands,
+                    embed,
+                    images,
+                    fonts,
+                    font_metrics,
+                    white_pixel,
+                    config,
+                    z,
+                );
                 entity_map.insert(embed.id, entity);
                 if embed.parent != 0 {
                     parent_relations.push((entity, embed.parent));
@@ -146,7 +155,7 @@ pub fn spawn_scene(
                 // Bookmarks are non-visual timeline markers, skip them
             }
             AmLayer::Text(text) => {
-                let entity = spawn_text(commands, text, fonts, config, z);
+                let entity = spawn_text(commands, text, fonts, font_metrics, config, z);
                 entity_map.insert(text.id, entity);
                 if text.parent != 0 {
                     parent_relations.push((entity, text.parent));
@@ -273,6 +282,7 @@ fn spawn_shape(
             has_parent,
             effect_pos_x,
             effect_pos_y,
+            font_y_offset: 0.0,
         },
         transform,
         GlobalTransform::default(),
@@ -387,6 +397,7 @@ fn spawn_null(
                 has_parent,
                 effect_pos_x,
                 effect_pos_y,
+                font_y_offset: 0.0,
             },
             transform,
             GlobalTransform::default(),
@@ -403,6 +414,7 @@ fn spawn_embed_scene(
     embed: &crate::schema::AmEmbedScene,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
     white_pixel: &Handle<Image>,
     config: &AmSceneConfig,
     z: f32,
@@ -448,6 +460,7 @@ fn spawn_embed_scene(
                 has_parent,
                 effect_pos_x: AmAnimatedFloat::default(),
                 effect_pos_y: AmAnimatedFloat::default(),
+                font_y_offset: 0.0,
             },
             transform,
             GlobalTransform::default(),
@@ -471,6 +484,7 @@ fn spawn_embed_scene(
         &embed.scene,
         images,
         fonts,
+        font_metrics,
         white_pixel,
         entity,
         &nested_config,
@@ -548,6 +562,7 @@ fn spawn_image(
             has_parent,
             effect_pos_x,
             effect_pos_y,
+            font_y_offset: 0.0,
         },
         transform,
         GlobalTransform::default(),
@@ -582,6 +597,7 @@ fn spawn_text(
     commands: &mut Commands,
     text: &AmText,
     fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -625,14 +641,46 @@ fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
-    // Font-specific Y offset adjustment
-    // Different fonts have different baseline/ascender characteristics
-    // that cause vertical positioning differences between AM and Bevy
-    // 针对不同字体的Y轴偏移调整
-    // 不同字体具有不同的基线/上升高度特性，导致AM和Bevy之间的垂直位置差异
-    // 
-    // Testing with top-left anchor first, no offset
-    let font_y_offset = 0.0;
+    // Calculate Y offset based on font metrics
+    // 基于字体度量计算 Y 偏移
+    //
+    // AM 的文本定位似乎基于某个参考字体的 win_ascent 值
+    // 当字体的 win_ascent 与参考值不同时，需要根据差值调整 Y 位置
+    //
+    // 通过实验确定：
+    // - 8-bit Operator + Bold (win_ascent=1.1285) 显示位置正确
+    // - Mars Needs Cunnilingus (win_ascent=0.7500) 需要向下偏移约 16.3px (font_size=48)
+    // - 偏移量 = (REFERENCE_WIN_ASCENT - win_ascent) * font_size * factor
+    //
+    // 经计算: factor ≈ 0.897 使得两个字体都能正确显示
+    // 但为了简化，使用 (1.1285 - win_ascent) / 2 * font_size 作为偏移
+    const REFERENCE_WIN_ASCENT: f32 = 1.1285; // 8-bit Operator + Bold 作为参考
+    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
+        // 当 win_ascent 小于参考值时，文本需要向下移动（负Y方向）
+        // offset 为正值时减去它会使 Y 变小（向下）
+        let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
+        let offset = ascent_diff * font_size * 0.43; // factor 经验值
+
+        // 计算基础Y位置（未应用偏移）
+        let base_y = ty;
+        let final_y = base_y - offset;
+
+        println!(
+            "  Font metrics for '{}': win_ascent={:.4}, win_descent={:.4}",
+            font_name, metrics.win_ascent, metrics.win_descent
+        );
+        println!(
+            "  Y calculation: base_y={:.2}, ascent_diff={:.4}, offset={:.2}, final_y={:.2}",
+            base_y, ascent_diff, offset, final_y
+        );
+        offset
+    } else {
+        println!(
+            "  No font metrics found for '{}', using offset=0",
+            font_name
+        );
+        0.0
+    };
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -662,8 +710,11 @@ fn spawn_text(
         text.content
     );
 
+    // Only apply font_y_offset to root text layers; child text inherits offset from parent
+    let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
+
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty + font_y_offset, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
@@ -710,6 +761,7 @@ fn spawn_text(
             has_parent,
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
+            font_y_offset,
         },
         transform,
         GlobalTransform::default(),
@@ -746,9 +798,9 @@ fn spawn_text(
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        // Use left-top anchor for text (AM text position may be from top-left)
-        // Testing different anchor to match AM coordinate system
-        Anchor(Vec2::new(-0.5, 0.5)),
+        // Use left-center anchor for text - AM uses center Y as the reference point
+        // With center anchor, the Y coordinate points to the vertical center of the text
+        Anchor(Vec2::new(-0.5, 0.0)),
     ));
 
     entity.id()

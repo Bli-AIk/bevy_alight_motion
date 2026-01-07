@@ -4,7 +4,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
 
-use crate::animation::{AmPlayback, advance_playback, animate_opacity, animate_text_opacity, animate_transform};
+use crate::animation::{
+    AmPlayback, advance_playback, animate_opacity, animate_text_opacity, animate_transform,
+};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig, spawn_scene};
 
@@ -104,6 +106,7 @@ fn spawn_loaded_projects(
                 &project.scene,
                 &project.images,
                 &project.fonts,
+                &project.font_metrics,
                 &white_pixel.0,
                 entity,
                 &config,

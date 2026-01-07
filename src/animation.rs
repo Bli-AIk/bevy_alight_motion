@@ -36,6 +36,8 @@ pub struct AmAnimated {
     pub effect_pos_x: AmAnimatedFloat,
     /// Effect position Y offset (from transform2 effect).
     pub effect_pos_y: AmAnimatedFloat,
+    /// Font Y offset for text layers (to compensate for different font metrics).
+    pub font_y_offset: f32,
 }
 
 /// Resource to control animation playback.
@@ -51,6 +53,9 @@ pub struct AmPlayback {
     pub speed: f32,
     /// Loop playback.
     pub looping: bool,
+    /// Force stopped - when true, animation systems won't update transforms.
+    /// Use this for debugging/inspector editing. Normal pause still updates animations.
+    pub force_stopped: bool,
 }
 
 impl Default for AmPlayback {
@@ -61,6 +66,7 @@ impl Default for AmPlayback {
             playing: true,
             speed: 1.0,
             looping: true,
+            force_stopped: false,
         }
     }
 }
@@ -83,6 +89,11 @@ impl AmPlayback {
     pub fn toggle(&mut self) {
         self.playing = !self.playing;
     }
+
+    /// Toggle force stop - freezes all animation updates for inspector editing.
+    pub fn toggle_force_stop(&mut self) {
+        self.force_stopped = !self.force_stopped;
+    }
 }
 
 /// System to advance playback time.
@@ -104,10 +115,17 @@ pub fn advance_playback(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
 }
 
 /// System to animate transforms based on keyframes.
+/// Only skips updates when force_stopped is true (for inspector editing).
+/// Normal pause still updates animations based on current time.
 pub fn animate_transform(
     playback: Res<AmPlayback>,
     mut query: Query<(&AmAnimated, &mut Transform, &AmLayerMarker)>,
 ) {
+    // Skip animation only when force stopped (for inspector editing)
+    if playback.force_stopped {
+        return;
+    }
+
     let global_time = playback.current_time_ms;
 
     for (animated, mut transform, _marker) in query.iter_mut() {
@@ -147,6 +165,12 @@ pub fn animate_transform(
                 by -= effect_y; // Y is inverted
             }
 
+            // Apply font Y offset for text layers (to compensate for different font metrics)
+            // Only apply to root text layers; child text inherits offset from parent
+            if !animated.has_parent {
+                by -= animated.font_y_offset;
+            }
+
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
 
@@ -163,7 +187,13 @@ pub fn animate_transform(
 }
 
 /// System to animate sprite opacity.
+/// Only skips updates when force_stopped is true (for inspector editing).
 pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated, &mut Sprite)>) {
+    // Skip animation only when force stopped (for inspector editing)
+    if playback.force_stopped {
+        return;
+    }
+
     let global_time = playback.current_time_ms;
 
     for (animated, mut sprite) in query.iter_mut() {
@@ -187,10 +217,24 @@ pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated,
 
 /// System to animate text opacity (handles Text2d entities).
 /// Uses Visibility component for proper show/hide behavior and TextColor alpha for opacity animation.
+/// Only skips updates when force_stopped is true (for inspector editing).
 pub fn animate_text_opacity(
     playback: Res<AmPlayback>,
-    mut query: Query<(&AmAnimated, &mut bevy::text::TextColor, &mut Visibility, &AmLayerMarker), With<Text2d>>,
+    mut query: Query<
+        (
+            &AmAnimated,
+            &mut bevy::text::TextColor,
+            &mut Visibility,
+            &AmLayerMarker,
+        ),
+        With<Text2d>,
+    >,
 ) {
+    // Skip animation only when force stopped (for inspector editing)
+    if playback.force_stopped {
+        return;
+    }
+
     let global_time = playback.current_time_ms;
     let text_count = query.iter().count();
 
@@ -199,7 +243,10 @@ pub fn animate_text_opacity(
     unsafe {
         FRAME_COUNT += 1;
         if FRAME_COUNT % 300 == 1 {
-            println!("[TEXT] Processing {} text entities at time={:.0}", text_count, global_time);
+            println!(
+                "[TEXT] Processing {} text entities at time={:.0}",
+                text_count, global_time
+            );
         }
     }
 

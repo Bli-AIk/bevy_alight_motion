@@ -50,27 +50,27 @@ fn main() {
     println!("Loading project: {}", project_file);
 
     let mut app = App::new();
-    
+
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: format!("Alight Motion Player - {}", project_file),
-                resolution: (1280, 960).into(),
-                resizable: false,
-                ..default()
-            }),
+        primary_window: Some(Window {
+            title: format!("Alight Motion Player - {}", project_file),
+            resolution: (1280, 960).into(),
+            resizable: false,
             ..default()
-        }))
-        // Black background matching AM project
-        .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(ProjectFile(project_file))
-        .init_resource::<DebugOverlaySettings>()
-        .add_plugins(AlightMotionPlugin)
-        .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (handle_input, update_ui, debug_sprites, toggle_debug_overlay),
-        );
-    
+        }),
+        ..default()
+    }))
+    // Black background matching AM project
+    .insert_resource(ClearColor(Color::BLACK))
+    .insert_resource(ProjectFile(project_file))
+    .init_resource::<DebugOverlaySettings>()
+    .add_plugins(AlightMotionPlugin)
+    .add_systems(Startup, setup)
+    .add_systems(
+        Update,
+        (handle_input, update_ui, debug_sprites, toggle_debug_overlay),
+    );
+
     // Add inspector plugin when debug feature is enabled
     #[cfg(feature = "debug")]
     {
@@ -78,7 +78,7 @@ fn main() {
         app.add_plugins(WorldInspectorPlugin::default());
         println!("Debug mode enabled: Inspector will be shown in the window");
     }
-    
+
     app.run();
 }
 
@@ -116,7 +116,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 
     // Instructions - clear English key descriptions
     commands.spawn((
-        Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [Left/Right] Seek | [Up/Down] Speed | [L] Loop"),
+        Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [F5] Force Stop | [Left/Right] Seek | [Up/Down] Speed | [L] Loop"),
         TextFont {
             font_size: 16.0,
             ..default()
@@ -165,6 +165,16 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlay
         playback.playing = true;
     }
 
+    // Force stop toggle (F5) - freezes all animation updates for inspector editing
+    if keyboard.just_pressed(KeyCode::F5) {
+        playback.toggle_force_stop();
+        let status = if playback.force_stopped { "ON" } else { "OFF" };
+        println!(
+            "Force stop: {} (animation updates frozen for inspector editing)",
+            status
+        );
+    }
+
     // Seek backward/forward by 50ms
     if keyboard.pressed(KeyCode::ArrowLeft) {
         playback.current_time_ms = (playback.current_time_ms - 50.0).max(0.0);
@@ -189,7 +199,9 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlay
 
 fn update_ui(playback: Res<AmPlayback>, mut query: Query<&mut Text, With<StatusText>>) {
     for mut text in query.iter_mut() {
-        let status = if playback.playing {
+        let status = if playback.force_stopped {
+            "FORCE STOPPED"
+        } else if playback.playing {
             "Playing"
         } else {
             "Paused"
