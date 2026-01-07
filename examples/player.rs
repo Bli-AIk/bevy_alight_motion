@@ -56,9 +56,10 @@ fn main() {
         // Black background matching AM project
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(ProjectFile(project_file))
+        .init_resource::<DebugOverlaySettings>()
         .add_plugins(AlightMotionPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, update_ui, debug_sprites))
+        .add_systems(Update, (handle_input, update_ui, debug_sprites, toggle_debug_overlay))
         .run();
 }
 
@@ -180,5 +181,163 @@ fn update_ui(playback: Res<AmPlayback>, mut query: Query<&mut Text, With<StatusT
             "{} | Time: {:.0}/{:.0}ms | Speed: {:.2}x | {}",
             status, playback.current_time_ms, playback.total_time_ms, playback.speed, loop_status
         );
+    }
+}
+
+/// Resource to control debug overlay visibility.
+#[derive(Resource, Default)]
+struct DebugOverlaySettings {
+    show_overlay: bool,
+}
+
+/// Component for the debug overlay image entity.
+#[derive(Component)]
+struct DebugOverlay;
+
+/// Toggle the debug overlay with the F4 key.
+fn toggle_debug_overlay(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut settings: ResMut<DebugOverlaySettings>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    overlay_query: Query<Entity, With<DebugOverlay>>,
+    window_query: Query<&Window>,
+) {
+    if keyboard.just_pressed(KeyCode::F4) {
+        settings.show_overlay = !settings.show_overlay;
+
+        if settings.show_overlay {
+            // Remove any existing overlay entity before spawning a new one.
+            for entity in overlay_query.iter() {
+                commands.entity(entity).despawn();
+            }
+
+            // Look up the most recently modified image in the debug folder.
+            if let Some(latest_image_path) = find_latest_debug_image() {
+                println!("Loading debug overlay image: {}", latest_image_path);
+
+                // Load the selected image asset.
+                let image_handle: Handle<Image> = asset_server.load(&latest_image_path);
+
+                // Query the current window size for correct scaling.
+                if let Ok(window) = window_query.single() {
+                    let window_width = window.width();
+                    let window_height = window.height();
+
+                    // Spawn the overlay node with a semi-transparent background.
+                    commands
+                        .spawn((
+                            Name::new("DebugOverlay"),
+                            DebugOverlay,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                top: Val::Px(0.0),
+                                left: Val::Px(0.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            ZIndex(1000),
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                ImageNode {
+                                    image: image_handle,
+                                    // Render the image as semi-transparent.
+                                    color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                                    ..default()
+                                },
+                                Node {
+                                    // Scale the image to fit the window while preserving aspect ratio.
+                                    width: Val::Percent(100.0),
+                                    height: Val::Percent(100.0),
+                                    max_width: Val::Px(window_width),
+                                    max_height: Val::Px(window_height),
+                                    ..default()
+                                },
+                            ));
+                        });
+
+                    println!("Debug image overlay: ON");
+                }
+            }
+        } else {
+            // Remove the overlay entity.
+            for entity in overlay_query.iter() {
+                commands.entity(entity).despawn();
+            }
+            println!("Debug image overlay: OFF");
+        }
+    }
+}
+
+/// Find the most recently modified image in the debug folder.
+fn find_latest_debug_image() -> Option<String> {
+    use std::fs;
+    use std::path::Path;
+    use std::time::SystemTime;
+
+    // Check multiple potential debug folder locations.
+    let possible_paths = [
+        "crates/bevy_alight_motion/assets/debug",
+        "assets/debug",
+        "../souprune/assets/debug",
+        "crates/souprune/assets/debug",
+    ];
+    let extensions = ["png", "jpg", "jpeg", "gif", "bmp", "tiff"];
+
+    let mut latest_file: Option<(String, SystemTime)> = None;
+    let mut found_debug_folder = false;
+
+    for debug_path in &possible_paths {
+        if !Path::new(debug_path).exists() {
+            continue;
+        }
+
+        found_debug_folder = true;
+
+        if let Ok(entries) = fs::read_dir(debug_path) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            // Check whether the file uses a supported image extension.
+                            if let Some(extension) = file_name.split('.').next_back() {
+                                if extensions.contains(&extension.to_lowercase().as_str()) {
+                                    if let Ok(metadata) = entry.metadata() {
+                                        if let Ok(modified) = metadata.modified() {
+                                            let relative_path = format!("debug/{}", file_name);
+
+                                            if latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified {
+                                                latest_file = Some((relative_path, modified));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Once files are found in this path we can stop probing others.
+            if latest_file.is_some() {
+                break;
+            }
+        }
+    }
+
+    if !found_debug_folder {
+        println!("Debug folder not found in any of the expected locations");
+        return None;
+    }
+
+    if let Some((path, _)) = latest_file {
+        println!("Selected latest debug image: {}", path);
+        Some(path)
+    } else {
+        println!("No image files found in debug folder");
+        None
     }
 }

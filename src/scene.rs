@@ -574,6 +574,11 @@ fn spawn_text(
     let (sx, sy) = get_initial_scale(&text.transform.scale);
     let opacity = get_initial_opacity(&text.transform.opacity);
 
+    // Text position offset - adjust these values to fine-tune text positioning
+    // 文本位置偏移 - 调整这些值来微调文本位置
+    const TEXT_OFFSET_X: f32 = -256.0;
+    const TEXT_OFFSET_Y: f32 = 23.0;
+
     // Parse font name from "imported?name=FontName.ttf" format
     let font_name = text
         .font
@@ -583,7 +588,9 @@ fn spawn_text(
 
     // Get font size (default to 16.0 if not specified)
     // AM font sizes appear to be in a different scale - use a larger multiplier
-    let font_size = if text.size > 0.0 { text.size * 3.0 } else { 48.0 };
+    // 文本大小乘数 - 调整这个值来修改字体大小
+    const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
+    let font_size = if text.size > 0.0 { text.size * TEXT_SIZE_MULTIPLIER } else { 48.0 };
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -611,10 +618,26 @@ fn spawn_text(
     );
 
     let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
+        translation: Vec3::new(tx + TEXT_OFFSET_X, ty + TEXT_OFFSET_Y, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
+
+    // Create a modified location with offset applied
+    // 创建一个带有偏移的location副本
+    let mut modified_location = text.transform.location.clone();
+    if let Some(ref mut val) = modified_location.value {
+        val[0] += TEXT_OFFSET_X;
+        val[1] -= TEXT_OFFSET_Y; // Note: Y is inverted in AM coordinates
+    }
+    // Also modify keyframes if present
+    for kf in &mut modified_location.keyframes {
+        if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+            parsed[0] += TEXT_OFFSET_X;
+            parsed[1] -= TEXT_OFFSET_Y;
+            kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+        }
+    }
 
     let mut entity = commands.spawn((
         AmLayerMarker {
@@ -626,7 +649,7 @@ fn spawn_text(
             start_time: text.start_time,
             end_time: text.end_time,
             time_offset: config.time_offset,
-            location: text.transform.location.clone(),
+            location: modified_location,
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
             scale: text.transform.scale.clone(),
