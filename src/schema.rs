@@ -452,6 +452,54 @@ pub struct AmShape {
     /// Fill color (when fillType="color").
     #[serde(rename = "fillColor", default)]
     pub fill_color: Option<AmFillColor>,
+
+    /// Stroke/border style.
+    #[serde(rename = "path-stroke", default)]
+    pub stroke: Option<AmStroke>,
+}
+
+/// Stroke/border properties for shapes.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmStroke {
+    /// Stroke direction ("centered", "inside", "outside").
+    #[serde(rename = "@direction", default)]
+    pub direction: String,
+
+    /// Line cap style ("square", "round", "butt").
+    #[serde(rename = "@cap", default)]
+    pub cap: String,
+
+    /// Line join style ("miter", "round", "bevel").
+    #[serde(rename = "@join", default)]
+    pub join: String,
+
+    /// End size for variable width strokes.
+    #[serde(rename = "@end-size", default)]
+    pub end_size: f32,
+
+    /// Stroke color (child element).
+    #[serde(rename = "color", default)]
+    pub color: Option<AmStrokeColor>,
+
+    /// Stroke width (child element).
+    #[serde(rename = "size", default)]
+    pub size: Option<AmStrokeSize>,
+}
+
+/// Stroke color element.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmStrokeColor {
+    /// Color value in #AARRGGBB format.
+    #[serde(rename = "@value", default)]
+    pub value: String,
+}
+
+/// Stroke size element.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmStrokeSize {
+    /// Size value.
+    #[serde(rename = "@value", default)]
+    pub value: f32,
 }
 
 /// Null object (invisible parent controller).

@@ -3,6 +3,8 @@
 use bevy::prelude::*;
 use bevy::sprite::{Anchor, Text2d};
 use bevy::text::{TextColor, TextFont, TextLayout};
+use bevy_smud::prelude::SdfAssets;
+use bevy_smud::{Frame, SmudShape};
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
@@ -309,7 +311,7 @@ fn spawn_shape(
         }
     } else if shape.fill_type == "color" {
         // Color fill - create a colored sprite using white pixel texture
-        let color = if let Some(fill_color) = &shape.fill_color {
+        let fill_color = if let Some(fill_color) = &shape.fill_color {
             // Try static value first, then check keyframes
             if !fill_color.value.is_empty() {
                 crate::schema::parse_color(&fill_color.value)
@@ -333,16 +335,62 @@ fn spawn_shape(
             Color::srgba(1.0, 1.0, 1.0, opacity)
         };
 
-        println!("  -> Added color sprite with white pixel texture");
-        entity.insert((
-            Sprite {
-                image: white_pixel.clone(),
-                color,
-                custom_size: Some(Vec2::new(width, height)),
-                ..default()
-            },
-            anchor,
-        ));
+        // Check if shape has a stroke (border)
+        if let Some(stroke) = &shape.stroke {
+            let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
+            let stroke_color = stroke
+                .color
+                .as_ref()
+                .and_then(|c| crate::schema::parse_color(&c.value).ok())
+                .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
+                .unwrap_or(Color::WHITE);
+
+            if stroke_width > 0.0 {
+                println!(
+                    "  -> Added stroked shape: stroke_width={:.1}, stroke_color={:?}",
+                    stroke_width, stroke_color
+                );
+
+                // For stroked shapes, we render fill only (stroke not yet implemented visually)
+                // The stroke would require either:
+                // 1. Two sprites (outer stroke layer + inner fill layer) - complex for animations
+                // 2. SDF shader (like bevy_smud) - best solution
+                // 3. Nine-patch sprites - limited to specific border styles
+                //
+                // For now, just render the fill. Stroke implementation TODO.
+                entity.insert((
+                    Sprite {
+                        image: white_pixel.clone(),
+                        color: fill_color,
+                        custom_size: Some(Vec2::new(width, height)),
+                        ..default()
+                    },
+                    anchor,
+                ));
+            } else {
+                println!("  -> Added color sprite with white pixel texture");
+                entity.insert((
+                    Sprite {
+                        image: white_pixel.clone(),
+                        color: fill_color,
+                        custom_size: Some(Vec2::new(width, height)),
+                        ..default()
+                    },
+                    anchor,
+                ));
+            }
+        } else {
+            println!("  -> Added color sprite with white pixel texture");
+            entity.insert((
+                Sprite {
+                    image: white_pixel.clone(),
+                    color: fill_color,
+                    custom_size: Some(Vec2::new(width, height)),
+                    ..default()
+                },
+                anchor,
+            ));
+        }
     }
 
     entity.id()

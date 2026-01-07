@@ -209,9 +209,9 @@ pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated,
         let layer_duration = (animated.end_time - animated.start_time) as f32;
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
-        if let Some(opacity) = interpolate_float(&animated.opacity, layer_time) {
-            sprite.color.set_alpha(opacity.clamp(0.0, 1.0));
-        }
+        // Get opacity from animation data, default to 1.0 if not specified
+        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+        sprite.color.set_alpha(opacity.clamp(0.0, 1.0));
     }
 }
 

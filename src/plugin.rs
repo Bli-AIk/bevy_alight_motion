@@ -3,6 +3,7 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
+use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback, animate_opacity, animate_text_opacity, animate_transform,
@@ -19,7 +20,8 @@ pub struct AlightMotionPlugin;
 
 impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
-        app.init_asset::<AmProject>()
+        app.add_plugins(SmudPlugin)
+            .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
             .add_systems(Startup, setup_white_pixel)
