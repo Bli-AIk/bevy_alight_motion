@@ -124,8 +124,9 @@ async fn load_amproj(
     // Load embedded fonts as labeled assets
     let mut fonts = HashMap::new();
     for (name, data) in embedded_fonts {
-        let font = Font::try_from_bytes(data.clone())
-            .map_err(|e| AmError::InvalidFormat(format!("Failed to load font {}: {:?}", name, e)))?;
+        let font = Font::try_from_bytes(data.clone()).map_err(|e| {
+            AmError::InvalidFormat(format!("Failed to load font {}: {:?}", name, e))
+        })?;
         let label = format!("font_{}", name);
         let handle = load_context.add_labeled_asset(label, font);
         fonts.insert(name, handle);

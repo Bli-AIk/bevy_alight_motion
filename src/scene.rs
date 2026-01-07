@@ -133,7 +133,8 @@ pub fn spawn_scene(
                 }
             }
             AmLayer::EmbedScene(embed) => {
-                let entity = spawn_embed_scene(commands, embed, images, fonts, white_pixel, config, z);
+                let entity =
+                    spawn_embed_scene(commands, embed, images, fonts, white_pixel, config, z);
                 entity_map.insert(embed.id, entity);
                 if embed.parent != 0 {
                     parent_relations.push((entity, embed.parent));
@@ -574,10 +575,26 @@ fn spawn_text(
     let (sx, sy) = get_initial_scale(&text.transform.scale);
     let opacity = get_initial_opacity(&text.transform.opacity);
 
-    // Text position offset - adjust these values to fine-tune text positioning
-    // 文本位置偏移 - 调整这些值来微调文本位置
-    const TEXT_OFFSET_X: f32 = -256.0;
-    const TEXT_OFFSET_Y: f32 = 23.0;
+    // AM text position is based on the CENTER of the wrapWidth box
+    // We need to offset to get the LEFT edge for left-aligned text
+    // 在AM中，文本位置是基于wrapWidth框的中心
+    // 对于左对齐文本，我们需要偏移到左边缘
+    // But for text with parent, don't apply wrap offset since position is relative
+    // 但是对于有父对象的文本，不应用wrapWidth偏移，因为位置是相对的
+    let wrap_width = text.wrap_width;
+    let wrap_offset_x = if has_parent {
+        0.0 // Child text uses relative positioning, no wrap offset
+    } else {
+        match text.align.as_str() {
+            "left" => -wrap_width / 2.0, // Move left by half of wrapWidth
+            "right" => wrap_width / 2.0, // Move right by half of wrapWidth
+            _ => 0.0,                    // Center - no offset needed
+        }
+    };
+
+    // Y offset for text - adjust this to fine-tune vertical positioning
+    // 文本Y轴偏移 - 调整这个值来微调垂直位置
+    const TEXT_OFFSET_Y: f32 = 22.0;
 
     // Parse font name from "imported?name=FontName.ttf" format
     let font_name = text
@@ -590,7 +607,11 @@ fn spawn_text(
     // AM font sizes appear to be in a different scale - use a larger multiplier
     // 文本大小乘数 - 调整这个值来修改字体大小
     const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
-    let font_size = if text.size > 0.0 { text.size * TEXT_SIZE_MULTIPLIER } else { 48.0 };
+    let font_size = if text.size > 0.0 {
+        text.size * TEXT_SIZE_MULTIPLIER
+    } else {
+        48.0
+    };
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -606,35 +627,41 @@ fn spawn_text(
     };
 
     println!(
-        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), size={:.1}, font={}, content='{}'",
+        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, content='{}'",
         text.label,
         text.id,
         text.parent,
         tx,
         ty,
+        wrap_width,
+        wrap_offset_x,
         font_size,
         font_name,
         text.content
     );
 
+    // Y offset only for root text (not for text with parent)
+    // Y偏移只应用于根文本（没有父对象的）
+    let y_offset = if has_parent { 0.0 } else { TEXT_OFFSET_Y };
+
     let transform = Transform {
-        translation: Vec3::new(tx + TEXT_OFFSET_X, ty + TEXT_OFFSET_Y, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty + y_offset, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    // Create a modified location with offset applied
-    // 创建一个带有偏移的location副本
+    // Create a modified location with wrap_offset and Y offset applied
+    // 创建一个带有wrapWidth偏移和Y偏移的location副本
     let mut modified_location = text.transform.location.clone();
     if let Some(ref mut val) = modified_location.value {
-        val[0] += TEXT_OFFSET_X;
-        val[1] -= TEXT_OFFSET_Y; // Note: Y is inverted in AM coordinates
+        val[0] += wrap_offset_x;
+        val[1] -= y_offset; // Note: Y is inverted in AM coordinates
     }
     // Also modify keyframes if present
     for kf in &mut modified_location.keyframes {
         if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
-            parsed[0] += TEXT_OFFSET_X;
-            parsed[1] -= TEXT_OFFSET_Y;
+            parsed[0] += wrap_offset_x;
+            parsed[1] -= y_offset;
             kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
         }
     }
@@ -851,11 +878,7 @@ fn pivot_to_anchor(pivot_x: f32, pivot_y: f32, width: f32, height: f32) -> bevy:
     // AM: pivot (px, py) means: "the anchor point is at (center + pivot)"
     // Bevy: anchor value of 0.5 corresponds to half the sprite size
     // So anchor = pivot / size (where size is the full dimension)
-    let anchor_x = if width > 0.0 {
-        pivot_x / width
-    } else {
-        0.0
-    };
+    let anchor_x = if width > 0.0 { pivot_x / width } else { 0.0 };
     let anchor_y = if height > 0.0 {
         // Y is inverted: AM Y-down, Bevy Y-up
         -pivot_y / height

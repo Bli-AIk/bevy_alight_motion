@@ -59,7 +59,10 @@ fn main() {
         .init_resource::<DebugOverlaySettings>()
         .add_plugins(AlightMotionPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, update_ui, debug_sprites, toggle_debug_overlay))
+        .add_systems(
+            Update,
+            (handle_input, update_ui, debug_sprites, toggle_debug_overlay),
+        )
         .run();
 }
 
@@ -310,7 +313,9 @@ fn find_latest_debug_image() -> Option<String> {
                                         if let Ok(modified) = metadata.modified() {
                                             let relative_path = format!("debug/{}", file_name);
 
-                                            if latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified {
+                                            if latest_file.is_none()
+                                                || latest_file.as_ref().unwrap().1 < modified
+                                            {
                                                 latest_file = Some((relative_path, modified));
                                             }
                                         }
