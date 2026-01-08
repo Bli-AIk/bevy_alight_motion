@@ -14,14 +14,21 @@ use bevy_smud::prelude::*;
 /// Resource to hold dynamically created SDF shader handles.
 #[derive(Resource, Default)]
 pub struct AmSdfShaders {
-    /// Cache of dynamically created SDF shaders keyed by dimensions.
-    /// Not used for caching in current implementation - SDFs are created per-shape.
-    _cache: (),
+    /// Handle to the parametric box SDF shader (uses params for dimensions).
+    pub parametric_box: Option<Handle<Shader>>,
 }
 
 /// Initialize SDF shaders resource on startup.
-pub fn setup_sdf_shaders(mut commands: Commands) {
-    commands.insert_resource(AmSdfShaders::default());
+pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
+    // Create a parametric box SDF that reads dimensions from params.xy
+    // params.x = half_width, params.y = half_height
+    let parametric_box = shaders.add_sdf_expr(
+        "smud::sd_box(p, vec2<f32>(params.x, params.y))"
+    );
+    
+    commands.insert_resource(AmSdfShaders {
+        parametric_box: Some(parametric_box),
+    });
 }
 
 /// Create an SDF expression for a box with given half-dimensions.
@@ -35,6 +42,17 @@ pub fn create_box_sdf(
         "smud::sd_box(p, vec2<f32>({}, {}))",
         half_width, half_height
     ))
+}
+
+/// Create a parametric box SDF that uses params for dimensions.
+/// The shader reads params.x as half_width and params.y as half_height.
+/// This allows dynamic resizing without recreating the shader.
+pub fn create_parametric_box_sdf(
+    shaders: &mut Assets<Shader>,
+) -> Handle<Shader> {
+    shaders.add_sdf_expr(
+        "smud::sd_box(p, vec2<f32>(params.x, params.y))"
+    )
 }
 
 /// Component for AM SDF shapes that need special animation handling.
@@ -62,7 +80,7 @@ mod tests {
     fn test_sdf_shaders_resource() {
         // Just verify the resource struct can be created
         let shaders = AmSdfShaders::default();
-        // Resource is now a simple marker, no shader handles stored
-        let _ = shaders;
+        // Resource now holds optional shader handles
+        assert!(shaders.parametric_box.is_none());
     }
 }

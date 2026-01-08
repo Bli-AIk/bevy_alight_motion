@@ -1257,16 +1257,23 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
     
-    let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
-        rotation: Quat::from_rotation_z(rotation.to_radians()),
-        scale: Vec3::new(sx, sy, 1.0),
-    };
-    
     let needs_sdf = shape.fill_type == "color"
         && shape.stroke.as_ref().map_or(false, |s| {
             s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
         });
+    
+    // For SDF shapes, we don't apply scale to the transform because:
+    // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)
+    // 2. The SDF dimensions are updated dynamically via animate_sdf_scale system
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: if needs_sdf {
+            Vec3::new(1.0, 1.0, 1.0)
+        } else {
+            Vec3::new(sx, sy, 1.0)
+        },
+    };
     
     let spec = if needs_sdf {
         let stroke = shape.stroke.as_ref().unwrap();

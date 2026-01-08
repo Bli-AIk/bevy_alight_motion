@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use bevy_smud::SmudPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_text_opacity,
-    animate_transform, manage_layer_lifecycle,
+    AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_sdf_scale,
+    animate_text_opacity, animate_transform, manage_layer_lifecycle,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
@@ -36,6 +36,7 @@ impl Plugin for AlightMotionPlugin {
                     animate_transform,
                     animate_opacity,
                     animate_sdf_opacity,
+                    animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_text_opacity,
                 )
                     .chain(),
