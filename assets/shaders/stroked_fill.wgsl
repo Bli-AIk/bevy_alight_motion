@@ -21,10 +21,10 @@
 // ADJUSTMENT VARIABLES - Modify these to tune
 // ============================================
 let offset_x = 0.0;        // Horizontal offset (positive = right)
-let offset_y = 0.0;        // Vertical offset (positive = up)
-let size_scale_x = 1.0;    // Width multiplier (1.0 = no change)
-let size_scale_y = 1.0;    // Height multiplier (1.0 = no change)
-let stroke_offset = 0.0;   // Stroke width adjustment (positive = thicker)
+let offset_y = 34.0;        // Vertical offset (positive = up)
+let size_scale_x = 0.99;    // Width multiplier (1.0 = no change)
+let size_scale_y = 0.96;    // Height multiplier (1.0 = no change)
+let stroke_offset = 1.5;   // Stroke width adjustment (positive = thicker)
 // ============================================
 
 let half_width = input.params.x * size_scale_x;

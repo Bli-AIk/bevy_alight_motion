@@ -11,7 +11,7 @@ use crate::animation::{
 };
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
-use crate::sdf::setup_sdf_shaders;
+use crate::sdf::{setup_sdf_shaders, hot_reload_shader};
 
 /// Resource holding the white pixel texture used for solid color sprites.
 #[derive(Resource)]
@@ -38,6 +38,7 @@ impl Plugin for AlightMotionPlugin {
                     animate_sdf_opacity,
                     animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_text_opacity,
+                    hot_reload_shader, // Hot-reload shader when 'R' is pressed
                 )
                     .chain(),
             );
