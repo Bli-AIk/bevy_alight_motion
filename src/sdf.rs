@@ -1,9 +1,9 @@
 //! SDF (Signed Distance Field) shape rendering module.
 //!
 //! This module provides SDF-based rendering for AM shapes using bevy_smud.
-//! 
+//!
 //! ## Design Philosophy (matching AM behavior)
-//! 
+//!
 //! AM renders stroked rectangles by:
 //! 1. Drawing a base shape with a stroke
 //! 2. Applying scale to change dimensions (stroke width stays constant)
@@ -57,35 +57,33 @@ impl Default for AmSdfShaders {
 pub const STROKED_FILL_SHADER_DEFAULT: &str = include_str!("../assets/shaders/stroked_fill.wgsl");
 
 /// Initialize SDF shaders resource on startup.
-pub fn setup_sdf_shaders(
-    mut commands: Commands,
-    mut shaders: ResMut<Assets<Shader>>,
-) {
+pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
     // Create a fixed-size box SDF (50x50 half-extent, 100x100 total)
-    let base_box_sdf = shaders.add_sdf_expr(
-        format!("smud::sd_box(p, vec2<f32>({0}, {0}))", BASE_HALF_EXTENT)
-    );
-    
+    let base_box_sdf = shaders.add_sdf_expr(format!(
+        "smud::sd_box(p, vec2<f32>({0}, {0}))",
+        BASE_HALF_EXTENT
+    ));
+
     // Try to find the shader file path for hot-reload (debug feature only)
     #[cfg(feature = "debug")]
     let shader_file_path = find_shader_file_path();
     #[cfg(not(feature = "debug"))]
     let shader_file_path: Option<PathBuf> = None;
-    
+
     // Load shader content (from file if available, otherwise use embedded)
     let shader_content = if let Some(ref path) = shader_file_path {
         std::fs::read_to_string(path).unwrap_or_else(|_| STROKED_FILL_SHADER_DEFAULT.to_string())
     } else {
         STROKED_FILL_SHADER_DEFAULT.to_string()
     };
-    
+
     let stroked_fill = shaders.add_fill_body(shader_content);
-    
+
     #[cfg(feature = "debug")]
     if shader_file_path.is_some() {
         bevy::log::info!("[SDF] Shader hot-reload enabled. Press 'F5' to reload shader.");
     }
-    
+
     commands.insert_resource(AmSdfShaders {
         base_box_sdf: Some(base_box_sdf),
         stroked_fill: Some(stroked_fill),
@@ -105,13 +103,13 @@ fn find_shader_file_path() -> Option<PathBuf> {
         // Relative to current dir
         PathBuf::from(STROKED_FILL_SHADER_FILENAME),
     ];
-    
+
     for path in &candidates {
         if path.exists() {
             return Some(path.clone());
         }
     }
-    
+
     None
 }
 
@@ -127,12 +125,12 @@ pub fn hot_reload_shader(
     if !keyboard.just_pressed(KeyCode::F5) {
         return;
     }
-    
+
     let Some(ref path) = sdf_shaders.shader_file_path else {
         bevy::log::warn!("[SDF] Shader hot-reload not available (file path not found)");
         return;
     };
-    
+
     // Read shader content from file
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -141,10 +139,10 @@ pub fn hot_reload_shader(
             return;
         }
     };
-    
+
     // Create new shader
     let new_fill = shaders.add_fill_body(&content);
-    
+
     // Update all SmudShape entities to use the new shader
     let mut count = 0;
     for mut shape in smud_shapes.iter_mut() {
@@ -156,10 +154,10 @@ pub fn hot_reload_shader(
             }
         }
     }
-    
+
     // Update the resource
     sdf_shaders.stroked_fill = Some(new_fill);
-    
+
     bevy::log::info!("[SDF] Shader hot-reloaded! Updated {} shapes.", count);
 }
 
@@ -184,12 +182,8 @@ pub fn pack_color(color: Color) -> f32 {
 /// Create a parametric box SDF that uses params for dimensions.
 /// The shader reads params.x as half_width and params.y as half_height.
 /// This allows dynamic resizing without recreating the shader.
-pub fn create_parametric_box_sdf(
-    shaders: &mut Assets<Shader>,
-) -> Handle<Shader> {
-    shaders.add_sdf_expr(
-        "smud::sd_box(p, vec2<f32>(params.x, params.y))"
-    )
+pub fn create_parametric_box_sdf(shaders: &mut Assets<Shader>) -> Handle<Shader> {
+    shaders.add_sdf_expr("smud::sd_box(p, vec2<f32>(params.x, params.y))")
 }
 
 /// Component for AM SDF shapes that need special animation handling.
@@ -221,7 +215,7 @@ mod tests {
         assert!(shaders.base_box_sdf.is_none());
         assert!(shaders.stroked_fill.is_none());
     }
-    
+
     #[test]
     fn test_pack_color() {
         // Test white
@@ -232,7 +226,7 @@ mod tests {
         assert_eq!((bits >> 16) & 0xFF, 255); // G
         assert_eq!((bits >> 8) & 0xFF, 255); // B
         assert_eq!(bits & 0xFF, 255); // A
-        
+
         // Test red
         let red = Color::srgba(1.0, 0.0, 0.0, 1.0);
         let packed = pack_color(red);
