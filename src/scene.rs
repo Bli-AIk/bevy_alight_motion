@@ -4,7 +4,6 @@ use bevy::asset::Assets;
 use bevy::prelude::*;
 use bevy::sprite::{Anchor, Text2d};
 use bevy::text::{TextColor, TextFont, TextLayout};
-use bevy_smud::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
@@ -193,7 +192,7 @@ pub fn spawn_scene(
     // In AM, layers at the END of the XML are rendered on top (higher z).
     // Last layer in XML = highest z (on top), first layer = lowest z (on bottom).
     let layer_count = scene.layers.len();
-    println!(
+    bevy::log::trace!(
         "spawn_scene: layer_count={}, z_spacing={}",
         layer_count, config.z_spacing
     );
@@ -265,14 +264,14 @@ pub fn spawn_scene(
             }
             AmLayer::Audio(audio) => {
                 // TODO: Audio playback is not yet implemented, skip for now
-                println!(
+                bevy::log::trace!(
                     "Skipping audio layer '{}' (id={}) - audio not implemented",
                     audio.label, audio.id
                 );
             }
             AmLayer::Camera(camera) => {
                 // TODO: Camera layer is not yet implemented, skip for now
-                println!(
+                bevy::log::trace!(
                     "Skipping camera layer '{}' (id={}) - camera not implemented",
                     camera.label, camera.id
                 );
@@ -288,7 +287,7 @@ pub fn spawn_scene(
             }
             AmLayer::Video(video) => {
                 // TODO: Video playback is not yet implemented, skip for now
-                println!(
+                bevy::log::trace!(
                     "Skipping video layer '{}' (id={}) - video not implemented",
                     video.label, video.id
                 );
@@ -334,7 +333,7 @@ fn spawn_shape(
     // Convert pivot to Bevy anchor
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
-    println!(
+    bevy::log::trace!(
         "Registering shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
         shape.label,
         shape.id,
@@ -455,7 +454,7 @@ fn spawn_null(
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
 
-    println!(
+    bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
         null.label, null.id, null.parent, tx, ty, sx, sy
     );
@@ -521,7 +520,7 @@ fn spawn_embed_scene(
     let rotation = get_initial_rotation(&embed.transform.rotation);
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
 
-    println!(
+    bevy::log::trace!(
         "Registering embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), start_time={}, time_offset={}",
         embed.label, embed.id, embed.parent, tx, ty, embed.start_time, config.time_offset
     );
@@ -614,7 +613,7 @@ fn spawn_image(
     // Convert pivot to Bevy anchor
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
-    println!(
+    bevy::log::trace!(
         "Registering image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}",
         image.label,
         image.id,
@@ -751,17 +750,17 @@ fn spawn_text(
         let base_y = ty;
         let final_y = base_y - offset;
 
-        println!(
+        bevy::log::trace!(
             "  Font metrics for '{}': win_ascent={:.4}, win_descent={:.4}",
             font_name, metrics.win_ascent, metrics.win_descent
         );
-        println!(
+        bevy::log::trace!(
             "  Y calculation: base_y={:.2}, ascent_diff={:.4}, offset={:.2}, final_y={:.2}",
             base_y, ascent_diff, offset, final_y
         );
         offset
     } else {
-        println!(
+        bevy::log::trace!(
             "  No font metrics found for '{}', using offset=0",
             font_name
         );
@@ -781,7 +780,7 @@ fn spawn_text(
         Color::srgba(1.0, 1.0, 1.0, opacity)
     };
 
-    println!(
+    bevy::log::trace!(
         "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, y_offset={:.1}, content='{}'",
         text.label,
         text.id,
@@ -859,14 +858,14 @@ fn spawn_text(
     // Add Text2d component immediately (text needs font handles which are context-dependent)
     // TODO: In the future, could move to lazy spawning with font handle caching
     let text_font = if let Some(font_handle) = fonts.get(&font_name) {
-        println!("  -> Using embedded font: {}", font_name);
+        bevy::log::trace!("  -> Using embedded font: {}", font_name);
         TextFont {
             font: font_handle.clone(),
             font_size,
             ..default()
         }
     } else {
-        println!("  -> Font not found '{}', using default", font_name);
+        bevy::log::trace!("  -> Font not found '{}', using default", font_name);
         TextFont {
             font_size,
             ..default()
@@ -1119,7 +1118,7 @@ pub fn collect_pending_layers(
     let mut pending_layers = Vec::new();
     
     let layer_count = scene.layers.len();
-    println!(
+    bevy::log::trace!(
         "collect_pending_layers: layer_count={}, z_spacing={}",
         layer_count, config.z_spacing
     );
@@ -1132,7 +1131,7 @@ pub fn collect_pending_layers(
     // Flatten all nested children into a single list
     let flattened = flatten_pending_layers(pending_layers);
     
-    println!("Collected {} pending layers (after flatten)", flattened.len());
+    bevy::log::trace!("Collected {} pending layers (after flatten)", flattened.len());
     flattened
 }
 
@@ -1200,7 +1199,7 @@ fn collect_layer(
     match layer {
         AmLayer::Shape(shape) => {
             if let Some(pl) = collect_shape(shape, config, z) {
-                println!(
+                bevy::log::trace!(
                     "  Collected shape '{}' (id={}, time={}..{}ms)",
                     shape.label, shape.id, shape.start_time, shape.end_time
                 );
@@ -1209,7 +1208,7 @@ fn collect_layer(
         }
         AmLayer::Nullobj(null) => {
             if let Some(pl) = collect_null(null, config, z) {
-                println!(
+                bevy::log::trace!(
                     "  Collected null '{}' (id={}, time={}..{}ms)",
                     null.label, null.id, null.start_time, null.end_time
                 );
@@ -1218,7 +1217,7 @@ fn collect_layer(
         }
         AmLayer::EmbedScene(embed) => {
             let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-            println!(
+            bevy::log::trace!(
                 "  Collected embed '{}' (id={}, time={}..{}ms, children={})",
                 embed.label, embed.id, embed.start_time, embed.end_time, pl.children.len()
             );
@@ -1226,7 +1225,7 @@ fn collect_layer(
         }
         AmLayer::Text(text) => {
             if let Some(pl) = collect_text(text, fonts, font_metrics, config, z) {
-                println!(
+                bevy::log::trace!(
                     "  Collected text '{}' (id={}, time={}..{}ms)",
                     text.label, text.id, text.start_time, text.end_time
                 );
@@ -1235,7 +1234,7 @@ fn collect_layer(
         }
         AmLayer::Image(image) => {
             if let Some(pl) = collect_image(image, config, z) {
-                println!(
+                bevy::log::trace!(
                     "  Collected image '{}' (id={}, time={}..{}ms)",
                     image.label, image.id, image.start_time, image.end_time
                 );

@@ -171,7 +171,7 @@ async fn load_amproj(
                     units_per_em: upm,
                 },
             );
-            println!(
+            bevy::log::trace!(
                 "Font '{}' metrics: win_ascent={:.4}, win_descent={:.4}, upm={}",
                 name, win_ascent, win_descent, upm
             );

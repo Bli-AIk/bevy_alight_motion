@@ -246,7 +246,7 @@ pub fn animate_text_opacity(
     unsafe {
         FRAME_COUNT += 1;
         if FRAME_COUNT % 300 == 1 {
-            println!(
+            bevy::log::trace!(
                 "[TEXT] Processing {} text entities at time={:.0}",
                 text_count, global_time
             );
@@ -261,7 +261,7 @@ pub fn animate_text_opacity(
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
             // Hide text when outside its time range
             if *visibility != Visibility::Hidden {
-                println!(
+                bevy::log::trace!(
                     "[TEXT] Hiding '{}' (id={}): time={:.0}, range=[{}, {}]",
                     marker.label, marker.id, local_time, animated.start_time, animated.end_time
                 );
@@ -273,7 +273,7 @@ pub fn animate_text_opacity(
 
         // Show text when within its time range
         if *visibility == Visibility::Hidden {
-            println!(
+            bevy::log::trace!(
                 "[TEXT] Showing '{}' (id={}): time={:.0}, range=[{}, {}]",
                 marker.label, marker.id, local_time, animated.start_time, animated.end_time
             );
@@ -308,7 +308,7 @@ pub fn animate_sdf_opacity(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut smud_shape, mut visibility, marker) in query.iter_mut() {
+    for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
         let local_time = global_time - animated.time_offset as f32;
 
@@ -333,12 +333,20 @@ pub fn animate_sdf_opacity(
 }
 
 /// System to update SDF shape dimensions based on parent scale animation.
-/// This allows the SDF to scale its dimensions while keeping stroke width constant.
+/// 
+/// ## New Approach (parametric SDF)
+/// Instead of using Transform.scale (which bevy_smud only supports uniformly),
+/// we update SmudShape.params to change the SDF dimensions:
+/// - params.x = base_half_width * animation_scale_x
+/// - params.y = base_half_height * animation_scale_y
+/// - params.z = stroke_width (constant)
+/// - params.w = packed_stroke_color (constant)
+///
+/// This allows non-uniform scaling while keeping stroke width constant.
 pub fn animate_sdf_scale(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children, Option<&AmLayerMarker>), With<AmSdfShapeParent>>,
-    mut fill_query: Query<(&mut bevy_smud::SmudShape, &AmSdfFillParams), Without<AmSdfStrokeParams>>,
-    mut stroke_query: Query<(&mut bevy_smud::SmudShape, &AmSdfStrokeParams), Without<AmSdfFillParams>>,
+    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
+    mut sdf_query: Query<(&mut SmudShape, &AmSdfParams)>,
 ) {
     if playback.force_stopped {
         return;
@@ -346,7 +354,7 @@ pub fn animate_sdf_scale(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, children, marker) in parent_query.iter() {
+    for (animated, children) in parent_query.iter() {
         // Calculate local time
         let local_time = global_time - animated.time_offset as f32;
         
@@ -359,58 +367,27 @@ pub fn animate_sdf_scale(
         let layer_duration = (animated.end_time - animated.start_time) as f32;
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
-        // Get scale from keyframes
-        let scale = if let Some(s) = interpolate_vec2(&animated.scale, layer_time) {
+        // Get animation scale from keyframes
+        let anim_scale = if let Some(s) = interpolate_vec2(&animated.scale, layer_time) {
             s
         } else {
             [1.0, 1.0]
         };
 
-        // Debug: check if this is our SDF shape layer
-        if let Some(m) = marker {
-            if m.label.contains("长方形") {
-                bevy::log::info!("SDF layer {} scale: {:?}, layer_time: {}", m.label, scale, layer_time);
-            }
-        }
-
-        // Update SDF children
+        // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            // Update fill: scaled base dimension minus constant stroke offset
-            if let Ok((mut smud_shape, fill_params)) = fill_query.get_mut(child) {
-                // Fill is inset by stroke_half (constant, not scaled)
-                let scaled_half_width = fill_params.base_half_width * scale[0] - fill_params.stroke_half_width;
-                let scaled_half_height = fill_params.base_half_height * scale[1] - fill_params.stroke_half_width;
-                smud_shape.params.x = scaled_half_width.max(0.0);
-                smud_shape.params.y = scaled_half_height.max(0.0);
+            if let Ok((mut smud_shape, sdf_params)) = sdf_query.get_mut(child) {
+                // Calculate scaled dimensions
+                let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
+                let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
                 
-                // Debug
-                if let Some(m) = marker {
-                    if m.label.contains("长方形") {
-                        bevy::log::info!("  Fill params: base=({}, {}), stroke_half={}, result=({}, {})", 
-                            fill_params.base_half_width, fill_params.base_half_height, 
-                            fill_params.stroke_half_width,
-                            smud_shape.params.x, smud_shape.params.y);
-                    }
-                }
-            }
-            
-            // Update stroke: scaled base dimension plus constant stroke offset
-            if let Ok((mut smud_shape, stroke_params)) = stroke_query.get_mut(child) {
-                // Stroke is offset by stroke_half (constant, not scaled)
-                let scaled_half_width = stroke_params.base_half_width * scale[0] + stroke_params.stroke_half_width;
-                let scaled_half_height = stroke_params.base_half_height * scale[1] + stroke_params.stroke_half_width;
-                smud_shape.params.x = scaled_half_width;
-                smud_shape.params.y = scaled_half_height;
-                
-                // Debug
-                if let Some(m) = marker {
-                    if m.label.contains("长方形") {
-                        bevy::log::info!("  Stroke params: base=({}, {}), stroke_half={}, result=({}, {})", 
-                            stroke_params.base_half_width, stroke_params.base_half_height, 
-                            stroke_params.stroke_half_width,
-                            smud_shape.params.x, smud_shape.params.y);
-                    }
-                }
+                // Update params: (half_width, half_height, stroke_width, packed_stroke)
+                smud_shape.params = Vec4::new(
+                    scaled_half_width,
+                    scaled_half_height,
+                    sdf_params.stroke_width,
+                    sdf_params.packed_stroke,
+                );
             }
         }
     }
@@ -587,8 +564,6 @@ pub fn manage_layer_lifecycle(
             continue;
         };
 
-        let images = &project.images;
-        let fonts = &project.fonts;
         let white_pixel_handle = white_pixel.as_ref().map(|wp| wp.0.clone());
 
         // Process all pending layers (including nested ones)
@@ -609,7 +584,7 @@ pub fn manage_layer_lifecycle(
             if FRAME_COUNT % 300 == 1 {
                 let spawned_count = pending.spawned_entities.len();
                 let total_layers = count_total_layers(&pending.layers);
-                println!(
+                bevy::log::trace!(
                     "[Lifecycle] time={:.0}ms | spawned={}/{} entities",
                     global_time, spawned_count, total_layers
                 );
@@ -695,7 +670,7 @@ fn process_pending_layers(
         if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
             // Find layer info for logging
             if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
-                println!("  [Lifecycle] Despawning '{}' (id={})", layer.label, layer_id);
+                bevy::log::trace!("  [Lifecycle] Despawning '{}' (id={})", layer.label, layer_id);
             }
             
             // Find all children of this layer (direct and nested) and despawn them first
@@ -709,7 +684,7 @@ fn process_pending_layers(
             for child_id in children_to_remove {
                 if let Some(child_entity) = pending.spawned_entities.remove(&child_id) {
                     if let Some(child) = pending.layers.iter().find(|l| l.id == child_id) {
-                        println!("    [Lifecycle] (cascade) Despawning child '{}' (id={})", child.label, child_id);
+                        bevy::log::trace!("    [Lifecycle] (cascade) Despawning child '{}' (id={})", child.label, child_id);
                     }
                     commands.entity(child_entity).despawn();
                 }
@@ -763,8 +738,8 @@ fn process_pending_layers(
             match pending.spawned_entities.get(&layer.parent) {
                 Some(&e) => e,
                 None => {
-                    println!(
-                        "  [Lifecycle] WARNING: Parent {} not found for '{}' (id={}), using root",
+                    bevy::log::warn!(
+                        "[Lifecycle] WARNING: Parent {} not found for '{}' (id={}), using root",
                         layer.parent, layer.label, layer.id
                     );
                     parent_entity
@@ -784,8 +759,8 @@ fn process_pending_layers(
             actual_parent,
         );
         
-        println!(
-            "  [Lifecycle] Spawning '{}' (id={}, parent={}, time={}..{}ms)",
+        bevy::log::debug!(
+            "[Lifecycle] Spawning '{}' (id={}, parent={}, time={}..{}ms)",
             layer.label, layer.id, layer.parent, layer.start_time, layer.end_time
         );
         
@@ -1018,7 +993,28 @@ fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color 
 }
 
 /// Spawn SDF visual components as children of the layer entity.
-/// Uses parametric SDF that can be dynamically resized via params.
+/// 
+/// ## AM Behavior (what we're matching)
+/// AM draws stroked rectangles by:
+/// 1. Drawing a base 100x100 square with stroke
+/// 2. Applying scale transform to stretch it
+/// 3. Stroke width remains constant (not scaled)
+///
+/// ## Our Implementation
+/// 1. Use a fixed 50x50 half-extent SDF box as the base
+/// 2. Calculate the scale to stretch it to target dimensions
+/// 3. Apply scale as a child transform (SDF entity)
+/// 4. Use stroked_fill shader with constant stroke_width parameter
+///
+/// ## bevy_smud Non-Uniform Scale Limitation
+/// bevy_smud only supports uniform scaling (single f32 scale value extracted from Transform).
+/// To achieve non-uniform scaling, we use a **parametric SDF** that reads dimensions from params:
+/// - params.x = half_width
+/// - params.y = half_height  
+/// - params.z = stroke_width
+/// - params.w = packed_stroke_color
+///
+/// The frame size is calculated to encompass the shape + stroke at maximum expected scale.
 fn spawn_sdf_visual(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -1032,6 +1028,8 @@ fn spawn_sdf_visual(
     _pivot_y: f32,
     marker: &AmLayerMarker,
 ) {
+    use crate::sdf::{PARAMETRIC_BOX_SDF, pack_color};
+    
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
         crate::schema::parse_color(stroke_color_value)
@@ -1041,93 +1039,88 @@ fn spawn_sdf_visual(
         Color::WHITE
     };
 
-    // Base dimensions from shape properties (before scale)
-    let base_half_width = width / 2.0;
-    let base_half_height = height / 2.0;
-    let stroke_half = stroke_width / 2.0;
+    // Target dimensions from shape properties (base size before animation scale)
+    let target_half_width = width / 2.0;
+    let target_half_height = height / 2.0;
+    
+    // Use parametric box SDF that reads dimensions from params.x and params.y
+    let parametric_sdf = shaders.add_sdf_expr(PARAMETRIC_BOX_SDF);
+    
+    // Create stroked fill shader
+    let stroked_fill = shaders.add_fill_body(crate::sdf::STROKED_FILL_SHADER);
+    
+    // Pack stroke color into u32 bits stored as f32
+    let packed_stroke = pack_color(stroke);
+    
+    // Frame size for rendering - must be large enough for the largest expected shape.
+    // Since we scale via params, the frame needs to accommodate the max size + stroke.
+    // We use a conservative estimate based on the target size * reasonable max scale factor.
+    // AM animations typically don't exceed 10x scale, so use that as a safety margin.
+    let max_scale_factor = 10.0;
+    let frame_half = (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
+    let frame_size = frame_half * 2.0;
 
-    // Initial dimensions (will be updated by animate_sdf_scale)
-    // Fill is inset by stroke_half, Stroke is offset by stroke_half
-    let fill_half_width = (base_half_width - stroke_half).max(0.0);
-    let fill_half_height = (base_half_height - stroke_half).max(0.0);
-    let stroke_outer_half_width = base_half_width + stroke_half;
-    let stroke_outer_half_height = base_half_height + stroke_half;
-
-    // Use parametric SDF that reads dimensions from params.xy
-    let parametric_sdf = crate::sdf::create_parametric_box_sdf(shaders);
-
-    // Frame size needs to be large enough to contain the shape at maximum expected scale
-    // We use a very large fixed frame size to accommodate any scale animation
-    // The SDF rendering only fills the area defined by params, so a large frame
-    // just means more GPU work but ensures the shape is never clipped
-    let frame_size = 2000.0; // Fixed large frame to handle any reasonable scale
-
-    // Spawn fill child with params containing fill dimensions
-    let fill_entity = commands
+    // Spawn single SDF entity with both fill and stroke
+    // Note: Transform.scale is set to 1.0 because we handle sizing via params
+    let sdf_entity = commands
         .spawn((
-            Name::new(format!("SdfFill[{}]: {}", marker.id, marker.label)),
-            Transform::from_translation(Vec3::new(0.0, 0.0, 0.0001)),
-            GlobalTransform::default(),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            SmudShape {
-                color: fill,
-                sdf: parametric_sdf.clone(),
-                frame: Frame::Quad(frame_size),
-                fill: SIMPLE_FILL_HANDLE,
-                // params.xy = half_width, half_height for the fill
-                params: Vec4::new(fill_half_width, fill_half_height, 0.0, 0.0),
-                ..default()
-            },
-            // Store original dimensions for animation
-            // base_half is the shape's base dimension, stroke_half is for offset
-            AmSdfFillParams {
-                base_half_width,
-                base_half_height,
-                stroke_half_width: stroke_half,
-            },
-        ))
-        .id();
-
-    // Spawn stroke child with params containing stroke dimensions
-    let stroke_entity = commands
-        .spawn((
-            Name::new(format!("SdfStroke[{}]: {}", marker.id, marker.label)),
+            Name::new(format!("SdfShape[{}]: {}", marker.id, marker.label)),
             Transform::default(),
             GlobalTransform::default(),
             Visibility::default(),
             InheritedVisibility::default(),
             ViewVisibility::default(),
             SmudShape {
-                color: stroke,
+                color: fill,
                 sdf: parametric_sdf,
                 frame: Frame::Quad(frame_size),
-                fill: SIMPLE_FILL_HANDLE,
-                // params.xy = half_width, half_height for the stroke
-                params: Vec4::new(stroke_outer_half_width, stroke_outer_half_height, 0.0, 0.0),
+                fill: stroked_fill,
+                // params: half_width, half_height, stroke_width, packed_stroke_color
+                params: Vec4::new(target_half_width, target_half_height, stroke_width, packed_stroke),
                 ..default()
             },
-            // Store original dimensions for animation
-            AmSdfStrokeParams {
-                base_half_width,
-                base_half_height,
-                stroke_half_width: stroke_half,
+            // Store base params for animation
+            AmSdfParams {
+                base_half_width: target_half_width,
+                base_half_height: target_half_height,
+                stroke_width,
+                packed_stroke,
             },
         ))
         .id();
 
-    // Add as children and mark parent as spawned and as SDF parent
-    // AmSdfShapeParent is used to skip scale animation in animate_transform
+    // Add as child and mark parent
     commands
         .entity(parent_entity)
-        .add_child(fill_entity)
-        .add_child(stroke_entity)
+        .add_child(sdf_entity)
         .insert((AmVisualSpawned, AmSdfShapeParent));
+    
+    bevy::log::info!(
+        "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}",
+        marker.label,
+        width, height,
+        stroke_width,
+        frame_size
+    );
 }
 
+/// Component to store SDF shape parameters for animation.
+/// Used by animate_sdf_scale to update SmudShape.params based on animation scale.
+#[derive(Component, Debug, Clone)]
+pub struct AmSdfParams {
+    /// Base half width of the shape (before animation scale)
+    pub base_half_width: f32,
+    /// Base half height of the shape (before animation scale)
+    pub base_half_height: f32,
+    /// Stroke width in pixels (constant, not scaled)
+    pub stroke_width: f32,
+    /// Packed stroke color (stored to preserve during updates)
+    pub packed_stroke: f32,
+}
+
+// Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere
 /// Component to store original SDF fill parameters for animation.
-/// The fill is the inner part of the shape, inset by half the stroke width.
+/// @deprecated Use AmSdfParams instead
 #[derive(Component, Debug, Clone)]
 pub struct AmSdfFillParams {
     /// Base half width of the shape (without scale)
@@ -1139,7 +1132,7 @@ pub struct AmSdfFillParams {
 }
 
 /// Component to store original SDF stroke parameters for animation.
-/// The stroke is the outer part, offset by half the stroke width.
+/// @deprecated Use AmSdfParams instead
 #[derive(Component, Debug, Clone)]
 pub struct AmSdfStrokeParams {
     /// Base half width of the shape (without scale)

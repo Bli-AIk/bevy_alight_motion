@@ -78,19 +78,19 @@ fn spawn_loaded_projects(
         }
 
         if let Some(project) = projects.get(&root.handle) {
-            println!(
+            bevy::log::info!(
                 "Loading AM project: {} ({}x{}, {}ms)",
                 project.scene.title,
                 project.scene.width,
                 project.scene.height,
                 project.scene.total_time
             );
-            println!("  Media count: {}", project.scene.media.len());
-            println!("  Images loaded: {}", project.images.len());
+            bevy::log::debug!("  Media count: {}", project.scene.media.len());
+            bevy::log::debug!("  Images loaded: {}", project.images.len());
             for uri in project.images.keys() {
-                println!("    - {}", uri);
+                bevy::log::trace!("    - {}", uri);
             }
-            println!("  Layers count: {}", project.scene.layers.len());
+            bevy::log::debug!("  Layers count: {}", project.scene.layers.len());
 
             // Update playback duration
             playback.total_time_ms = project.scene.total_time as f32;
@@ -110,7 +110,7 @@ fn spawn_loaded_projects(
                 &config,
             );
             
-            println!(
+            bevy::log::info!(
                 "Prepared {} pending layers for lazy spawning",
                 pending_layers.len()
             );
@@ -122,7 +122,7 @@ fn spawn_loaded_projects(
             });
 
             root.spawned = true;
-            println!("Project ready for playback");
+            bevy::log::info!("Project ready for playback");
         }
     }
 }
