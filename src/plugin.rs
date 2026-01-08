@@ -6,10 +6,12 @@ use bevy::prelude::*;
 use bevy_smud::SmudPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback, animate_opacity, animate_text_opacity, animate_transform,
+    AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_text_opacity,
+    animate_transform, manage_layer_lifecycle,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
-use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig, spawn_scene};
+use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
+use crate::sdf::setup_sdf_shaders;
 
 /// Resource holding the white pixel texture used for solid color sprites.
 #[derive(Resource)]
@@ -24,14 +26,16 @@ impl Plugin for AlightMotionPlugin {
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
-            .add_systems(Startup, setup_white_pixel)
+            .add_systems(Startup, (setup_white_pixel, setup_sdf_shaders))
             .add_systems(
                 Update,
                 (
                     spawn_loaded_projects,
                     advance_playback,
+                    manage_layer_lifecycle, // Spawn/despawn visuals based on time
                     animate_transform,
                     animate_opacity,
+                    animate_sdf_opacity,
                     animate_text_opacity,
                 )
                     .chain(),
@@ -59,19 +63,14 @@ fn setup_white_pixel(mut commands: Commands, mut images: ResMut<Assets<Image>>) 
     commands.insert_resource(AmWhitePixel(handle));
 }
 
-/// System to spawn entities when a project finishes loading.
+/// System to collect pending layers when a project finishes loading.
+/// Note: This doesn't spawn entities immediately - the lifecycle system handles that.
 fn spawn_loaded_projects(
     mut commands: Commands,
     mut query: Query<(Entity, &mut AmProjectRoot)>,
     projects: Res<Assets<AmProject>>,
     mut playback: ResMut<AmPlayback>,
-    white_pixel: Option<Res<AmWhitePixel>>,
 ) {
-    // Wait for white pixel texture to be created
-    let Some(white_pixel) = white_pixel else {
-        return;
-    };
-
     for (entity, mut root) in query.iter_mut() {
         if root.spawned {
             continue;
@@ -102,20 +101,27 @@ fn spawn_loaded_projects(
                 ..Default::default()
             };
 
-            // Spawn the scene entities
-            spawn_scene(
-                &mut commands,
+            // Collect pending layers instead of spawning immediately
+            let pending_layers = crate::scene::collect_pending_layers(
                 &project.scene,
-                &project.images,
                 &project.fonts,
                 &project.font_metrics,
-                &white_pixel.0,
-                entity,
                 &config,
             );
+            
+            println!(
+                "Prepared {} pending layers for lazy spawning",
+                pending_layers.len()
+            );
+
+            // Add the pending layers component to the project root
+            commands.entity(entity).insert(crate::scene::AmPendingLayers {
+                layers: pending_layers,
+                spawned_entities: std::collections::HashMap::new(),
+            });
 
             root.spawned = true;
-            println!("Scene spawned successfully");
+            println!("Project ready for playback");
         }
     }
 }
@@ -127,19 +133,30 @@ pub fn load_am_project(
     path: impl Into<String>,
 ) -> Entity {
     let path_string: String = path.into();
-    let handle: Handle<AmProject> = asset_server.load(path_string);
+    let handle: Handle<AmProject> = asset_server.load(path_string.clone());
+
+    // Extract project name from path for entity naming
+    let project_name = path_string
+        .rsplit('/')
+        .next()
+        .unwrap_or(&path_string)
+        .trim_end_matches(".amproj")
+        .trim_end_matches(".xml");
 
     commands
-        .spawn(AmProjectBundle {
-            transform: Transform::default(),
-            global_transform: GlobalTransform::default(),
-            visibility: Visibility::default(),
-            inherited_visibility: InheritedVisibility::default(),
-            view_visibility: ViewVisibility::default(),
-            marker: AmProjectRoot {
-                handle,
-                spawned: false,
+        .spawn((
+            Name::new(format!("AmProject: {}", project_name)),
+            AmProjectBundle {
+                transform: Transform::default(),
+                global_transform: GlobalTransform::default(),
+                visibility: Visibility::default(),
+                inherited_visibility: InheritedVisibility::default(),
+                view_visibility: ViewVisibility::default(),
+                marker: AmProjectRoot {
+                    handle,
+                    spawned: false,
+                },
             },
-        })
+        ))
         .id()
 }

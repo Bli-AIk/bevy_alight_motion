@@ -1,10 +1,10 @@
 //! Scene building and coordinate transformation.
 
+use bevy::asset::Assets;
 use bevy::prelude::*;
 use bevy::sprite::{Anchor, Text2d};
 use bevy::text::{TextColor, TextFont, TextLayout};
-use bevy_smud::prelude::SdfAssets;
-use bevy_smud::{Frame, SmudShape};
+use bevy_smud::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
@@ -12,6 +12,7 @@ use crate::loader::{AmProject, FontMetrics};
 use crate::schema::{
     AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape, AmText,
 };
+use crate::sdf::AmSdfShaders;
 
 /// Component bundle for an AM project root.
 #[derive(Bundle)]
@@ -39,6 +40,16 @@ pub struct AmProjectRoot {
     pub spawned: bool,
 }
 
+/// Component storing pending layers for lazy entity spawning.
+/// Attached to the project root, contains all layer definitions that haven't been spawned yet.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmPendingLayers {
+    /// All layers in the project, stored as flat list with parent references.
+    pub layers: Vec<PendingLayer>,
+    /// Mapping from layer ID to entity (for spawned layers).
+    pub spawned_entities: HashMap<u64, Entity>,
+}
+
 /// Component marking an AM layer entity.
 #[derive(Component, Debug, Clone)]
 pub struct AmLayerMarker {
@@ -46,6 +57,80 @@ pub struct AmLayerMarker {
     pub id: u64,
     /// Layer label.
     pub label: String,
+}
+
+/// Marker component indicating the layer's visual has been spawned.
+/// When present, the layer has active visual children that need to be despawned when out of time range.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmVisualSpawned;
+
+/// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
+#[derive(Component, Debug, Clone)]
+pub enum AmLayerSpec {
+    /// Shape with sprite (media or color fill without stroke)
+    SpriteShape {
+        image_uri: String,
+        is_media: bool,
+        fill_color: Option<crate::schema::AmFillColor>,
+        width: f32,
+        height: f32,
+        anchor: bevy::sprite::Anchor,
+    },
+    /// Shape with SDF rendering (has stroke)
+    SdfShape {
+        fill_color: Option<crate::schema::AmFillColor>,
+        stroke_color_value: String,
+        stroke_width: f32,
+        width: f32,
+        height: f32,
+        pivot_x: f32,
+        pivot_y: f32,
+    },
+    /// Text layer
+    Text {
+        content: String,
+        font_name: String,
+        font_size: f32,
+        align: String,
+        fill_color: Option<crate::schema::AmFillColor>,
+    },
+    /// Image layer  
+    Image {
+        image_uri: String,
+        width: f32,
+        height: f32,
+        anchor: bevy::sprite::Anchor,
+    },
+    /// Null object (no visual, always active within time range)
+    Null,
+    /// Embedded scene container (children managed separately)
+    EmbedScene,
+}
+
+/// Complete layer definition for deferred spawning.
+/// This stores all information needed to create an entity when the layer becomes active.
+#[derive(Debug, Clone)]
+pub struct PendingLayer {
+    /// Layer ID
+    pub id: u64,
+    /// Layer label
+    pub label: String,
+    /// Parent layer ID (0 = root)
+    pub parent: u64,
+    /// Start time in ms
+    pub start_time: i32,
+    /// End time in ms  
+    pub end_time: i32,
+    /// Initial transform
+    pub transform: Transform,
+    /// Animation data
+    pub animated: AmAnimated,
+    /// Visual specification
+    pub spec: AmLayerSpec,
+    /// Z-order index
+    pub z_index: f32,
+    /// Child pending layers (for embed scenes)
+    pub children: Vec<PendingLayer>,
 }
 
 /// Configuration for scene building.
@@ -92,11 +177,13 @@ pub fn am_to_bevy_coords(x: f32, y: f32, config: &AmSceneConfig) -> (f32, f32) {
 /// Spawn entities from an AM scene.
 pub fn spawn_scene(
     commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
     scene: &AmScene,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
     font_metrics: &HashMap<String, FontMetrics>,
     white_pixel: &Handle<Image>,
+    sdf_shaders: &AmSdfShaders,
     parent: Entity,
     config: &AmSceneConfig,
 ) -> HashMap<u64, Entity> {
@@ -118,7 +205,16 @@ pub fn spawn_scene(
 
         match layer {
             AmLayer::Shape(shape) => {
-                let entity = spawn_shape(commands, shape, images, white_pixel, config, z);
+                let entity = spawn_shape(
+                    commands,
+                    shaders,
+                    shape,
+                    images,
+                    white_pixel,
+                    sdf_shaders,
+                    config,
+                    z,
+                );
                 entity_map.insert(shape.id, entity);
                 if shape.parent != 0 {
                     parent_relations.push((entity, shape.parent));
@@ -138,11 +234,13 @@ pub fn spawn_scene(
             AmLayer::EmbedScene(embed) => {
                 let entity = spawn_embed_scene(
                     commands,
+                    shaders,
                     embed,
                     images,
                     fonts,
                     font_metrics,
                     white_pixel,
+                    sdf_shaders,
                     config,
                     z,
                 );
@@ -211,12 +309,14 @@ pub fn spawn_scene(
     entity_map
 }
 
-/// Spawn a shape layer.
+/// Spawn a shape layer (lazy - visual components spawned later by lifecycle system).
 fn spawn_shape(
     commands: &mut Commands,
+    _shaders: &mut Assets<Shader>,
     shape: &AmShape,
-    images: &HashMap<String, Handle<Image>>,
-    white_pixel: &Handle<Image>,
+    _images: &HashMap<String, Handle<Image>>,
+    _white_pixel: &Handle<Image>,
+    _sdf_shaders: &AmSdfShaders,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -225,7 +325,6 @@ fn spawn_shape(
     let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
-    let opacity = get_initial_opacity(&shape.transform.opacity);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
@@ -236,7 +335,7 @@ fn spawn_shape(
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
     println!(
-        "Spawning shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
+        "Registering shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
         shape.label,
         shape.id,
         shape.parent,
@@ -245,7 +344,6 @@ fn spawn_shape(
         z,
         sx,
         sy,
-        opacity,
         width,
         height,
         pivot_x,
@@ -263,137 +361,85 @@ fn spawn_shape(
     // Create entity name for inspector identification
     let entity_name = format!("Shape[{}]: {}", shape.id, shape.label);
 
-    let mut entity = commands.spawn((
-        Name::new(entity_name),
-        AmLayerMarker {
-            id: shape.id,
-            label: shape.label.clone(),
-        },
-        AmAnimated {
-            layer_id: shape.id,
-            start_time: shape.start_time,
-            end_time: shape.end_time,
-            time_offset: config.time_offset,
-            location: shape.transform.location.clone(),
-            pivot: shape.transform.pivot.clone(),
-            rotation: shape.transform.rotation.clone(),
-            scale: shape.transform.scale.clone(),
-            opacity: shape.transform.opacity.clone(),
-            canvas_width: config.canvas_width,
-            canvas_height: config.canvas_height,
-            has_parent,
-            effect_pos_x,
-            effect_pos_y,
-            font_y_offset: 0.0,
-        },
-        transform,
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-    ));
+    // Check if this is a stroked shape that needs SDF rendering
+    let needs_sdf = shape.fill_type == "color"
+        && shape.stroke.as_ref().map_or(false, |s| {
+            s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
+        });
 
-    // Add sprite if it's a media fill
-    if shape.fill_type == "media" && !shape.fill_image.is_empty() {
-        if let Some(handle) = images.get(&shape.fill_image) {
-            println!("  -> Added media sprite with handle");
-            entity.insert((
-                Sprite {
-                    image: handle.clone(),
-                    color: Color::srgba(1.0, 1.0, 1.0, opacity),
-                    custom_size: Some(Vec2::new(width, height)),
-                    ..default()
-                },
-                anchor.clone(),
-            ));
-        } else {
-            println!("  -> Image not found: {}", shape.fill_image);
+    // Create the layer spec for lazy spawning
+    let layer_spec = if needs_sdf {
+        let stroke = shape.stroke.as_ref().unwrap();
+        let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
+        let stroke_color_value = stroke
+            .color
+            .as_ref()
+            .map(|c| c.value.clone())
+            .unwrap_or_default();
+
+        AmLayerSpec::SdfShape {
+            fill_color: shape.fill_color.clone(),
+            stroke_color_value,
+            stroke_width,
+            width,
+            height,
+            pivot_x,
+            pivot_y,
         }
-    } else if shape.fill_type == "color" {
-        // Color fill - create a colored sprite using white pixel texture
-        let fill_color = if let Some(fill_color) = &shape.fill_color {
-            // Try static value first, then check keyframes
-            if !fill_color.value.is_empty() {
-                crate::schema::parse_color(&fill_color.value)
-                    .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
-                    .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
-            } else if !fill_color.keyframes.is_empty() {
-                // Get the initial color from keyframes (sorted by time)
-                let mut sorted: Vec<_> = fill_color.keyframes.iter().collect();
-                sorted.sort_by(|a, b| {
-                    a.time
-                        .partial_cmp(&b.time)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                crate::schema::parse_color(&sorted[0].value)
-                    .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
-                    .unwrap_or(Color::srgba(1.0, 1.0, 1.0, opacity))
-            } else {
-                Color::srgba(1.0, 1.0, 1.0, opacity)
-            }
-        } else {
-            Color::srgba(1.0, 1.0, 1.0, opacity)
-        };
-
-        // Check if shape has a stroke (border)
-        if let Some(stroke) = &shape.stroke {
-            let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
-            let stroke_color = stroke
-                .color
-                .as_ref()
-                .and_then(|c| crate::schema::parse_color(&c.value).ok())
-                .map(|c| Color::srgba(c[0], c[1], c[2], c[3] * opacity))
-                .unwrap_or(Color::WHITE);
-
-            if stroke_width > 0.0 {
-                println!(
-                    "  -> Added stroked shape: stroke_width={:.1}, stroke_color={:?}",
-                    stroke_width, stroke_color
-                );
-
-                // For stroked shapes, we render fill only (stroke not yet implemented visually)
-                // The stroke would require either:
-                // 1. Two sprites (outer stroke layer + inner fill layer) - complex for animations
-                // 2. SDF shader (like bevy_smud) - best solution
-                // 3. Nine-patch sprites - limited to specific border styles
-                //
-                // For now, just render the fill. Stroke implementation TODO.
-                entity.insert((
-                    Sprite {
-                        image: white_pixel.clone(),
-                        color: fill_color,
-                        custom_size: Some(Vec2::new(width, height)),
-                        ..default()
-                    },
-                    anchor,
-                ));
-            } else {
-                println!("  -> Added color sprite with white pixel texture");
-                entity.insert((
-                    Sprite {
-                        image: white_pixel.clone(),
-                        color: fill_color,
-                        custom_size: Some(Vec2::new(width, height)),
-                        ..default()
-                    },
-                    anchor,
-                ));
-            }
-        } else {
-            println!("  -> Added color sprite with white pixel texture");
-            entity.insert((
-                Sprite {
-                    image: white_pixel.clone(),
-                    color: fill_color,
-                    custom_size: Some(Vec2::new(width, height)),
-                    ..default()
-                },
-                anchor,
-            ));
+    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
+        AmLayerSpec::SpriteShape {
+            image_uri: shape.fill_image.clone(),
+            is_media: true,
+            fill_color: None,
+            width,
+            height,
+            anchor,
         }
-    }
+    } else {
+        // Color fill
+        AmLayerSpec::SpriteShape {
+            image_uri: String::new(),
+            is_media: false,
+            fill_color: shape.fill_color.clone(),
+            width,
+            height,
+            anchor,
+        }
+    };
 
-    entity.id()
+    // Spawn the layer entity without visual components (they'll be added by lifecycle system)
+    commands
+        .spawn((
+            Name::new(entity_name),
+            AmLayerMarker {
+                id: shape.id,
+                label: shape.label.clone(),
+            },
+            AmAnimated {
+                layer_id: shape.id,
+                start_time: shape.start_time,
+                end_time: shape.end_time,
+                time_offset: config.time_offset,
+                location: shape.transform.location.clone(),
+                pivot: shape.transform.pivot.clone(),
+                rotation: shape.transform.rotation.clone(),
+                scale: shape.transform.scale.clone(),
+                opacity: shape.transform.opacity.clone(),
+                canvas_width: config.canvas_width,
+                canvas_height: config.canvas_height,
+                has_parent,
+                effect_pos_x,
+                effect_pos_y,
+                font_y_offset: 0.0,
+            },
+            layer_spec,
+            transform,
+            GlobalTransform::default(),
+            Visibility::Hidden, // Start hidden, lifecycle system will show when active
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+        ))
+        .id()
 }
 
 /// Spawn a null object.
@@ -410,7 +456,7 @@ fn spawn_null(
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
 
     println!(
-        "Spawning nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
+        "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
         null.label, null.id, null.parent, tx, ty, sx, sy
     );
 
@@ -447,9 +493,10 @@ fn spawn_null(
                 effect_pos_y,
                 font_y_offset: 0.0,
             },
+            AmLayerSpec::Null,
             transform,
             GlobalTransform::default(),
-            Visibility::default(),
+            Visibility::Hidden, // Start hidden, lifecycle system will show when active
             InheritedVisibility::default(),
             ViewVisibility::default(),
         ))
@@ -459,11 +506,13 @@ fn spawn_null(
 /// Spawn an embedded scene.
 fn spawn_embed_scene(
     commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
     embed: &crate::schema::AmEmbedScene,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
     font_metrics: &HashMap<String, FontMetrics>,
     white_pixel: &Handle<Image>,
+    sdf_shaders: &AmSdfShaders,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -473,7 +522,7 @@ fn spawn_embed_scene(
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
 
     println!(
-        "Spawning embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), start_time={}, time_offset={}",
+        "Registering embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), start_time={}, time_offset={}",
         embed.label, embed.id, embed.parent, tx, ty, embed.start_time, config.time_offset
     );
 
@@ -510,9 +559,10 @@ fn spawn_embed_scene(
                 effect_pos_y: AmAnimatedFloat::default(),
                 font_y_offset: 0.0,
             },
+            AmLayerSpec::EmbedScene,
             transform,
             GlobalTransform::default(),
-            Visibility::default(),
+            Visibility::Hidden, // Start hidden, lifecycle system will show when active
             InheritedVisibility::default(),
             ViewVisibility::default(),
         ))
@@ -529,11 +579,13 @@ fn spawn_embed_scene(
 
     spawn_scene(
         commands,
+        shaders,
         &embed.scene,
         images,
         fonts,
         font_metrics,
         white_pixel,
+        sdf_shaders,
         entity,
         &nested_config,
     );
@@ -541,11 +593,11 @@ fn spawn_embed_scene(
     entity
 }
 
-/// Spawn an image layer.
+/// Spawn an image layer (lazy - visual components spawned later by lifecycle system).
 fn spawn_image(
     commands: &mut Commands,
     image: &crate::schema::AmImage,
-    images: &HashMap<String, Handle<Image>>,
+    _images: &HashMap<String, Handle<Image>>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -553,7 +605,6 @@ fn spawn_image(
     let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
-    let opacity = get_initial_opacity(&image.transform.opacity);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
 
@@ -564,7 +615,7 @@ fn spawn_image(
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
     println!(
-        "Spawning image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), opacity={:.2}, size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}",
+        "Registering image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}",
         image.label,
         image.id,
         image.parent,
@@ -572,7 +623,6 @@ fn spawn_image(
         ty,
         sx,
         sy,
-        opacity,
         width,
         height,
         pivot_x,
@@ -589,55 +639,43 @@ fn spawn_image(
     // Create entity name for inspector identification
     let entity_name = format!("Image[{}]: {}", image.id, image.label);
 
-    let mut entity = commands.spawn((
-        Name::new(entity_name),
-        AmLayerMarker {
-            id: image.id,
-            label: image.label.clone(),
-        },
-        AmAnimated {
-            layer_id: image.id,
-            start_time: image.start_time,
-            end_time: image.end_time,
-            time_offset: config.time_offset,
-            location: image.transform.location.clone(),
-            pivot: image.transform.pivot.clone(),
-            rotation: image.transform.rotation.clone(),
-            scale: image.transform.scale.clone(),
-            opacity: image.transform.opacity.clone(),
-            canvas_width: config.canvas_width,
-            canvas_height: config.canvas_height,
-            has_parent,
-            effect_pos_x,
-            effect_pos_y,
-            font_y_offset: 0.0,
-        },
-        transform,
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-    ));
-
-    // Add sprite for media fill
-    if !image.fill_image.is_empty() {
-        if let Some(handle) = images.get(&image.fill_image) {
-            println!("  -> Added image sprite with handle");
-            entity.insert((
-                Sprite {
-                    image: handle.clone(),
-                    color: Color::srgba(1.0, 1.0, 1.0, opacity),
-                    custom_size: Some(Vec2::new(width, height)),
-                    ..default()
-                },
+    commands
+        .spawn((
+            Name::new(entity_name),
+            AmLayerMarker {
+                id: image.id,
+                label: image.label.clone(),
+            },
+            AmAnimated {
+                layer_id: image.id,
+                start_time: image.start_time,
+                end_time: image.end_time,
+                time_offset: config.time_offset,
+                location: image.transform.location.clone(),
+                pivot: image.transform.pivot.clone(),
+                rotation: image.transform.rotation.clone(),
+                scale: image.transform.scale.clone(),
+                opacity: image.transform.opacity.clone(),
+                canvas_width: config.canvas_width,
+                canvas_height: config.canvas_height,
+                has_parent,
+                effect_pos_x,
+                effect_pos_y,
+                font_y_offset: 0.0,
+            },
+            AmLayerSpec::Image {
+                image_uri: image.fill_image.clone(),
+                width,
+                height,
                 anchor,
-            ));
-        } else {
-            println!("  -> Image not found: {}", image.fill_image);
-        }
-    }
-
-    entity.id()
+            },
+            transform,
+            GlobalTransform::default(),
+            Visibility::Hidden, // Start hidden, lifecycle system will show when active
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+        ))
+        .id()
 }
 
 /// Spawn a text layer.
@@ -818,7 +856,8 @@ fn spawn_text(
         ViewVisibility::default(),
     ));
 
-    // Add Text2d component
+    // Add Text2d component immediately (text needs font handles which are context-dependent)
+    // TODO: In the future, could move to lazy spawning with font handle caching
     let text_font = if let Some(font_handle) = fonts.get(&font_name) {
         println!("  -> Using embedded font: {}", font_name);
         TextFont {
@@ -841,6 +880,7 @@ fn spawn_text(
         _ => bevy::text::Justify::Left,
     };
 
+    // Text layers have visual components spawned immediately but use visibility for lifecycle
     entity.insert((
         Text2d::new(&text.content),
         text_font,
@@ -849,6 +889,14 @@ fn spawn_text(
         // Use left-center anchor for text - AM uses center Y as the reference point
         // With center anchor, the Y coordinate points to the vertical center of the text
         Anchor(Vec2::new(-0.5, 0.0)),
+        AmLayerSpec::Text {
+            content: text.content.clone(),
+            font_name: font_name.clone(),
+            font_size,
+            align: text.align.clone(),
+            fill_color: text.fill_color.clone(),
+        },
+        AmVisualSpawned, // Mark as already spawned
     ));
 
     entity.id()
@@ -1053,6 +1101,450 @@ fn truncate_string(s: &str, max_len: usize) -> String {
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     }
+}
+
+// =============================================================================
+// DEFERRED ENTITY SPAWNING
+// =============================================================================
+
+/// Collect pending layers from an AM scene without spawning any entities.
+/// Returns a flat list of PendingLayer that can be used to spawn entities on demand.
+pub fn collect_pending_layers(
+    scene: &AmScene,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+) -> Vec<PendingLayer> {
+    let mut pending_layers = Vec::new();
+    
+    let layer_count = scene.layers.len();
+    println!(
+        "collect_pending_layers: layer_count={}, z_spacing={}",
+        layer_count, config.z_spacing
+    );
+    
+    for (idx, layer) in scene.layers.iter().enumerate() {
+        let z = idx as f32 * config.z_spacing;
+        collect_layer(&mut pending_layers, layer, fonts, font_metrics, config, z);
+    }
+    
+    println!("Collected {} pending layers", pending_layers.len());
+    pending_layers
+}
+
+/// Collect a single layer into the pending list.
+fn collect_layer(
+    pending: &mut Vec<PendingLayer>,
+    layer: &AmLayer,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+    z: f32,
+) {
+    match layer {
+        AmLayer::Shape(shape) => {
+            if let Some(pl) = collect_shape(shape, config, z) {
+                println!(
+                    "  Collected shape '{}' (id={}, time={}..{}ms)",
+                    shape.label, shape.id, shape.start_time, shape.end_time
+                );
+                pending.push(pl);
+            }
+        }
+        AmLayer::Nullobj(null) => {
+            if let Some(pl) = collect_null(null, config, z) {
+                println!(
+                    "  Collected null '{}' (id={}, time={}..{}ms)",
+                    null.label, null.id, null.start_time, null.end_time
+                );
+                pending.push(pl);
+            }
+        }
+        AmLayer::EmbedScene(embed) => {
+            let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+            println!(
+                "  Collected embed '{}' (id={}, time={}..{}ms, children={})",
+                embed.label, embed.id, embed.start_time, embed.end_time, pl.children.len()
+            );
+            pending.push(pl);
+        }
+        AmLayer::Text(text) => {
+            if let Some(pl) = collect_text(text, fonts, font_metrics, config, z) {
+                println!(
+                    "  Collected text '{}' (id={}, time={}..{}ms)",
+                    text.label, text.id, text.start_time, text.end_time
+                );
+                pending.push(pl);
+            }
+        }
+        AmLayer::Image(image) => {
+            if let Some(pl) = collect_image(image, config, z) {
+                println!(
+                    "  Collected image '{}' (id={}, time={}..{}ms)",
+                    image.label, image.id, image.start_time, image.end_time
+                );
+                pending.push(pl);
+            }
+        }
+        // Ignore unsupported layer types
+        AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Camera(_) | AmLayer::Video(_) => {}
+    }
+}
+
+/// Collect a shape layer's data.
+fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<PendingLayer> {
+    let has_parent = shape.parent != 0;
+    let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&shape.transform.rotation);
+    let (sx, sy) = get_initial_scale(&shape.transform.scale);
+    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
+    let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
+    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+    
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+    
+    let needs_sdf = shape.fill_type == "color"
+        && shape.stroke.as_ref().map_or(false, |s| {
+            s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
+        });
+    
+    let spec = if needs_sdf {
+        let stroke = shape.stroke.as_ref().unwrap();
+        let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
+        let stroke_color_value = stroke
+            .color
+            .as_ref()
+            .map(|c| c.value.clone())
+            .unwrap_or_default();
+        AmLayerSpec::SdfShape {
+            fill_color: shape.fill_color.clone(),
+            stroke_color_value,
+            stroke_width,
+            width,
+            height,
+            pivot_x,
+            pivot_y,
+        }
+    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
+        AmLayerSpec::SpriteShape {
+            image_uri: shape.fill_image.clone(),
+            is_media: true,
+            fill_color: None,
+            width,
+            height,
+            anchor,
+        }
+    } else {
+        AmLayerSpec::SpriteShape {
+            image_uri: String::new(),
+            is_media: false,
+            fill_color: shape.fill_color.clone(),
+            width,
+            height,
+            anchor,
+        }
+    };
+    
+    Some(PendingLayer {
+        id: shape.id,
+        label: shape.label.clone(),
+        parent: shape.parent,
+        start_time: shape.start_time,
+        end_time: shape.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: shape.id,
+            start_time: shape.start_time,
+            end_time: shape.end_time,
+            time_offset: config.time_offset,
+            location: shape.transform.location.clone(),
+            pivot: shape.transform.pivot.clone(),
+            rotation: shape.transform.rotation.clone(),
+            scale: shape.transform.scale.clone(),
+            opacity: shape.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x,
+            effect_pos_y,
+            font_y_offset: 0.0,
+        },
+        spec,
+        z_index: z,
+        children: Vec::new(),
+    })
+}
+
+/// Collect a null object's data.
+fn collect_null(null: &crate::schema::AmNullObj, config: &AmSceneConfig, z: f32) -> Option<PendingLayer> {
+    let has_parent = null.parent != 0;
+    let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&null.transform.rotation);
+    let (sx, sy) = get_initial_scale(&null.transform.scale);
+    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+    
+    Some(PendingLayer {
+        id: null.id,
+        label: null.label.clone(),
+        parent: null.parent,
+        start_time: null.start_time,
+        end_time: null.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: null.id,
+            start_time: null.start_time,
+            end_time: null.end_time,
+            time_offset: config.time_offset,
+            location: null.transform.location.clone(),
+            pivot: null.transform.pivot.clone(),
+            rotation: null.transform.rotation.clone(),
+            scale: null.transform.scale.clone(),
+            opacity: null.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x,
+            effect_pos_y,
+            font_y_offset: 0.0,
+        },
+        spec: AmLayerSpec::Null,
+        z_index: z,
+        children: Vec::new(),
+    })
+}
+
+/// Collect an embed scene's data recursively.
+fn collect_embed_scene(
+    embed: &crate::schema::AmEmbedScene,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+    z: f32,
+) -> PendingLayer {
+    let has_parent = embed.parent != 0;
+    let (tx, ty) = get_initial_location(&embed.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&embed.transform.rotation);
+    let (sx, sy) = get_initial_scale(&embed.transform.scale);
+    
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+    
+    // Collect children with nested config
+    let nested_config = AmSceneConfig {
+        canvas_width: embed.scene.width as f32,
+        canvas_height: embed.scene.height as f32,
+        time_offset: config.time_offset + embed.start_time,
+        ..config.clone()
+    };
+    
+    let children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
+    
+    PendingLayer {
+        id: embed.id,
+        label: embed.label.clone(),
+        parent: embed.parent,
+        start_time: embed.start_time,
+        end_time: embed.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: embed.id,
+            start_time: embed.start_time,
+            end_time: embed.end_time,
+            time_offset: config.time_offset,
+            location: embed.transform.location.clone(),
+            pivot: embed.transform.pivot.clone(),
+            rotation: embed.transform.rotation.clone(),
+            scale: embed.transform.scale.clone(),
+            opacity: embed.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x: AmAnimatedFloat::default(),
+            effect_pos_y: AmAnimatedFloat::default(),
+            font_y_offset: 0.0,
+        },
+        spec: AmLayerSpec::EmbedScene,
+        z_index: z,
+        children,
+    }
+}
+
+/// Collect a text layer's data.
+fn collect_text(
+    text: &AmText,
+    _fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Option<PendingLayer> {
+    let has_parent = text.parent != 0;
+    let (tx, ty) = get_initial_location(&text.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&text.transform.rotation);
+    let (sx, sy) = get_initial_scale(&text.transform.scale);
+    
+    // Font name parsing
+    let font_name = text
+        .font
+        .strip_prefix("imported?name=")
+        .unwrap_or(&text.font)
+        .to_string();
+    
+    const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
+    let font_size = if text.size > 0.0 {
+        text.size * TEXT_SIZE_MULTIPLIER
+    } else {
+        48.0
+    };
+    
+    // Calculate wrap offset for text positioning
+    // AM text position is based on the CENTER of the wrapWidth box
+    // We need to offset to get the LEFT edge for left-aligned text
+    let wrap_width = text.wrap_width;
+    let wrap_offset_x = if has_parent {
+        0.0 // Child text uses relative positioning, no wrap offset
+    } else {
+        match text.align.as_str() {
+            "left" => -wrap_width / 2.0, // Move left by half of wrapWidth
+            "right" => wrap_width / 2.0, // Move right by half of wrapWidth
+            _ => 0.0,                    // Center - no offset needed
+        }
+    };
+    
+    // Calculate Y offset based on font metrics
+    const REFERENCE_WIN_ASCENT: f32 = 1.1285;
+    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
+        let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
+        ascent_diff * font_size * 0.43
+    } else {
+        0.0
+    };
+    
+    let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
+    
+    let transform = Transform {
+        translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+    
+    // Create a modified location with wrap_offset applied (for animations)
+    let mut modified_location = text.transform.location.clone();
+    if let Some(ref mut val) = modified_location.value {
+        val[0] += wrap_offset_x;
+    }
+    // Also modify keyframes if present
+    for kf in &mut modified_location.keyframes {
+        if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+            parsed[0] += wrap_offset_x;
+            kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+        }
+    }
+    
+    Some(PendingLayer {
+        id: text.id,
+        label: text.label.clone(),
+        parent: text.parent,
+        start_time: text.start_time,
+        end_time: text.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: text.id,
+            start_time: text.start_time,
+            end_time: text.end_time,
+            time_offset: config.time_offset,
+            location: modified_location, // Use modified location with wrap offset
+            pivot: text.transform.pivot.clone(),
+            rotation: text.transform.rotation.clone(),
+            scale: text.transform.scale.clone(),
+            opacity: text.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x: AmAnimatedFloat::default(),
+            effect_pos_y: AmAnimatedFloat::default(),
+            font_y_offset,
+        },
+        spec: AmLayerSpec::Text {
+            content: text.content.clone(),
+            font_name,
+            font_size,
+            align: text.align.clone(),
+            fill_color: text.fill_color.clone(),
+        },
+        z_index: z,
+        children: Vec::new(),
+    })
+}
+
+/// Collect an image layer's data.
+fn collect_image(
+    image: &crate::schema::AmImage,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Option<PendingLayer> {
+    let has_parent = image.parent != 0;
+    let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&image.transform.rotation);
+    let (sx, sy) = get_initial_scale(&image.transform.scale);
+    let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
+    
+    // Get size from properties
+    let (width, height) = get_shape_size(&image.properties, &image.fill_type);
+    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+    
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+    
+    Some(PendingLayer {
+        id: image.id,
+        label: image.label.clone(),
+        parent: image.parent,
+        start_time: image.start_time,
+        end_time: image.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: image.id,
+            start_time: image.start_time,
+            end_time: image.end_time,
+            time_offset: config.time_offset,
+            location: image.transform.location.clone(),
+            pivot: image.transform.pivot.clone(),
+            rotation: image.transform.rotation.clone(),
+            scale: image.transform.scale.clone(),
+            opacity: image.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            effect_pos_x: AmAnimatedFloat::default(),
+            effect_pos_y: AmAnimatedFloat::default(),
+            font_y_offset: 0.0,
+        },
+        spec: AmLayerSpec::Image {
+            image_uri: image.fill_image.clone(),
+            width,
+            height,
+            anchor,
+        },
+        z_index: z,
+        children: Vec::new(),
+    })
 }
 
 #[cfg(test)]

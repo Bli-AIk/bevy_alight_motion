@@ -286,6 +286,49 @@ pub fn animate_text_opacity(
     }
 }
 
+/// System to animate SDF shape opacity (handles SmudShape entities).
+/// Uses Visibility component for proper show/hide behavior and SmudShape color alpha for opacity animation.
+/// Only skips updates when force_stopped is true (for inspector editing).
+pub fn animate_sdf_opacity(
+    playback: Res<AmPlayback>,
+    mut query: Query<(
+        &AmAnimated,
+        &mut bevy_smud::SmudShape,
+        &mut Visibility,
+        &AmLayerMarker,
+    )>,
+) {
+    // Skip animation only when force stopped (for inspector editing)
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, mut smud_shape, mut visibility, marker) in query.iter_mut() {
+        // Calculate local time (accounting for time offset from parent scene)
+        let local_time = global_time - animated.time_offset as f32;
+
+        // Check if layer is active
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            // Hide shape when outside its time range
+            *visibility = Visibility::Hidden;
+            smud_shape.color.set_alpha(0.0);
+            continue;
+        }
+
+        // Show shape when within its time range
+        *visibility = Visibility::Inherited;
+
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Get opacity from keyframes, or default to 1.0 if no opacity animation
+        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+        smud_shape.color.set_alpha(opacity.clamp(0.0, 1.0));
+    }
+}
+
 /// Interpolate a Vec3 property at normalized time t.
 pub fn interpolate_vec3(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
     if prop.keyframes.is_empty() {
@@ -414,6 +457,464 @@ fn parse_keyframe_vec3(s: &str) -> Option<[f32; 3]> {
 /// Parse Vec2 from keyframe value string.
 fn parse_keyframe_vec2(s: &str) -> Option<[f32; 2]> {
     crate::schema::parse_vec2(s).ok()
+}
+
+// ============================================================================
+// Layer Lifecycle Management System
+// ============================================================================
+
+use crate::loader::AmProject;
+use crate::plugin::AmWhitePixel;
+use crate::scene::{AmLayerSpec, AmPendingLayers, AmVisualSpawned, PendingLayer};
+use bevy::asset::Assets;
+use bevy_smud::prelude::*;
+use std::collections::HashMap;
+
+/// System to manage layer lifecycle based on playback time.
+/// - Creates entities when layers enter their time range
+/// - Destroys entities when layers exit their time range
+/// - Implements true lazy spawning where no entities exist until needed
+pub fn manage_layer_lifecycle(
+    mut commands: Commands,
+    playback: Res<AmPlayback>,
+    mut shaders: ResMut<Assets<Shader>>,
+    white_pixel: Option<Res<AmWhitePixel>>,
+    projects: Res<Assets<AmProject>>,
+    mut project_query: Query<(Entity, &crate::scene::AmProjectRoot, &mut AmPendingLayers)>,
+) {
+    // Skip if force stopped
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    // Debug logging
+    static mut FRAME_COUNT: u32 = 0;
+    unsafe {
+        FRAME_COUNT += 1;
+    }
+
+    for (project_entity, root, mut pending) in project_query.iter_mut() {
+        let Some(project) = projects.get(&root.handle) else {
+            continue;
+        };
+
+        let images = &project.images;
+        let fonts = &project.fonts;
+        let white_pixel_handle = white_pixel.as_ref().map(|wp| wp.0.clone());
+
+        // Process all pending layers (including nested ones)
+        process_pending_layers(
+            &mut commands,
+            &mut shaders,
+            &mut pending,
+            &project.images,
+            &project.fonts,
+            white_pixel_handle.as_ref(),
+            global_time,
+            project_entity,
+            0, // root time offset
+        );
+
+        // Log stats occasionally
+        unsafe {
+            if FRAME_COUNT % 300 == 1 {
+                let spawned_count = pending.spawned_entities.len();
+                let total_layers = count_total_layers(&pending.layers);
+                println!(
+                    "[Lifecycle] time={:.0}ms | spawned={}/{} entities",
+                    global_time, spawned_count, total_layers
+                );
+            }
+        }
+    }
+}
+
+/// Count total layers including nested ones.
+fn count_total_layers(layers: &[PendingLayer]) -> usize {
+    layers.iter().map(|l| 1 + count_total_layers(&l.children)).sum()
+}
+
+/// Process pending layers recursively.
+fn process_pending_layers(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    pending: &mut AmPendingLayers,
+    images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
+    white_pixel: Option<&Handle<Image>>,
+    global_time: f32,
+    parent_entity: Entity,
+    time_offset: i32,
+) {
+    // We need to collect actions to avoid borrowing issues
+    let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
+    let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
+
+    for (idx, layer) in pending.layers.iter().enumerate() {
+        // Calculate local time
+        let local_time = global_time - (layer.animated.time_offset + time_offset) as f32;
+        
+        // Check if layer should be active
+        let should_be_active = local_time >= layer.start_time as f32 
+            && local_time <= layer.end_time as f32;
+
+        let is_spawned = pending.spawned_entities.contains_key(&layer.id);
+
+        if should_be_active && !is_spawned {
+            to_spawn.push(idx);
+        } else if !should_be_active && is_spawned {
+            to_despawn.push(layer.id);
+        }
+    }
+
+    // Despawn entities that are no longer active
+    for layer_id in to_despawn {
+        if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
+            // Find layer info for logging
+            if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+                println!("  [Lifecycle] Despawning '{}' (id={})", layer.label, layer_id);
+            }
+            // Despawn entity (Bevy will handle orphaned children)
+            commands.entity(entity).despawn();
+        }
+    }
+
+    // Sort layers to spawn by dependency (parents before children)
+    // Build a set of layer IDs being spawned this frame
+    let spawning_ids: std::collections::HashSet<u64> = to_spawn.iter()
+        .map(|&idx| pending.layers[idx].id)
+        .collect();
+    
+    // Sort: layers without parents or with already-spawned parents come first
+    to_spawn.sort_by(|&a_idx, &b_idx| {
+        let a = &pending.layers[a_idx];
+        let b = &pending.layers[b_idx];
+        
+        // Check if parent is also being spawned this frame
+        let a_needs_wait = a.parent != 0 && spawning_ids.contains(&a.parent);
+        let b_needs_wait = b.parent != 0 && spawning_ids.contains(&b.parent);
+        
+        match (a_needs_wait, b_needs_wait) {
+            (false, true) => std::cmp::Ordering::Less,    // a comes before b
+            (true, false) => std::cmp::Ordering::Greater, // b comes before a
+            _ => std::cmp::Ordering::Equal,               // same priority
+        }
+    });
+
+    // Spawn new entities in dependency order
+    for idx in to_spawn {
+        let layer = &pending.layers[idx];
+        
+        // Determine parent for this entity
+        let actual_parent = if layer.parent != 0 {
+            pending.spawned_entities.get(&layer.parent).copied().unwrap_or(parent_entity)
+        } else {
+            parent_entity
+        };
+        
+        let entity = spawn_layer_entity(
+            commands,
+            shaders,
+            layer,
+            images,
+            fonts,
+            white_pixel,
+            actual_parent,
+        );
+        
+        println!(
+            "  [Lifecycle] Spawning '{}' (id={}, parent={}, time={}..{}ms)",
+            layer.label, layer.id, layer.parent, layer.start_time, layer.end_time
+        );
+        
+        pending.spawned_entities.insert(layer.id, entity);
+    }
+}
+
+/// Spawn a complete entity from a PendingLayer.
+fn spawn_layer_entity(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    layer: &PendingLayer,
+    images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
+    white_pixel: Option<&Handle<Image>>,
+    parent_entity: Entity,
+) -> Entity {
+    let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
+    
+    // Create base entity with common components
+    let entity = commands.spawn((
+        Name::new(entity_name),
+        AmLayerMarker {
+            id: layer.id,
+            label: layer.label.clone(),
+        },
+        layer.animated.clone(),
+        layer.spec.clone(),
+        layer.transform,
+        GlobalTransform::default(),
+        Visibility::Inherited,
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    )).id();
+
+    // Add visual components based on spec
+    add_visual_components(
+        commands,
+        shaders,
+        entity,
+        &layer.spec,
+        images,
+        fonts,
+        white_pixel,
+        &layer.label,
+        layer.id,
+    );
+
+    // Add as child of parent
+    commands.entity(parent_entity).add_child(entity);
+
+    entity
+}
+
+/// Add visual components to an entity based on layer spec.
+fn add_visual_components(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    entity: Entity,
+    spec: &AmLayerSpec,
+    images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
+    white_pixel: Option<&Handle<Image>>,
+    label: &str,
+    id: u64,
+) {
+    match spec {
+        AmLayerSpec::SpriteShape {
+            image_uri,
+            is_media,
+            fill_color,
+            width,
+            height,
+            anchor,
+        } => {
+            if *is_media && !image_uri.is_empty() {
+                if let Some(handle) = images.get(image_uri) {
+                    commands.entity(entity).insert((
+                        Sprite {
+                            image: handle.clone(),
+                            color: Color::WHITE,
+                            custom_size: Some(Vec2::new(*width, *height)),
+                            ..default()
+                        },
+                        anchor.clone(),
+                        AmVisualSpawned,
+                    ));
+                }
+            } else if let Some(wp) = white_pixel {
+                let color = extract_fill_color(fill_color);
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: wp.clone(),
+                        color,
+                        custom_size: Some(Vec2::new(*width, *height)),
+                        ..default()
+                    },
+                    anchor.clone(),
+                    AmVisualSpawned,
+                ));
+            }
+        }
+        AmLayerSpec::SdfShape {
+            fill_color,
+            stroke_color_value,
+            stroke_width,
+            width,
+            height,
+            pivot_x,
+            pivot_y,
+        } => {
+            spawn_sdf_visual(
+                commands,
+                shaders,
+                entity,
+                fill_color,
+                stroke_color_value,
+                *stroke_width,
+                *width,
+                *height,
+                *pivot_x,
+                *pivot_y,
+                &AmLayerMarker { id, label: label.to_string() },
+            );
+        }
+        AmLayerSpec::Image {
+            image_uri,
+            width,
+            height,
+            anchor,
+        } => {
+            if let Some(handle) = images.get(image_uri) {
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: handle.clone(),
+                        color: Color::WHITE,
+                        custom_size: Some(Vec2::new(*width, *height)),
+                        ..default()
+                    },
+                    anchor.clone(),
+                    AmVisualSpawned,
+                ));
+            }
+        }
+        AmLayerSpec::Text {
+            content,
+            font_name,
+            font_size,
+            align,
+            fill_color,
+        } => {
+            // For text, we need font handles
+            if let Some(font_handle) = fonts.get(font_name) {
+                use bevy::sprite::{Anchor, Text2d};
+                use bevy::text::{Justify, TextColor, TextFont, TextLayout};
+                
+                let color = extract_fill_color(fill_color);
+                let justify = match align.as_str() {
+                    "center" => Justify::Center,
+                    "right" => Justify::Right,
+                    _ => Justify::Left,
+                };
+                
+                commands.entity(entity).insert((
+                    Text2d::new(content),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: *font_size,
+                        ..default()
+                    },
+                    TextColor(color),
+                    TextLayout::new_with_justify(justify),
+                    Anchor(Vec2::new(-0.5, 0.0)), // Left-center anchor
+                    AmVisualSpawned,
+                ));
+            }
+        }
+        AmLayerSpec::Null | AmLayerSpec::EmbedScene => {
+            // No visual components needed
+            commands.entity(entity).insert(AmVisualSpawned);
+        }
+    }
+}
+
+/// Extract fill color from AmFillColor.
+fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color {
+    if let Some(fc) = fill_color {
+        if !fc.value.is_empty() {
+            if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                return Color::srgba(c[0], c[1], c[2], c[3]);
+            }
+        } else if !fc.keyframes.is_empty() {
+            let mut sorted: Vec<_> = fc.keyframes.iter().collect();
+            sorted.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Ok(c) = crate::schema::parse_color(&sorted[0].value) {
+                return Color::srgba(c[0], c[1], c[2], c[3]);
+            }
+        }
+    }
+    Color::WHITE
+}
+
+/// Spawn SDF visual components as children of the layer entity.
+fn spawn_sdf_visual(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    parent_entity: Entity,
+    fill_color: &Option<crate::schema::AmFillColor>,
+    stroke_color_value: &str,
+    stroke_width: f32,
+    width: f32,
+    height: f32,
+    _pivot_x: f32,
+    _pivot_y: f32,
+    marker: &AmLayerMarker,
+) {
+    let fill = extract_fill_color(fill_color);
+    let stroke = if !stroke_color_value.is_empty() {
+        crate::schema::parse_color(stroke_color_value)
+            .map(|c| Color::srgba(c[0], c[1], c[2], c[3]))
+            .unwrap_or(Color::WHITE)
+    } else {
+        Color::WHITE
+    };
+
+    let base_half_width = width / 2.0;
+    let base_half_height = height / 2.0;
+    let base_stroke_width = stroke_width;
+
+    let fill_half_width = (base_half_width - base_stroke_width / 2.0).max(0.0);
+    let fill_half_height = (base_half_height - base_stroke_width / 2.0).max(0.0);
+    let stroke_outer_half_width = base_half_width + base_stroke_width / 2.0;
+    let stroke_outer_half_height = base_half_height + base_stroke_width / 2.0;
+
+    let fill_sdf = crate::sdf::create_box_sdf(shaders, fill_half_width, fill_half_height);
+    let stroke_sdf =
+        crate::sdf::create_box_sdf(shaders, stroke_outer_half_width, stroke_outer_half_height);
+
+    let fill_frame_size = fill_half_width.max(fill_half_height) + 10.0;
+    let stroke_frame_size = stroke_outer_half_width.max(stroke_outer_half_height) + 10.0;
+
+    // Spawn fill child
+    let fill_entity = commands
+        .spawn((
+            Name::new(format!("SdfFill[{}]: {}", marker.id, marker.label)),
+            Transform::from_translation(Vec3::new(0.0, 0.0, 0.0001)),
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            SmudShape {
+                color: fill,
+                sdf: fill_sdf,
+                frame: Frame::Quad(fill_frame_size),
+                fill: SIMPLE_FILL_HANDLE,
+                ..default()
+            },
+        ))
+        .id();
+
+    // Spawn stroke child
+    let stroke_entity = commands
+        .spawn((
+            Name::new(format!("SdfStroke[{}]: {}", marker.id, marker.label)),
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            SmudShape {
+                color: stroke,
+                sdf: stroke_sdf,
+                frame: Frame::Quad(stroke_frame_size),
+                fill: SIMPLE_FILL_HANDLE,
+                ..default()
+            },
+        ))
+        .id();
+
+    // Add as children and mark parent as spawned
+    commands
+        .entity(parent_entity)
+        .add_child(fill_entity)
+        .add_child(stroke_entity)
+        .insert(AmVisualSpawned);
 }
 
 #[cfg(test)]

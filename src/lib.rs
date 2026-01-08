@@ -44,6 +44,7 @@ pub mod loader;
 pub mod plugin;
 pub mod scene;
 pub mod schema;
+pub mod sdf;
 
 /// Prelude module for convenient imports.
 pub mod prelude {
