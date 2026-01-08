@@ -120,7 +120,12 @@ pub fn advance_playback(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
 /// Note: Scale animation is skipped for SDF shape parents (handled by animate_sdf_scale).
 pub fn animate_transform(
     playback: Res<AmPlayback>,
-    mut query: Query<(&AmAnimated, &mut Transform, &AmLayerMarker, Option<&AmSdfShapeParent>)>,
+    mut query: Query<(
+        &AmAnimated,
+        &mut Transform,
+        &AmLayerMarker,
+        Option<&AmSdfShapeParent>,
+    )>,
 ) {
     // Skip animation only when force stopped (for inspector editing)
     if playback.force_stopped {
@@ -248,7 +253,8 @@ pub fn animate_text_opacity(
         if FRAME_COUNT % 300 == 1 {
             bevy::log::trace!(
                 "[TEXT] Processing {} text entities at time={:.0}",
-                text_count, global_time
+                text_count,
+                global_time
             );
         }
     }
@@ -263,7 +269,11 @@ pub fn animate_text_opacity(
             if *visibility != Visibility::Hidden {
                 bevy::log::trace!(
                     "[TEXT] Hiding '{}' (id={}): time={:.0}, range=[{}, {}]",
-                    marker.label, marker.id, local_time, animated.start_time, animated.end_time
+                    marker.label,
+                    marker.id,
+                    local_time,
+                    animated.start_time,
+                    animated.end_time
                 );
             }
             *visibility = Visibility::Hidden;
@@ -275,7 +285,11 @@ pub fn animate_text_opacity(
         if *visibility == Visibility::Hidden {
             bevy::log::trace!(
                 "[TEXT] Showing '{}' (id={}): time={:.0}, range=[{}, {}]",
-                marker.label, marker.id, local_time, animated.start_time, animated.end_time
+                marker.label,
+                marker.id,
+                local_time,
+                animated.start_time,
+                animated.end_time
             );
         }
         *visibility = Visibility::Inherited;
@@ -333,7 +347,7 @@ pub fn animate_sdf_opacity(
 }
 
 /// System to update SDF shape dimensions based on parent scale animation.
-/// 
+///
 /// ## New Approach (parametric SDF)
 /// Instead of using Transform.scale (which bevy_smud only supports uniformly),
 /// we update SmudShape.params to change the SDF dimensions:
@@ -357,7 +371,7 @@ pub fn animate_sdf_scale(
     for (animated, children) in parent_query.iter() {
         // Calculate local time
         let local_time = global_time - animated.time_offset as f32;
-        
+
         // Skip if outside active time range
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
             continue;
@@ -380,7 +394,7 @@ pub fn animate_sdf_scale(
                 // Calculate scaled dimensions
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
-                
+
                 // Update params: (half_width, half_height, stroke_width, packed_stroke)
                 smud_shape.params = Vec4::new(
                     scaled_half_width,
@@ -529,7 +543,9 @@ fn parse_keyframe_vec2(s: &str) -> Option<[f32; 2]> {
 
 use crate::loader::AmProject;
 use crate::plugin::AmWhitePixel;
-use crate::scene::{AmLayerSpec, AmPendingLayers, AmVisualSpawned, PendingLayer};
+use crate::scene::{
+    AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPendingLayers, AmVisualSpawned, PendingLayer,
+};
 use bevy::asset::Assets;
 use bevy_smud::prelude::*;
 use std::collections::HashMap;
@@ -542,6 +558,8 @@ pub fn manage_layer_lifecycle(
     mut commands: Commands,
     playback: Res<AmPlayback>,
     mut shaders: ResMut<Assets<Shader>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut masked_materials: ResMut<Assets<crate::masked_sprite::MaskedSpriteMaterial>>,
     sdf_shaders: Res<crate::sdf::AmSdfShaders>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
@@ -571,6 +589,8 @@ pub fn manage_layer_lifecycle(
         process_pending_layers(
             &mut commands,
             &mut shaders,
+            &mut meshes,
+            &mut masked_materials,
             &sdf_shaders,
             &mut pending,
             &project.images,
@@ -588,7 +608,9 @@ pub fn manage_layer_lifecycle(
                 let total_layers = count_total_layers(&pending.layers);
                 bevy::log::trace!(
                     "[Lifecycle] time={:.0}ms | spawned={}/{} entities",
-                    global_time, spawned_count, total_layers
+                    global_time,
+                    spawned_count,
+                    total_layers
                 );
             }
         }
@@ -597,13 +619,18 @@ pub fn manage_layer_lifecycle(
 
 /// Count total layers including nested ones.
 fn count_total_layers(layers: &[PendingLayer]) -> usize {
-    layers.iter().map(|l| 1 + count_total_layers(&l.children)).sum()
+    layers
+        .iter()
+        .map(|l| 1 + count_total_layers(&l.children))
+        .sum()
 }
 
 /// Process pending layers recursively.
 fn process_pending_layers(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    meshes: &mut Assets<Mesh>,
+    masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     pending: &mut AmPendingLayers,
     images: &HashMap<String, Handle<Image>>,
@@ -618,30 +645,35 @@ fn process_pending_layers(
     let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
 
     // Helper function to check if an ancestor is active
-    fn is_ancestor_active(layer_id: u64, layers: &[PendingLayer], global_time: f32, time_offset: i32) -> bool {
+    fn is_ancestor_active(
+        layer_id: u64,
+        layers: &[PendingLayer],
+        global_time: f32,
+        time_offset: i32,
+    ) -> bool {
         let layer = match layers.iter().find(|l| l.id == layer_id) {
             Some(l) => l,
             None => return true, // If not found, assume active (root)
         };
-        
+
         if layer.parent == 0 {
             return true; // No parent, always considered active from parent perspective
         }
-        
+
         // Check parent's active status
         let parent = match layers.iter().find(|l| l.id == layer.parent) {
             Some(p) => p,
             None => return true, // Parent not in our list, assume active
         };
-        
+
         let parent_local_time = global_time - (parent.animated.time_offset + time_offset) as f32;
-        let parent_active = parent_local_time >= parent.start_time as f32 
+        let parent_active = parent_local_time >= parent.start_time as f32
             && parent_local_time <= parent.end_time as f32;
-        
+
         if !parent_active {
             return false; // Parent is not active
         }
-        
+
         // Recursively check grandparent
         is_ancestor_active(layer.parent, layers, global_time, time_offset)
     }
@@ -649,14 +681,15 @@ fn process_pending_layers(
     for (idx, layer) in pending.layers.iter().enumerate() {
         // Calculate local time
         let local_time = global_time - (layer.animated.time_offset + time_offset) as f32;
-        
+
         // Check if layer should be active (considering both own time range and parent's time range)
-        let own_time_active = local_time >= layer.start_time as f32 
-            && local_time <= layer.end_time as f32;
-        
+        let own_time_active =
+            local_time >= layer.start_time as f32 && local_time <= layer.end_time as f32;
+
         // Check if all ancestors are active
-        let ancestors_active = is_ancestor_active(layer.id, &pending.layers, global_time, time_offset);
-        
+        let ancestors_active =
+            is_ancestor_active(layer.id, &pending.layers, global_time, time_offset);
+
         let should_be_active = own_time_active && ancestors_active;
 
         let is_spawned = pending.spawned_entities.contains_key(&layer.id);
@@ -673,26 +706,36 @@ fn process_pending_layers(
         if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
             // Find layer info for logging
             if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
-                bevy::log::trace!("  [Lifecycle] Despawning '{}' (id={})", layer.label, layer_id);
+                bevy::log::trace!(
+                    "  [Lifecycle] Despawning '{}' (id={})",
+                    layer.label,
+                    layer_id
+                );
             }
-            
+
             // Find all children of this layer (direct and nested) and despawn them first
-            let children_to_remove: Vec<u64> = pending.layers.iter()
+            let children_to_remove: Vec<u64> = pending
+                .layers
+                .iter()
                 .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
                 .map(|l| l.id)
                 .collect();
-            
+
             // Despawn children (deepest first would be ideal, but order doesn't matter much
             // since we're despawning them all)
             for child_id in children_to_remove {
                 if let Some(child_entity) = pending.spawned_entities.remove(&child_id) {
                     if let Some(child) = pending.layers.iter().find(|l| l.id == child_id) {
-                        bevy::log::trace!("    [Lifecycle] (cascade) Despawning child '{}' (id={})", child.label, child_id);
+                        bevy::log::trace!(
+                            "    [Lifecycle] (cascade) Despawning child '{}' (id={})",
+                            child.label,
+                            child_id
+                        );
                     }
                     commands.entity(child_entity).despawn();
                 }
             }
-            
+
             // Despawn the entity itself
             commands.entity(entity).despawn();
         }
@@ -700,22 +743,26 @@ fn process_pending_layers(
 
     // Sort layers to spawn by dependency (parents before children) using topological sort
     // Build a set of layer IDs being spawned this frame
-    let spawning_ids: std::collections::HashSet<u64> = to_spawn.iter()
-        .map(|&idx| pending.layers[idx].id)
-        .collect();
-    
+    let spawning_ids: std::collections::HashSet<u64> =
+        to_spawn.iter().map(|&idx| pending.layers[idx].id).collect();
+
     // Helper function to count dependency depth (how many ancestors are also being spawned)
-    fn count_spawn_depth(layer_id: u64, layers: &[PendingLayer], spawning_ids: &std::collections::HashSet<u64>, visited: &mut std::collections::HashSet<u64>) -> usize {
+    fn count_spawn_depth(
+        layer_id: u64,
+        layers: &[PendingLayer],
+        spawning_ids: &std::collections::HashSet<u64>,
+        visited: &mut std::collections::HashSet<u64>,
+    ) -> usize {
         if visited.contains(&layer_id) {
             return 0; // Prevent infinite loop
         }
         visited.insert(layer_id);
-        
+
         let layer = match layers.iter().find(|l| l.id == layer_id) {
             Some(l) => l,
             None => return 0,
         };
-        
+
         if layer.parent == 0 || !spawning_ids.contains(&layer.parent) {
             // No parent being spawned this frame, depth is 0
             0
@@ -724,7 +771,7 @@ fn process_pending_layers(
             1 + count_spawn_depth(layer.parent, layers, spawning_ids, visited)
         }
     }
-    
+
     // Sort by depth (lower depth = spawn first)
     to_spawn.sort_by_key(|&idx| {
         let layer_id = pending.layers[idx].id;
@@ -735,7 +782,7 @@ fn process_pending_layers(
     // Spawn new entities in dependency order
     for idx in to_spawn {
         let layer = &pending.layers[idx];
-        
+
         // Determine parent for this entity
         let actual_parent = if layer.parent != 0 {
             match pending.spawned_entities.get(&layer.parent) {
@@ -743,7 +790,9 @@ fn process_pending_layers(
                 None => {
                     bevy::log::warn!(
                         "[Lifecycle] WARNING: Parent {} not found for '{}' (id={}), using root",
-                        layer.parent, layer.label, layer.id
+                        layer.parent,
+                        layer.label,
+                        layer.id
                     );
                     parent_entity
                 }
@@ -751,10 +800,12 @@ fn process_pending_layers(
         } else {
             parent_entity
         };
-        
+
         let entity = spawn_layer_entity(
             commands,
             shaders,
+            meshes,
+            masked_materials,
             sdf_shaders,
             layer,
             images,
@@ -762,12 +813,17 @@ fn process_pending_layers(
             white_pixel,
             actual_parent,
         );
-        
-        bevy::log::debug!(
-            "[Lifecycle] Spawning '{}' (id={}, parent={}, time={}..{}ms)",
-            layer.label, layer.id, layer.parent, layer.start_time, layer.end_time
+
+        bevy::log::info!(
+            "[Lifecycle] Spawning '{}' (id={}, parent={}, z={:.6}, time={}..{}ms)",
+            layer.label,
+            layer.id,
+            layer.parent,
+            layer.transform.translation.z,
+            layer.start_time,
+            layer.end_time
         );
-        
+
         pending.spawned_entities.insert(layer.id, entity);
     }
 }
@@ -777,23 +833,23 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
     if layer_id == ancestor_id {
         return false; // Not a descendant of itself
     }
-    
+
     // Find the layer
     let layer = match layers.iter().find(|l| l.id == layer_id) {
         Some(l) => l,
         None => return false,
     };
-    
+
     // Check if direct child
     if layer.parent == ancestor_id {
         return true;
     }
-    
+
     // Recursively check ancestors (with depth limit to prevent infinite loops)
     if layer.parent != 0 {
         return is_descendant_of(layer.parent, ancestor_id, layers);
     }
-    
+
     false
 }
 
@@ -801,6 +857,8 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
 fn spawn_layer_entity(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    meshes: &mut Assets<Mesh>,
+    masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     layer: &PendingLayer,
     images: &HashMap<String, Handle<Image>>,
@@ -809,36 +867,62 @@ fn spawn_layer_entity(
     parent_entity: Entity,
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
-    
-    // Create base entity with common components
-    let entity = commands.spawn((
-        Name::new(entity_name),
-        AmLayerMarker {
-            id: layer.id,
-            label: layer.label.clone(),
-        },
-        layer.animated.clone(),
-        layer.spec.clone(),
-        layer.transform,
-        GlobalTransform::default(),
-        Visibility::Inherited,
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-    )).id();
 
-    // Add visual components based on spec
-    add_visual_components(
-        commands,
-        shaders,
-        sdf_shaders,
-        entity,
-        &layer.spec,
-        images,
-        fonts,
-        white_pixel,
-        &layer.label,
-        layer.id,
-    );
+    // Create base entity with common components
+    let entity = commands
+        .spawn((
+            Name::new(entity_name),
+            AmLayerMarker {
+                id: layer.id,
+                label: layer.label.clone(),
+            },
+            layer.animated.clone(),
+            layer.spec.clone(),
+            layer.transform,
+            GlobalTransform::default(),
+            Visibility::Inherited,
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+        ))
+        .id();
+
+    // Add mask info component if this layer is affected by a mask
+    if let Some(mask_info) = &layer.mask_info {
+        commands.entity(entity).insert(mask_info.clone());
+        bevy::log::debug!(
+            "[Lifecycle] Layer '{}' has mask: center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+            layer.label,
+            mask_info.center.x,
+            mask_info.center.y,
+            mask_info.half_size.x,
+            mask_info.half_size.y
+        );
+    }
+
+    // Add visual components based on spec (skip for mask layers)
+    if layer.blending_mode != AmBlendingMode::Mask {
+        add_visual_components(
+            commands,
+            shaders,
+            meshes,
+            masked_materials,
+            sdf_shaders,
+            entity,
+            &layer.spec,
+            &layer.mask_info,
+            images,
+            fonts,
+            white_pixel,
+            &layer.label,
+            layer.id,
+        );
+    } else {
+        bevy::log::info!(
+            "[Lifecycle] Skipping visual for mask layer '{}' (id={})",
+            layer.label,
+            layer.id
+        );
+    }
 
     // Add as child of parent
     commands.entity(parent_entity).add_child(entity);
@@ -850,9 +934,12 @@ fn spawn_layer_entity(
 fn add_visual_components(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    meshes: &mut Assets<Mesh>,
+    masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     entity: Entity,
     spec: &AmLayerSpec,
+    mask_info: &Option<AmMaskInfo>,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
@@ -870,10 +957,90 @@ fn add_visual_components(
         } => {
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
+                    // If masked, use Material2d approach
+                    if let Some(mask) = mask_info {
+                        use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
+                        use bevy::mesh::Mesh2d;
+
+                        let mesh = meshes.add(Rectangle::new(*width, *height));
+                        let material = masked_materials.add(MaskedSpriteMaterial {
+                            color: LinearRgba::WHITE,
+                            mask_params: Vec4::new(
+                                mask.center.x,
+                                mask.center.y,
+                                mask.half_size.x,
+                                mask.half_size.y,
+                            ),
+                            texture: Some(handle.clone()),
+                        });
+
+                        commands.entity(entity).insert((
+                            Mesh2d(mesh),
+                            MeshMaterial2d(material),
+                            MaskedSpriteMarker,
+                            AmVisualSpawned,
+                        ));
+
+                        bevy::log::debug!(
+                            "[Visual] Spawned masked sprite '{}' with mask center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                            label,
+                            mask.center.x,
+                            mask.center.y,
+                            mask.half_size.x,
+                            mask.half_size.y
+                        );
+                    } else {
+                        // Normal sprite
+                        commands.entity(entity).insert((
+                            Sprite {
+                                image: handle.clone(),
+                                color: Color::WHITE,
+                                custom_size: Some(Vec2::new(*width, *height)),
+                                ..default()
+                            },
+                            anchor.clone(),
+                            AmVisualSpawned,
+                        ));
+                    }
+                }
+            } else if let Some(wp) = white_pixel {
+                let color = extract_fill_color(fill_color);
+                // If masked, use Material2d approach
+                if let Some(mask) = mask_info {
+                    use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
+                    use bevy::mesh::Mesh2d;
+
+                    let mesh = meshes.add(Rectangle::new(*width, *height));
+                    let material = masked_materials.add(MaskedSpriteMaterial {
+                        color: color.to_linear(),
+                        mask_params: Vec4::new(
+                            mask.center.x,
+                            mask.center.y,
+                            mask.half_size.x,
+                            mask.half_size.y,
+                        ),
+                        texture: Some(wp.clone()),
+                    });
+
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        MaskedSpriteMarker,
+                        AmVisualSpawned,
+                    ));
+
+                    bevy::log::debug!(
+                        "[Visual] Spawned masked fill sprite '{}' with mask center=({:.1},{:.1})",
+                        label,
+                        mask.center.x,
+                        mask.center.y
+                    );
+                } else {
+                    // Normal sprite
                     commands.entity(entity).insert((
                         Sprite {
-                            image: handle.clone(),
-                            color: Color::WHITE,
+                            image: wp.clone(),
+                            color,
                             custom_size: Some(Vec2::new(*width, *height)),
                             ..default()
                         },
@@ -881,18 +1048,6 @@ fn add_visual_components(
                         AmVisualSpawned,
                     ));
                 }
-            } else if let Some(wp) = white_pixel {
-                let color = extract_fill_color(fill_color);
-                commands.entity(entity).insert((
-                    Sprite {
-                        image: wp.clone(),
-                        color,
-                        custom_size: Some(Vec2::new(*width, *height)),
-                        ..default()
-                    },
-                    anchor.clone(),
-                    AmVisualSpawned,
-                ));
             }
         }
         AmLayerSpec::SdfShape {
@@ -916,7 +1071,10 @@ fn add_visual_components(
                 *height,
                 *pivot_x,
                 *pivot_y,
-                &AmLayerMarker { id, label: label.to_string() },
+                &AmLayerMarker {
+                    id,
+                    label: label.to_string(),
+                },
             );
         }
         AmLayerSpec::Image {
@@ -926,16 +1084,44 @@ fn add_visual_components(
             anchor,
         } => {
             if let Some(handle) = images.get(image_uri) {
-                commands.entity(entity).insert((
-                    Sprite {
-                        image: handle.clone(),
-                        color: Color::WHITE,
-                        custom_size: Some(Vec2::new(*width, *height)),
-                        ..default()
-                    },
-                    anchor.clone(),
-                    AmVisualSpawned,
-                ));
+                // If masked, use Material2d approach
+                if let Some(mask) = mask_info {
+                    use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
+                    use bevy::mesh::Mesh2d;
+
+                    let mesh = meshes.add(Rectangle::new(*width, *height));
+                    let material = masked_materials.add(MaskedSpriteMaterial {
+                        color: LinearRgba::WHITE,
+                        mask_params: Vec4::new(
+                            mask.center.x,
+                            mask.center.y,
+                            mask.half_size.x,
+                            mask.half_size.y,
+                        ),
+                        texture: Some(handle.clone()),
+                    });
+
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        MaskedSpriteMarker,
+                        AmVisualSpawned,
+                    ));
+
+                    bevy::log::debug!("[Visual] Spawned masked image '{}' with mask", label);
+                } else {
+                    // Normal sprite
+                    commands.entity(entity).insert((
+                        Sprite {
+                            image: handle.clone(),
+                            color: Color::WHITE,
+                            custom_size: Some(Vec2::new(*width, *height)),
+                            ..default()
+                        },
+                        anchor.clone(),
+                        AmVisualSpawned,
+                    ));
+                }
             }
         }
         AmLayerSpec::Text {
@@ -949,14 +1135,14 @@ fn add_visual_components(
             if let Some(font_handle) = fonts.get(font_name) {
                 use bevy::sprite::{Anchor, Text2d};
                 use bevy::text::{Justify, TextColor, TextFont, TextLayout};
-                
+
                 let color = extract_fill_color(fill_color);
                 let justify = match align.as_str() {
                     "center" => Justify::Center,
                     "right" => Justify::Right,
                     _ => Justify::Left,
                 };
-                
+
                 commands.entity(entity).insert((
                     Text2d::new(content),
                     TextFont {
@@ -1001,7 +1187,7 @@ fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color 
 }
 
 /// Spawn SDF visual components as children of the layer entity.
-/// 
+///
 /// ## AM Behavior (what we're matching)
 /// AM draws stroked rectangles by:
 /// 1. Drawing a base 100x100 square with stroke
@@ -1038,7 +1224,7 @@ fn spawn_sdf_visual(
     marker: &AmLayerMarker,
 ) {
     use crate::sdf::{PARAMETRIC_BOX_SDF, pack_color};
-    
+
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
         crate::schema::parse_color(stroke_color_value)
@@ -1051,27 +1237,31 @@ fn spawn_sdf_visual(
     // Target dimensions from shape properties (base size before animation scale)
     let target_half_width = width / 2.0;
     let target_half_height = height / 2.0;
-    
+
     // Use parametric box SDF that reads dimensions from params.x and params.y
     let parametric_sdf = shaders.add_sdf_expr(PARAMETRIC_BOX_SDF);
-    
+
     // Get stroked fill shader from pre-loaded resource (loaded from file)
-    let stroked_fill = sdf_shaders.stroked_fill.clone()
+    let stroked_fill = sdf_shaders
+        .stroked_fill
+        .clone()
         .expect("AmSdfShaders.stroked_fill not initialized - ensure setup_sdf_shaders runs first");
-    
+
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);
-    
+
     // Frame size for rendering - must be large enough for the largest expected shape.
     // Since we scale via params, the frame needs to accommodate the max size + stroke.
     // We use a conservative estimate based on the target size * reasonable max scale factor.
     // AM animations typically don't exceed 10x scale, so use that as a safety margin.
     let max_scale_factor = 10.0;
-    let frame_half = (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
+    let frame_half =
+        (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
     let frame_size = frame_half * 2.0;
 
     // Spawn single SDF entity with both fill and stroke
     // Note: Transform.scale is set to 1.0 because we handle sizing via params
+    // SDF child uses default transform (z=0 relative to parent) - z-ordering is handled by parent's z value
     let sdf_entity = commands
         .spawn((
             Name::new(format!("SdfShape[{}]: {}", marker.id, marker.label)),
@@ -1086,7 +1276,12 @@ fn spawn_sdf_visual(
                 frame: Frame::Quad(frame_size),
                 fill: stroked_fill,
                 // params: half_width, half_height, stroke_width, packed_stroke_color
-                params: Vec4::new(target_half_width, target_half_height, stroke_width, packed_stroke),
+                params: Vec4::new(
+                    target_half_width,
+                    target_half_height,
+                    stroke_width,
+                    packed_stroke,
+                ),
                 ..default()
             },
             // Store base params for animation
@@ -1104,11 +1299,12 @@ fn spawn_sdf_visual(
         .entity(parent_entity)
         .add_child(sdf_entity)
         .insert((AmVisualSpawned, AmSdfShapeParent));
-    
+
     bevy::log::info!(
         "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}",
         marker.label,
-        width, height,
+        width,
+        height,
         stroke_width,
         frame_size
     );
@@ -1157,6 +1353,47 @@ pub struct AmSdfStrokeParams {
 /// Used to skip scale animation in animate_transform (scale is handled by animate_sdf_scale).
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmSdfShapeParent;
+
+/// System to apply mask clipping to layers that have an AmMaskInfo component.
+/// This system checks if the sprite/layer is within the mask bounds and hides it if outside.
+/// Note: This is a simplified implementation that only checks the sprite center against the mask.
+/// For precise pixel-level masking, a custom shader would be needed.
+pub fn apply_mask_clipping(
+    mut query: Query<(
+        &GlobalTransform,
+        &AmMaskInfo,
+        &mut Visibility,
+        &AmLayerMarker,
+    )>,
+) {
+    for (global_transform, mask_info, mut visibility, marker) in query.iter_mut() {
+        let world_pos = global_transform.translation().truncate();
+
+        // Check if sprite center is inside the mask rectangle
+        // Note: This doesn't account for mask rotation, treating it as axis-aligned
+        let rel_pos = world_pos - mask_info.center;
+        let inside_mask =
+            rel_pos.x.abs() <= mask_info.half_size.x && rel_pos.y.abs() <= mask_info.half_size.y;
+
+        // Update visibility based on mask check
+        if inside_mask {
+            if *visibility == Visibility::Hidden {
+                *visibility = Visibility::Inherited;
+                bevy::log::trace!("[MASK] Layer '{}' now visible (inside mask)", marker.label);
+            }
+        } else {
+            if *visibility != Visibility::Hidden {
+                *visibility = Visibility::Hidden;
+                bevy::log::trace!(
+                    "[MASK] Layer '{}' hidden (outside mask at {:.1},{:.1})",
+                    marker.label,
+                    world_pos.x,
+                    world_pos.y
+                );
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

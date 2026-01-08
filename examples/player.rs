@@ -64,11 +64,19 @@ fn main() {
     .insert_resource(ClearColor(Color::BLACK))
     .insert_resource(ProjectFile(project_file))
     .init_resource::<DebugOverlaySettings>()
+    .init_resource::<MaskDebugSettings>()
     .add_plugins(AlightMotionPlugin)
     .add_systems(Startup, setup)
     .add_systems(
         Update,
-        (handle_input, update_ui, debug_sprites, toggle_debug_overlay),
+        (
+            handle_input,
+            update_ui,
+            debug_sprites,
+            debug_sdf_shapes,
+            toggle_debug_overlay,
+            toggle_mask_debug,
+        ),
     );
 
     // Add inspector plugin when debug feature is enabled
@@ -132,18 +140,36 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 }
 
 /// Debug system to print sprite info once
-fn debug_sprites(query: Query<(&AmLayerMarker, &Transform, &Sprite), Added<Sprite>>) {
-    for (marker, transform, sprite) in query.iter() {
+fn debug_sprites(
+    query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
+) {
+    for (marker, transform, global_transform, sprite) in query.iter() {
+        let global_z = global_transform.translation().z;
         println!(
-            "Sprite added: '{}' at ({:.1},{:.1},{:.1}) scale=({:.2},{:.2}) alpha={:.2} size={:?}",
+            "Sprite added: '{}' at ({:.1},{:.1}) local_z={:.2} global_z={:.2} scale=({:.2},{:.2}) alpha={:.2}",
             marker.label,
             transform.translation.x,
             transform.translation.y,
             transform.translation.z,
+            global_z,
             transform.scale.x,
             transform.scale.y,
             sprite.color.alpha(),
-            sprite.custom_size
+        );
+    }
+}
+
+/// Debug system to print SDF shape info once (to verify GlobalTransform z propagation)
+/// Run in PostUpdate to ensure GlobalTransform is propagated
+fn debug_sdf_shapes(
+    query: Query<(&Name, &Transform, &GlobalTransform), Added<bevy_smud::SmudShape>>,
+) {
+    for (name, transform, global_transform) in query.iter() {
+        let local_z = transform.translation.z;
+        let global_z = global_transform.translation().z;
+        println!(
+            "[SDF Z-DEBUG] '{}': local_z={:.6} global_z={:.6}",
+            name, local_z, global_z,
         );
     }
 }
@@ -372,5 +398,95 @@ fn find_latest_debug_image() -> Option<String> {
     } else {
         println!("No image files found in debug folder");
         None
+    }
+}
+
+// ============================================================================
+// Mask Debug Visualization
+// ============================================================================
+
+/// Resource to control mask debug visualization
+#[derive(Resource, Default)]
+struct MaskDebugSettings {
+    show_masks: bool,
+}
+
+/// Component for mask debug visualization entities
+#[derive(Component)]
+struct MaskDebugVisual;
+
+/// Toggle mask debug visualization with the M key
+fn toggle_mask_debug(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut settings: ResMut<MaskDebugSettings>,
+    mut commands: Commands,
+    mask_query: Query<&bevy_alight_motion::scene::AmMaskInfo, Without<MaskDebugVisual>>,
+    debug_visual_query: Query<Entity, With<MaskDebugVisual>>,
+) {
+    if keyboard.just_pressed(KeyCode::KeyM) {
+        settings.show_masks = !settings.show_masks;
+
+        if settings.show_masks {
+            // Spawn mask visualization entities for each mask
+            // First, find unique mask centers (masks may be shared across many entities)
+            let mut seen_masks: std::collections::HashSet<(i32, i32, i32, i32)> =
+                std::collections::HashSet::new();
+
+            for mask_info in mask_query.iter() {
+                // Create a key based on mask position and size (rounded to int for comparison)
+                let key = (
+                    (mask_info.center.x * 10.0) as i32,
+                    (mask_info.center.y * 10.0) as i32,
+                    (mask_info.half_size.x * 10.0) as i32,
+                    (mask_info.half_size.y * 10.0) as i32,
+                );
+
+                if seen_masks.contains(&key) {
+                    continue;
+                }
+                seen_masks.insert(key);
+
+                // Spawn a semi-transparent rectangle to visualize the mask
+                println!(
+                    "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
+                    mask_info.center.x,
+                    mask_info.center.y,
+                    mask_info.half_size.x * 2.0,
+                    mask_info.half_size.y * 2.0
+                );
+
+                // Create a sprite to show the mask region
+                commands.spawn((
+                    Name::new("MaskDebugVisual"),
+                    MaskDebugVisual,
+                    Sprite {
+                        color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
+                        custom_size: Some(Vec2::new(
+                            mask_info.half_size.x * 2.0,
+                            mask_info.half_size.y * 2.0,
+                        )),
+                        ..default()
+                    },
+                    Transform::from_translation(Vec3::new(
+                        mask_info.center.x,
+                        mask_info.center.y,
+                        100.0, // High z to render on top
+                    )),
+                ));
+            }
+
+            if seen_masks.is_empty() {
+                println!("[MASK DEBUG] No masks found to visualize");
+            } else {
+                println!("[MASK DEBUG] Showing {} mask region(s)", seen_masks.len());
+            }
+        } else {
+            // Remove debug visualizations
+            let count = debug_visual_query.iter().count();
+            for entity in debug_visual_query.iter() {
+                commands.entity(entity).despawn();
+            }
+            println!("[MASK DEBUG] Hidden {} mask visualization(s)", count);
+        }
     }
 }

@@ -106,6 +106,29 @@ pub enum AmLayerSpec {
     EmbedScene,
 }
 
+/// Blending mode for layers.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum AmBlendingMode {
+    /// Normal rendering
+    #[default]
+    Normal,
+    /// Mask layer - clips content below it (not rendered itself)
+    Mask,
+}
+
+/// Information about an active mask that clips this layer.
+#[derive(Debug, Clone, Default, Component)]
+pub struct AmMaskInfo {
+    /// Center position of the mask in local coordinates
+    pub center: Vec2,
+    /// Half-size of the mask rectangle
+    pub half_size: Vec2,
+    /// Rotation of the mask in radians
+    pub rotation: f32,
+    /// Scale of the mask
+    pub scale: Vec2,
+}
+
 /// Complete layer definition for deferred spawning.
 /// This stores all information needed to create an entity when the layer becomes active.
 #[derive(Debug, Clone)]
@@ -130,6 +153,10 @@ pub struct PendingLayer {
     pub z_index: f32,
     /// Child pending layers (for embed scenes)
     pub children: Vec<PendingLayer>,
+    /// Blending mode (normal, mask, etc.)
+    pub blending_mode: AmBlendingMode,
+    /// Active mask info (if this layer is clipped by a mask)
+    pub mask_info: Option<AmMaskInfo>,
 }
 
 /// Configuration for scene building.
@@ -141,10 +168,12 @@ pub struct AmSceneConfig {
     pub canvas_height: f32,
     /// Whether to flip Y axis (AM uses top-left origin).
     pub flip_y: bool,
-    /// Z-spacing between layers.
+    /// Z-spacing between layers at this nesting level.
     pub z_spacing: f32,
     /// Time offset from parent scene (for embedded scenes).
     pub time_offset: i32,
+    /// Nesting depth (0 = root scene, 1 = first level embed, etc.)
+    pub nesting_depth: u32,
 }
 
 impl Default for AmSceneConfig {
@@ -153,8 +182,9 @@ impl Default for AmSceneConfig {
             canvas_width: 1280.0,
             canvas_height: 960.0,
             flip_y: true,
-            z_spacing: 0.001,
+            z_spacing: 0.1, // Base spacing for root scene
             time_offset: 0,
+            nesting_depth: 0,
         }
     }
 }
@@ -192,15 +222,46 @@ pub fn spawn_scene(
     // In AM, layers at the END of the XML are rendered on top (higher z).
     // Last layer in XML = highest z (on top), first layer = lowest z (on bottom).
     let layer_count = scene.layers.len();
+
     bevy::log::trace!(
-        "spawn_scene: layer_count={}, z_spacing={}",
-        layer_count, config.z_spacing
+        "spawn_scene: layer_count={}, z_spacing={}, nesting_depth={}",
+        layer_count,
+        config.z_spacing,
+        config.nesting_depth
     );
+
+    // For nested scenes, start at a small offset above parent to avoid z-fighting
+    // Root scene (depth 0) starts at z=0, nested scenes start at a small offset
+    let z_base = if config.nesting_depth > 0 {
+        config.z_spacing * 0.1 // Small offset to be above parent
+    } else {
+        0.0
+    };
 
     // First pass: create all entities and collect parent relationships
     for (idx, layer) in scene.layers.iter().enumerate() {
-        // Direct z order: last layer in XML = highest z (on top)
-        let z = idx as f32 * config.z_spacing;
+        // Simple sequential z allocation
+        let z = z_base + idx as f32 * config.z_spacing;
+
+        // Log z value for each layer
+        let layer_label = match layer {
+            AmLayer::Shape(s) => &s.label,
+            AmLayer::Nullobj(n) => &n.label,
+            AmLayer::EmbedScene(e) => &e.label,
+            AmLayer::Text(t) => &t.label,
+            AmLayer::Audio(a) => &a.label,
+            AmLayer::Bookmark(b) => &b.label,
+            AmLayer::Image(i) => &i.label,
+            AmLayer::Camera(c) => &c.label,
+            AmLayer::Video(v) => &v.label,
+        };
+        bevy::log::info!(
+            "[Z-ORDER] depth={}, idx={}, z={:.4}, label='{}'",
+            config.nesting_depth,
+            idx,
+            z,
+            layer_label
+        );
 
         match layer {
             AmLayer::Shape(shape) => {
@@ -266,14 +327,16 @@ pub fn spawn_scene(
                 // TODO: Audio playback is not yet implemented, skip for now
                 bevy::log::trace!(
                     "Skipping audio layer '{}' (id={}) - audio not implemented",
-                    audio.label, audio.id
+                    audio.label,
+                    audio.id
                 );
             }
             AmLayer::Camera(camera) => {
                 // TODO: Camera layer is not yet implemented, skip for now
                 bevy::log::trace!(
                     "Skipping camera layer '{}' (id={}) - camera not implemented",
-                    camera.label, camera.id
+                    camera.label,
+                    camera.id
                 );
             }
             AmLayer::Image(image) => {
@@ -289,7 +352,8 @@ pub fn spawn_scene(
                 // TODO: Video playback is not yet implemented, skip for now
                 bevy::log::trace!(
                     "Skipping video layer '{}' (id={}) - video not implemented",
-                    video.label, video.id
+                    video.label,
+                    video.id
                 );
             }
         }
@@ -456,7 +520,13 @@ fn spawn_null(
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
-        null.label, null.id, null.parent, tx, ty, sx, sy
+        null.label,
+        null.id,
+        null.parent,
+        tx,
+        ty,
+        sx,
+        sy
     );
 
     let transform = Transform {
@@ -522,7 +592,13 @@ fn spawn_embed_scene(
 
     bevy::log::trace!(
         "Registering embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), start_time={}, time_offset={}",
-        embed.label, embed.id, embed.parent, tx, ty, embed.start_time, config.time_offset
+        embed.label,
+        embed.id,
+        embed.parent,
+        tx,
+        ty,
+        embed.start_time,
+        config.time_offset
     );
 
     let transform = Transform {
@@ -569,10 +645,17 @@ fn spawn_embed_scene(
 
     // Recursively spawn nested scene with accumulated time offset
     // The nested scene's layers use times relative to the embed's start_time
+    //
+    // Nested scenes use smaller z_spacing to keep all children within
+    // the parent's z-range (between parent and next sibling)
+    // Using /100 instead of /1000 for better numerical precision
+    let nested_z_spacing = config.z_spacing / 100.0;
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
         time_offset: config.time_offset + embed.start_time,
+        z_spacing: nested_z_spacing,
+        nesting_depth: config.nesting_depth + 1,
         ..config.clone()
     };
 
@@ -752,11 +835,16 @@ fn spawn_text(
 
         bevy::log::trace!(
             "  Font metrics for '{}': win_ascent={:.4}, win_descent={:.4}",
-            font_name, metrics.win_ascent, metrics.win_descent
+            font_name,
+            metrics.win_ascent,
+            metrics.win_descent
         );
         bevy::log::trace!(
             "  Y calculation: base_y={:.2}, ascent_diff={:.4}, offset={:.2}, final_y={:.2}",
-            base_y, ascent_diff, offset, final_y
+            base_y,
+            ascent_diff,
+            offset,
+            final_y
         );
         offset
     } else {
@@ -1109,6 +1197,12 @@ fn truncate_string(s: &str, max_len: usize) -> String {
 
 /// Collect pending layers from an AM scene without spawning any entities.
 /// Returns a flat list of PendingLayer that can be used to spawn entities on demand.
+///
+/// Z-ordering strategy for nested scenes:
+/// - Root scene layers use z_spacing (default 0.1) between each layer
+/// - Nested scenes use a much smaller z_spacing (z_spacing / 1000) so all nested
+///   layers fit within the z-range "between" the parent and next sibling
+/// - This ensures nested content stays "inside" its parent in z-order
 pub fn collect_pending_layers(
     scene: &AmScene,
     fonts: &HashMap<String, Handle<Font>>,
@@ -1116,22 +1210,36 @@ pub fn collect_pending_layers(
     config: &AmSceneConfig,
 ) -> Vec<PendingLayer> {
     let mut pending_layers = Vec::new();
-    
+
     let layer_count = scene.layers.len();
+
     bevy::log::trace!(
-        "collect_pending_layers: layer_count={}, z_spacing={}",
-        layer_count, config.z_spacing
+        "collect_pending_layers: layer_count={}, z_spacing={}, nesting_depth={}",
+        layer_count,
+        config.z_spacing,
+        config.nesting_depth
     );
-    
+
+    // For nested scenes, start at a small offset above parent to avoid z-fighting
+    let z_base = if config.nesting_depth > 0 {
+        config.z_spacing * 0.1
+    } else {
+        0.0
+    };
+
+    // Simple sequential z allocation
     for (idx, layer) in scene.layers.iter().enumerate() {
-        let z = idx as f32 * config.z_spacing;
+        let z = z_base + idx as f32 * config.z_spacing;
         collect_layer(&mut pending_layers, layer, fonts, font_metrics, config, z);
     }
-    
+
     // Flatten all nested children into a single list
     let flattened = flatten_pending_layers(pending_layers);
-    
-    bevy::log::trace!("Collected {} pending layers (after flatten)", flattened.len());
+
+    bevy::log::trace!(
+        "Collected {} pending layers (after flatten)",
+        flattened.len()
+    );
     flattened
 }
 
@@ -1139,51 +1247,52 @@ pub fn collect_pending_layers(
 /// Children of embed scenes are extracted and their parent is set to the embed's ID.
 fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
     let mut result = Vec::new();
-    
+
     for layer in layers {
         let embed_id = layer.id;
         let children = layer.children.clone();
-        
+
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
         layer_without_children.children = Vec::new();
         result.push(layer_without_children);
-        
+
         // Recursively flatten children and update their parent reference
         // We need to remap IDs to make them unique per embed instance
         if !children.is_empty() {
             let flattened_children = flatten_pending_layers(children);
-            
+
             // Build a map of old ID -> new ID for this embed's children
-            let mut id_remap: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+            let mut id_remap: std::collections::HashMap<u64, u64> =
+                std::collections::HashMap::new();
             for child in &flattened_children {
                 // Create unique ID by combining embed_id and child_id
                 // Use wrapping operations to handle large IDs
                 let unique_id = embed_id.wrapping_mul(1_000_000).wrapping_add(child.id);
                 id_remap.insert(child.id, unique_id);
             }
-            
+
             for mut child in flattened_children {
                 let old_id = child.id;
-                
+
                 // Remap the child's ID
                 child.id = *id_remap.get(&old_id).unwrap_or(&old_id);
-                
+
                 // Remap the parent reference
                 if child.parent == 0 {
                     child.parent = embed_id;
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
                     child.parent = new_parent_id;
                 }
-                
+
                 // Also update the layer_id in animated component
                 child.animated.layer_id = child.id;
-                
+
                 result.push(child);
             }
         }
     }
-    
+
     result
 }
 
@@ -1201,7 +1310,10 @@ fn collect_layer(
             if let Some(pl) = collect_shape(shape, config, z) {
                 bevy::log::trace!(
                     "  Collected shape '{}' (id={}, time={}..{}ms)",
-                    shape.label, shape.id, shape.start_time, shape.end_time
+                    shape.label,
+                    shape.id,
+                    shape.start_time,
+                    shape.end_time
                 );
                 pending.push(pl);
             }
@@ -1210,7 +1322,10 @@ fn collect_layer(
             if let Some(pl) = collect_null(null, config, z) {
                 bevy::log::trace!(
                     "  Collected null '{}' (id={}, time={}..{}ms)",
-                    null.label, null.id, null.start_time, null.end_time
+                    null.label,
+                    null.id,
+                    null.start_time,
+                    null.end_time
                 );
                 pending.push(pl);
             }
@@ -1219,7 +1334,11 @@ fn collect_layer(
             let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
             bevy::log::trace!(
                 "  Collected embed '{}' (id={}, time={}..{}ms, children={})",
-                embed.label, embed.id, embed.start_time, embed.end_time, pl.children.len()
+                embed.label,
+                embed.id,
+                embed.start_time,
+                embed.end_time,
+                pl.children.len()
             );
             pending.push(pl);
         }
@@ -1227,7 +1346,10 @@ fn collect_layer(
             if let Some(pl) = collect_text(text, fonts, font_metrics, config, z) {
                 bevy::log::trace!(
                     "  Collected text '{}' (id={}, time={}..{}ms)",
-                    text.label, text.id, text.start_time, text.end_time
+                    text.label,
+                    text.id,
+                    text.start_time,
+                    text.end_time
                 );
                 pending.push(pl);
             }
@@ -1236,7 +1358,10 @@ fn collect_layer(
             if let Some(pl) = collect_image(image, config, z) {
                 bevy::log::trace!(
                     "  Collected image '{}' (id={}, time={}..{}ms)",
-                    image.label, image.id, image.start_time, image.end_time
+                    image.label,
+                    image.id,
+                    image.start_time,
+                    image.end_time
                 );
                 pending.push(pl);
             }
@@ -1256,12 +1381,12 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
-    
+
     let needs_sdf = shape.fill_type == "color"
         && shape.stroke.as_ref().map_or(false, |s| {
             s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
         });
-    
+
     // For SDF shapes, we don't apply scale to the transform because:
     // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)
     // 2. The SDF dimensions are updated dynamically via animate_sdf_scale system
@@ -1274,7 +1399,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             Vec3::new(sx, sy, 1.0)
         },
     };
-    
+
     let spec = if needs_sdf {
         let stroke = shape.stroke.as_ref().unwrap();
         let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
@@ -1311,7 +1436,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             anchor,
         }
     };
-    
+
     Some(PendingLayer {
         id: shape.id,
         label: shape.label.clone(),
@@ -1339,23 +1464,33 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         spec,
         z_index: z,
         children: Vec::new(),
+        blending_mode: if shape.blending == "mask" {
+            AmBlendingMode::Mask
+        } else {
+            AmBlendingMode::Normal
+        },
+        mask_info: None,
     })
 }
 
 /// Collect a null object's data.
-fn collect_null(null: &crate::schema::AmNullObj, config: &AmSceneConfig, z: f32) -> Option<PendingLayer> {
+fn collect_null(
+    null: &crate::schema::AmNullObj,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Option<PendingLayer> {
     let has_parent = null.parent != 0;
     let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
-    
+
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
-    
+
     Some(PendingLayer {
         id: null.id,
         label: null.label.clone(),
@@ -1383,6 +1518,8 @@ fn collect_null(null: &crate::schema::AmNullObj, config: &AmSceneConfig, z: f32)
         spec: AmLayerSpec::Null,
         z_index: z,
         children: Vec::new(),
+        blending_mode: AmBlendingMode::Normal,
+        mask_info: None,
     })
 }
 
@@ -1398,23 +1535,32 @@ fn collect_embed_scene(
     let (tx, ty) = get_initial_location(&embed.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&embed.transform.rotation);
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
-    
+
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
-    
+
     // Collect children with nested config
+    // Nested scenes use smaller z_spacing to keep all children within
+    // the parent's z-range (between parent and next sibling)
+    // Using /100 instead of /1000 for better numerical precision
+    let nested_z_spacing = config.z_spacing / 100.0;
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
         time_offset: config.time_offset + embed.start_time,
+        z_spacing: nested_z_spacing,
+        nesting_depth: config.nesting_depth + 1,
         ..config.clone()
     };
-    
-    let children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
-    
+
+    let mut children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
+
+    // Process mask relationships within this embed scene
+    apply_mask_to_children(&mut children);
+
     PendingLayer {
         id: embed.id,
         label: embed.label.clone(),
@@ -1442,6 +1588,120 @@ fn collect_embed_scene(
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
         children,
+        blending_mode: AmBlendingMode::Normal,
+        mask_info: None,
+    }
+}
+
+/// Apply mask information to layers that are below mask layers.
+/// A mask layer affects all layers with lower z-index (parent=0 only) until end of scope.
+fn apply_mask_to_children(layers: &mut [PendingLayer]) {
+    // Find all mask layers and their info
+    let mut mask_layers: Vec<(f32, AmMaskInfo)> = Vec::new();
+
+    for layer in layers.iter() {
+        if layer.blending_mode == AmBlendingMode::Mask && layer.parent == 0 {
+            // Extract mask geometry from the layer's transform and spec
+            if let AmLayerSpec::SdfShape { width, height, .. } = &layer.spec {
+                let mask_info = AmMaskInfo {
+                    center: Vec2::new(layer.transform.translation.x, layer.transform.translation.y),
+                    half_size: Vec2::new(
+                        *width / 2.0 * layer.transform.scale.x,
+                        *height / 2.0 * layer.transform.scale.y,
+                    ),
+                    rotation: layer
+                        .transform
+                        .rotation
+                        .to_euler(bevy::math::EulerRot::ZYX)
+                        .0,
+                    scale: Vec2::new(layer.transform.scale.x, layer.transform.scale.y),
+                };
+                bevy::log::info!(
+                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                    layer.label,
+                    layer.id,
+                    layer.z_index,
+                    mask_info.center.x,
+                    mask_info.center.y,
+                    mask_info.half_size.x,
+                    mask_info.half_size.y
+                );
+                mask_layers.push((layer.z_index, mask_info));
+            } else if let AmLayerSpec::SpriteShape { width, height, .. } = &layer.spec {
+                let mask_info = AmMaskInfo {
+                    center: Vec2::new(layer.transform.translation.x, layer.transform.translation.y),
+                    half_size: Vec2::new(
+                        *width / 2.0 * layer.transform.scale.x,
+                        *height / 2.0 * layer.transform.scale.y,
+                    ),
+                    rotation: layer
+                        .transform
+                        .rotation
+                        .to_euler(bevy::math::EulerRot::ZYX)
+                        .0,
+                    scale: Vec2::new(layer.transform.scale.x, layer.transform.scale.y),
+                };
+                bevy::log::info!(
+                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                    layer.label,
+                    layer.id,
+                    layer.z_index,
+                    mask_info.center.x,
+                    mask_info.center.y,
+                    mask_info.half_size.x,
+                    mask_info.half_size.y
+                );
+                mask_layers.push((layer.z_index, mask_info));
+            }
+        }
+    }
+
+    // Apply masks to layers below them (lower z-index)
+    // Masks only affect direct children (parent=0) within the same scope
+    for layer in layers.iter_mut() {
+        if layer.blending_mode == AmBlendingMode::Mask {
+            continue; // Don't apply mask to mask layer itself
+        }
+
+        if layer.parent != 0 {
+            continue; // Only affect root-level layers in this scope
+        }
+
+        // Find the closest mask that is above this layer (higher z-index)
+        for (mask_z, mask_info) in &mask_layers {
+            if *mask_z > layer.z_index {
+                // This mask affects this layer
+                layer.mask_info = Some(mask_info.clone());
+                bevy::log::info!(
+                    "[MASK] Layer '{}' (id={}, z={:.4}) will be clipped by mask at z={:.4}",
+                    layer.label,
+                    layer.id,
+                    layer.z_index,
+                    mask_z
+                );
+
+                // Recursively apply mask to all children (including nested embedScenes)
+                propagate_mask_to_children(&mut layer.children, mask_info);
+
+                break; // Use the first (closest) mask above
+            }
+        }
+    }
+}
+
+/// Recursively propagate mask information to all children layers.
+fn propagate_mask_to_children(children: &mut [PendingLayer], mask_info: &AmMaskInfo) {
+    for child in children.iter_mut() {
+        if child.blending_mode != AmBlendingMode::Mask && child.mask_info.is_none() {
+            child.mask_info = Some(mask_info.clone());
+            bevy::log::debug!(
+                "[MASK] Propagated mask to nested layer '{}' (id={})",
+                child.label,
+                child.id
+            );
+            // Recursively propagate to this child's children
+            propagate_mask_to_children(&mut child.children, mask_info);
+        }
     }
 }
 
@@ -1457,21 +1717,21 @@ fn collect_text(
     let (tx, ty) = get_initial_location(&text.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&text.transform.rotation);
     let (sx, sy) = get_initial_scale(&text.transform.scale);
-    
+
     // Font name parsing
     let font_name = text
         .font
         .strip_prefix("imported?name=")
         .unwrap_or(&text.font)
         .to_string();
-    
+
     const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
     let font_size = if text.size > 0.0 {
         text.size * TEXT_SIZE_MULTIPLIER
     } else {
         48.0
     };
-    
+
     // Calculate wrap offset for text positioning
     // AM text position is based on the CENTER of the wrapWidth box
     // We need to offset to get the LEFT edge for left-aligned text
@@ -1485,7 +1745,7 @@ fn collect_text(
             _ => 0.0,                    // Center - no offset needed
         }
     };
-    
+
     // Calculate Y offset based on font metrics
     const REFERENCE_WIN_ASCENT: f32 = 1.1285;
     let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
@@ -1494,15 +1754,15 @@ fn collect_text(
     } else {
         0.0
     };
-    
+
     let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
-    
+
     let transform = Transform {
         translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
-    
+
     // Create a modified location with wrap_offset applied (for animations)
     let mut modified_location = text.transform.location.clone();
     if let Some(ref mut val) = modified_location.value {
@@ -1515,7 +1775,7 @@ fn collect_text(
             kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
         }
     }
-    
+
     Some(PendingLayer {
         id: text.id,
         label: text.label.clone(),
@@ -1549,6 +1809,8 @@ fn collect_text(
         },
         z_index: z,
         children: Vec::new(),
+        blending_mode: AmBlendingMode::Normal,
+        mask_info: None,
     })
 }
 
@@ -1563,17 +1825,17 @@ fn collect_image(
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
-    
+
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
-    
+
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
-    
+
     Some(PendingLayer {
         id: image.id,
         label: image.label.clone(),
@@ -1606,6 +1868,8 @@ fn collect_image(
         },
         z_index: z,
         children: Vec::new(),
+        blending_mode: AmBlendingMode::Normal,
+        mask_info: None,
     })
 }
 
@@ -1621,6 +1885,7 @@ mod tests {
             flip_y: true,
             z_spacing: 0.001,
             time_offset: 0,
+            nesting_depth: 0,
         };
 
         // Center of AM canvas should be at Bevy origin

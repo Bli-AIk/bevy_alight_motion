@@ -3,15 +3,17 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
+use bevy::sprite_render::Material2dPlugin;
 use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_sdf_scale,
-    animate_text_opacity, animate_transform, manage_layer_lifecycle,
+    animate_text_opacity, animate_transform, apply_mask_clipping, manage_layer_lifecycle,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
+use crate::masked_sprite::MaskedSpriteMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
-use crate::sdf::{setup_sdf_shaders, hot_reload_shader};
+use crate::sdf::{hot_reload_shader, setup_sdf_shaders};
 
 /// Resource holding the white pixel texture used for solid color sprites.
 #[derive(Resource)]
@@ -23,6 +25,7 @@ pub struct AlightMotionPlugin;
 impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SmudPlugin)
+            .add_plugins(Material2dPlugin::<MaskedSpriteMaterial>::default())
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
@@ -38,7 +41,8 @@ impl Plugin for AlightMotionPlugin {
                     animate_sdf_opacity,
                     animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_text_opacity,
-                    hot_reload_shader, // Hot-reload shader when 'R' is pressed
+                    apply_mask_clipping, // Apply mask clipping to masked layers
+                    hot_reload_shader,   // Hot-reload shader when 'R' is pressed
                 )
                     .chain(),
             );
@@ -110,17 +114,19 @@ fn spawn_loaded_projects(
                 &project.font_metrics,
                 &config,
             );
-            
+
             bevy::log::info!(
                 "Prepared {} pending layers for lazy spawning",
                 pending_layers.len()
             );
 
             // Add the pending layers component to the project root
-            commands.entity(entity).insert(crate::scene::AmPendingLayers {
-                layers: pending_layers,
-                spawned_entities: std::collections::HashMap::new(),
-            });
+            commands
+                .entity(entity)
+                .insert(crate::scene::AmPendingLayers {
+                    layers: pending_layers,
+                    spawned_entities: std::collections::HashMap::new(),
+                });
 
             root.spawned = true;
             bevy::log::info!("Project ready for playback");

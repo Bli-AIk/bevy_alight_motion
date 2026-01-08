@@ -437,6 +437,10 @@ pub struct AmShape {
     #[serde(rename = "@s", default)]
     pub shape_type: String,
 
+    /// Blending mode (e.g., "mask" for masking layer).
+    #[serde(rename = "@blending", default)]
+    pub blending: String,
+
     /// Transform data.
     #[serde(default)]
     pub transform: AmTransform,

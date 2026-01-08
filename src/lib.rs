@@ -41,6 +41,7 @@
 pub mod animation;
 pub mod error;
 pub mod loader;
+pub mod masked_sprite;
 pub mod plugin;
 pub mod scene;
 pub mod schema;
