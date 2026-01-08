@@ -542,6 +542,7 @@ pub fn manage_layer_lifecycle(
     mut commands: Commands,
     playback: Res<AmPlayback>,
     mut shaders: ResMut<Assets<Shader>>,
+    sdf_shaders: Res<crate::sdf::AmSdfShaders>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
     mut project_query: Query<(Entity, &crate::scene::AmProjectRoot, &mut AmPendingLayers)>,
@@ -570,6 +571,7 @@ pub fn manage_layer_lifecycle(
         process_pending_layers(
             &mut commands,
             &mut shaders,
+            &sdf_shaders,
             &mut pending,
             &project.images,
             &project.fonts,
@@ -602,6 +604,7 @@ fn count_total_layers(layers: &[PendingLayer]) -> usize {
 fn process_pending_layers(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    sdf_shaders: &crate::sdf::AmSdfShaders,
     pending: &mut AmPendingLayers,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
@@ -752,6 +755,7 @@ fn process_pending_layers(
         let entity = spawn_layer_entity(
             commands,
             shaders,
+            sdf_shaders,
             layer,
             images,
             fonts,
@@ -797,6 +801,7 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
 fn spawn_layer_entity(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    sdf_shaders: &crate::sdf::AmSdfShaders,
     layer: &PendingLayer,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
@@ -825,6 +830,7 @@ fn spawn_layer_entity(
     add_visual_components(
         commands,
         shaders,
+        sdf_shaders,
         entity,
         &layer.spec,
         images,
@@ -844,6 +850,7 @@ fn spawn_layer_entity(
 fn add_visual_components(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    sdf_shaders: &crate::sdf::AmSdfShaders,
     entity: Entity,
     spec: &AmLayerSpec,
     images: &HashMap<String, Handle<Image>>,
@@ -900,6 +907,7 @@ fn add_visual_components(
             spawn_sdf_visual(
                 commands,
                 shaders,
+                sdf_shaders,
                 entity,
                 fill_color,
                 stroke_color_value,
@@ -1018,6 +1026,7 @@ fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color 
 fn spawn_sdf_visual(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
+    sdf_shaders: &crate::sdf::AmSdfShaders,
     parent_entity: Entity,
     fill_color: &Option<crate::schema::AmFillColor>,
     stroke_color_value: &str,
@@ -1046,8 +1055,9 @@ fn spawn_sdf_visual(
     // Use parametric box SDF that reads dimensions from params.x and params.y
     let parametric_sdf = shaders.add_sdf_expr(PARAMETRIC_BOX_SDF);
     
-    // Create stroked fill shader
-    let stroked_fill = shaders.add_fill_body(crate::sdf::STROKED_FILL_SHADER);
+    // Get stroked fill shader from pre-loaded resource (loaded from file)
+    let stroked_fill = sdf_shaders.stroked_fill.clone()
+        .expect("AmSdfShaders.stroked_fill not initialized - ensure setup_sdf_shaders runs first");
     
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);

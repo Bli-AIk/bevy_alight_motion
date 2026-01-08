@@ -5,15 +5,17 @@
 //! ## Design Philosophy (matching AM behavior)
 //! 
 //! AM renders stroked rectangles by:
-//! 1. Drawing a base 100x100 square with the stroke
-//! 2. Applying scale transform to stretch it into the desired shape
-//! 3. The stroke width remains constant (not scaled)
+//! 1. Drawing a base shape with a stroke
+//! 2. Applying scale to change dimensions (stroke width stays constant)
 //!
 //! We achieve this by:
-//! 1. Using a fixed 50x50 half-extent SDF box as the base
-//! 2. Applying the shape's scale to the SDF entity's transform
-//! 3. Using a custom fill shader that renders both fill and stroke
-//!    based on SDF distance, with stroke_width passed as a parameter
+//! 1. Using a parametric SDF box that reads dimensions from params
+//! 2. Using Chebyshev distance for sharp corners (cap="square", join="miter")
+//! 3. Passing stroke_width as a parameter to keep it constant
+//!
+//! ## Shader Files
+//! The fill shader source is in: `assets/shaders/stroked_fill.wgsl`
+//! Edit that file to adjust rendering behavior (requires recompilation).
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
@@ -31,20 +33,27 @@ pub const PARAMETRIC_BOX_SDF: &str = "smud::sd_box(p, vec2<f32>(params.x, params
 pub struct AmSdfShaders {
     /// Handle to the base box SDF shader (fixed 50x50 half-extent).
     pub base_box_sdf: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader.
+    /// Handle to the stroked fill shader (loaded from file at compile time).
     pub stroked_fill: Option<Handle<Shader>>,
 }
 
+/// Stroked fill shader source, loaded from file at compile time.
+/// Edit `assets/shaders/stroked_fill.wgsl` to modify the shader.
+/// Note: Changes require recompilation to take effect.
+pub const STROKED_FILL_SHADER: &str = include_str!("../assets/shaders/stroked_fill.wgsl");
+
 /// Initialize SDF shaders resource on startup.
-pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
+pub fn setup_sdf_shaders(
+    mut commands: Commands,
+    mut shaders: ResMut<Assets<Shader>>,
+) {
     // Create a fixed-size box SDF (50x50 half-extent, 100x100 total)
-    // This matches AM's approach of drawing a base square then scaling it
     let base_box_sdf = shaders.add_sdf_expr(
         format!("smud::sd_box(p, vec2<f32>({0}, {0}))", BASE_HALF_EXTENT)
     );
     
-    // Create the stroked fill shader that handles both fill and stroke
-    // params.z = stroke_width, params.w = packed stroke color
+    // Create stroked fill shader from file content (embedded at compile time)
+    // The shader source is in assets/shaders/stroked_fill.wgsl for easy editing
     let stroked_fill = shaders.add_fill_body(STROKED_FILL_SHADER);
     
     commands.insert_resource(AmSdfShaders {
@@ -52,48 +61,6 @@ pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shad
         stroked_fill: Some(stroked_fill),
     });
 }
-
-/// Inline stroked fill shader source.
-/// This shader renders both fill and stroke in a single pass:
-/// - Fill color (input.color) when distance < 0
-/// - Stroke color (from packed u32 in fill shader uniform) when 0 <= distance < stroke_width  
-/// - Transparent outside
-///
-/// ## Params usage:
-/// - params.x: half_width (used by SDF)
-/// - params.y: half_height (used by SDF)
-/// - params.z: stroke_width
-/// - params.w: packed_stroke_color (RGBA as u32 bits stored in f32)
-///
-/// NOTE: bevy_smud fill shader body is a code fragment, cannot define functions.
-/// All logic must be inline.
-pub const STROKED_FILL_SHADER: &str = r#"
-let stroke_width = input.params.z;
-
-// Unpack stroke color from params.w (packed RGBA as u32 bits stored in f32)
-let stroke_bits = bitcast<u32>(input.params.w);
-let stroke_r = f32((stroke_bits >> 24u) & 0xFFu) / 255.0;
-let stroke_g = f32((stroke_bits >> 16u) & 0xFFu) / 255.0;
-let stroke_b = f32((stroke_bits >> 8u) & 0xFFu) / 255.0;
-let stroke_a = f32(stroke_bits & 0xFFu) / 255.0;
-let stroke_color = vec4<f32>(stroke_r, stroke_g, stroke_b, stroke_a);
-
-// Inside fill region (distance < 0)
-if input.distance < 0.0 {
-    return input.color;
-}
-
-// Inside stroke region (0 <= distance < stroke_width)
-if input.distance < stroke_width {
-    // Anti-alias the outer edge of the stroke
-    let edge_smoothness = 1.0;
-    let alpha = 1.0 - smoothstep(stroke_width - edge_smoothness, stroke_width, input.distance);
-    return vec4<f32>(stroke_color.rgb, stroke_color.a * alpha);
-}
-
-// Outside - fully transparent
-return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-"#;
 
 /// Pack RGBA color into a u32 stored as f32 bits.
 /// Format: 0xRRGGBBAA
