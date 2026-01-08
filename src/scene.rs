@@ -994,14 +994,15 @@ fn get_initial_opacity(prop: &AmAnimatedFloat) -> f32 {
 }
 
 /// Get shape size from properties.
-/// Note: AM stores size as half-extents (like radius), so we double them to get full dimensions.
+/// AM's size property represents half-extents (half-width and half-height).
+/// We multiply by 2 to get full dimensions for rendering.
 fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) -> (f32, f32) {
     for prop in properties {
         if prop.name == "size"
             && prop.prop_type == "vec2"
             && let Ok(size) = crate::schema::parse_vec2(&prop.value)
         {
-            // AM size is half-extent for all shape types, double it for full size
+            // AM size is half-extent, double it for full dimensions
             return (size[0] * 2.0, size[1] * 2.0);
         }
     }

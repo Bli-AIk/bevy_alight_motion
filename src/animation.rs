@@ -336,7 +336,7 @@ pub fn animate_sdf_opacity(
 /// This allows the SDF to scale its dimensions while keeping stroke width constant.
 pub fn animate_sdf_scale(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children, Option<&AmLayerMarker>)>,
+    parent_query: Query<(&AmAnimated, &Children, Option<&AmLayerMarker>), With<AmSdfShapeParent>>,
     mut fill_query: Query<(&mut bevy_smud::SmudShape, &AmSdfFillParams), Without<AmSdfStrokeParams>>,
     mut stroke_query: Query<(&mut bevy_smud::SmudShape, &AmSdfStrokeParams), Without<AmSdfFillParams>>,
 ) {
