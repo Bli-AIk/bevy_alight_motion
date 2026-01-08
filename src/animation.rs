@@ -1065,6 +1065,7 @@ fn add_visual_components(
             fill_color,
             stroke_color_value,
             stroke_width,
+            stroke_join,
             width,
             height,
             pivot_x,
@@ -1079,6 +1080,7 @@ fn add_visual_components(
                 fill_color,
                 stroke_color_value,
                 *stroke_width,
+                stroke_join,
                 *width,
                 *height,
                 *pivot_x,
@@ -1230,6 +1232,7 @@ fn spawn_sdf_visual(
     fill_color: &Option<crate::schema::AmFillColor>,
     stroke_color_value: &str,
     stroke_width: f32,
+    stroke_join: &str,
     width: f32,
     height: f32,
     pivot_x: f32,
@@ -1237,7 +1240,7 @@ fn spawn_sdf_visual(
     shape_type: &str,
     marker: &AmLayerMarker,
 ) {
-    use crate::sdf::{PARAMETRIC_BOX_SDF, PARAMETRIC_CIRCLE_SDF, pack_color};
+    use crate::sdf::pack_color;
 
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
@@ -1259,12 +1262,41 @@ fn spawn_sdf_visual(
     // We can just use a simple expression like "0.0" as we don't use the result 'd' in our fill shader.
     let parametric_sdf = shaders.add_sdf_expr("0.0");
 
-    // Select the correct fill shader based on shape type
+    // Select the correct fill shader based on shape type and stroke join
+    // Current mapping:
+    // .circle -> stroked_fill_circle (ignores join type as circles naturally have round joins)
+    // .rect ->
+    //   - join="miter" -> stroked_fill_box_miter (Square corners)
+    //   - join="round" -> stroked_fill_box (Round corners)
+    //   - join="bevel" -> stroked_fill_box_bevel (Bevel corners)
+    //   - join="" (default) -> stroked_fill_box_bevel (Assume bevel if unspecified, per user request)
     let stroked_fill = if shape_type == ".circle" {
-        sdf_shaders.stroked_fill_circle.clone().expect("Circle fill shader not initialized")
+        sdf_shaders
+            .stroked_fill_circle
+            .clone()
+            .expect("Circle fill shader not initialized")
     } else {
-        sdf_shaders.stroked_fill_box.clone().expect("Box fill shader not initialized")
+        match stroke_join {
+            "miter" => sdf_shaders
+                .stroked_fill_box_miter
+                .clone()
+                .expect("Box miter shader not initialized"),
+            "round" => sdf_shaders
+                .stroked_fill_box
+                .clone()
+                .expect("Box round shader not initialized"),
+            "bevel" | "" => sdf_shaders
+                .stroked_fill_box_bevel
+                .clone()
+                .expect("Box bevel shader not initialized"),
+            _ => sdf_shaders
+                .stroked_fill_box
+                .clone()
+                .expect("Box default shader not initialized"),
+        }
     };
+
+    bevy::log::trace!("[SDF] Spawning {} with join='{}'", shape_type, stroke_join);
 
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);

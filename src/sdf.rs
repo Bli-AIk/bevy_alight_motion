@@ -34,6 +34,8 @@ pub const PARAMETRIC_CIRCLE_SDF: &str = "smud::sd_circle(p, params.x)";
 
 /// Relative path to the stroked fill shader file (from assets folder)
 pub const STROKED_FILL_BOX_FILENAME: &str = "shaders/stroked_fill_box.wgsl";
+pub const STROKED_FILL_BOX_MITER_FILENAME: &str = "shaders/stroked_fill_box_miter.wgsl";
+pub const STROKED_FILL_BOX_BEVEL_FILENAME: &str = "shaders/stroked_fill_box_bevel.wgsl";
 pub const STROKED_FILL_CIRCLE_FILENAME: &str = "shaders/stroked_fill_circle.wgsl";
 
 /// Resource to hold SDF shader handles.
@@ -41,8 +43,12 @@ pub const STROKED_FILL_CIRCLE_FILENAME: &str = "shaders/stroked_fill_circle.wgsl
 pub struct AmSdfShaders {
     /// Handle to the base box SDF shader (fixed 50x50 half-extent).
     pub base_box_sdf: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader for Box.
+    /// Handle to the stroked fill shader for Box (Round join).
     pub stroked_fill_box: Option<Handle<Shader>>,
+    /// Handle to the stroked fill shader for Box (Miter/Square join).
+    pub stroked_fill_box_miter: Option<Handle<Shader>>,
+    /// Handle to the stroked fill shader for Box (Bevel join).
+    pub stroked_fill_box_bevel: Option<Handle<Shader>>,
     /// Handle to the stroked fill shader for Circle.
     pub stroked_fill_circle: Option<Handle<Shader>>,
     /// Path to the shader file for hot-reload
@@ -54,6 +60,8 @@ impl Default for AmSdfShaders {
         Self {
             base_box_sdf: None,
             stroked_fill_box: None,
+            stroked_fill_box_miter: None,
+            stroked_fill_box_bevel: None,
             stroked_fill_circle: None,
             shader_file_path: None,
         }
@@ -62,7 +70,12 @@ impl Default for AmSdfShaders {
 
 /// Stroked fill shader source, loaded from file at compile time (fallback).
 pub const STROKED_FILL_BOX_DEFAULT: &str = include_str!("../assets/shaders/stroked_fill_box.wgsl");
-pub const STROKED_FILL_CIRCLE_DEFAULT: &str = include_str!("../assets/shaders/stroked_fill_circle.wgsl");
+pub const STROKED_FILL_BOX_MITER_DEFAULT: &str =
+    include_str!("../assets/shaders/stroked_fill_box_miter.wgsl");
+pub const STROKED_FILL_BOX_BEVEL_DEFAULT: &str =
+    include_str!("../assets/shaders/stroked_fill_box_bevel.wgsl");
+pub const STROKED_FILL_CIRCLE_DEFAULT: &str =
+    include_str!("../assets/shaders/stroked_fill_circle.wgsl");
 
 /// Initialize SDF shaders resource on startup.
 pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
@@ -78,28 +91,22 @@ pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shad
     #[cfg(not(feature = "debug"))]
     let shader_file_path: Option<PathBuf> = None;
 
-    // Load shader content for Box
-    let box_content = if let Some(ref path) = shader_file_path {
-        // If debug path is found, it points to one file, we need to adjust
-        // For simplicity in debug mode, we might just look for files relative to assets
-        // But here let's just use the logic to load from default if hot reload logic is complex
-        // Actually, let's keep it simple: always use embedded default unless we specifically implemented per-file hot reload
-        // Since we split into two files, the old hot reload logic is broken anyway.
-        // Let's rely on embedded defaults for now to fix the render issue first.
-        STROKED_FILL_BOX_DEFAULT.to_string()
-    } else {
-        STROKED_FILL_BOX_DEFAULT.to_string()
-    };
-    
-    // Load shader content for Circle
+    // Load shader content
+    let box_content = STROKED_FILL_BOX_DEFAULT.to_string();
+    let box_miter_content = STROKED_FILL_BOX_MITER_DEFAULT.to_string();
+    let box_bevel_content = STROKED_FILL_BOX_BEVEL_DEFAULT.to_string();
     let circle_content = STROKED_FILL_CIRCLE_DEFAULT.to_string();
 
     let stroked_fill_box = shaders.add_fill_body(box_content);
+    let stroked_fill_box_miter = shaders.add_fill_body(box_miter_content);
+    let stroked_fill_box_bevel = shaders.add_fill_body(box_bevel_content);
     let stroked_fill_circle = shaders.add_fill_body(circle_content);
 
     commands.insert_resource(AmSdfShaders {
         base_box_sdf: Some(base_box_sdf),
         stroked_fill_box: Some(stroked_fill_box),
+        stroked_fill_box_miter: Some(stroked_fill_box_miter),
+        stroked_fill_box_bevel: Some(stroked_fill_box_bevel),
         stroked_fill_circle: Some(stroked_fill_circle),
         shader_file_path,
     });
