@@ -1595,114 +1595,231 @@ fn collect_embed_scene(
 
 /// Apply mask information to layers that are below mask layers.
 /// A mask layer affects all layers with lower z-index (parent=0 only) until end of scope.
+///
+/// This function works on a **flattened** list of layers (from `flatten_pending_layers`).
+/// Since children are extracted into the flat list with remapped parent IDs, we need to:
+/// 1. Find mask layers (parent=0 and blending_mode=Mask)
+/// 2. Find root-level layers (parent=0) that are below the mask (lower z-index)
+/// 3. Propagate mask to all descendants by following the parent chain
 fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // Find all mask layers and their info
-    let mut mask_layers: Vec<(f32, AmMaskInfo)> = Vec::new();
+    // Masks are root-level layers (parent=0) with blending_mode=Mask
+    let mut mask_layers: Vec<(u64, f32, AmMaskInfo)> = Vec::new(); // (mask_id, z_index, mask_info)
 
     for layer in layers.iter() {
         if layer.blending_mode == AmBlendingMode::Mask && layer.parent == 0 {
             // Extract mask geometry from the layer's transform and spec
-            if let AmLayerSpec::SdfShape { width, height, .. } = &layer.spec {
-                let mask_info = AmMaskInfo {
-                    center: Vec2::new(layer.transform.translation.x, layer.transform.translation.y),
-                    half_size: Vec2::new(
-                        *width / 2.0 * layer.transform.scale.x,
-                        *height / 2.0 * layer.transform.scale.y,
-                    ),
-                    rotation: layer
-                        .transform
-                        .rotation
-                        .to_euler(bevy::math::EulerRot::ZYX)
-                        .0,
-                    scale: Vec2::new(layer.transform.scale.x, layer.transform.scale.y),
-                };
+            let mask_info = extract_mask_info_from_layer(layer);
+            if let Some(info) = mask_info {
                 bevy::log::info!(
                     "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
                     layer.label,
                     layer.id,
                     layer.z_index,
-                    mask_info.center.x,
-                    mask_info.center.y,
-                    mask_info.half_size.x,
-                    mask_info.half_size.y
+                    info.center.x,
+                    info.center.y,
+                    info.half_size.x,
+                    info.half_size.y
                 );
-                mask_layers.push((layer.z_index, mask_info));
-            } else if let AmLayerSpec::SpriteShape { width, height, .. } = &layer.spec {
-                let mask_info = AmMaskInfo {
-                    center: Vec2::new(layer.transform.translation.x, layer.transform.translation.y),
-                    half_size: Vec2::new(
-                        *width / 2.0 * layer.transform.scale.x,
-                        *height / 2.0 * layer.transform.scale.y,
-                    ),
-                    rotation: layer
-                        .transform
-                        .rotation
-                        .to_euler(bevy::math::EulerRot::ZYX)
-                        .0,
-                    scale: Vec2::new(layer.transform.scale.x, layer.transform.scale.y),
-                };
-                bevy::log::info!(
-                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                    layer.label,
-                    layer.id,
-                    layer.z_index,
-                    mask_info.center.x,
-                    mask_info.center.y,
-                    mask_info.half_size.x,
-                    mask_info.half_size.y
-                );
-                mask_layers.push((layer.z_index, mask_info));
+                mask_layers.push((layer.id, layer.z_index, info));
             }
         }
     }
 
-    // Apply masks to layers below them (lower z-index)
-    // Masks only affect direct children (parent=0) within the same scope
-    for layer in layers.iter_mut() {
+    if mask_layers.is_empty() {
+        return;
+    }
+
+    // Build a set of layer IDs that should receive the mask
+    // Start with root-level layers (parent=0) that are below the mask
+    let mut masked_layer_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
+
+    for layer in layers.iter() {
         if layer.blending_mode == AmBlendingMode::Mask {
             continue; // Don't apply mask to mask layer itself
         }
 
         if layer.parent != 0 {
-            continue; // Only affect root-level layers in this scope
+            continue; // Only consider root-level layers for initial mask assignment
         }
 
         // Find the closest mask that is above this layer (higher z-index)
-        for (mask_z, mask_info) in &mask_layers {
-            if *mask_z > layer.z_index {
-                // This mask affects this layer
-                layer.mask_info = Some(mask_info.clone());
+        for (mask_id, mask_z, _mask_info) in &mask_layers {
+            if *mask_z > layer.z_index && *mask_id != layer.id {
+                // This layer should be masked
+                masked_layer_ids.insert(layer.id);
                 bevy::log::info!(
-                    "[MASK] Layer '{}' (id={}, z={:.4}) will be clipped by mask at z={:.4}",
+                    "[MASK] Root layer '{}' (id={}, z={:.4}) will be clipped by mask at z={:.4}",
                     layer.label,
                     layer.id,
                     layer.z_index,
                     mask_z
                 );
-
-                // Recursively apply mask to all children (including nested embedScenes)
-                propagate_mask_to_children(&mut layer.children, mask_info);
-
                 break; // Use the first (closest) mask above
             }
         }
     }
-}
 
-/// Recursively propagate mask information to all children layers.
-fn propagate_mask_to_children(children: &mut [PendingLayer], mask_info: &AmMaskInfo) {
-    for child in children.iter_mut() {
-        if child.blending_mode != AmBlendingMode::Mask && child.mask_info.is_none() {
-            child.mask_info = Some(mask_info.clone());
+    // Now propagate: find all layers whose parent (directly or indirectly) is in masked_layer_ids
+    // We iterate until no new layers are added (transitive closure)
+    loop {
+        let mut new_ids: Vec<u64> = Vec::new();
+        for layer in layers.iter() {
+            if layer.blending_mode == AmBlendingMode::Mask {
+                continue;
+            }
+            if masked_layer_ids.contains(&layer.id) {
+                continue; // Already marked
+            }
+            // Check if this layer's parent is masked
+            if layer.parent != 0 && masked_layer_ids.contains(&layer.parent) {
+                new_ids.push(layer.id);
+            }
+        }
+        if new_ids.is_empty() {
+            break;
+        }
+        for id in new_ids {
             bevy::log::debug!(
-                "[MASK] Propagated mask to nested layer '{}' (id={})",
-                child.label,
-                child.id
+                "[MASK] Adding descendant layer id={} to masked set (parent is masked)",
+                id
             );
-            // Recursively propagate to this child's children
-            propagate_mask_to_children(&mut child.children, mask_info);
+            masked_layer_ids.insert(id);
         }
     }
+
+    // Now apply the mask_info to all masked layers
+    // Use the first mask (there's typically only one mask per scope)
+    let (_mask_id, _mask_z, mask_info) = &mask_layers[0];
+
+    for layer in layers.iter_mut() {
+        if masked_layer_ids.contains(&layer.id) && layer.mask_info.is_none() {
+            layer.mask_info = Some(mask_info.clone());
+            bevy::log::debug!(
+                "[MASK] Applied mask to layer '{}' (id={})",
+                layer.label,
+                layer.id
+            );
+        }
+    }
+}
+
+/// Extract mask geometry info from a layer's transform and spec.
+/// For animated scales (like SDF shapes), we need to get the scale at t=0 from the animation data.
+fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
+    let (width, height, pivot_x, pivot_y) = match &layer.spec {
+        AmLayerSpec::SdfShape {
+            width,
+            height,
+            pivot_x,
+            pivot_y,
+            ..
+        } => (*width, *height, *pivot_x, *pivot_y),
+        AmLayerSpec::SpriteShape { width, height, .. } => (*width, *height, 0.0, 0.0),
+        _ => return None,
+    };
+
+    // Get scale from animation data at t=0, since transform.scale might be (1,1) for SDF shapes
+    let (scale_x, scale_y) = get_scale_at_normalized_time(&layer.animated.scale, 0.0);
+
+    // For SDF shapes, transform.translation represents the position in Bevy coordinates.
+    // The pivot is stored but currently NOT affecting the visual position because:
+    // 1. SDF child uses Transform::default() (centered on parent)
+    // 2. Parent transform.translation is set from get_initial_location
+    //
+    // So the mask center should match the transform translation directly.
+    // The pivot values are preserved for reference but not applied to the mask center.
+    let center_x = layer.transform.translation.x;
+    let center_y = layer.transform.translation.y;
+    let _ = (pivot_x, pivot_y); // Stored but not used for mask center calculation
+
+    bevy::log::debug!(
+        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+        width,
+        height,
+        pivot_x,
+        pivot_y,
+        scale_x,
+        scale_y,
+        center_x,
+        center_y,
+        width / 2.0 * scale_x,
+        height / 2.0 * scale_y
+    );
+
+    Some(AmMaskInfo {
+        center: Vec2::new(center_x, center_y),
+        half_size: Vec2::new(width / 2.0 * scale_x, height / 2.0 * scale_y),
+        rotation: layer
+            .transform
+            .rotation
+            .to_euler(bevy::math::EulerRot::ZYX)
+            .0,
+        scale: Vec2::new(scale_x, scale_y),
+    })
+}
+
+/// Get scale at a normalized time (0.0 to 1.0) from animation data.
+/// If no animation, returns the static value or defaults to (1.0, 1.0).
+fn get_scale_at_normalized_time(prop: &crate::schema::AmAnimatedVec2, t: f32) -> (f32, f32) {
+    // If there's a static value, use it
+    if let Some(val) = &prop.value {
+        return (val[0], val[1]);
+    }
+
+    // If no keyframes, default to 1.0
+    if prop.keyframes.is_empty() {
+        return (1.0, 1.0);
+    }
+
+    // Sort keyframes by time
+    let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // If t is before or at the first keyframe, use the first keyframe value
+    if t <= sorted[0].time {
+        return crate::schema::parse_vec2(&sorted[0].value)
+            .map(|v| (v[0], v[1]))
+            .unwrap_or((1.0, 1.0));
+    }
+
+    // If t is after or at the last keyframe, use the last keyframe value
+    let last = sorted.last().unwrap();
+    if t >= last.time {
+        return crate::schema::parse_vec2(&last.value)
+            .map(|v| (v[0], v[1]))
+            .unwrap_or((1.0, 1.0));
+    }
+
+    // Find the surrounding keyframes and interpolate
+    for i in 0..sorted.len() - 1 {
+        let kf_prev = sorted[i];
+        let kf_next = sorted[i + 1];
+
+        if t >= kf_prev.time && t <= kf_next.time {
+            let v_prev = crate::schema::parse_vec2(&kf_prev.value).unwrap_or([1.0, 1.0]);
+            let v_next = crate::schema::parse_vec2(&kf_next.value).unwrap_or([1.0, 1.0]);
+
+            let span = kf_next.time - kf_prev.time;
+            let local_t = if span > 0.0 {
+                (t - kf_prev.time) / span
+            } else {
+                0.0
+            };
+
+            return (
+                v_prev[0] + (v_next[0] - v_prev[0]) * local_t,
+                v_prev[1] + (v_next[1] - v_prev[1]) * local_t,
+            );
+        }
+    }
+
+    // Fallback
+    (1.0, 1.0)
 }
 
 /// Collect a text layer's data.
