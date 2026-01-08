@@ -1128,8 +1128,63 @@ pub fn collect_pending_layers(
         collect_layer(&mut pending_layers, layer, fonts, font_metrics, config, z);
     }
     
-    println!("Collected {} pending layers", pending_layers.len());
-    pending_layers
+    // Flatten all nested children into a single list
+    let flattened = flatten_pending_layers(pending_layers);
+    
+    println!("Collected {} pending layers (after flatten)", flattened.len());
+    flattened
+}
+
+/// Flatten a tree of PendingLayers into a single list.
+/// Children of embed scenes are extracted and their parent is set to the embed's ID.
+fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
+    let mut result = Vec::new();
+    
+    for layer in layers {
+        let embed_id = layer.id;
+        let children = layer.children.clone();
+        
+        // Add the layer itself (with children cleared)
+        let mut layer_without_children = layer;
+        layer_without_children.children = Vec::new();
+        result.push(layer_without_children);
+        
+        // Recursively flatten children and update their parent reference
+        // We need to remap IDs to make them unique per embed instance
+        if !children.is_empty() {
+            let flattened_children = flatten_pending_layers(children);
+            
+            // Build a map of old ID -> new ID for this embed's children
+            let mut id_remap: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+            for child in &flattened_children {
+                // Create unique ID by combining embed_id and child_id
+                // Use wrapping operations to handle large IDs
+                let unique_id = embed_id.wrapping_mul(1_000_000).wrapping_add(child.id);
+                id_remap.insert(child.id, unique_id);
+            }
+            
+            for mut child in flattened_children {
+                let old_id = child.id;
+                
+                // Remap the child's ID
+                child.id = *id_remap.get(&old_id).unwrap_or(&old_id);
+                
+                // Remap the parent reference
+                if child.parent == 0 {
+                    child.parent = embed_id;
+                } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
+                    child.parent = new_parent_id;
+                }
+                
+                // Also update the layer_id in animated component
+                child.animated.layer_id = child.id;
+                
+                result.push(child);
+            }
+        }
+    }
+    
+    result
 }
 
 /// Collect a single layer into the pending list.

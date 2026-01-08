@@ -552,13 +552,47 @@ fn process_pending_layers(
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
     let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
 
+    // Helper function to check if an ancestor is active
+    fn is_ancestor_active(layer_id: u64, layers: &[PendingLayer], global_time: f32, time_offset: i32) -> bool {
+        let layer = match layers.iter().find(|l| l.id == layer_id) {
+            Some(l) => l,
+            None => return true, // If not found, assume active (root)
+        };
+        
+        if layer.parent == 0 {
+            return true; // No parent, always considered active from parent perspective
+        }
+        
+        // Check parent's active status
+        let parent = match layers.iter().find(|l| l.id == layer.parent) {
+            Some(p) => p,
+            None => return true, // Parent not in our list, assume active
+        };
+        
+        let parent_local_time = global_time - (parent.animated.time_offset + time_offset) as f32;
+        let parent_active = parent_local_time >= parent.start_time as f32 
+            && parent_local_time <= parent.end_time as f32;
+        
+        if !parent_active {
+            return false; // Parent is not active
+        }
+        
+        // Recursively check grandparent
+        is_ancestor_active(layer.parent, layers, global_time, time_offset)
+    }
+
     for (idx, layer) in pending.layers.iter().enumerate() {
         // Calculate local time
         let local_time = global_time - (layer.animated.time_offset + time_offset) as f32;
         
-        // Check if layer should be active
-        let should_be_active = local_time >= layer.start_time as f32 
+        // Check if layer should be active (considering both own time range and parent's time range)
+        let own_time_active = local_time >= layer.start_time as f32 
             && local_time <= layer.end_time as f32;
+        
+        // Check if all ancestors are active
+        let ancestors_active = is_ancestor_active(layer.id, &pending.layers, global_time, time_offset);
+        
+        let should_be_active = own_time_active && ancestors_active;
 
         let is_spawned = pending.spawned_entities.contains_key(&layer.id);
 
@@ -576,31 +610,61 @@ fn process_pending_layers(
             if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
                 println!("  [Lifecycle] Despawning '{}' (id={})", layer.label, layer_id);
             }
-            // Despawn entity (Bevy will handle orphaned children)
+            
+            // Find all children of this layer (direct and nested) and despawn them first
+            let children_to_remove: Vec<u64> = pending.layers.iter()
+                .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
+                .map(|l| l.id)
+                .collect();
+            
+            // Despawn children (deepest first would be ideal, but order doesn't matter much
+            // since we're despawning them all)
+            for child_id in children_to_remove {
+                if let Some(child_entity) = pending.spawned_entities.remove(&child_id) {
+                    if let Some(child) = pending.layers.iter().find(|l| l.id == child_id) {
+                        println!("    [Lifecycle] (cascade) Despawning child '{}' (id={})", child.label, child_id);
+                    }
+                    commands.entity(child_entity).despawn();
+                }
+            }
+            
+            // Despawn the entity itself
             commands.entity(entity).despawn();
         }
     }
 
-    // Sort layers to spawn by dependency (parents before children)
+    // Sort layers to spawn by dependency (parents before children) using topological sort
     // Build a set of layer IDs being spawned this frame
     let spawning_ids: std::collections::HashSet<u64> = to_spawn.iter()
         .map(|&idx| pending.layers[idx].id)
         .collect();
     
-    // Sort: layers without parents or with already-spawned parents come first
-    to_spawn.sort_by(|&a_idx, &b_idx| {
-        let a = &pending.layers[a_idx];
-        let b = &pending.layers[b_idx];
-        
-        // Check if parent is also being spawned this frame
-        let a_needs_wait = a.parent != 0 && spawning_ids.contains(&a.parent);
-        let b_needs_wait = b.parent != 0 && spawning_ids.contains(&b.parent);
-        
-        match (a_needs_wait, b_needs_wait) {
-            (false, true) => std::cmp::Ordering::Less,    // a comes before b
-            (true, false) => std::cmp::Ordering::Greater, // b comes before a
-            _ => std::cmp::Ordering::Equal,               // same priority
+    // Helper function to count dependency depth (how many ancestors are also being spawned)
+    fn count_spawn_depth(layer_id: u64, layers: &[PendingLayer], spawning_ids: &std::collections::HashSet<u64>, visited: &mut std::collections::HashSet<u64>) -> usize {
+        if visited.contains(&layer_id) {
+            return 0; // Prevent infinite loop
         }
+        visited.insert(layer_id);
+        
+        let layer = match layers.iter().find(|l| l.id == layer_id) {
+            Some(l) => l,
+            None => return 0,
+        };
+        
+        if layer.parent == 0 || !spawning_ids.contains(&layer.parent) {
+            // No parent being spawned this frame, depth is 0
+            0
+        } else {
+            // Parent is also being spawned, add 1 and recurse
+            1 + count_spawn_depth(layer.parent, layers, spawning_ids, visited)
+        }
+    }
+    
+    // Sort by depth (lower depth = spawn first)
+    to_spawn.sort_by_key(|&idx| {
+        let layer_id = pending.layers[idx].id;
+        let mut visited = std::collections::HashSet::new();
+        count_spawn_depth(layer_id, &pending.layers, &spawning_ids, &mut visited)
     });
 
     // Spawn new entities in dependency order
@@ -609,7 +673,16 @@ fn process_pending_layers(
         
         // Determine parent for this entity
         let actual_parent = if layer.parent != 0 {
-            pending.spawned_entities.get(&layer.parent).copied().unwrap_or(parent_entity)
+            match pending.spawned_entities.get(&layer.parent) {
+                Some(&e) => e,
+                None => {
+                    println!(
+                        "  [Lifecycle] WARNING: Parent {} not found for '{}' (id={}), using root",
+                        layer.parent, layer.label, layer.id
+                    );
+                    parent_entity
+                }
+            }
         } else {
             parent_entity
         };
@@ -631,6 +704,31 @@ fn process_pending_layers(
         
         pending.spawned_entities.insert(layer.id, entity);
     }
+}
+
+/// Check if a layer is a descendant of another layer (direct or nested).
+fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) -> bool {
+    if layer_id == ancestor_id {
+        return false; // Not a descendant of itself
+    }
+    
+    // Find the layer
+    let layer = match layers.iter().find(|l| l.id == layer_id) {
+        Some(l) => l,
+        None => return false,
+    };
+    
+    // Check if direct child
+    if layer.parent == ancestor_id {
+        return true;
+    }
+    
+    // Recursively check ancestors (with depth limit to prevent infinite loops)
+    if layer.parent != 0 {
+        return is_descendant_of(layer.parent, ancestor_id, layers);
+    }
+    
+    false
 }
 
 /// Spawn a complete entity from a PendingLayer.
