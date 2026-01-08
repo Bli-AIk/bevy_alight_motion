@@ -357,10 +357,14 @@ pub fn animate_sdf_opacity(
 /// - params.w = packed_stroke_color (constant)
 ///
 /// This allows non-uniform scaling while keeping stroke width constant.
+///
+/// Also updates the child transform translation to account for pivot scaling.
+/// Since the parent (Pivot) is not scaled, we must move the child (Center)
+/// to simulate scaling around the pivot.
 pub fn animate_sdf_scale(
     playback: Res<AmPlayback>,
     parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
-    mut sdf_query: Query<(&mut SmudShape, &AmSdfParams)>,
+    mut sdf_query: Query<(&mut SmudShape, &AmSdfParams, &mut Transform)>,
 ) {
     if playback.force_stopped {
         return;
@@ -390,7 +394,7 @@ pub fn animate_sdf_scale(
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            if let Ok((mut smud_shape, sdf_params)) = sdf_query.get_mut(child) {
+            if let Ok((mut smud_shape, sdf_params, mut transform)) = sdf_query.get_mut(child) {
                 // Calculate scaled dimensions
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
@@ -402,6 +406,13 @@ pub fn animate_sdf_scale(
                     sdf_params.stroke_width,
                     sdf_params.packed_stroke,
                 );
+
+                // Update translation to simulate scaling around pivot
+                // Center position = -Pivot * Scale
+                // Account for Y-flip: AM pivot_y is down (+), Bevy Y is up
+                // So translation.y = pivot_y * scale_y (positive pivot_y moves center UP relative to pivot)
+                transform.translation.x = -sdf_params.base_pivot_x * anim_scale[0];
+                transform.translation.y = sdf_params.base_pivot_y * anim_scale[1];
             }
         }
     }
@@ -1058,6 +1069,7 @@ fn add_visual_components(
             height,
             pivot_x,
             pivot_y,
+            shape_type,
         } => {
             spawn_sdf_visual(
                 commands,
@@ -1071,6 +1083,7 @@ fn add_visual_components(
                 *height,
                 *pivot_x,
                 *pivot_y,
+                shape_type,
                 &AmLayerMarker {
                     id,
                     label: label.to_string(),
@@ -1219,11 +1232,12 @@ fn spawn_sdf_visual(
     stroke_width: f32,
     width: f32,
     height: f32,
-    _pivot_x: f32,
-    _pivot_y: f32,
+    pivot_x: f32,
+    pivot_y: f32,
+    shape_type: &str,
     marker: &AmLayerMarker,
 ) {
-    use crate::sdf::{PARAMETRIC_BOX_SDF, pack_color};
+    use crate::sdf::{PARAMETRIC_BOX_SDF, PARAMETRIC_CIRCLE_SDF, pack_color};
 
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
@@ -1238,14 +1252,19 @@ fn spawn_sdf_visual(
     let target_half_width = width / 2.0;
     let target_half_height = height / 2.0;
 
-    // Use parametric box SDF that reads dimensions from params.x and params.y
-    let parametric_sdf = shaders.add_sdf_expr(PARAMETRIC_BOX_SDF);
+    // Use a dummy SDF expression because our custom fill shader handles distance calculation explicitly.
+    // We pass 0.0 to satisfy the parser, but it won't be used for distance.
+    // However, we must ensure 'params' is available in the shader context.
+    // bevy_smud generates: fn sdf(p, params) -> f32 { <EXPR> }
+    // We can just use a simple expression like "0.0" as we don't use the result 'd' in our fill shader.
+    let parametric_sdf = shaders.add_sdf_expr("0.0");
 
-    // Get stroked fill shader from pre-loaded resource (loaded from file)
-    let stroked_fill = sdf_shaders
-        .stroked_fill
-        .clone()
-        .expect("AmSdfShaders.stroked_fill not initialized - ensure setup_sdf_shaders runs first");
+    // Select the correct fill shader based on shape type
+    let stroked_fill = if shape_type == ".circle" {
+        sdf_shaders.stroked_fill_circle.clone().expect("Circle fill shader not initialized")
+    } else {
+        sdf_shaders.stroked_fill_box.clone().expect("Box fill shader not initialized")
+    };
 
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);
@@ -1259,13 +1278,18 @@ fn spawn_sdf_visual(
         (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
     let frame_size = frame_half * 2.0;
 
+    // Calculate initial translation based on pivot (with Y-flip for Bevy)
+    // Pivot (px, py) in AM means Center is at (-px, -py) relative to Pivot.
+    // Bevy Y is flipped, so Center Y is -(-py) = py.
+    let initial_translation = Vec3::new(-pivot_x, pivot_y, 0.0);
+
     // Spawn single SDF entity with both fill and stroke
     // Note: Transform.scale is set to 1.0 because we handle sizing via params
     // SDF child uses default transform (z=0 relative to parent) - z-ordering is handled by parent's z value
     let sdf_entity = commands
         .spawn((
             Name::new(format!("SdfShape[{}]: {}", marker.id, marker.label)),
-            Transform::default(),
+            Transform::from_translation(initial_translation),
             GlobalTransform::default(),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -1290,6 +1314,8 @@ fn spawn_sdf_visual(
                 base_half_height: target_half_height,
                 stroke_width,
                 packed_stroke,
+                base_pivot_x: pivot_x,
+                base_pivot_y: pivot_y,
             },
         ))
         .id();
@@ -1301,12 +1327,14 @@ fn spawn_sdf_visual(
         .insert((AmVisualSpawned, AmSdfShapeParent));
 
     bevy::log::info!(
-        "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}",
+        "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}, pivot=({:.1},{:.1})",
         marker.label,
         width,
         height,
         stroke_width,
-        frame_size
+        frame_size,
+        pivot_x,
+        pivot_y
     );
 }
 
@@ -1322,6 +1350,10 @@ pub struct AmSdfParams {
     pub stroke_width: f32,
     /// Packed stroke color (stored to preserve during updates)
     pub packed_stroke: f32,
+    /// Base pivot X in pixels
+    pub base_pivot_x: f32,
+    /// Base pivot Y in pixels
+    pub base_pivot_y: f32,
 }
 
 // Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere

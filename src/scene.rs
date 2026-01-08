@@ -84,6 +84,7 @@ pub enum AmLayerSpec {
         height: f32,
         pivot_x: f32,
         pivot_y: f32,
+        shape_type: String,
     },
     /// Text layer
     Text {
@@ -425,14 +426,17 @@ fn spawn_shape(
     let entity_name = format!("Shape[{}]: {}", shape.id, shape.label);
 
     // Check if this is a stroked shape that needs SDF rendering
+    // Also use SDF for circles (better quality than sprite rect)
     let needs_sdf = shape.fill_type == "color"
-        && shape.stroke.as_ref().map_or(false, |s| {
-            s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
-        });
+        && (shape.shape_type == ".circle"
+            || shape.stroke.as_ref().map_or(false, |s| {
+                s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
+            }));
 
     // Create the layer spec for lazy spawning
     let layer_spec = if needs_sdf {
-        let stroke = shape.stroke.as_ref().unwrap();
+        let default_stroke = crate::schema::AmStroke::default();
+        let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
         let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
         let stroke_color_value = stroke
             .color
@@ -448,6 +452,7 @@ fn spawn_shape(
             height,
             pivot_x,
             pivot_y,
+            shape_type: shape.shape_type.clone(),
         }
     } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         AmLayerSpec::SpriteShape {
@@ -1085,12 +1090,26 @@ fn get_initial_opacity(prop: &AmAnimatedFloat) -> f32 {
 /// We multiply by 2 to get full dimensions for rendering.
 fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) -> (f32, f32) {
     for prop in properties {
-        if prop.name == "size"
-            && prop.prop_type == "vec2"
-            && let Ok(size) = crate::schema::parse_vec2(&prop.value)
-        {
-            // AM size is half-extent, double it for full dimensions
-            return (size[0] * 2.0, size[1] * 2.0);
+        if prop.name == "size" && prop.prop_type == "vec2" {
+            // Check static value first
+            if !prop.value.is_empty() {
+                if let Ok(size) = crate::schema::parse_vec2(&prop.value) {
+                    return (size[0] * 2.0, size[1] * 2.0);
+                }
+            }
+            // If no static value, check first keyframe
+            if !prop.keyframes.is_empty() {
+                // Find earliest keyframe
+                let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+                sorted.sort_by(|a, b| {
+                    a.time
+                        .partial_cmp(&b.time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                if let Ok(size) = crate::schema::parse_vec2(&sorted[0].value) {
+                    return (size[0] * 2.0, size[1] * 2.0);
+                }
+            }
         }
     }
     (100.0, 100.0)
@@ -1383,9 +1402,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
     let needs_sdf = shape.fill_type == "color"
-        && shape.stroke.as_ref().map_or(false, |s| {
-            s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
-        });
+        && (shape.shape_type == ".circle"
+            || shape.stroke.as_ref().map_or(false, |s| {
+                s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
+            }));
 
     // For SDF shapes, we don't apply scale to the transform because:
     // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)
@@ -1401,7 +1421,8 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     };
 
     let spec = if needs_sdf {
-        let stroke = shape.stroke.as_ref().unwrap();
+        let default_stroke = crate::schema::AmStroke::default();
+        let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
         let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
         let stroke_color_value = stroke
             .color
@@ -1416,6 +1437,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             height,
             pivot_x,
             pivot_y,
+            shape_type: shape.shape_type.clone(),
         }
     } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         AmLayerSpec::SpriteShape {
