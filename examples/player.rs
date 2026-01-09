@@ -65,6 +65,7 @@ fn main() {
     // Black background matching AM project
     .insert_resource(ClearColor(Color::BLACK))
     .insert_resource(ProjectFile(project_file))
+    .insert_resource(AmProjectResolution::FitWindow)
     .init_resource::<DebugOverlaySettings>()
     .init_resource::<MaskDebugSettings>()
     .add_plugins(AlightMotionPlugin)

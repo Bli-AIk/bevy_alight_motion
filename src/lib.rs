@@ -52,7 +52,7 @@ pub mod prelude {
     pub use crate::animation::{AmAnimated, AmPlayback};
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
-    pub use crate::plugin::{AlightMotionPlugin, load_am_project};
+    pub use crate::plugin::{AlightMotionPlugin, AmProjectResolution, load_am_project};
     pub use crate::scene::{
         AmLayerMarker, AmProjectBundle, AmProjectRoot, AmSceneConfig, am_to_bevy_coords,
     };

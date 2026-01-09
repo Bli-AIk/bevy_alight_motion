@@ -35,6 +35,22 @@ use crate::masked_sprite::MaskedSpriteMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
 use crate::sdf::{hot_reload_shader_system, setup_sdf_shaders_system};
 
+/// Resource to configure how the AM project is scaled relative to the window.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
+pub enum AmProjectResolution {
+    /// No scaling (1:1 pixel mapping).
+    #[default]
+    None,
+    /// Scale the project to fit within the window, preserving aspect ratio.
+    FitWindow,
+    /// Scale the project to cover the window, preserving aspect ratio.
+    CoverWindow,
+    /// Scale the project to a fixed width, preserving aspect ratio.
+    FixedWidth(f32),
+    /// Scale the project to a fixed height, preserving aspect ratio.
+    FixedHeight(f32),
+}
+
 /// Resource holding the white pixel texture used for solid color sprites.
 ///
 /// 保存用于纯色精灵的白色像素纹理的资源。
@@ -53,6 +69,7 @@ impl Plugin for AlightMotionPlugin {
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
+            .init_resource::<AmProjectResolution>()
             .add_systems(
                 Startup,
                 (setup_white_pixel_system, setup_sdf_shaders_system),
@@ -111,11 +128,13 @@ fn setup_white_pixel_system(mut commands: Commands, mut images: ResMut<Assets<Im
 /// 注意：这不会立即生成实体 - 生命周期系统会处理这个。
 fn spawn_loaded_projects_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut AmProjectRoot)>,
+    mut query: Query<(Entity, &mut AmProjectRoot, &mut Transform)>,
     projects: Res<Assets<AmProject>>,
     mut playback: ResMut<AmPlayback>,
+    resolution_config: Res<AmProjectResolution>,
+    window_query: Query<&Window>,
 ) {
-    for (entity, mut root) in query.iter_mut() {
+    for (entity, mut root, mut transform) in query.iter_mut() {
         if root.spawned {
             continue;
         }
@@ -137,6 +156,59 @@ fn spawn_loaded_projects_system(
 
             // Update playback duration
             playback.total_time_ms = project.scene.total_time as f32;
+
+            // Apply resolution scaling
+            match *resolution_config {
+                AmProjectResolution::None => {
+                    // Default scale 1.0
+                }
+                AmProjectResolution::FitWindow => {
+                    if let Some(window) = window_query.iter().next() {
+                        let s_x = window.width() / (project.scene.width as f32);
+                        let s_y = window.height() / (project.scene.height as f32);
+                        let scale = s_x.min(s_y);
+                        transform.scale = Vec3::splat(scale);
+                        bevy::log::info!(
+                            "Scaled project to fit window: scale={:.4} (win={}x{})",
+                            scale,
+                            window.width(),
+                            window.height()
+                        );
+                    }
+                }
+                AmProjectResolution::CoverWindow => {
+                    if let Some(window) = window_query.iter().next() {
+                        let s_x = window.width() / (project.scene.width as f32);
+                        let s_y = window.height() / (project.scene.height as f32);
+                        let scale = s_x.max(s_y);
+                        transform.scale = Vec3::splat(scale);
+                        bevy::log::info!(
+                            "Scaled project to cover window: scale={:.4} (win={}x{})",
+                            scale,
+                            window.width(),
+                            window.height()
+                        );
+                    }
+                }
+                AmProjectResolution::FixedWidth(target_width) => {
+                    let scale = target_width / (project.scene.width as f32);
+                    transform.scale = Vec3::splat(scale);
+                    bevy::log::info!(
+                        "Scaled project to fixed width {}: scale={:.4}",
+                        target_width,
+                        scale
+                    );
+                }
+                AmProjectResolution::FixedHeight(target_height) => {
+                    let scale = target_height / (project.scene.height as f32);
+                    transform.scale = Vec3::splat(scale);
+                    bevy::log::info!(
+                        "Scaled project to fixed height {}: scale={:.4}",
+                        target_height,
+                        scale
+                    );
+                }
+            }
 
             // Build scene configuration
             let config = AmSceneConfig {
