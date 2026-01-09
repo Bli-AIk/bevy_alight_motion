@@ -1,4 +1,23 @@
+//! # plugin.rs
+//!
+//! # plugin.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
 //! Bevy plugin for Alight Motion support.
+//!
+//! 用于支持 Alight Motion 的 Bevy 插件。
+//!
+//! ## Source File Overview
+//!
+//! ## 源文件概述
+//!
+//! This file defines `AlightMotionPlugin` which registers all necessary systems,
+//! assets, and resources for loading and playing Alight Motion projects.
+//!
+//! 本文件定义了 `AlightMotionPlugin`，用于注册加载和播放 Alight Motion 项目所需的所有系统、资源和资源加载器。
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
@@ -7,20 +26,24 @@ use bevy::sprite_render::Material2dPlugin;
 use bevy_smud::SmudPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_sdf_scale,
-    animate_size, animate_text_opacity, animate_transform, apply_mask_clipping,
-    manage_layer_lifecycle,
+    AmPlayback, advance_playback_system, animate_opacity_system, animate_sdf_opacity_system,
+    animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
+    animate_transform_system, apply_mask_clipping_system, manage_layer_lifecycle_system,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::MaskedSpriteMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
-use crate::sdf::{hot_reload_shader, setup_sdf_shaders};
+use crate::sdf::{hot_reload_shader_system, setup_sdf_shaders_system};
 
 /// Resource holding the white pixel texture used for solid color sprites.
+///
+/// 保存用于纯色精灵的白色像素纹理的资源。
 #[derive(Resource)]
 pub struct AmWhitePixel(pub Handle<Image>);
 
 /// Plugin providing Alight Motion support for Bevy.
+///
+/// 为 Bevy 提供 Alight Motion 支持的插件。
 pub struct AlightMotionPlugin;
 
 impl Plugin for AlightMotionPlugin {
@@ -30,21 +53,29 @@ impl Plugin for AlightMotionPlugin {
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
-            .add_systems(Startup, (setup_white_pixel, setup_sdf_shaders))
+            .add_systems(
+                Startup,
+                (setup_white_pixel_system, setup_sdf_shaders_system),
+            )
             .add_systems(
                 Update,
                 (
-                    spawn_loaded_projects,
-                    advance_playback,
-                    manage_layer_lifecycle, // Spawn/despawn visuals based on time
-                    animate_transform,
-                    animate_size, // Update size from size property animation (runs before scale)
-                    animate_sdf_scale, // Update SDF dimensions based on scale animation
-                    animate_opacity,
-                    animate_sdf_opacity,
-                    animate_text_opacity,
-                    apply_mask_clipping, // Apply mask clipping to masked layers
-                    hot_reload_shader,   // Hot-reload shader when 'R' is pressed
+                    spawn_loaded_projects_system,
+                    advance_playback_system,
+                    manage_layer_lifecycle_system, // Spawn/despawn visuals based on time
+                    // 基于时间生成/销毁可视化组件
+                    animate_transform_system,
+                    animate_size_system, // Update size from size property animation (runs before scale)
+                    // 从 size 属性动画更新尺寸（在 scale 之前运行）
+                    animate_sdf_scale_system, // Update SDF dimensions based on scale animation
+                    // 基于 scale 动画更新 SDF 尺寸
+                    animate_opacity_system,
+                    animate_sdf_opacity_system,
+                    animate_text_opacity_system,
+                    apply_mask_clipping_system, // Apply mask clipping to masked layers
+                    // 对被遮罩的图层应用遮罩裁剪
+                    hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
+                                              // 按 'R' 键时热重载着色器
                 )
                     .chain(),
             );
@@ -52,7 +83,9 @@ impl Plugin for AlightMotionPlugin {
 }
 
 /// Create a 1x1 white pixel texture for solid color sprites.
-fn setup_white_pixel(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+///
+/// 创建 1x1 白色像素纹理用于纯色精灵。
+fn setup_white_pixel_system(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
     let white_pixel = Image::new_fill(
@@ -73,7 +106,10 @@ fn setup_white_pixel(mut commands: Commands, mut images: ResMut<Assets<Image>>) 
 
 /// System to collect pending layers when a project finishes loading.
 /// Note: This doesn't spawn entities immediately - the lifecycle system handles that.
-fn spawn_loaded_projects(
+///
+/// 在项目加载完成时收集待处理图层的系统。
+/// 注意：这不会立即生成实体 - 生命周期系统会处理这个。
+fn spawn_loaded_projects_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut AmProjectRoot)>,
     projects: Res<Assets<AmProject>>,

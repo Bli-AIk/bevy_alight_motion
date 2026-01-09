@@ -1,21 +1,45 @@
-//! SDF (Signed Distance Field) shape rendering module.
+//! # sdf.rs
 //!
-//! This module provides SDF-based rendering for AM shapes using bevy_smud.
+//! # sdf.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
+//! SDF (Signed Distance Field) shape rendering module using bevy_smud.
+//!
+//! 使用 bevy_smud 的 SDF（有向距离场）形状渲染模块。
+//!
+//! ## Source File Overview
+//!
+//! ## 源文件概述
+//!
+//! This file provides SDF-based rendering for AM shapes, matching AM's stroke behavior
+//! where stroke width stays constant during scale animations.
+//!
+//! 本文件提供基于 SDF 的 AM 形状渲染，匹配 AM 的描边行为，即在缩放动画期间描边宽度保持不变。
 //!
 //! ## Design Philosophy (matching AM behavior)
+//!
+//! ## 设计理念（匹配 AM 行为）
 //!
 //! AM renders stroked rectangles by:
 //! 1. Drawing a base shape with a stroke
 //! 2. Applying scale to change dimensions (stroke width stays constant)
+//!
+//! AM 渲染带描边的矩形的方式：
+//! 1. 绘制带描边的基础形状
+//! 2. 应用缩放来改变尺寸（描边宽度保持不变）
 //!
 //! We achieve this by:
 //! 1. Using a parametric SDF box that reads dimensions from params
 //! 2. Using Chebyshev distance for sharp corners (cap="square", join="miter")
 //! 3. Passing stroke_width as a parameter to keep it constant
 //!
-//! ## Shader Files
-//! The fill shader source is in: `assets/shaders/stroked_fill.wgsl`
-//! Edit that file and press 'R' in the player window to hot-reload the shader.
+//! 我们通过以下方式实现：
+//! 1. 使用从 params 读取尺寸的参数化 SDF 盒子
+//! 2. 使用切比雪夫距离实现锐角（cap="square", join="miter"）
+//! 3. 将 stroke_width 作为参数传递以保持其不变
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
@@ -23,25 +47,38 @@ use bevy_smud::prelude::*;
 use std::path::PathBuf;
 
 /// Base half-extent for SDF shapes (AM uses 100x100 base square -> 50x50 half-extent)
+///
+/// SDF 形状的基础半尺寸（AM 使用 100x100 基础正方形 -> 50x50 半尺寸）
 pub const BASE_HALF_EXTENT: f32 = 50.0;
 
 /// SDF expression for a parametric box that reads dimensions from params.x and params.y.
 /// This allows non-uniform scaling without Transform, which bevy_smud doesn't support.
+///
+/// 从 params.x 和 params.y 读取尺寸的参数化盒子 SDF 表达式。
+/// 这允许不使用 Transform 的非均匀缩放，而 bevy_smud 不支持这一点。
 pub const PARAMETRIC_BOX_SDF: &str = "smud::sd_box(p, vec2<f32>(params.x, params.y))";
 
 /// SDF expression for a parametric circle that reads radius from params.x.
+///
+/// 从 params.x 读取半径的参数化圆形 SDF 表达式。
 pub const PARAMETRIC_CIRCLE_SDF: &str = "smud::sd_circle(p, params.x)";
 
 /// Relative path to the stroked fill shader file (from assets folder)
+///
+/// 描边填充着色器文件的相对路径（从 assets 文件夹）
 pub const STROKED_FILL_BOX_FILENAME: &str = "shaders/stroked_fill_box.wgsl";
 pub const STROKED_FILL_BOX_MITER_FILENAME: &str = "shaders/stroked_fill_box_miter.wgsl";
 pub const STROKED_FILL_BOX_BEVEL_FILENAME: &str = "shaders/stroked_fill_box_bevel.wgsl";
 pub const STROKED_FILL_CIRCLE_FILENAME: &str = "shaders/stroked_fill_circle.wgsl";
 
 /// Resource to hold SDF shader handles.
+///
+/// 保存 SDF 着色器句柄的资源。
 #[derive(Resource, Default)]
 pub struct AmSdfShaders {
     /// Handle to the base box SDF shader (fixed 50x50 half-extent).
+    ///
+    /// 基础盒子 SDF 着色器句柄（固定 50x50 半尺寸）。
     pub base_box_sdf: Option<Handle<Shader>>,
     /// Handle to the stroked fill shader for Box (Round join).
     pub stroked_fill_box: Option<Handle<Shader>>,
@@ -65,7 +102,7 @@ pub const STROKED_FILL_CIRCLE_DEFAULT: &str =
     include_str!("../assets/shaders/stroked_fill_circle.wgsl");
 
 /// Initialize SDF shaders resource on startup.
-pub fn setup_sdf_shaders(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
+pub fn setup_sdf_shaders_system(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
     // Create a fixed-size box SDF (50x50 half-extent, 100x100 total)
     let base_box_sdf = shaders.add_sdf_expr(format!(
         "smud::sd_box(p, vec2<f32>({0}, {0}))",
@@ -108,7 +145,7 @@ fn find_shader_file_path() -> Option<PathBuf> {
 
 /// System to handle shader hot-reload when 'F5' key is pressed (debug feature only).
 #[cfg(feature = "debug")]
-pub fn hot_reload_shader(
+pub fn hot_reload_shader_system(
     _keyboard: Res<ButtonInput<KeyCode>>,
     _shaders: ResMut<Assets<Shader>>,
     _sdf_shaders: ResMut<AmSdfShaders>,
@@ -119,7 +156,7 @@ pub fn hot_reload_shader(
 
 /// No-op hot-reload system when debug feature is disabled.
 #[cfg(not(feature = "debug"))]
-pub fn hot_reload_shader() {
+pub fn hot_reload_shader_system() {
     // Intentionally empty - hot-reload only available in debug builds
 }
 

@@ -1,4 +1,23 @@
-//! Animation systems for interpolating keyframes.
+//! # animation.rs
+//!
+//! # animation.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
+//! Animation systems for interpolating keyframes in Alight Motion projects.
+//!
+//! 用于在 Alight Motion 项目中插值关键帧的动画系统。
+//!
+//! ## Source File Overview
+//!
+//! ## 源文件概述
+//!
+//! This file contains the core animation components and systems for playback control,
+//! transform animation, opacity animation, SDF shape animation, and layer lifecycle management.
+//!
+//! 本文件包含核心动画组件和系统，用于播放控制、变换动画、不透明度动画、SDF形状动画和图层生命周期管理。
 
 use bevy::prelude::*;
 
@@ -6,11 +25,17 @@ use crate::scene::AmLayerMarker;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe, Easing};
 
 /// Component marking an entity as part of an AM animation.
+///
+/// 标记实体为 AM 动画一部分的组件。
 #[derive(Component, Debug, Clone)]
 pub struct AmAnimated {
     /// Unique layer ID from AM.
+    ///
+    /// AM 中的唯一图层 ID。
     pub layer_id: u64,
     /// Start time in milliseconds (relative to time_offset).
+    ///
+    /// 开始时间（毫秒，相对于时间偏移）。
     pub start_time: i32,
     /// End time in milliseconds (relative to time_offset).
     pub end_time: i32,
@@ -99,7 +124,7 @@ impl AmPlayback {
 }
 
 /// System to advance playback time.
-pub fn advance_playback(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
+pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
     if !playback.playing {
         return;
     }
@@ -120,7 +145,7 @@ pub fn advance_playback(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
 /// Only skips updates when force_stopped is true (for inspector editing).
 /// Normal pause still updates animations based on current time.
 /// Note: Scale animation is skipped for SDF shape parents (handled by animate_sdf_scale).
-pub fn animate_transform(
+pub fn animate_transform_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
         &AmAnimated,
@@ -198,7 +223,10 @@ pub fn animate_transform(
 
 /// System to animate sprite opacity.
 /// Only skips updates when force_stopped is true (for inspector editing).
-pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated, &mut Sprite)>) {
+pub fn animate_opacity_system(
+    playback: Res<AmPlayback>,
+    mut query: Query<(&AmAnimated, &mut Sprite)>,
+) {
     // Skip animation only when force stopped (for inspector editing)
     if playback.force_stopped {
         return;
@@ -228,7 +256,7 @@ pub fn animate_opacity(playback: Res<AmPlayback>, mut query: Query<(&AmAnimated,
 /// System to animate text opacity (handles Text2d entities).
 /// Uses Visibility component for proper show/hide behavior and TextColor alpha for opacity animation.
 /// Only skips updates when force_stopped is true (for inspector editing).
-pub fn animate_text_opacity(
+pub fn animate_text_opacity_system(
     playback: Res<AmPlayback>,
     mut query: Query<
         (
@@ -308,7 +336,7 @@ pub fn animate_text_opacity(
 /// System to animate SDF shape opacity (handles SmudShape entities).
 /// Uses Visibility component for proper show/hide behavior and SmudShape color alpha for opacity animation.
 /// Only skips updates when force_stopped is true (for inspector editing).
-pub fn animate_sdf_opacity(
+pub fn animate_sdf_opacity_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
         &AmAnimated,
@@ -363,7 +391,7 @@ pub fn animate_sdf_opacity(
 /// Also updates the child transform translation to account for pivot scaling.
 /// Since the parent (Pivot) is not scaled, we must move the child (Center)
 /// to simulate scaling around the pivot.
-pub fn animate_sdf_scale(
+pub fn animate_sdf_scale_system(
     playback: Res<AmPlayback>,
     parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
     mut sdf_query: Query<(&mut SmudShape, &AmSdfParams, &mut Transform)>,
@@ -424,7 +452,7 @@ pub fn animate_sdf_scale(
 ///
 /// For SDF shapes: Updates SmudShape.params with new half-width/half-height.
 /// For Sprite shapes: Updates Sprite.custom_size.
-pub fn animate_size(
+pub fn animate_size_system(
     playback: Res<AmPlayback>,
     // SDF shapes: parent entity has AmSdfShapeParent marker, child has SmudShape
     parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
@@ -652,7 +680,7 @@ use std::collections::HashMap;
 /// - Destroys entities when layers exit their time range
 /// - Implements true lazy spawning where no entities exist until needed
 #[allow(clippy::too_many_arguments)]
-pub fn manage_layer_lifecycle(
+pub fn manage_layer_lifecycle_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,
     mut shaders: ResMut<Assets<Shader>>,
@@ -1513,7 +1541,7 @@ pub struct AmSdfShapeParent;
 /// This system checks if the sprite/layer is within the mask bounds and hides it if outside.
 /// Note: This is a simplified implementation that only checks the sprite center against the mask.
 /// For precise pixel-level masking, a custom shader would be needed.
-pub fn apply_mask_clipping(
+pub fn apply_mask_clipping_system(
     mut query: Query<(
         &GlobalTransform,
         &AmMaskInfo,
