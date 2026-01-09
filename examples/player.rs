@@ -3,6 +3,7 @@
 //! Usage:
 //!   cargo run -p bevy_alight_motion --example player -- <project_name>
 //!   cargo run -p bevy_alight_motion --example player --features debug -- <project_name>
+//!   cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
 //!
 //! Available projects:
 //!   - simple_gb (default)
@@ -19,6 +20,7 @@
 //! - L: Toggle loop mode
 //! - F1: Toggle inspector window (requires --features debug)
 //! - F4: Toggle debug image overlay
+//! - F6: Toggle video debug overlay (requires --features video-debug)
 
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
@@ -78,6 +80,15 @@ fn main() {
             toggle_mask_debug,
         ),
     );
+
+    // Add video debug systems when video-debug feature is enabled
+    #[cfg(feature = "video-debug")]
+    {
+        app.init_resource::<VideoDebugState>()
+            .add_systems(Startup, setup_video_debug)
+            .add_systems(Update, (load_video_frames, update_video_debug_overlay));
+        println!("Video debug mode enabled: Press F6 to toggle video overlay");
+    }
 
     // Add inspector plugin when debug feature is enabled
     #[cfg(feature = "debug")]
@@ -490,3 +501,453 @@ fn toggle_mask_debug(
         }
     }
 }
+
+// ============================================================================
+// Video Debug Overlay (requires --features video-debug)
+// Uses ffmpeg to extract frames at startup, then plays them as an overlay
+// ============================================================================
+
+#[cfg(feature = "video-debug")]
+mod video_debug {
+    use super::*;
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    /// Resource to control video debug overlay state
+    #[derive(Resource)]
+    pub struct VideoDebugState {
+        /// Whether the video overlay is enabled
+        pub enabled: bool,
+        /// Extracted frame paths (sorted by frame number)
+        pub frame_paths: Vec<PathBuf>,
+        /// Frame handles loaded into Bevy
+        pub frame_handles: Vec<Handle<Image>>,
+        /// Current frame index
+        pub current_frame: usize,
+        /// Video frame rate
+        pub fps: f32,
+        /// Time of last frame update
+        pub last_frame_time: f32,
+        /// Total duration in seconds
+        pub duration: f32,
+        /// Temp directory for extracted frames
+        pub temp_dir: Option<PathBuf>,
+        /// Whether frames have been loaded into Bevy
+        pub frames_loaded: bool,
+        /// Whether all frames are ready (fully loaded)
+        pub frames_ready: bool,
+    }
+
+    impl Default for VideoDebugState {
+        fn default() -> Self {
+            Self {
+                enabled: false,
+                frame_paths: Vec::new(),
+                frame_handles: Vec::new(),
+                current_frame: 0,
+                fps: 12.0,
+                last_frame_time: 0.0,
+                duration: 0.0,
+                temp_dir: None,
+                frames_loaded: false,
+                frames_ready: false,
+            }
+        }
+    }
+
+    /// Component for the video debug overlay entity
+    #[derive(Component)]
+    pub struct VideoDebugOverlay;
+
+    /// Component for the image node that displays frames
+    #[derive(Component)]
+    pub struct VideoDebugImageNode;
+
+    /// Find the latest video file in the debug folder
+    fn find_latest_debug_video() -> Option<PathBuf> {
+        use std::fs;
+        use std::time::SystemTime;
+
+        let possible_paths = [
+            "crates/bevy_alight_motion/assets/debug",
+            "assets/debug",
+        ];
+        let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
+
+        let mut latest_file: Option<(PathBuf, SystemTime)> = None;
+
+        for debug_path in &possible_paths {
+            let path = std::path::Path::new(debug_path);
+            if !path.exists() {
+                continue;
+            }
+
+            if let Ok(entries) = fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    if let Ok(file_type) = entry.file_type() {
+                        if file_type.is_file() {
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                if let Some(extension) = file_name.split('.').next_back() {
+                                    if extensions.contains(&extension.to_lowercase().as_str()) {
+                                        if let Ok(metadata) = entry.metadata() {
+                                            if let Ok(modified) = metadata.modified() {
+                                                if latest_file.is_none()
+                                                    || latest_file.as_ref().unwrap().1 < modified
+                                                {
+                                                    latest_file = Some((entry.path(), modified));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if latest_file.is_some() {
+                    break;
+                }
+            }
+        }
+
+        latest_file.map(|(path, _)| path)
+    }
+
+    /// Get video info using ffprobe
+    fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
+        // Get frame rate
+        let fps_output = Command::new("ffprobe")
+            .args([
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=r_frame_rate",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+            ])
+            .arg(video_path)
+            .output()
+            .ok()?;
+
+        let fps_str = String::from_utf8_lossy(&fps_output.stdout);
+        let fps = parse_fps(&fps_str.trim()).unwrap_or(12.0);
+
+        // Get duration
+        let duration_output = Command::new("ffprobe")
+            .args([
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+            ])
+            .arg(video_path)
+            .output()
+            .ok()?;
+
+        let duration_str = String::from_utf8_lossy(&duration_output.stdout);
+        let duration: f32 = duration_str.trim().parse().unwrap_or(0.0);
+
+        Some((fps, duration))
+    }
+
+    /// Parse FPS from ffprobe output (handles formats like "12/1" or "29.97")
+    fn parse_fps(s: &str) -> Option<f32> {
+        if s.contains('/') {
+            let parts: Vec<&str> = s.split('/').collect();
+            if parts.len() == 2 {
+                let num: f32 = parts[0].parse().ok()?;
+                let den: f32 = parts[1].parse().ok()?;
+                if den > 0.0 {
+                    return Some(num / den);
+                }
+            }
+        }
+        s.parse().ok()
+    }
+
+    /// Extract frames from video using ffmpeg
+    fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
+        use std::fs;
+
+        // Create frames directory inside assets/debug
+        let possible_assets_dirs = [
+            "crates/bevy_alight_motion/assets/debug/_video_frames",
+            "assets/debug/_video_frames",
+        ];
+
+        let mut frames_dir = None;
+        for dir_path in &possible_assets_dirs {
+            let parent = std::path::Path::new(dir_path).parent()?;
+            if parent.exists() {
+                frames_dir = Some(PathBuf::from(dir_path));
+                break;
+            }
+        }
+
+        let frames_dir = frames_dir?;
+
+        // Clean up existing frames
+        if frames_dir.exists() {
+            let _ = fs::remove_dir_all(&frames_dir);
+        }
+        fs::create_dir_all(&frames_dir).ok()?;
+
+        println!("[VIDEO DEBUG] Extracting frames to {:?}", frames_dir);
+
+        // Extract frames using ffmpeg
+        let output_pattern = frames_dir.join("frame_%06d.png");
+        let status = Command::new("ffmpeg")
+            .args(["-i"])
+            .arg(video_path)
+            .args([
+                "-vf", &format!("fps={}", fps),
+                "-y", // Overwrite existing files
+            ])
+            .arg(&output_pattern)
+            .output();
+
+        match status {
+            Ok(output) => {
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    println!("[VIDEO DEBUG] ffmpeg error: {}", stderr);
+                    return None;
+                }
+                Some(frames_dir)
+            }
+            Err(e) => {
+                println!("[VIDEO DEBUG] Failed to run ffmpeg: {:?}", e);
+                None
+            }
+        }
+    }
+
+    /// Setup video debug overlay on startup
+    pub fn setup_video_debug(mut state: ResMut<VideoDebugState>) {
+        // Find the latest video file
+        let Some(video_path) = find_latest_debug_video() else {
+            println!("[VIDEO DEBUG] No video file found in debug folder");
+            return;
+        };
+
+        println!("[VIDEO DEBUG] Found video: {:?}", video_path);
+
+        // Get video info
+        let Some((fps, duration)) = get_video_info(&video_path) else {
+            println!("[VIDEO DEBUG] Failed to get video info");
+            return;
+        };
+
+        println!(
+            "[VIDEO DEBUG] Video info: {:.2} FPS, {:.2}s duration",
+            fps, duration
+        );
+
+        // Extract frames
+        let Some(temp_dir) = extract_frames(&video_path, fps) else {
+            println!("[VIDEO DEBUG] Failed to extract frames");
+            return;
+        };
+
+        // Collect frame paths
+        let mut frame_paths: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "png").unwrap_or(false) {
+                    frame_paths.push(path);
+                }
+            }
+        }
+
+        // Sort by filename (frame_000001.png, frame_000002.png, etc.)
+        frame_paths.sort();
+
+        let frame_count = frame_paths.len();
+        println!(
+            "[VIDEO DEBUG] Extracted {} frames",
+            frame_count
+        );
+
+        if frame_count == 0 {
+            println!("[VIDEO DEBUG] No frames extracted!");
+            return;
+        }
+
+        state.fps = fps;
+        state.duration = duration;
+        state.frame_paths = frame_paths;
+        state.temp_dir = Some(temp_dir);
+        state.enabled = true; // Auto-enable
+    }
+
+    /// Load frame images into Bevy asset system
+    pub fn load_video_frames(
+        mut state: ResMut<VideoDebugState>,
+        asset_server: Res<AssetServer>,
+    ) {
+        if state.frames_loaded || state.frame_paths.is_empty() {
+            return;
+        }
+
+        // Load all frames as images using relative asset paths
+        // Convert absolute paths to relative paths under assets/
+        state.frame_handles = state
+            .frame_paths
+            .iter()
+            .map(|path| {
+                // Extract just the filename and construct asset-relative path
+                let filename = path.file_name().unwrap().to_string_lossy();
+                let asset_path = format!("debug/_video_frames/{}", filename);
+                asset_server.load(asset_path)
+            })
+            .collect();
+
+        state.frames_loaded = true;
+        println!(
+            "[VIDEO DEBUG] Loading {} frame handles...",
+            state.frame_handles.len()
+        );
+    }
+
+    /// Check if all video frames are loaded and pause playback until ready
+    pub fn check_video_frames_ready(
+        mut state: ResMut<VideoDebugState>,
+        mut playback: ResMut<AmPlayback>,
+        images: Res<Assets<Image>>,
+    ) {
+        if state.frames_ready || state.frame_handles.is_empty() {
+            return;
+        }
+
+        // Check if all frame images are loaded
+        let loaded_count = state
+            .frame_handles
+            .iter()
+            .filter(|handle| images.get(*handle).is_some())
+            .count();
+
+        let total = state.frame_handles.len();
+
+        if loaded_count < total {
+            // Still loading - ensure playback is paused and at beginning
+            if playback.playing {
+                playback.playing = false;
+                playback.current_time_ms = 0.0;
+                println!(
+                    "[VIDEO DEBUG] Waiting for frames: {}/{}",
+                    loaded_count, total
+                );
+            }
+        } else {
+            // All frames loaded!
+            state.frames_ready = true;
+            playback.playing = true;
+            playback.current_time_ms = 0.0;
+            println!("[VIDEO DEBUG] All {} frames ready, starting playback!", total);
+        }
+    }
+
+    /// Update video debug overlay each frame
+    pub fn update_video_debug_overlay(
+        mut commands: Commands,
+        mut state: ResMut<VideoDebugState>,
+        keyboard: Res<ButtonInput<KeyCode>>,
+        playback: Res<AmPlayback>,
+        overlay_query: Query<Entity, With<VideoDebugOverlay>>,
+        mut image_node_query: Query<&mut ImageNode, With<VideoDebugImageNode>>,
+        window_query: Query<&Window>,
+    ) {
+        // Toggle with F6
+        if keyboard.just_pressed(KeyCode::F6) {
+            state.enabled = !state.enabled;
+            println!(
+                "[VIDEO DEBUG] Overlay {}",
+                if state.enabled { "ON" } else { "OFF" }
+            );
+
+            if !state.enabled {
+                // Remove overlay entities
+                for entity in overlay_query.iter() {
+                    commands.entity(entity).despawn();
+                }
+                return;
+            }
+        }
+
+        if !state.enabled || state.frame_handles.is_empty() {
+            return;
+        }
+
+        // Calculate which frame to show based on playback time
+        let current_time = playback.current_time_ms / 1000.0; // Convert to seconds
+        let frame_duration = 1.0 / state.fps;
+        let total_frames = state.frame_handles.len();
+
+        // Calculate frame index (with looping)
+        let frame_index = ((current_time / frame_duration) as usize) % total_frames;
+
+        // Spawn overlay if it doesn't exist
+        if overlay_query.is_empty() {
+            if let Ok(window) = window_query.single() {
+                let window_width = window.width();
+                let window_height = window.height();
+
+                let initial_handle = state.frame_handles[frame_index].clone();
+
+                commands
+                    .spawn((
+                        Name::new("VideoDebugOverlay"),
+                        VideoDebugOverlay,
+                        Node {
+                            position_type: PositionType::Absolute,
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            top: Val::Px(0.0),
+                            left: Val::Px(0.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        ZIndex(999),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            VideoDebugImageNode,
+                            ImageNode {
+                                image: initial_handle,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.5), // Semi-transparent
+                                ..default()
+                            },
+                            Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                max_width: Val::Px(window_width),
+                                max_height: Val::Px(window_height),
+                                ..default()
+                            },
+                        ));
+                    });
+
+                state.current_frame = frame_index;
+            }
+        } else if frame_index != state.current_frame {
+            // Update the displayed frame
+            for mut image_node in image_node_query.iter_mut() {
+                image_node.image = state.frame_handles[frame_index].clone();
+            }
+            state.current_frame = frame_index;
+        }
+    }
+
+    /// Cleanup temp files on exit
+    impl Drop for VideoDebugState {
+        fn drop(&mut self) {
+            if let Some(temp_dir) = &self.temp_dir {
+                if let Err(e) = std::fs::remove_dir_all(temp_dir) {
+                    eprintln!("[VIDEO DEBUG] Failed to cleanup temp dir: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "video-debug")]
+pub use video_debug::*;

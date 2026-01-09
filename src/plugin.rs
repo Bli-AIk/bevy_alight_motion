@@ -8,7 +8,8 @@ use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback, animate_opacity, animate_sdf_opacity, animate_sdf_scale,
-    animate_text_opacity, animate_transform, apply_mask_clipping, manage_layer_lifecycle,
+    animate_size, animate_text_opacity, animate_transform, apply_mask_clipping,
+    manage_layer_lifecycle,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::MaskedSpriteMaterial;
@@ -37,9 +38,10 @@ impl Plugin for AlightMotionPlugin {
                     advance_playback,
                     manage_layer_lifecycle, // Spawn/despawn visuals based on time
                     animate_transform,
+                    animate_size,      // Update size from size property animation (runs before scale)
+                    animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_opacity,
                     animate_sdf_opacity,
-                    animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_text_opacity,
                     apply_mask_clipping, // Apply mask clipping to masked layers
                     hot_reload_shader,   // Hot-reload shader when 'R' is pressed

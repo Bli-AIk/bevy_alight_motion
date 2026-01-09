@@ -21,6 +21,7 @@ bevy = "0.17.2"
 [features]
 default = []
 debug = ["bevy-inspector-egui"]
+video-debug = []
 
 [[example]]
 name = "player"

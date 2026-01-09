@@ -501,6 +501,7 @@ fn spawn_shape(
                 effect_pos_x,
                 effect_pos_y,
                 font_y_offset: 0.0,
+                size: get_shape_size_animation(&shape.properties),
             },
             layer_spec,
             transform,
@@ -568,6 +569,7 @@ fn spawn_null(
                 effect_pos_x,
                 effect_pos_y,
                 font_y_offset: 0.0,
+                size: AmAnimatedVec2::default(),
             },
             AmLayerSpec::Null,
             transform,
@@ -640,6 +642,7 @@ fn spawn_embed_scene(
                 effect_pos_x: AmAnimatedFloat::default(),
                 effect_pos_y: AmAnimatedFloat::default(),
                 font_y_offset: 0.0,
+                size: AmAnimatedVec2::default(),
             },
             AmLayerSpec::EmbedScene,
             transform,
@@ -751,6 +754,7 @@ fn spawn_image(
                 effect_pos_x,
                 effect_pos_y,
                 font_y_offset: 0.0,
+                size: AmAnimatedVec2::default(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -942,6 +946,7 @@ fn spawn_text(
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset,
+            size: AmAnimatedVec2::default(),
         },
         transform,
         GlobalTransform::default(),
@@ -1115,6 +1120,52 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
         }
     }
     (100.0, 100.0)
+}
+
+/// Get shape size animation data from properties.
+/// AM's size property represents half-extents, so we multiply by 2 for full dimensions.
+/// Returns AmAnimatedVec2 with values in full dimensions (width, height).
+fn get_shape_size_animation(
+    properties: &[crate::schema::AmProperty],
+) -> crate::schema::AmAnimatedVec2 {
+    use crate::schema::{AmAnimatedVec2, AmKeyframe};
+
+    for prop in properties {
+        if prop.name == "size" && prop.prop_type == "vec2" {
+            // Convert static value (half-extents to full dimensions)
+            let value = if !prop.value.is_empty() {
+                crate::schema::parse_vec2(&prop.value)
+                    .ok()
+                    .map(|s| [s[0] * 2.0, s[1] * 2.0])
+            } else {
+                None
+            };
+
+            // Convert keyframes (half-extents to full dimensions)
+            let keyframes: Vec<AmKeyframe> = prop
+                .keyframes
+                .iter()
+                .map(|kf| {
+                    let converted_value = crate::schema::parse_vec2(&kf.value)
+                        .map(|s| format!("{},{}", s[0] * 2.0, s[1] * 2.0))
+                        .unwrap_or_else(|_| kf.value.clone());
+                    AmKeyframe {
+                        time: kf.time,
+                        value: converted_value,
+                        easing: kf.easing.clone(),
+                    }
+                })
+                .collect();
+
+            return AmAnimatedVec2 { value, keyframes };
+        }
+    }
+
+    // Default: 100x100 (full dimensions)
+    AmAnimatedVec2 {
+        value: Some([100.0, 100.0]),
+        keyframes: Vec::new(),
+    }
 }
 
 /// Get initial pivot from animated property.
@@ -1401,6 +1452,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
+    let size_animation = get_shape_size_animation(&shape.properties);
     let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
     let needs_sdf = shape.fill_type == "color"
@@ -1485,6 +1537,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             effect_pos_x,
             effect_pos_y,
             font_y_offset: 0.0,
+            size: size_animation,
         },
         spec,
         z_index: z,
@@ -1539,6 +1592,7 @@ fn collect_null(
             effect_pos_x,
             effect_pos_y,
             font_y_offset: 0.0,
+            size: AmAnimatedVec2::default(),
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -1609,6 +1663,7 @@ fn collect_embed_scene(
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset: 0.0,
+            size: AmAnimatedVec2::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -1941,6 +1996,7 @@ fn collect_text(
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset,
+            size: AmAnimatedVec2::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2001,6 +2057,7 @@ fn collect_image(
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset: 0.0,
+            size: AmAnimatedVec2::default(),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

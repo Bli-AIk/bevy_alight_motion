@@ -38,6 +38,8 @@ pub struct AmAnimated {
     pub effect_pos_y: AmAnimatedFloat,
     /// Font Y offset for text layers (to compensate for different font metrics).
     pub font_y_offset: f32,
+    /// Size animation data (for shapes). AM size is half-extents, stored as full dimensions.
+    pub size: AmAnimatedVec2,
 }
 
 /// Resource to control animation playback.
@@ -414,6 +416,94 @@ pub fn animate_sdf_scale(
                 transform.translation.x = -sdf_params.base_pivot_x * anim_scale[0];
                 transform.translation.y = sdf_params.base_pivot_y * anim_scale[1];
             }
+        }
+    }
+}
+
+/// System to animate shape size based on size property keyframes.
+///
+/// AM shapes have a `size` property (in properties list) that can be animated.
+/// This is separate from scale animation - size changes the base dimensions
+/// while scale is applied on top.
+///
+/// For SDF shapes: Updates SmudShape.params with new half-width/half-height.
+/// For Sprite shapes: Updates Sprite.custom_size.
+pub fn animate_size(
+    playback: Res<AmPlayback>,
+    // SDF shapes: parent entity has AmSdfShapeParent marker, child has SmudShape
+    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
+    mut sdf_query: Query<(&mut SmudShape, &mut AmSdfParams)>,
+    // Sprite shapes: entity has Sprite component directly
+    mut sprite_query: Query<(&AmAnimated, &mut Sprite), Without<AmSdfShapeParent>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    // Handle SDF shapes (size is on parent, SmudShape is on child)
+    for (animated, children) in parent_query.iter() {
+        // Skip if no size animation
+        if animated.size.keyframes.is_empty() && animated.size.value.is_none() {
+            continue;
+        }
+
+        // Calculate local time
+        let local_time = global_time - animated.time_offset as f32;
+
+        // Skip if outside active time range
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            continue;
+        }
+
+        // Calculate normalized time within layer duration
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Interpolate size (already stored as full dimensions, need half for SDF)
+        if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
+            let half_width = size[0].abs() / 2.0;
+            let half_height = size[1].abs() / 2.0;
+
+            // Update SDF children
+            for child in children.iter() {
+                if let Ok((mut smud_shape, mut sdf_params)) = sdf_query.get_mut(child) {
+                    // Update base params (these will be further modified by scale in animate_sdf_scale)
+                    sdf_params.base_half_width = half_width;
+                    sdf_params.base_half_height = half_height;
+
+                    // Also update the actual SmudShape params directly
+                    // (animate_sdf_scale will run after and apply scale on top if needed)
+                    smud_shape.params.x = half_width;
+                    smud_shape.params.y = half_height;
+                }
+            }
+        }
+    }
+
+    // Handle Sprite shapes
+    for (animated, mut sprite) in sprite_query.iter_mut() {
+        // Skip if no size animation
+        if animated.size.keyframes.is_empty() && animated.size.value.is_none() {
+            continue;
+        }
+
+        // Calculate local time
+        let local_time = global_time - animated.time_offset as f32;
+
+        // Skip if outside active time range
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            continue;
+        }
+
+        // Calculate normalized time within layer duration
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Interpolate size (full dimensions for Sprite)
+        if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
+            sprite.custom_size = Some(Vec2::new(size[0].abs(), size[1].abs()));
         }
     }
 }
