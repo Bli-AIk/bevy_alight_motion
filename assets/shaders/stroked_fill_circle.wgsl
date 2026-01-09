@@ -1,10 +1,20 @@
-// Stroked fill shader for Circle
-// Explicitly calculates distance using sd_circle
+// Stroked fill shader for Circle/Ellipse
+// Uses sd_circle for circles (when a == b) and sd_ellipse for ellipses
 
 let stroke_width = input.params.z;
-// Calculate distance explicitly for Circle
-// params.x = radius
-let dist = smud::sd_circle(input.pos, input.params.x);
+// params.x = half_width (radius_x), params.y = half_height (radius_y)
+let radius_x = input.params.x;
+let radius_y = input.params.y;
+
+// Use circle SDF when radii are equal (avoids division by zero in ellipse SDF)
+// Use a small epsilon for floating point comparison
+let is_circle = abs(radius_x - radius_y) < 0.001;
+var dist: f32;
+if (is_circle) {
+    dist = smud::sd_circle(input.pos, radius_x);
+} else {
+    dist = smud::sd_ellipse(input.pos, radius_x, radius_y);
+}
 
 // Unpack stroke color from params.w
 let stroke_bits = bitcast<u32>(input.params.w);
