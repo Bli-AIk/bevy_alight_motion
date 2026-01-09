@@ -65,6 +65,9 @@ pub struct AmAnimated {
     pub font_y_offset: f32,
     /// Size animation data (for shapes). AM size is half-extents, stored as full dimensions.
     pub size: AmAnimatedVec2,
+    /// Position compensation for anchor offset (Bevy coords).
+    /// When anchor is not CENTER, sprite position needs adjustment to keep center at AM location.
+    pub anchor_offset: Vec2,
 }
 
 /// Resource to control animation playback.
@@ -203,6 +206,11 @@ pub fn animate_transform_system(
             if !animated.has_parent {
                 by -= animated.font_y_offset;
             }
+
+            // Apply anchor offset compensation for SpriteShape with non-center pivot.
+            // This keeps the sprite center at the AM location while pivot affects rotation/scale.
+            bx += animated.anchor_offset.x;
+            by += animated.anchor_offset.y;
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }

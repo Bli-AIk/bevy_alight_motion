@@ -2,7 +2,7 @@
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
-use bevy::sprite::{Anchor, Text2d};
+use bevy::sprite::Text2d;
 use bevy::text::{TextColor, TextFont, TextLayout};
 use std::collections::HashMap;
 
@@ -398,9 +398,8 @@ fn spawn_shape(
     // Get size from properties
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
 
-    // Convert pivot to Bevy anchor
-    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
-
+    // AM location points to object CENTER, not pivot. No position compensation needed.
+    // Pivot only affects rotation/scale center, which is handled by Anchor.
     bevy::log::trace!(
         "Registering shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
         shape.label,
@@ -419,12 +418,6 @@ fn spawn_shape(
         shape.fill_image
     );
 
-    let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
-        rotation: Quat::from_rotation_z(rotation.to_radians()),
-        scale: Vec3::new(sx, sy, 1.0),
-    };
-
     // Create entity name for inspector identification
     let entity_name = format!("Shape[{}]: {}", shape.id, shape.label);
 
@@ -436,6 +429,25 @@ fn spawn_shape(
                 .stroke
                 .as_ref()
                 .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
+
+    // Calculate anchor and position compensation for non-SDF shapes
+    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+
+    // For SpriteShape, we need to compensate position when anchor is not CENTER
+    // because Bevy draws sprite with anchor point at translation position
+    let (final_tx, final_ty) = if needs_sdf {
+        // SDF uses parent-child structure, no position compensation needed here
+        (tx, ty)
+    } else {
+        // SpriteShape: compensate position so center stays at AM location
+        (tx + comp_x, ty + comp_y)
+    };
+
+    let transform = Transform {
+        translation: Vec3::new(final_tx, final_ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
 
     // Create the layer spec for lazy spawning
     let layer_spec = if needs_sdf {
@@ -481,6 +493,14 @@ fn spawn_shape(
     };
 
     // Spawn the layer entity without visual components (they'll be added by lifecycle system)
+    // For SDF shapes, anchor_offset is 0 (they use parent-child structure)
+    // For SpriteShape, use the computed compensation
+    let anchor_offset = if needs_sdf {
+        Vec2::ZERO
+    } else {
+        Vec2::new(comp_x, comp_y)
+    };
+
     commands
         .spawn((
             Name::new(entity_name),
@@ -505,6 +525,7 @@ fn spawn_shape(
                 effect_pos_y,
                 font_y_offset: 0.0,
                 size: get_shape_size_animation(&shape.properties),
+                anchor_offset,
             },
             layer_spec,
             transform,
@@ -573,6 +594,7 @@ fn spawn_null(
                 effect_pos_y,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
+                anchor_offset: Vec2::ZERO,
             },
             AmLayerSpec::Null,
             transform,
@@ -647,6 +669,7 @@ fn spawn_embed_scene(
                 effect_pos_y: AmAnimatedFloat::default(),
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
+                anchor_offset: Vec2::ZERO,
             },
             AmLayerSpec::EmbedScene,
             transform,
@@ -707,16 +730,17 @@ fn spawn_image(
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
 
-    // Convert pivot to Bevy anchor
-    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+    // Calculate anchor and position compensation
+    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+    let (final_tx, final_ty) = (tx + comp_x, ty + comp_y);
 
     bevy::log::trace!(
         "Registering image '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}",
         image.label,
         image.id,
         image.parent,
-        tx,
-        ty,
+        final_tx,
+        final_ty,
         sx,
         sy,
         width,
@@ -727,7 +751,7 @@ fn spawn_image(
     );
 
     let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
+        translation: Vec3::new(final_tx, final_ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
@@ -759,6 +783,7 @@ fn spawn_image(
                 effect_pos_y,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
+                anchor_offset: Vec2::new(comp_x, comp_y),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -951,6 +976,7 @@ fn spawn_text(
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset,
             size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::ZERO,
         },
         transform,
         GlobalTransform::default(),
@@ -991,7 +1017,7 @@ fn spawn_text(
         TextLayout::new_with_justify(justify),
         // Use left-center anchor for text - AM uses center Y as the reference point
         // With center anchor, the Y coordinate points to the vertical center of the text
-        Anchor(Vec2::new(-0.5, 0.0)),
+        bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
         AmLayerSpec::Text {
             content: text.content.clone(),
             font_name: font_name.clone(),
@@ -1197,7 +1223,7 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// AM pivot: (0, 0) = center, positive X = right, positive Y = down
 /// Bevy anchor: (0, 0) = center, range typically -0.5 to 0.5 for edges
 ///
-/// The pivot in AM represents the offset from the center where the anchor point is.
+/// The pivot in AM represents the offset from the center where the rotation/scale anchor point is.
 /// For example, pivot (-100, 0) means the anchor is 100 pixels to the left of center.
 /// In Bevy, we need to convert this to a normalized anchor value.
 ///
@@ -1205,10 +1231,25 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// - Anchor(0, 0) = center
 /// - Anchor(-0.5, -0.5) = bottom-left corner
 /// - Anchor(0.5, 0.5) = top-right corner
-///   So Anchor.x = 0.5 means the anchor is at the right edge (half the width from center).
-fn pivot_to_anchor(pivot_x: f32, pivot_y: f32, width: f32, height: f32) -> bevy::sprite::Anchor {
+/// Convert AM pivot (in pixels, relative to center) to Bevy Anchor and position compensation.
+///
+/// AM pivot: (0, 0) = center, positive X = right, positive Y = down
+/// Bevy anchor: (0, 0) = center, range typically -0.5 to 0.5 for edges
+///
+/// Returns (Anchor, position_compensation_x, position_compensation_y)
+///
+/// The pivot in AM represents the offset from the center where the rotation/scale anchor point is.
+/// In Bevy, when Anchor is not CENTER, the sprite is drawn so that the anchor point is at
+/// Transform.translation. This means we need to compensate the position to keep the sprite
+/// visually in the same place.
+fn pivot_to_anchor_and_offset(
+    pivot_x: f32,
+    pivot_y: f32,
+    width: f32,
+    height: f32,
+) -> (bevy::sprite::Anchor, f32, f32) {
     if pivot_x == 0.0 && pivot_y == 0.0 {
-        return bevy::sprite::Anchor::CENTER;
+        return (bevy::sprite::Anchor::CENTER, 0.0, 0.0);
     }
 
     // Convert pixel offset to normalized anchor
@@ -1223,7 +1264,19 @@ fn pivot_to_anchor(pivot_x: f32, pivot_y: f32, width: f32, height: f32) -> bevy:
         0.0
     };
 
-    bevy::sprite::Anchor(Vec2::new(anchor_x, anchor_y))
+    // Position compensation: when anchor is not center, we need to offset position
+    // so that the sprite center stays at the same world position.
+    // Bevy draws sprite such that anchor point is at translation.
+    // To keep center at (tx, ty), we need to move translation by anchor * size.
+    // In Bevy coords: compensation = (anchor_x * width, anchor_y * height)
+    let comp_x = anchor_x * width;
+    let comp_y = anchor_y * height;
+
+    (
+        bevy::sprite::Anchor(Vec2::new(anchor_x, anchor_y)),
+        comp_x,
+        comp_y,
+    )
 }
 
 /// Extract effect animation data (posx, posy) from transform2 effects.
@@ -1457,7 +1510,6 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
-    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
 
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
@@ -1466,11 +1518,21 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
                 .as_ref()
                 .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
 
+    // Calculate anchor and position compensation for non-SDF shapes
+    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+
+    // For SpriteShape, we need to compensate position when anchor is not CENTER
+    let (final_tx, final_ty) = if needs_sdf {
+        (tx, ty)
+    } else {
+        (tx + comp_x, ty + comp_y)
+    };
+
     // For SDF shapes, we don't apply scale to the transform because:
     // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)
     // 2. The SDF dimensions are updated dynamically via animate_sdf_scale system
     let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
+        translation: Vec3::new(final_tx, final_ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: if needs_sdf {
             Vec3::new(1.0, 1.0, 1.0)
@@ -1519,6 +1581,14 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         }
     };
 
+    // For SDF shapes, anchor_offset is 0 (they use parent-child structure)
+    // For SpriteShape, use the computed compensation
+    let anchor_offset = if needs_sdf {
+        Vec2::ZERO
+    } else {
+        Vec2::new(comp_x, comp_y)
+    };
+
     Some(PendingLayer {
         id: shape.id,
         label: shape.label.clone(),
@@ -1543,6 +1613,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             effect_pos_y,
             font_y_offset: 0.0,
             size: size_animation,
+            anchor_offset,
         },
         spec,
         z_index: z,
@@ -1598,6 +1669,7 @@ fn collect_null(
             effect_pos_y,
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -1669,6 +1741,7 @@ fn collect_embed_scene(
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2002,6 +2075,7 @@ fn collect_text(
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset,
             size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2031,10 +2105,13 @@ fn collect_image(
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
-    let anchor = pivot_to_anchor(pivot_x, pivot_y, width, height);
+
+    // Calculate anchor and position compensation
+    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+    let (final_tx, final_ty) = (tx + comp_x, ty + comp_y);
 
     let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
+        translation: Vec3::new(final_tx, final_ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
@@ -2063,6 +2140,7 @@ fn collect_image(
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::new(comp_x, comp_y),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
