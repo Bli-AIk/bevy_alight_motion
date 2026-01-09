@@ -42,3 +42,5 @@ ignore_music.wav
 *.amproj
 
 *.mp4
+
+_video_frames/

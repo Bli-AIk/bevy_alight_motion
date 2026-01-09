@@ -683,7 +683,10 @@ fn spawn_embed_scene(
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
                 wipe_start: AmAnimatedFloat::default(),
-                wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+                wipe_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
                 wipe_angle: AmAnimatedFloat::default(),
                 wipe_feather: AmAnimatedFloat::default(),
             },
@@ -999,7 +1002,10 @@ fn spawn_text(
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
             wipe_start: AmAnimatedFloat::default(),
-            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
         },
@@ -1838,7 +1844,10 @@ fn collect_embed_scene(
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
             wipe_start: AmAnimatedFloat::default(),
-            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
         },
@@ -1979,25 +1988,27 @@ fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
     // Get scale from animation data at t=0, since transform.scale might be (1,1) for SDF shapes
     let (scale_x, scale_y) = get_scale_at_normalized_time(&layer.animated.scale, 0.0);
 
-    // For SDF shapes, transform.translation represents the position in Bevy coordinates.
-    // The pivot is stored but currently NOT affecting the visual position because:
-    // 1. SDF child uses Transform::default() (centered on parent)
-    // 2. Parent transform.translation is set from get_initial_location
-    //
-    // So the mask center should match the transform translation directly.
-    // The pivot values are preserved for reference but not applied to the mask center.
-    let center_x = layer.transform.translation.x;
-    let center_y = layer.transform.translation.y;
-    let _ = (pivot_x, pivot_y); // Stored but not used for mask center calculation
+    // For SDF shapes, transform.translation is the pivot point position.
+    // The shape is scaled around this pivot point.
+    // The geometric center of the scaled shape relative to the pivot is:
+    // Center = Pivot - Scale * PivotOffset
+    // Where PivotOffset (in Bevy coords) is (pivot_x, -pivot_y).
+    // So:
+    // Center.x = Pivot.x - scale_x * pivot_x
+    // Center.y = Pivot.y - scale_y * (-pivot_y) = Pivot.y + scale_y * pivot_y
+    let center_x = layer.transform.translation.x - pivot_x * scale_x;
+    let center_y = layer.transform.translation.y + pivot_y * scale_y;
 
     bevy::log::debug!(
-        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1})",
         width,
         height,
         pivot_x,
         pivot_y,
         scale_x,
         scale_y,
+        layer.transform.translation.x,
+        layer.transform.translation.y,
         center_x,
         center_y,
         width / 2.0 * scale_x,
@@ -2176,7 +2187,10 @@ fn collect_text(
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
             wipe_start: AmAnimatedFloat::default(),
-            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
         },
