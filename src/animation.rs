@@ -68,6 +68,14 @@ pub struct AmAnimated {
     /// Position compensation for anchor offset (Bevy coords).
     /// When anchor is not CENTER, sprite position needs adjustment to keep center at AM location.
     pub anchor_offset: Vec2,
+    /// Wipe effect start (0.0-1.0 percentage, default 0.0).
+    pub wipe_start: AmAnimatedFloat,
+    /// Wipe effect end (0.0-1.0 percentage, default 1.0).
+    pub wipe_end: AmAnimatedFloat,
+    /// Wipe effect angle in radians (0 = left-to-right).
+    pub wipe_angle: AmAnimatedFloat,
+    /// Wipe effect feather (softness of edge, 0.0 = sharp).
+    pub wipe_feather: AmAnimatedFloat,
 }
 
 /// Resource to control animation playback.
@@ -258,6 +266,50 @@ pub fn animate_opacity_system(
         // Get opacity from animation data, default to 1.0 if not specified
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         sprite.color.set_alpha(opacity.clamp(0.0, 1.0));
+    }
+}
+
+/// System to animate wipe effect on sprites using MaskedSpriteMaterial.
+/// Wipe effect clips the sprite based on start/end percentages and angle.
+pub fn animate_wipe_effect_system(
+    playback: Res<AmPlayback>,
+    query: Query<(&AmAnimated, &MeshMaterial2d<crate::masked_sprite::MaskedSpriteMaterial>)>,
+    mut materials: ResMut<Assets<crate::masked_sprite::MaskedSpriteMaterial>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, material_handle) in query.iter() {
+        // Only process wipe if there are wipe parameters
+        let has_wipe = animated.wipe_end.value != Some(1.0) || !animated.wipe_end.keyframes.is_empty()
+            || animated.wipe_start.value.is_some() || !animated.wipe_start.keyframes.is_empty();
+        
+        if !has_wipe {
+            continue;
+        }
+
+        // Calculate local time
+        let local_time = global_time - animated.time_offset as f32;
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            continue;
+        }
+
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Get wipe parameters
+        let wipe_start = interpolate_float(&animated.wipe_start, layer_time).unwrap_or(0.0);
+        let wipe_end = interpolate_float(&animated.wipe_end, layer_time).unwrap_or(1.0);
+        let wipe_angle = interpolate_float(&animated.wipe_angle, layer_time).unwrap_or(0.0);
+        let wipe_feather = interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
+
+        // Update the material's wipe_params
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            material.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
+        }
     }
 }
 
@@ -988,6 +1040,27 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
     false
 }
 
+/// Get initial scale from animated scale property.
+/// For SDF shapes, the initial scale is stored in the animated data, not the transform.
+fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
+    if let Some(val) = &prop.value {
+        (val[0], val[1])
+    } else if !prop.keyframes.is_empty() {
+        // Sort keyframes by time and get the first one
+        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        parse_keyframe_vec2(&sorted[0].value)
+            .map(|v| (v[0], v[1]))
+            .unwrap_or((1.0, 1.0))
+    } else {
+        (1.0, 1.0)
+    }
+}
+
 /// Spawn a complete entity from a PendingLayer.
 #[allow(clippy::too_many_arguments)]
 fn spawn_layer_entity(
@@ -1037,6 +1110,27 @@ fn spawn_layer_entity(
 
     // Add visual components based on spec (skip for mask layers)
     if layer.blending_mode != AmBlendingMode::Mask {
+        // Extract initial scale from animated data for SDF shapes
+        // (transform.scale is set to 1.0 for SDF shapes, actual scale is in animated)
+        let initial_scale = get_initial_scale_from_animated(&layer.animated.scale);
+        
+        // Check if layer has wipe effect
+        let has_wipe = layer.animated.wipe_end.value != Some(1.0) 
+            || !layer.animated.wipe_end.keyframes.is_empty()
+            || layer.animated.wipe_start.value.is_some() 
+            || !layer.animated.wipe_start.keyframes.is_empty();
+        
+        // Get initial wipe params
+        let initial_wipe = if has_wipe {
+            let wipe_start = layer.animated.wipe_start.value.unwrap_or(0.0);
+            let wipe_end = layer.animated.wipe_end.value.unwrap_or(1.0);
+            let wipe_angle = layer.animated.wipe_angle.value.unwrap_or(0.0);
+            let wipe_feather = layer.animated.wipe_feather.value.unwrap_or(0.0);
+            Some(Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather))
+        } else {
+            None
+        };
+        
         add_visual_components(
             commands,
             shaders,
@@ -1051,6 +1145,8 @@ fn spawn_layer_entity(
             white_pixel,
             &layer.label,
             layer.id,
+            initial_scale,
+            initial_wipe,
         );
     } else {
         bevy::log::info!(
@@ -1082,7 +1178,68 @@ fn add_visual_components(
     white_pixel: Option<&Handle<Image>>,
     label: &str,
     id: u64,
+    initial_scale: (f32, f32),
+    wipe_params: Option<Vec4>,
 ) {
+    // Determine if we need MaskedSpriteMaterial (for mask or wipe effect)
+    let needs_material = mask_info.is_some() || wipe_params.is_some();
+    
+    // Helper function to create a rectangle mesh with anchor offset
+    // When using Material2d, we need to manually apply anchor offset since there's no Anchor component
+    fn create_anchored_rectangle(
+        meshes: &mut Assets<Mesh>,
+        width: f32,
+        height: f32,
+        anchor: &bevy::sprite::Anchor,
+    ) -> Handle<Mesh> {
+        // Get anchor as normalized Vec2 (-0.5 to 0.5)
+        let anchor_vec = anchor.as_vec();
+        
+        // Calculate offset: anchor moves the sprite so the anchor point is at transform position
+        // If anchor is Custom(-0.5, 0) (left edge), we need to offset the mesh right by half_width
+        let offset_x = -anchor_vec.x * width;
+        let offset_y = -anchor_vec.y * height;
+        
+        // Create vertices for a quad with the offset applied
+        let half_w = width / 2.0;
+        let half_h = height / 2.0;
+        
+        let vertices = vec![
+            // Position: bottom-left to top-right, with offset
+            [offset_x - half_w, offset_y - half_h, 0.0],  // bottom-left
+            [offset_x + half_w, offset_y - half_h, 0.0],  // bottom-right
+            [offset_x + half_w, offset_y + half_h, 0.0],  // top-right
+            [offset_x - half_w, offset_y + half_h, 0.0],  // top-left
+        ];
+        
+        let normals = vec![
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ];
+        
+        let uvs = vec![
+            [0.0, 1.0],  // bottom-left
+            [1.0, 1.0],  // bottom-right  
+            [1.0, 0.0],  // top-right
+            [0.0, 0.0],  // top-left
+        ];
+        
+        let indices = vec![0, 1, 2, 0, 2, 3];
+        
+        let mut mesh = Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD,
+        );
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+        
+        meshes.add(mesh)
+    }
+    
     match spec {
         AmLayerSpec::SpriteShape {
             image_uri,
@@ -1094,20 +1251,19 @@ fn add_visual_components(
         } => {
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
-                    // If masked, use Material2d approach
-                    if let Some(mask) = mask_info {
+                    // If masked or has wipe, use Material2d approach
+                    if needs_material {
                         use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                         use bevy::mesh::Mesh2d;
 
-                        let mesh = meshes.add(Rectangle::new(*width, *height));
+                        let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
                         let material = masked_materials.add(MaskedSpriteMaterial {
                             color: LinearRgba::WHITE,
-                            mask_params: Vec4::new(
-                                mask.center.x,
-                                mask.center.y,
-                                mask.half_size.x,
-                                mask.half_size.y,
+                            mask_params: mask_info.as_ref().map_or(
+                                Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                                |m| Vec4::new(m.center.x, m.center.y, m.half_size.x, m.half_size.y)
                             ),
+                            wipe_params: wipe_params.unwrap_or(Vec4::new(0.0, 1.0, 0.0, 0.0)),
                             texture: Some(handle.clone()),
                         });
 
@@ -1118,14 +1274,24 @@ fn add_visual_components(
                             AmVisualSpawned,
                         ));
 
-                        bevy::log::debug!(
-                            "[Visual] Spawned masked sprite '{}' with mask center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                            label,
-                            mask.center.x,
-                            mask.center.y,
-                            mask.half_size.x,
-                            mask.half_size.y
-                        );
+                        if let Some(mask) = mask_info {
+                            bevy::log::debug!(
+                                "[Visual] Spawned masked sprite '{}' with mask center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                                label,
+                                mask.center.x,
+                                mask.center.y,
+                                mask.half_size.x,
+                                mask.half_size.y
+                            );
+                        }
+                        if wipe_params.is_some() {
+                            bevy::log::debug!(
+                                "[Visual] Spawned sprite '{}' with wipe effect: start={:.2}, end={:.2}",
+                                label,
+                                wipe_params.unwrap().x,
+                                wipe_params.unwrap().y
+                            );
+                        }
                     } else {
                         // Normal sprite
                         commands.entity(entity).insert((
@@ -1142,20 +1308,19 @@ fn add_visual_components(
                 }
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
-                // If masked, use Material2d approach
-                if let Some(mask) = mask_info {
+                // If masked or has wipe, use Material2d approach
+                if needs_material {
                     use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                     use bevy::mesh::Mesh2d;
 
-                    let mesh = meshes.add(Rectangle::new(*width, *height));
+                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
                     let material = masked_materials.add(MaskedSpriteMaterial {
                         color: color.to_linear(),
-                        mask_params: Vec4::new(
-                            mask.center.x,
-                            mask.center.y,
-                            mask.half_size.x,
-                            mask.half_size.y,
+                        mask_params: mask_info.as_ref().map_or(
+                            Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                            |m| Vec4::new(m.center.x, m.center.y, m.half_size.x, m.half_size.y)
                         ),
+                        wipe_params: wipe_params.unwrap_or(Vec4::new(0.0, 1.0, 0.0, 0.0)),
                         texture: Some(wp.clone()),
                     });
 
@@ -1166,12 +1331,22 @@ fn add_visual_components(
                         AmVisualSpawned,
                     ));
 
-                    bevy::log::debug!(
-                        "[Visual] Spawned masked fill sprite '{}' with mask center=({:.1},{:.1})",
-                        label,
-                        mask.center.x,
-                        mask.center.y
-                    );
+                    if let Some(mask) = mask_info {
+                        bevy::log::debug!(
+                            "[Visual] Spawned masked fill sprite '{}' with mask center=({:.1},{:.1})",
+                            label,
+                            mask.center.x,
+                            mask.center.y
+                        );
+                    }
+                    if wipe_params.is_some() {
+                        bevy::log::debug!(
+                            "[Visual] Spawned fill sprite '{}' with wipe effect: start={:.2}, end={:.2}",
+                            label,
+                            wipe_params.unwrap().x,
+                            wipe_params.unwrap().y
+                        );
+                    }
                 } else {
                     // Normal sprite
                     commands.entity(entity).insert((
@@ -1216,6 +1391,7 @@ fn add_visual_components(
                     id,
                     label: label.to_string(),
                 },
+                initial_scale,
             );
         }
         AmLayerSpec::Image {
@@ -1225,20 +1401,19 @@ fn add_visual_components(
             anchor,
         } => {
             if let Some(handle) = images.get(image_uri) {
-                // If masked, use Material2d approach
-                if let Some(mask) = mask_info {
+                // If masked or has wipe, use Material2d approach
+                if needs_material {
                     use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                     use bevy::mesh::Mesh2d;
 
-                    let mesh = meshes.add(Rectangle::new(*width, *height));
+                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
                     let material = masked_materials.add(MaskedSpriteMaterial {
                         color: LinearRgba::WHITE,
-                        mask_params: Vec4::new(
-                            mask.center.x,
-                            mask.center.y,
-                            mask.half_size.x,
-                            mask.half_size.y,
+                        mask_params: mask_info.as_ref().map_or(
+                            Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                            |m| Vec4::new(m.center.x, m.center.y, m.half_size.x, m.half_size.y)
                         ),
+                        wipe_params: wipe_params.unwrap_or(Vec4::new(0.0, 1.0, 0.0, 0.0)),
                         texture: Some(handle.clone()),
                     });
 
@@ -1249,7 +1424,7 @@ fn add_visual_components(
                         AmVisualSpawned,
                     ));
 
-                    bevy::log::debug!("[Visual] Spawned masked image '{}' with mask", label);
+                    bevy::log::debug!("[Visual] Spawned masked/wipe image '{}' with material", label);
                 } else {
                     // Normal sprite
                     commands.entity(entity).insert((
@@ -1366,6 +1541,7 @@ fn spawn_sdf_visual(
     pivot_y: f32,
     shape_type: &str,
     marker: &AmLayerMarker,
+    initial_scale: (f32, f32),
 ) {
     use crate::sdf::pack_color;
 
@@ -1437,10 +1613,15 @@ fn spawn_sdf_visual(
         (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
     let frame_size = frame_half * 2.0;
 
-    // Calculate initial translation based on pivot (with Y-flip for Bevy)
+    // Calculate initial translation based on pivot and initial scale (with Y-flip for Bevy)
     // Pivot (px, py) in AM means Center is at (-px, -py) relative to Pivot.
     // Bevy Y is flipped, so Center Y is -(-py) = py.
-    let initial_translation = Vec3::new(-pivot_x, pivot_y, 0.0);
+    // Apply initial scale to the pivot offset so the child is correctly positioned from the start.
+    let initial_translation = Vec3::new(
+        -pivot_x * initial_scale.0,
+        pivot_y * initial_scale.1,
+        0.0,
+    );
 
     // Spawn single SDF entity with both fill and stroke
     // Note: Transform.scale is set to 1.0 because we handle sizing via params
@@ -1486,14 +1667,19 @@ fn spawn_sdf_visual(
         .insert((AmVisualSpawned, AmSdfShapeParent));
 
     bevy::log::info!(
-        "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}, pivot=({:.1},{:.1})",
+        "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}, pivot=({:.1},{:.1}), initial_scale=({:.2},{:.2}), initial_translation=({:.1},{:.1},{:.1})",
         marker.label,
         width,
         height,
         stroke_width,
         frame_size,
         pivot_x,
-        pivot_y
+        pivot_y,
+        initial_scale.0,
+        initial_scale.1,
+        initial_translation.x,
+        initial_translation.y,
+        initial_translation.z
     );
 }
 

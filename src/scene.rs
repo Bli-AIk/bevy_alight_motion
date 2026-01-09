@@ -393,6 +393,7 @@ fn spawn_shape(
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let wipe_effect = extract_wipe_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -435,9 +436,10 @@ fn spawn_shape(
 
     // For SpriteShape, we need to compensate position when anchor is not CENTER
     // because Bevy draws sprite with anchor point at translation position
+    // For SDF shapes, parent should be at pivot point (for rotation/scale around pivot)
     let (final_tx, final_ty) = if needs_sdf {
-        // SDF uses parent-child structure, no position compensation needed here
-        (tx, ty)
+        // SDF parent is at pivot point: AM center + pivot offset (with Y flip)
+        (tx + pivot_x, ty - pivot_y)
     } else {
         // SpriteShape: compensate position so center stays at AM location
         (tx + comp_x, ty + comp_y)
@@ -493,10 +495,11 @@ fn spawn_shape(
     };
 
     // Spawn the layer entity without visual components (they'll be added by lifecycle system)
-    // For SDF shapes, anchor_offset is 0 (they use parent-child structure)
+    // For SDF shapes, anchor_offset moves parent from center to pivot point
     // For SpriteShape, use the computed compensation
     let anchor_offset = if needs_sdf {
-        Vec2::ZERO
+        // SDF parent needs to be offset from center to pivot point
+        Vec2::new(pivot_x, -pivot_y)
     } else {
         Vec2::new(comp_x, comp_y)
     };
@@ -526,6 +529,10 @@ fn spawn_shape(
                 font_y_offset: 0.0,
                 size: get_shape_size_animation(&shape.properties),
                 anchor_offset,
+                wipe_start: wipe_effect.start,
+                wipe_end: wipe_effect.end,
+                wipe_angle: wipe_effect.angle,
+                wipe_feather: wipe_effect.feather,
             },
             layer_spec,
             transform,
@@ -549,6 +556,7 @@ fn spawn_null(
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    let wipe_effect = extract_wipe_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -595,6 +603,10 @@ fn spawn_null(
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
+                wipe_start: wipe_effect.start,
+                wipe_end: wipe_effect.end,
+                wipe_angle: wipe_effect.angle,
+                wipe_feather: wipe_effect.feather,
             },
             AmLayerSpec::Null,
             transform,
@@ -670,6 +682,10 @@ fn spawn_embed_scene(
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
+                wipe_start: AmAnimatedFloat::default(),
+                wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+                wipe_angle: AmAnimatedFloat::default(),
+                wipe_feather: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
             transform,
@@ -725,6 +741,7 @@ fn spawn_image(
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
+    let wipe_effect = extract_wipe_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
 
     // Get size from properties
@@ -784,6 +801,10 @@ fn spawn_image(
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::new(comp_x, comp_y),
+                wipe_start: wipe_effect.start,
+                wipe_end: wipe_effect.end,
+                wipe_angle: wipe_effect.angle,
+                wipe_feather: wipe_effect.feather,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -977,6 +998,10 @@ fn spawn_text(
             font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
+            wipe_start: AmAnimatedFloat::default(),
+            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_angle: AmAnimatedFloat::default(),
+            wipe_feather: AmAnimatedFloat::default(),
         },
         transform,
         GlobalTransform::default(),
@@ -1311,6 +1336,62 @@ fn extract_effect_animations(effects: &[AmEffect]) -> (AmAnimatedFloat, AmAnimat
     (pos_x, pos_y)
 }
 
+/// Wipe effect parameters extracted from effects.
+#[derive(Debug, Clone, Default)]
+pub struct WipeEffectParams {
+    pub start: AmAnimatedFloat,
+    pub end: AmAnimatedFloat,
+    pub angle: AmAnimatedFloat,
+    pub feather: AmAnimatedFloat,
+}
+
+/// Extract wipe effect parameters from wipe2 effects.
+fn extract_wipe_effect(effects: &[AmEffect]) -> WipeEffectParams {
+    let mut params = WipeEffectParams::default();
+    // Default: no wipe (show everything)
+    params.end.value = Some(1.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.wipe2" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "start" => {
+                        if !prop.keyframes.is_empty() {
+                            params.start.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.start.value = Some(v);
+                        }
+                    }
+                    "end" => {
+                        if !prop.keyframes.is_empty() {
+                            params.end.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.end.value = Some(v);
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "feather" => {
+                        if !prop.keyframes.is_empty() {
+                            params.feather.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.feather.value = Some(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
 /// Truncate a string to a maximum length, adding "..." if truncated.
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -1507,6 +1588,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let wipe_effect = extract_wipe_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
@@ -1522,8 +1604,11 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
 
     // For SpriteShape, we need to compensate position when anchor is not CENTER
+    // For SDF shapes, parent should be at pivot point (for rotation/scale around pivot)
     let (final_tx, final_ty) = if needs_sdf {
-        (tx, ty)
+        // SDF parent is at pivot point: AM center + pivot offset (with Y flip)
+        // pivot is relative to center in AM coords, so pivot_point = center + (pivot_x, -pivot_y) in Bevy
+        (tx + pivot_x, ty - pivot_y)
     } else {
         (tx + comp_x, ty + comp_y)
     };
@@ -1581,10 +1666,11 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         }
     };
 
-    // For SDF shapes, anchor_offset is 0 (they use parent-child structure)
+    // For SDF shapes, anchor_offset moves parent from center to pivot point
     // For SpriteShape, use the computed compensation
     let anchor_offset = if needs_sdf {
-        Vec2::ZERO
+        // SDF parent needs to be offset from center to pivot point
+        Vec2::new(pivot_x, -pivot_y)
     } else {
         Vec2::new(comp_x, comp_y)
     };
@@ -1614,6 +1700,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             font_y_offset: 0.0,
             size: size_animation,
             anchor_offset,
+            wipe_start: wipe_effect.start,
+            wipe_end: wipe_effect.end,
+            wipe_angle: wipe_effect.angle,
+            wipe_feather: wipe_effect.feather,
         },
         spec,
         z_index: z,
@@ -1638,6 +1728,7 @@ fn collect_null(
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    let wipe_effect = extract_wipe_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -1670,6 +1761,10 @@ fn collect_null(
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
+            wipe_start: wipe_effect.start,
+            wipe_end: wipe_effect.end,
+            wipe_angle: wipe_effect.angle,
+            wipe_feather: wipe_effect.feather,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -1742,6 +1837,10 @@ fn collect_embed_scene(
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
+            wipe_start: AmAnimatedFloat::default(),
+            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_angle: AmAnimatedFloat::default(),
+            wipe_feather: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2076,6 +2175,10 @@ fn collect_text(
             font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
+            wipe_start: AmAnimatedFloat::default(),
+            wipe_end: AmAnimatedFloat { value: Some(1.0), keyframes: vec![] },
+            wipe_angle: AmAnimatedFloat::default(),
+            wipe_feather: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2102,6 +2205,7 @@ fn collect_image(
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
+    let wipe_effect = extract_wipe_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -2141,6 +2245,10 @@ fn collect_image(
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::new(comp_x, comp_y),
+            wipe_start: wipe_effect.start,
+            wipe_end: wipe_effect.end,
+            wipe_angle: wipe_effect.angle,
+            wipe_feather: wipe_effect.feather,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

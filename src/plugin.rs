@@ -28,7 +28,8 @@ use bevy_smud::SmudPlugin;
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_sdf_opacity_system,
     animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
-    animate_transform_system, apply_mask_clipping_system, manage_layer_lifecycle_system,
+    animate_transform_system, animate_wipe_effect_system, apply_mask_clipping_system,
+    manage_layer_lifecycle_system,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::MaskedSpriteMaterial;
@@ -89,6 +90,8 @@ impl Plugin for AlightMotionPlugin {
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
+                    animate_wipe_effect_system, // Apply wipe effect clipping to sprites
+                    // 对精灵应用擦拭效果裁剪
                     apply_mask_clipping_system, // Apply mask clipping to masked layers
                     // 对被遮罩的图层应用遮罩裁剪
                     hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
