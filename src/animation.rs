@@ -188,10 +188,10 @@ pub fn animate_transform(
         }
 
         // Interpolate scale (skip for SDF shapes - their scale is handled by animate_sdf_scale)
-        if sdf_parent.is_none() {
-            if let Some(scale) = interpolate_vec2(&animated.scale, layer_time) {
-                transform.scale = Vec3::new(scale[0], scale[1], 1.0);
-            }
+        if sdf_parent.is_none()
+            && let Some(scale) = interpolate_vec2(&animated.scale, layer_time)
+        {
+            transform.scale = Vec3::new(scale[0], scale[1], 1.0);
         }
     }
 }
@@ -388,11 +388,7 @@ pub fn animate_sdf_scale(
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
         // Get animation scale from keyframes
-        let anim_scale = if let Some(s) = interpolate_vec2(&animated.scale, layer_time) {
-            s
-        } else {
-            [1.0, 1.0]
-        };
+        let anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
@@ -655,6 +651,7 @@ use std::collections::HashMap;
 /// - Creates entities when layers enter their time range
 /// - Destroys entities when layers exit their time range
 /// - Implements true lazy spawning where no entities exist until needed
+#[allow(clippy::too_many_arguments)]
 pub fn manage_layer_lifecycle(
     mut commands: Commands,
     playback: Res<AmPlayback>,
@@ -727,6 +724,7 @@ fn count_total_layers(layers: &[PendingLayer]) -> usize {
 }
 
 /// Process pending layers recursively.
+#[allow(clippy::too_many_arguments)]
 fn process_pending_layers(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -955,6 +953,7 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
 }
 
 /// Spawn a complete entity from a PendingLayer.
+#[allow(clippy::too_many_arguments)]
 fn spawn_layer_entity(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -1032,6 +1031,7 @@ fn spawn_layer_entity(
 }
 
 /// Add visual components to an entity based on layer spec.
+#[allow(clippy::too_many_arguments)]
 fn add_visual_components(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -1099,7 +1099,7 @@ fn add_visual_components(
                                 custom_size: Some(Vec2::new(*width, *height)),
                                 ..default()
                             },
-                            anchor.clone(),
+                            *anchor,
                             AmVisualSpawned,
                         ));
                     }
@@ -1145,7 +1145,7 @@ fn add_visual_components(
                             custom_size: Some(Vec2::new(*width, *height)),
                             ..default()
                         },
-                        anchor.clone(),
+                        *anchor,
                         AmVisualSpawned,
                     ));
                 }
@@ -1223,7 +1223,7 @@ fn add_visual_components(
                             custom_size: Some(Vec2::new(*width, *height)),
                             ..default()
                         },
-                        anchor.clone(),
+                        *anchor,
                         AmVisualSpawned,
                     ));
                 }
@@ -1314,6 +1314,7 @@ fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color 
 /// - params.w = packed_stroke_color
 ///
 /// The frame size is calculated to encompass the shape + stroke at maximum expected scale.
+#[allow(clippy::too_many_arguments)]
 fn spawn_sdf_visual(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -1535,16 +1536,14 @@ pub fn apply_mask_clipping(
                 *visibility = Visibility::Inherited;
                 bevy::log::trace!("[MASK] Layer '{}' now visible (inside mask)", marker.label);
             }
-        } else {
-            if *visibility != Visibility::Hidden {
-                *visibility = Visibility::Hidden;
-                bevy::log::trace!(
-                    "[MASK] Layer '{}' hidden (outside mask at {:.1},{:.1})",
-                    marker.label,
-                    world_pos.x,
-                    world_pos.y
-                );
-            }
+        } else if *visibility != Visibility::Hidden {
+            *visibility = Visibility::Hidden;
+            bevy::log::trace!(
+                "[MASK] Layer '{}' hidden (outside mask at {:.1},{:.1})",
+                marker.label,
+                world_pos.x,
+                world_pos.y
+            );
         }
     }
 }

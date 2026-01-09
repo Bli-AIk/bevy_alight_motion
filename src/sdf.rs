@@ -39,7 +39,7 @@ pub const STROKED_FILL_BOX_BEVEL_FILENAME: &str = "shaders/stroked_fill_box_beve
 pub const STROKED_FILL_CIRCLE_FILENAME: &str = "shaders/stroked_fill_circle.wgsl";
 
 /// Resource to hold SDF shader handles.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct AmSdfShaders {
     /// Handle to the base box SDF shader (fixed 50x50 half-extent).
     pub base_box_sdf: Option<Handle<Shader>>,
@@ -53,19 +53,6 @@ pub struct AmSdfShaders {
     pub stroked_fill_circle: Option<Handle<Shader>>,
     /// Path to the shader file for hot-reload
     pub shader_file_path: Option<PathBuf>,
-}
-
-impl Default for AmSdfShaders {
-    fn default() -> Self {
-        Self {
-            base_box_sdf: None,
-            stroked_fill_box: None,
-            stroked_fill_box_miter: None,
-            stroked_fill_box_bevel: None,
-            stroked_fill_circle: None,
-            shader_file_path: None,
-        }
-    }
 }
 
 /// Stroked fill shader source, loaded from file at compile time (fallback).
@@ -182,7 +169,7 @@ mod tests {
         let shaders = AmSdfShaders::default();
         // Resource now holds optional shader handles
         assert!(shaders.base_box_sdf.is_none());
-        assert!(shaders.stroked_fill.is_none());
+        assert!(shaders.stroked_fill_box.is_none());
     }
 
     #[test]

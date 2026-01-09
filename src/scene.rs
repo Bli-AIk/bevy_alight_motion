@@ -206,6 +206,7 @@ pub fn am_to_bevy_coords(x: f32, y: f32, config: &AmSceneConfig) -> (f32, f32) {
 }
 
 /// Spawn entities from an AM scene.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_scene(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -375,6 +376,7 @@ pub fn spawn_scene(
 }
 
 /// Spawn a shape layer (lazy - visual components spawned later by lifecycle system).
+#[allow(clippy::too_many_arguments)]
 fn spawn_shape(
     commands: &mut Commands,
     _shaders: &mut Assets<Shader>,
@@ -430,9 +432,10 @@ fn spawn_shape(
     // Also use SDF for circles (better quality than sprite rect)
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
-            || shape.stroke.as_ref().map_or(false, |s| {
-                s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
-            }));
+            || shape
+                .stroke
+                .as_ref()
+                .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
 
     // Create the layer spec for lazy spawning
     let layer_spec = if needs_sdf {
@@ -582,6 +585,7 @@ fn spawn_null(
 }
 
 /// Spawn an embedded scene.
+#[allow(clippy::too_many_arguments)]
 fn spawn_embed_scene(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -1099,10 +1103,10 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
     for prop in properties {
         if prop.name == "size" && prop.prop_type == "vec2" {
             // Check static value first
-            if !prop.value.is_empty() {
-                if let Ok(size) = crate::schema::parse_vec2(&prop.value) {
-                    return (size[0] * 2.0, size[1] * 2.0);
-                }
+            if !prop.value.is_empty()
+                && let Ok(size) = crate::schema::parse_vec2(&prop.value)
+            {
+                return (size[0] * 2.0, size[1] * 2.0);
             }
             // If no static value, check first keyframe
             if !prop.keyframes.is_empty() {
@@ -1201,7 +1205,7 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// - Anchor(0, 0) = center
 /// - Anchor(-0.5, -0.5) = bottom-left corner
 /// - Anchor(0.5, 0.5) = top-right corner
-/// So Anchor.x = 0.5 means the anchor is at the right edge (half the width from center).
+///   So Anchor.x = 0.5 means the anchor is at the right edge (half the width from center).
 fn pivot_to_anchor(pivot_x: f32, pivot_y: f32, width: f32, height: f32) -> bevy::sprite::Anchor {
     if pivot_x == 0.0 && pivot_y == 0.0 {
         return bevy::sprite::Anchor::CENTER;
@@ -1457,9 +1461,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
 
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
-            || shape.stroke.as_ref().map_or(false, |s| {
-                s.size.as_ref().map_or(false, |sz| sz.value > 0.0)
-            }));
+            || shape
+                .stroke
+                .as_ref()
+                .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
 
     // For SDF shapes, we don't apply scale to the transform because:
     // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)

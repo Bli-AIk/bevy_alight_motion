@@ -368,25 +368,20 @@ fn find_latest_debug_image() -> Option<String> {
 
         if let Ok(entries) = fs::read_dir(debug_path) {
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(file_name) = entry.file_name().to_str() {
-                            // Check whether the file uses a supported image extension.
-                            if let Some(extension) = file_name.split('.').next_back() {
-                                if extensions.contains(&extension.to_lowercase().as_str()) {
-                                    if let Ok(metadata) = entry.metadata() {
-                                        if let Ok(modified) = metadata.modified() {
-                                            let relative_path = format!("debug/{}", file_name);
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_file()
+                    && let Some(file_name) = entry.file_name().to_str()
+                {
+                    // Check whether the file uses a supported image extension.
+                    if let Some(extension) = file_name.split('.').next_back()
+                        && extensions.contains(&extension.to_lowercase().as_str())
+                        && let Ok(metadata) = entry.metadata()
+                        && let Ok(modified) = metadata.modified()
+                    {
+                        let relative_path = format!("debug/{}", file_name);
 
-                                            if latest_file.is_none()
-                                                || latest_file.as_ref().unwrap().1 < modified
-                                            {
-                                                latest_file = Some((relative_path, modified));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        if latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified {
+                            latest_file = Some((relative_path, modified));
                         }
                     }
                 }
@@ -568,10 +563,7 @@ mod video_debug {
         use std::fs;
         use std::time::SystemTime;
 
-        let possible_paths = [
-            "crates/bevy_alight_motion/assets/debug",
-            "assets/debug",
-        ];
+        let possible_paths = ["crates/bevy_alight_motion/assets/debug", "assets/debug"];
         let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
 
         let mut latest_file: Option<(PathBuf, SystemTime)> = None;
@@ -618,10 +610,14 @@ mod video_debug {
         // Get frame rate
         let fps_output = Command::new("ffprobe")
             .args([
-                "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=r_frame_rate",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=r_frame_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
             ])
             .arg(video_path)
             .output()
@@ -633,9 +629,12 @@ mod video_debug {
         // Get duration
         let duration_output = Command::new("ffprobe")
             .args([
-                "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
             ])
             .arg(video_path)
             .output()
@@ -697,7 +696,8 @@ mod video_debug {
             .args(["-i"])
             .arg(video_path)
             .args([
-                "-vf", &format!("fps={}", fps),
+                "-vf",
+                &format!("fps={}", fps),
                 "-y", // Overwrite existing files
             ])
             .arg(&output_pattern)
@@ -761,10 +761,7 @@ mod video_debug {
         frame_paths.sort();
 
         let frame_count = frame_paths.len();
-        println!(
-            "[VIDEO DEBUG] Extracted {} frames",
-            frame_count
-        );
+        println!("[VIDEO DEBUG] Extracted {} frames", frame_count);
 
         if frame_count == 0 {
             println!("[VIDEO DEBUG] No frames extracted!");
@@ -779,10 +776,7 @@ mod video_debug {
     }
 
     /// Load frame images into Bevy asset system
-    pub fn load_video_frames(
-        mut state: ResMut<VideoDebugState>,
-        asset_server: Res<AssetServer>,
-    ) {
+    pub fn load_video_frames(mut state: ResMut<VideoDebugState>, asset_server: Res<AssetServer>) {
         if state.frames_loaded || state.frame_paths.is_empty() {
             return;
         }
@@ -841,7 +835,10 @@ mod video_debug {
             state.frames_ready = true;
             playback.playing = true;
             playback.current_time_ms = 0.0;
-            println!("[VIDEO DEBUG] All {} frames ready, starting playback!", total);
+            println!(
+                "[VIDEO DEBUG] All {} frames ready, starting playback!",
+                total
+            );
         }
     }
 

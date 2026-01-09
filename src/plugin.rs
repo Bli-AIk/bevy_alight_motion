@@ -38,7 +38,7 @@ impl Plugin for AlightMotionPlugin {
                     advance_playback,
                     manage_layer_lifecycle, // Spawn/despawn visuals based on time
                     animate_transform,
-                    animate_size,      // Update size from size property animation (runs before scale)
+                    animate_size, // Update size from size property animation (runs before scale)
                     animate_sdf_scale, // Update SDF dimensions based on scale animation
                     animate_opacity,
                     animate_sdf_opacity,
