@@ -1,5 +1,6 @@
 // Stroked fill shader for Box (Bevel/Cut corners)
 // Uses intersection of Box and Rotated Box (Manhattan distance) to create bevel
+// Uses fwidth-based anti-aliasing for proper rendering at any scale
 
 let stroke_width = input.params.z;
 let half_width = input.params.x;
@@ -17,6 +18,10 @@ let dist_bevel = d_box.x + d_box.y;
 
 let dist = max(dist_miter, dist_bevel);
 
+// Calculate adaptive anti-aliasing width based on distance field gradient
+let aa_width = fwidth(dist);
+let safe_aa_width = max(aa_width, 0.001);
+
 // Unpack stroke color from params.w
 let stroke_bits = bitcast<u32>(input.params.w);
 let stroke_r = f32((stroke_bits >> 24u) & 0xFFu) / 255.0;
@@ -25,14 +30,14 @@ let stroke_b = f32((stroke_bits >> 8u) & 0xFFu) / 255.0;
 let stroke_a = f32(stroke_bits & 0xFFu) / 255.0;
 let stroke_color = vec4<f32>(stroke_r, stroke_g, stroke_b, stroke_a);
 
-// Stroke logic (Centered)
+// Stroke logic (Centered) with adaptive AA
 let half_stroke = stroke_width * 0.5;
 let dist_from_center_line = abs(dist);
-let stroke_alpha = 1.0 - smoothstep(half_stroke - 0.5, half_stroke + 0.5, dist_from_center_line);
+let stroke_alpha = 1.0 - smoothstep(half_stroke - safe_aa_width, half_stroke + safe_aa_width, dist_from_center_line);
 let stroke_col = vec4<f32>(stroke_color.rgb, stroke_color.a * stroke_alpha);
 
-// Fill logic
-let fill_alpha = 1.0 - smoothstep(-0.5, 0.5, dist);
+// Fill logic with adaptive AA
+let fill_alpha = 1.0 - smoothstep(-safe_aa_width, safe_aa_width, dist);
 let fill_col = vec4<f32>(input.color.rgb, input.color.a * fill_alpha);
 
 // Composite
