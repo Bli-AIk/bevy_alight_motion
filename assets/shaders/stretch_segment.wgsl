@@ -70,7 +70,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // 3. Apply stretch logic in pixel space
     // The gap width is stretch_px (the amount we pushed the halves apart)
-    let half_gap = stretch_px * 0.5;
+    // For angled stretch, reduce the visual gap based on angle (angle_factor = 1.0 at 0°, 0.75 at 90°)
+    let angle_factor = mix(1.0, 0.75, abs(sin(angle)));
+    let half_gap = stretch_px * 0.5 * angle_factor;
     
     var sample_rotated_x: f32;
     
