@@ -6,7 +6,7 @@ description = "Bevy plugin for loading and playing Alight Motion project files"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = "0.17.2"
+bevy = { version = "0.17.2", features = ["jpeg"] }
 serde = { version = "1.0", features = ["derive"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }

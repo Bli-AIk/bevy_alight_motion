@@ -27,12 +27,12 @@ use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_sdf_opacity_system,
-    animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
-    animate_transform_system, animate_wipe_effect_system, apply_mask_clipping_system,
-    manage_layer_lifecycle_system,
+    animate_sdf_scale_system, animate_size_system, animate_stretch_segment_system,
+    animate_text_opacity_system, animate_transform_system, animate_wipe_effect_system,
+    apply_mask_clipping_system, manage_layer_lifecycle_system,
 };
 use crate::loader::{AlightMotionLoader, AmProject};
-use crate::masked_sprite::MaskedSpriteMaterial;
+use crate::masked_sprite::{MaskedSpriteMaterial, StretchSegmentMaterial};
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
 use crate::sdf::{hot_reload_shader_system, setup_sdf_shaders_system};
 
@@ -67,6 +67,7 @@ impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SmudPlugin)
             .add_plugins(Material2dPlugin::<MaskedSpriteMaterial>::default())
+            .add_plugins(Material2dPlugin::<StretchSegmentMaterial>::default())
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
@@ -92,6 +93,8 @@ impl Plugin for AlightMotionPlugin {
                     animate_text_opacity_system,
                     animate_wipe_effect_system, // Apply wipe effect clipping to sprites
                     // 对精灵应用擦拭效果裁剪
+                    animate_stretch_segment_system, // Apply stretch segment UV distortion
+                    // 应用拉伸片段 UV 扭曲效果
                     apply_mask_clipping_system, // Apply mask clipping to masked layers
                     // 对被遮罩的图层应用遮罩裁剪
                     hot_reload_shader_system, // Hot-reload shader when 'R' is pressed

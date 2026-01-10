@@ -394,6 +394,7 @@ fn spawn_shape(
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
+    let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -533,6 +534,10 @@ fn spawn_shape(
                 wipe_end: wipe_effect.end,
                 wipe_angle: wipe_effect.angle,
                 wipe_feather: wipe_effect.feather,
+                stretch_angle: stretch_segment.angle,
+                stretch_amount: stretch_segment.stretch,
+                stretch_offset: stretch_segment.offset,
+                stretch_smooth: stretch_segment.smooth,
             },
             layer_spec,
             transform,
@@ -557,6 +562,7 @@ fn spawn_null(
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
     let wipe_effect = extract_wipe_effect(&null.effects);
+    let stretch_segment = extract_stretch_segment_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -607,6 +613,10 @@ fn spawn_null(
                 wipe_end: wipe_effect.end,
                 wipe_angle: wipe_effect.angle,
                 wipe_feather: wipe_effect.feather,
+                stretch_angle: stretch_segment.angle,
+                stretch_amount: stretch_segment.stretch,
+                stretch_offset: stretch_segment.offset,
+                stretch_smooth: stretch_segment.smooth,
             },
             AmLayerSpec::Null,
             transform,
@@ -689,6 +699,10 @@ fn spawn_embed_scene(
                 },
                 wipe_angle: AmAnimatedFloat::default(),
                 wipe_feather: AmAnimatedFloat::default(),
+                stretch_angle: AmAnimatedFloat::default(),
+                stretch_amount: AmAnimatedFloat::default(),
+                stretch_offset: AmAnimatedFloat::default(),
+                stretch_smooth: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
             transform,
@@ -745,6 +759,7 @@ fn spawn_image(
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
     let wipe_effect = extract_wipe_effect(&image.effects);
+    let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
 
     // Get size from properties
@@ -808,6 +823,10 @@ fn spawn_image(
                 wipe_end: wipe_effect.end,
                 wipe_angle: wipe_effect.angle,
                 wipe_feather: wipe_effect.feather,
+                stretch_angle: stretch_segment.angle,
+                stretch_amount: stretch_segment.stretch,
+                stretch_offset: stretch_segment.offset,
+                stretch_smooth: stretch_segment.smooth,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -1008,6 +1027,10 @@ fn spawn_text(
             },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
+            stretch_angle: AmAnimatedFloat::default(),
+            stretch_amount: AmAnimatedFloat::default(),
+            stretch_offset: AmAnimatedFloat::default(),
+            stretch_smooth: AmAnimatedFloat::default(),
         },
         transform,
         GlobalTransform::default(),
@@ -1398,6 +1421,78 @@ fn extract_wipe_effect(effects: &[AmEffect]) -> WipeEffectParams {
     params
 }
 
+/// Stretch segment effect parameters extracted from effects.
+#[derive(Debug, Clone, Default)]
+pub struct StretchSegmentParams {
+    /// Angle of the split line in degrees (0 = horizontal)
+    pub angle: AmAnimatedFloat,
+    /// Stretch amount (pixels, will be normalized to UV)
+    pub stretch: AmAnimatedFloat,
+    /// Offset of the split line position
+    pub offset: AmAnimatedFloat,
+    /// Smooth transition width (0 = hard edge)
+    pub smooth: AmAnimatedFloat,
+}
+
+impl StretchSegmentParams {
+    /// Check if this has any stretch segment effect parameters set
+    pub fn has_effect(&self) -> bool {
+        self.stretch.value.is_some()
+            || !self.stretch.keyframes.is_empty()
+            || self.angle.value.is_some()
+            || !self.angle.keyframes.is_empty()
+            || self.offset.value.is_some()
+            || !self.offset.keyframes.is_empty()
+            || self.smooth.value.is_some()
+            || !self.smooth.keyframes.is_empty()
+    }
+}
+
+/// Extract stretch segment effect parameters from effects.
+fn extract_stretch_segment_effect(effects: &[AmEffect]) -> StretchSegmentParams {
+    let mut params = StretchSegmentParams::default();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.stretchsegment" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "stretch" => {
+                        if !prop.keyframes.is_empty() {
+                            params.stretch.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.stretch.value = Some(v);
+                        }
+                    }
+                    "offset" => {
+                        if !prop.keyframes.is_empty() {
+                            params.offset.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.offset.value = Some(v);
+                        }
+                    }
+                    "smooth" => {
+                        if !prop.keyframes.is_empty() {
+                            params.smooth.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.smooth.value = Some(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
 /// Truncate a string to a maximum length, adding "..." if truncated.
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -1595,6 +1690,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
+    let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
@@ -1605,6 +1701,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
                 .stroke
                 .as_ref()
                 .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
+
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -1710,6 +1807,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             wipe_end: wipe_effect.end,
             wipe_angle: wipe_effect.angle,
             wipe_feather: wipe_effect.feather,
+            stretch_angle: stretch_segment.angle,
+            stretch_amount: stretch_segment.stretch,
+            stretch_offset: stretch_segment.offset,
+            stretch_smooth: stretch_segment.smooth,
         },
         spec,
         z_index: z,
@@ -1735,6 +1836,7 @@ fn collect_null(
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
     let wipe_effect = extract_wipe_effect(&null.effects);
+    let stretch_segment = extract_stretch_segment_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -1771,6 +1873,10 @@ fn collect_null(
             wipe_end: wipe_effect.end,
             wipe_angle: wipe_effect.angle,
             wipe_feather: wipe_effect.feather,
+            stretch_angle: stretch_segment.angle,
+            stretch_amount: stretch_segment.stretch,
+            stretch_offset: stretch_segment.offset,
+            stretch_smooth: stretch_segment.smooth,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -1850,6 +1956,10 @@ fn collect_embed_scene(
             },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
+            stretch_angle: AmAnimatedFloat::default(),
+            stretch_amount: AmAnimatedFloat::default(),
+            stretch_offset: AmAnimatedFloat::default(),
+            stretch_smooth: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2193,6 +2303,10 @@ fn collect_text(
             },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
+            stretch_angle: AmAnimatedFloat::default(),
+            stretch_amount: AmAnimatedFloat::default(),
+            stretch_offset: AmAnimatedFloat::default(),
+            stretch_smooth: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2220,6 +2334,7 @@ fn collect_image(
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let wipe_effect = extract_wipe_effect(&image.effects);
+    let stretch_segment = extract_stretch_segment_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -2263,6 +2378,10 @@ fn collect_image(
             wipe_end: wipe_effect.end,
             wipe_angle: wipe_effect.angle,
             wipe_feather: wipe_effect.feather,
+            stretch_angle: stretch_segment.angle,
+            stretch_amount: stretch_segment.stretch,
+            stretch_offset: stretch_segment.offset,
+            stretch_smooth: stretch_segment.smooth,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

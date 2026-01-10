@@ -77,6 +77,14 @@ pub struct AmAnimated {
     pub wipe_angle: AmAnimatedFloat,
     /// Wipe effect feather (softness of edge, 0.0 = sharp).
     pub wipe_feather: AmAnimatedFloat,
+    /// Stretch segment effect angle in degrees (0 = horizontal split).
+    pub stretch_angle: AmAnimatedFloat,
+    /// Stretch segment effect stretch amount (pixels, normalized to UV).
+    pub stretch_amount: AmAnimatedFloat,
+    /// Stretch segment effect offset (position of split line).
+    pub stretch_offset: AmAnimatedFloat,
+    /// Stretch segment effect smooth width (0 = hard edge).
+    pub stretch_smooth: AmAnimatedFloat,
 }
 
 /// Resource to control animation playback.
@@ -316,6 +324,147 @@ pub fn animate_wipe_effect_system(
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
         }
+    }
+}
+
+/// System to animate stretch segment effect on sprites using StretchSegmentMaterial.
+/// Stretch segment effect creates UV distortion along a configurable split line.
+/// This system also updates the mesh size to accommodate the stretch expansion.
+pub fn animate_stretch_segment_system(
+    playback: Res<AmPlayback>,
+    mut commands: Commands,
+    query: Query<(
+        Entity,
+        &AmAnimated,
+        &MeshMaterial2d<crate::masked_sprite::StretchSegmentMaterial>,
+    )>,
+    mut materials: ResMut<Assets<crate::masked_sprite::StretchSegmentMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (entity, animated, material_handle) in query.iter() {
+        // Only process if there are stretch segment parameters
+        let has_stretch = animated.stretch_amount.value.is_some()
+            || !animated.stretch_amount.keyframes.is_empty()
+            || animated.stretch_angle.value.is_some()
+            || !animated.stretch_angle.keyframes.is_empty()
+            || animated.stretch_offset.value.is_some()
+            || !animated.stretch_offset.keyframes.is_empty()
+            || animated.stretch_smooth.value.is_some()
+            || !animated.stretch_smooth.keyframes.is_empty();
+
+        if !has_stretch {
+            continue;
+        }
+
+        // Calculate local time
+        let local_time = global_time - animated.time_offset as f32;
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            continue;
+        }
+
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Get original sprite size
+        let sprite_size = interpolate_vec2(&animated.size, layer_time)
+            .unwrap_or([100.0, 100.0]);
+        let orig_width = sprite_size[0].max(1.0);
+        let orig_height = sprite_size[1].max(1.0);
+        
+        // Get stretch segment parameters
+        // angle: degrees -> radians (0 = vertical split line, stretch is horizontal)
+        let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
+        let angle_rad = angle_deg.to_radians();
+
+        // stretch: pixel value (how much to expand the sprite)
+        let stretch_px = interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
+
+        // offset: pixel value -> UV space (currently unused in shader)
+        let offset_px = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
+        let offset_uv = offset_px / orig_width;
+
+        // smooth: 0.0-1.0 value (currently unused in shader)
+        let smooth = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
+        let smooth_width = smooth * 0.3;
+
+        // Debug log (only occasionally to avoid spam)
+        if (global_time as i32) % 500 < 17 {
+            bevy::log::info!(
+                "[StretchSegment] t={:.2}s orig_size=({:.1},{:.1}) stretch_px={:.1} new_width={:.1} angle={:.1}°",
+                global_time / 1000.0,
+                orig_width, orig_height,
+                stretch_px,
+                orig_width + stretch_px,
+                angle_deg,
+            );
+        }
+
+        // Update mesh size to accommodate stretch by creating a new mesh
+        // AM stretch formula: stretch=135 means width doubles
+        // Currently only horizontal stretch (angle=0) is supported
+        
+        let stretch_factor = 1.0 + stretch_px / 50.0;
+        let new_width = orig_width * stretch_factor;
+        let new_height = orig_height; // Height stays the same for horizontal stretch
+        let half_w = new_width / 2.0;
+        let half_h = new_height / 2.0;
+        
+        // Calculate actual stretch pixels for the shader
+        let actual_stretch_px = new_width - orig_width;
+        
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            material.stretch_params = Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
+        }
+        
+        if (global_time as i32) % 500 < 17 {
+            bevy::log::info!(
+                "[StretchSegment] stretch_val={:.1} factor={:.3} width={:.1}->{:.1}",
+                stretch_px, stretch_factor, orig_width, new_width
+            );
+        }
+        
+        // Create new mesh with updated size
+        // For simplicity, assume CENTER anchor (no offset needed)
+        // TODO: Handle non-center anchors properly
+        let vertices = vec![
+            [-half_w, -half_h, 0.0], // bottom-left
+            [half_w, -half_h, 0.0],  // bottom-right
+            [half_w, half_h, 0.0],   // top-right
+            [-half_w, half_h, 0.0],  // top-left
+        ];
+        let normals = vec![
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let uvs = vec![
+            [0.0, 1.0], // bottom-left
+            [1.0, 1.0], // bottom-right
+            [1.0, 0.0], // top-right
+            [0.0, 0.0], // top-left
+        ];
+        let indices = vec![0u32, 1, 2, 0, 2, 3];
+        
+        let mut new_mesh = Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+        );
+        new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+        new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+        
+        let new_mesh_handle = meshes.add(new_mesh);
+        
+        // Replace the Mesh2d component on the entity
+        commands.entity(entity).insert(bevy::mesh::Mesh2d(new_mesh_handle));
     }
 }
 
@@ -752,6 +901,7 @@ pub fn manage_layer_lifecycle_system(
     mut shaders: ResMut<Assets<Shader>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut masked_materials: ResMut<Assets<crate::masked_sprite::MaskedSpriteMaterial>>,
+    mut stretch_materials: ResMut<Assets<crate::masked_sprite::StretchSegmentMaterial>>,
     sdf_shaders: Res<crate::sdf::AmSdfShaders>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
@@ -783,6 +933,7 @@ pub fn manage_layer_lifecycle_system(
             &mut shaders,
             &mut meshes,
             &mut masked_materials,
+            &mut stretch_materials,
             &sdf_shaders,
             &mut pending,
             &project.images,
@@ -824,6 +975,7 @@ fn process_pending_layers(
     shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
+    stretch_materials: &mut Assets<crate::masked_sprite::StretchSegmentMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     pending: &mut AmPendingLayers,
     images: &HashMap<String, Handle<Image>>,
@@ -999,6 +1151,7 @@ fn process_pending_layers(
             shaders,
             meshes,
             masked_materials,
+            stretch_materials,
             sdf_shaders,
             layer,
             images,
@@ -1074,6 +1227,7 @@ fn spawn_layer_entity(
     shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
+    stretch_materials: &mut Assets<crate::masked_sprite::StretchSegmentMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     layer: &PendingLayer,
     images: &HashMap<String, Handle<Image>>,
@@ -1126,6 +1280,16 @@ fn spawn_layer_entity(
             || layer.animated.wipe_start.value.is_some()
             || !layer.animated.wipe_start.keyframes.is_empty();
 
+        // Check if layer has stretch segment effect
+        let has_stretch = layer.animated.stretch_amount.value.is_some()
+            || !layer.animated.stretch_amount.keyframes.is_empty()
+            || layer.animated.stretch_angle.value.is_some()
+            || !layer.animated.stretch_angle.keyframes.is_empty()
+            || layer.animated.stretch_offset.value.is_some()
+            || !layer.animated.stretch_offset.keyframes.is_empty()
+            || layer.animated.stretch_smooth.value.is_some()
+            || !layer.animated.stretch_smooth.keyframes.is_empty();
+
         // Get initial wipe params
         let initial_wipe = if has_wipe {
             let wipe_start = layer.animated.wipe_start.value.unwrap_or(0.0);
@@ -1137,11 +1301,27 @@ fn spawn_layer_entity(
             None
         };
 
+        // Get initial stretch segment params
+        let initial_stretch = if has_stretch {
+            let angle_deg = layer.animated.stretch_angle.value.unwrap_or(0.0);
+            let angle_rad = angle_deg.to_radians();
+            let stretch_px = layer.animated.stretch_amount.value.unwrap_or(0.0);
+            let stretch_uv = stretch_px / 500.0;
+            let offset_px = layer.animated.stretch_offset.value.unwrap_or(0.0);
+            let offset_uv = offset_px / 500.0;
+            let smooth = layer.animated.stretch_smooth.value.unwrap_or(0.0);
+            let smooth_width = smooth * 0.3;
+            Some(Vec4::new(angle_rad, stretch_uv, offset_uv, smooth_width))
+        } else {
+            None
+        };
+
         add_visual_components(
             commands,
             shaders,
             meshes,
             masked_materials,
+            stretch_materials,
             sdf_shaders,
             entity,
             &layer.spec,
@@ -1153,6 +1333,7 @@ fn spawn_layer_entity(
             layer.id,
             initial_scale,
             initial_wipe,
+            initial_stretch,
         );
     } else {
         bevy::log::info!(
@@ -1175,6 +1356,7 @@ fn add_visual_components(
     shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     masked_materials: &mut Assets<crate::masked_sprite::MaskedSpriteMaterial>,
+    stretch_materials: &mut Assets<crate::masked_sprite::StretchSegmentMaterial>,
     sdf_shaders: &crate::sdf::AmSdfShaders,
     entity: Entity,
     spec: &AmLayerSpec,
@@ -1186,9 +1368,14 @@ fn add_visual_components(
     id: u64,
     initial_scale: (f32, f32),
     wipe_params: Option<Vec4>,
+    stretch_params: Option<Vec4>,
 ) {
-    // Determine if we need MaskedSpriteMaterial (for mask or wipe effect)
-    let needs_material = mask_info.is_some() || wipe_params.is_some();
+    // Determine which material to use:
+    // - StretchSegmentMaterial if stretch segment effect is present (priority over wipe/mask)
+    // - MaskedSpriteMaterial if mask or wipe effect is present
+    // - Regular Sprite otherwise
+    let needs_stretch = stretch_params.is_some();
+    let needs_masked = mask_info.is_some() || wipe_params.is_some();
 
     // Helper function to create a rectangle mesh with anchor offset
     // When using Material2d, we need to manually apply anchor offset since there's no Anchor component
@@ -1257,8 +1444,34 @@ fn add_visual_components(
         } => {
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
-                    // If masked or has wipe, use Material2d approach
-                    if needs_material {
+                    // Priority: stretch segment > masked/wipe > normal sprite
+                    if needs_stretch {
+                        use crate::masked_sprite::{StretchSegmentMarker, StretchSegmentMaterial};
+                        use bevy::mesh::Mesh2d;
+
+                        let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                        let material = stretch_materials.add(StretchSegmentMaterial {
+                            color: LinearRgba::WHITE,
+                            stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
+                            original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                            texture: Some(handle.clone()),
+                        });
+
+                        commands.entity(entity).insert((
+                            Mesh2d(mesh),
+                            MeshMaterial2d(material),
+                            StretchSegmentMarker,
+                            AmVisualSpawned,
+                        ));
+
+                        bevy::log::info!(
+                            "[Visual] Spawned sprite '{}' with stretch segment effect: size=({:.1},{:.1}), angle={:.2}, stretch={:.4}",
+                            label,
+                            *width, *height,
+                            stretch_params.unwrap().x,
+                            stretch_params.unwrap().y
+                        );
+                    } else if needs_masked {
                         use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                         use bevy::mesh::Mesh2d;
 
@@ -1315,8 +1528,31 @@ fn add_visual_components(
                 }
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
-                // If masked or has wipe, use Material2d approach
-                if needs_material {
+                // Priority: stretch segment > masked/wipe > normal sprite
+                if needs_stretch {
+                    use crate::masked_sprite::{StretchSegmentMarker, StretchSegmentMaterial};
+                    use bevy::mesh::Mesh2d;
+
+                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                    let material = stretch_materials.add(StretchSegmentMaterial {
+                        color: color.to_linear(),
+                        stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
+                        original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                        texture: Some(wp.clone()),
+                    });
+
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        StretchSegmentMarker,
+                        AmVisualSpawned,
+                    ));
+
+                    bevy::log::info!(
+                        "[Visual] Spawned fill sprite '{}' with stretch segment effect",
+                        label
+                    );
+                } else if needs_masked {
                     use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                     use bevy::mesh::Mesh2d;
 
@@ -1409,8 +1645,31 @@ fn add_visual_components(
             anchor,
         } => {
             if let Some(handle) = images.get(image_uri) {
-                // If masked or has wipe, use Material2d approach
-                if needs_material {
+                // Priority: stretch segment > masked/wipe > normal sprite
+                if needs_stretch {
+                    use crate::masked_sprite::{StretchSegmentMarker, StretchSegmentMaterial};
+                    use bevy::mesh::Mesh2d;
+
+                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                    let material = stretch_materials.add(StretchSegmentMaterial {
+                        color: LinearRgba::WHITE,
+                        stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
+                        original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                        texture: Some(handle.clone()),
+                    });
+
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        StretchSegmentMarker,
+                        AmVisualSpawned,
+                    ));
+
+                    bevy::log::info!(
+                        "[Visual] Spawned image '{}' with stretch segment effect",
+                        label
+                    );
+                } else if needs_masked {
                     use crate::masked_sprite::{MaskedSpriteMarker, MaskedSpriteMaterial};
                     use bevy::mesh::Mesh2d;
 

@@ -128,18 +128,34 @@ async fn load_amproj(
     // Load embedded images as labeled assets
     let mut images = HashMap::new();
     for (uri, data) in &embedded_images {
-        // Try to load the image from raw bytes
+        // Determine the image type from the URI extension
+        let label = uri.trim_start_matches("amproj:");
+        let extension = label
+            .rsplit('.')
+            .next()
+            .unwrap_or("png")
+            .to_lowercase();
+        
+        // Normalize extension for bevy (jpg -> jpeg)
+        let bevy_extension = match extension.as_str() {
+            "jpg" => "jpeg",
+            other => other,
+        };
+        
+        // Try to load the image from raw bytes with correct format
         if let Ok(image) = Image::from_buffer(
             data,
-            bevy::image::ImageType::Extension("png"),
+            bevy::image::ImageType::Extension(bevy_extension),
             bevy::image::CompressedImageFormats::NONE,
             true,
             bevy::image::ImageSampler::Default,
             RenderAssetUsages::all(),
         ) {
-            let label = uri.trim_start_matches("amproj:");
             let handle = load_context.add_labeled_asset(label.to_string(), image);
             images.insert(uri.clone(), handle);
+            bevy::log::debug!("Loaded image: {} (format: {})", uri, bevy_extension);
+        } else {
+            bevy::log::warn!("Failed to load image: {} (format: {})", uri, bevy_extension);
         }
     }
 
