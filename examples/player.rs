@@ -559,14 +559,44 @@ mod video_debug {
     #[derive(Component)]
     pub struct VideoDebugImageNode;
 
-    /// Find the latest video file in the debug folder
-    fn find_latest_debug_video() -> Option<PathBuf> {
+    /// Find video file for debug overlay
+    /// First try to find a video with the same name as the project, then fall back to latest
+    fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
         use std::fs;
         use std::time::SystemTime;
 
         let possible_paths = ["crates/bevy_alight_motion/assets/debug", "assets/debug"];
         let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
 
+        // First, try to find a video matching the project name
+        if let Some(path) = project_path {
+            // Extract just the filename without directory and extension
+            // e.g., "am/fx_1_stretch_segment.amproj" -> "fx_1_stretch_segment"
+            let base_name = std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(path);
+            
+            println!("[VIDEO DEBUG] Looking for video matching project: {}", base_name);
+            
+            for debug_path in &possible_paths {
+                let path = std::path::Path::new(debug_path);
+                if !path.exists() {
+                    continue;
+                }
+
+                for ext in &extensions {
+                    let video_file = path.join(format!("{}.{}", base_name, ext));
+                    if video_file.exists() {
+                        println!("[VIDEO DEBUG] Found matching video: {:?}", video_file);
+                        return Some(video_file);
+                    }
+                }
+            }
+            println!("[VIDEO DEBUG] No matching video for '{}', falling back to latest", base_name);
+        }
+
+        // Fall back to finding the latest video file
         let mut latest_file: Option<(PathBuf, SystemTime)> = None;
 
         for debug_path in &possible_paths {
@@ -721,9 +751,12 @@ mod video_debug {
     }
 
     /// Setup video debug overlay on startup
-    pub fn setup_video_debug(mut state: ResMut<VideoDebugState>) {
-        // Find the latest video file
-        let Some(video_path) = find_latest_debug_video() else {
+    pub fn setup_video_debug(
+        mut state: ResMut<VideoDebugState>,
+        project_file: Res<super::ProjectFile>,
+    ) {
+        // Find video file - first try matching project name, then fallback to latest
+        let Some(video_path) = find_debug_video(Some(&project_file.0)) else {
             println!("[VIDEO DEBUG] No video file found in debug folder");
             return;
         };
