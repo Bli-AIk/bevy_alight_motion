@@ -208,11 +208,6 @@ pub fn animate_transform_system(
             interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
         };
 
-        // Get current rotation for pivot compensation (in radians)
-        let current_rotation_rad = interpolate_float(&animated.rotation, layer_time)
-            .unwrap_or(0.0)
-            .to_radians();
-
         // Interpolate location and convert from AM to Bevy coordinates
         if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
             let (mut bx, mut by) = if animated.has_parent {
@@ -229,47 +224,24 @@ pub fn animate_transform_system(
                 )
             };
 
-            // Apply pivot compensation for non-unit scale AND rotation
+            // Apply pivot offset and compensation
             // AM transforms around (location + pivot), Bevy transforms around entity origin
-            // Note: pivot.y is in AM coordinates (Y-down), so we need to flip it
+            // For SDF shapes: translation should be at transform center (location + pivot)
+            // For other shapes: need pivot compensation for non-unit scale
             if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
                 let pivot_x = pivot[0];
                 let pivot_y = pivot[1];
                 
-                // If no rotation, use simpler formula
-                if current_rotation_rad.abs() < 0.0001 {
-                    // X compensation (positive pivot_x moves transform center to the right)
-                    bx += pivot_x * (1.0 - current_scale[0]);
-                    // Y compensation (pivot_y in AM is Y-down, Bevy is Y-up, so negate)
-                    by -= pivot_y * (1.0 - current_scale[1]);
+                if sdf_parent.is_some() {
+                    // SDF shapes: translation is at transform center (location + pivot)
+                    // Simply add pivot offset (Y flip for Bevy coordinates)
+                    bx += pivot_x;
+                    by -= pivot_y;
                 } else {
-                    // With rotation, use full transform chain:
-                    // 1. rel = -pivot (relative position from transform center to location)
-                    // 2. rotated = rotate(rel, rotation) 
-                    // 3. scaled = rotated * scale
-                    // 4. disp = pivot + scaled (displacement in AM coords)
-                    // 5. Convert to Bevy coords
-                    let rel_x = -pivot_x;
-                    let rel_y = -pivot_y;
-                    
-                    let cos_r = current_rotation_rad.cos();
-                    let sin_r = current_rotation_rad.sin();
-                    let rotated_x = rel_x * cos_r - rel_y * sin_r;
-                    let rotated_y = rel_x * sin_r + rel_y * cos_r;
-                    
-                    let scaled_x = rotated_x * current_scale[0];
-                    let scaled_y = rotated_y * current_scale[1];
-                    
-                    let disp_am_x = pivot_x + scaled_x;
-                    let disp_am_y = pivot_y + scaled_y;
-                    
-                    // Convert to Bevy coords (Y flip)
-                    bx += disp_am_x;
-                    if animated.has_parent {
-                        by += disp_am_y; // Y already flipped in parent coordinate system
-                    } else {
-                        by -= disp_am_y; // Flip Y for Bevy
-                    }
+                    // Non-SDF shapes: need pivot compensation for scale
+                    // Formula: pivot * (1 - scale) compensates for scale around pivot
+                    bx += pivot_x * (1.0 - current_scale[0]);
+                    by -= pivot_y * (1.0 - current_scale[1]);
                 }
             }
 
