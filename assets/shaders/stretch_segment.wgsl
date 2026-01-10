@@ -8,10 +8,10 @@
 // 2. Rotate coordinates to align split line vertically
 // 3. Apply horizontal stretch logic in pixel space
 // 4. Rotate back
-// 5. Convert back to UV
+// 5. Convert back to UV (relative to original texture)
 //
-// Key insight: We must use the EXPANDED mesh dimensions for aspect ratio,
-// not the original image dimensions, because UV [0,1] maps to the expanded mesh.
+// Key insight: When angle != 0, the mesh is expanded in BOTH X and Y directions.
+// The expansion in each axis depends on cos(angle) and sin(angle).
 //
 // Uniform 0: color (vec4<f32>) - tint color
 // Uniform 1: stretch_params (vec4<f32>) - (angle_radians, stretch_px, offset_uv, smooth_width)
@@ -46,9 +46,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let orig_width = original_size.x;
     let orig_height = original_size.y;
     
-    // Calculate EXPANDED mesh dimensions (CPU already expanded the mesh)
-    let mesh_width = orig_width + stretch_px;
-    let mesh_height = orig_height;
+    // Calculate EXPANDED mesh dimensions (CPU expanded mesh based on angle)
+    // X expansion = stretch_px * |cos(angle)|
+    // Y expansion = stretch_px * |sin(angle)|
+    let expand_x = stretch_px * abs(cos(angle));
+    let expand_y = stretch_px * abs(sin(angle));
+    let mesh_width = orig_width + expand_x;
+    let mesh_height = orig_height + expand_y;
     
     // Input UV [0, 1] covers the EXPANDED mesh
     let uv = mesh.uv;
@@ -85,8 +89,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // 4. Rotate back to original orientation
     let unrotated_pixel = rotate_vec(final_rotated, -angle);
     
-    // 5. Convert back to UV coordinates
-    // Note: we're sampling from the ORIGINAL texture, so use orig_width/height
+    // 5. Convert back to UV coordinates (relative to ORIGINAL texture)
     let final_uv = vec2<f32>(
         (unrotated_pixel.x / orig_width) + 0.5,
         (unrotated_pixel.y / orig_height) + 0.5

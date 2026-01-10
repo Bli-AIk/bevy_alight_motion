@@ -407,16 +407,21 @@ pub fn animate_stretch_segment_system(
 
         // Update mesh size to accommodate stretch by creating a new mesh
         // AM stretch formula: stretch=135 means width doubles
-        // Currently only horizontal stretch (angle=0) is supported
+        // When angle != 0, stretch expands in BOTH X and Y directions
         
         let stretch_factor = 1.0 + stretch_px / 50.0;
-        let new_width = orig_width * stretch_factor;
-        let new_height = orig_height; // Height stays the same for horizontal stretch
+        let actual_stretch_px = orig_width * stretch_factor - orig_width;
+        
+        // Calculate X and Y expansion based on angle
+        // angle=0: all expansion in X, none in Y
+        // angle=90: all expansion in Y, none in X
+        let expand_x = actual_stretch_px * angle_rad.cos().abs();
+        let expand_y = actual_stretch_px * angle_rad.sin().abs();
+        
+        let new_width = orig_width + expand_x;
+        let new_height = orig_height + expand_y;
         let half_w = new_width / 2.0;
         let half_h = new_height / 2.0;
-        
-        // Calculate actual stretch pixels for the shader
-        let actual_stretch_px = new_width - orig_width;
         
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.stretch_params = Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
@@ -424,8 +429,8 @@ pub fn animate_stretch_segment_system(
         
         if (global_time as i32) % 500 < 17 {
             bevy::log::info!(
-                "[StretchSegment] stretch_val={:.1} factor={:.3} width={:.1}->{:.1}",
-                stretch_px, stretch_factor, orig_width, new_width
+                "[StretchSegment] stretch_val={:.1} factor={:.3} expand_x={:.1} expand_y={:.1} size=({:.1},{:.1})->({:.1},{:.1})",
+                stretch_px, stretch_factor, expand_x, expand_y, orig_width, orig_height, new_width, new_height
             );
         }
         
