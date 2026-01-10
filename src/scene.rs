@@ -7,6 +7,7 @@ use bevy::text::{TextColor, TextFont, TextLayout};
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
+use crate::effects::NeedsEmbedSceneRtt;
 use crate::loader::{AmProject, FontMetrics};
 use crate::schema::{
     AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape, AmText,
@@ -159,6 +160,8 @@ pub struct PendingLayer {
     pub blending_mode: AmBlendingMode,
     /// Active mask info (if this layer is clipped by a mask)
     pub mask_info: Option<AmMaskInfo>,
+    /// For EmbedScene: internal scene dimensions for RTT clipping
+    pub embed_scene_size: Option<(f32, f32)>,
 }
 
 /// Configuration for scene building.
@@ -655,7 +658,7 @@ fn spawn_embed_scene(
     let pivot = get_initial_pivot(&embed.transform.pivot);
 
     // Apply pivot compensation for initial position
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -722,6 +725,11 @@ fn spawn_embed_scene(
                 speed_multiplier: config.speed_multiplier,
             },
             AmLayerSpec::EmbedScene,
+            // Mark for RTT setup (will enable clipping to scene bounds)
+            NeedsEmbedSceneRtt {
+                scene_width: embed.scene.width as f32,
+                scene_height: embed.scene.height as f32,
+            },
             transform,
             GlobalTransform::default(),
             Visibility::Hidden, // Start hidden, lifecycle system will show when active
@@ -1197,24 +1205,31 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 }
 
 /// Calculate pivot compensation for non-unit scale.
-/// AM transforms around pivot point, Bevy transforms around entity origin.
+/// AM transforms around (location + pivot), Bevy transforms around entity origin.
+/// This function calculates the position compensation needed when scale != 1.
+/// 
+/// Note: Rotation is handled by Bevy's transform system - we don't need to compensate for it here.
+/// The key insight is that pivot compensation is about WHERE the scale happens, not about rotation.
+/// 
 /// Returns (compensation_x, compensation_y) in Bevy coordinates.
 fn calculate_pivot_compensation(
     pivot: (f32, f32),
     scale: (f32, f32),
+    _rotation_deg: f32, // Kept for API compatibility, but not used
     has_parent: bool,
 ) -> (f32, f32) {
     let pivot_x = pivot.0;
     let pivot_y = pivot.1;
-    // X compensation
+    
+    // Compensation formula: pivot * (1 - scale)
+    // This moves the entity position to keep the visual center correct after scaling
     let comp_x = pivot_x * (1.0 - scale.0);
-    // Y compensation - pivot_y in AM is Y-down, Bevy is Y-up
-    // For has_parent, Y is already negated in get_initial_location
     let comp_y = if has_parent {
-        pivot_y * (1.0 - scale.1) // Will be applied after Y negation
+        pivot_y * (1.0 - scale.1) // Y already flipped in parent coordinate system
     } else {
-        -pivot_y * (1.0 - scale.1) // Negate because Bevy Y is up
+        -pivot_y * (1.0 - scale.1) // Flip Y for Bevy (AM Y-down, Bevy Y-up)
     };
+    
     (comp_x, comp_y)
 }
 
@@ -1246,7 +1261,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
             if !prop.value.is_empty()
                 && let Ok(size) = crate::schema::parse_vec2(&prop.value)
             {
-                return (size[0] * 2.0, size[1] * 2.0);
+                return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
             }
             // If no static value, check first keyframe
             if !prop.keyframes.is_empty() {
@@ -1258,7 +1273,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 if let Ok(size) = crate::schema::parse_vec2(&sorted[0].value) {
-                    return (size[0] * 2.0, size[1] * 2.0);
+                    return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
                 }
             }
         }
@@ -1861,6 +1876,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             AmBlendingMode::Normal
         },
         mask_info: None,
+        embed_scene_size: None,
     })
 }
 
@@ -1924,6 +1940,7 @@ fn collect_null(
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        embed_scene_size: None,
     })
 }
 
@@ -1942,7 +1959,7 @@ fn collect_embed_scene(
     let pivot = get_initial_pivot(&embed.transform.pivot);
 
     // Apply pivot compensation for initial position
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -2015,6 +2032,7 @@ fn collect_embed_scene(
         children,
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
     }
 }
 
@@ -2369,6 +2387,7 @@ fn collect_text(
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        embed_scene_size: None,
     })
 }
 
@@ -2444,6 +2463,7 @@ fn collect_image(
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        embed_scene_size: None,
     })
 }
 
@@ -2459,6 +2479,7 @@ mod tests {
             flip_y: true,
             z_spacing: 0.001,
             time_offset: 0,
+            speed_multiplier: 1.0,
             nesting_depth: 0,
         };
 

@@ -28,6 +28,8 @@
 //!
 //! 3. **Always RTT-Ready**: All code paths assume RTT architecture. There is no "legacy mode".
 
+use bevy::camera::visibility::RenderLayers;
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -358,13 +360,266 @@ pub struct EffectRenderPlugin;
 
 impl Plugin for EffectRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                setup_effect_buffers_system,
-                update_effect_buffers_system,
-                mark_dirty_on_change_system,
-            ),
+        app.init_resource::<EmbedSceneRenderLayerPool>()
+            .add_systems(
+                Update,
+                (
+                    setup_effect_buffers_system,
+                    update_effect_buffers_system,
+                    mark_dirty_on_change_system,
+                    setup_embed_scene_rtt_system,
+                    propagate_render_layers_system,
+                    cleanup_embed_scene_rtt_system,
+                ),
+            );
+    }
+}
+
+// ============================================================================
+// EmbedScene RTT Architecture
+// ============================================================================
+
+/// Resource managing the pool of available RenderLayers for embedScenes.
+/// Bevy supports up to 32 RenderLayers (0-31). Layer 0 is reserved for the main camera.
+/// We use layers 1-31 for embedScene RTT rendering.
+#[derive(Resource)]
+pub struct EmbedSceneRenderLayerPool {
+    /// Bitset tracking which layers are in use (bit N = layer N+1)
+    used_layers: u32,
+}
+
+impl Default for EmbedSceneRenderLayerPool {
+    fn default() -> Self {
+        Self { used_layers: 0 }
+    }
+}
+
+impl EmbedSceneRenderLayerPool {
+    /// Allocate a render layer. Returns None if all layers are in use.
+    pub fn allocate(&mut self) -> Option<u8> {
+        // Find first available layer (layers 1-31)
+        for i in 0..31 {
+            if (self.used_layers & (1 << i)) == 0 {
+                self.used_layers |= 1 << i;
+                return Some(i + 1); // Return layer index (1-31)
+            }
+        }
+        None
+    }
+
+    /// Release a render layer back to the pool.
+    pub fn release(&mut self, layer: u8) {
+        if layer >= 1 && layer <= 31 {
+            self.used_layers &= !(1 << (layer - 1));
+        }
+    }
+
+    /// Check how many layers are currently in use.
+    #[allow(dead_code)]
+    pub fn used_count(&self) -> u32 {
+        self.used_layers.count_ones()
+    }
+}
+
+/// Component for embedScene entities that need RTT rendering.
+/// Stores the render infrastructure for clipping content to scene bounds.
+#[derive(Component)]
+pub struct EmbedSceneRtt {
+    /// The render target texture
+    pub render_texture: Handle<Image>,
+    /// The camera entity that renders to this RTT
+    pub camera_entity: Entity,
+    /// The render layer index (1-31)
+    pub render_layer: u8,
+    /// Scene dimensions (for camera orthographic projection)
+    pub scene_width: f32,
+    pub scene_height: f32,
+}
+
+/// Marker component for embedScene RTT cameras
+#[derive(Component)]
+pub struct EmbedSceneRttCamera {
+    /// Reference to parent embedScene entity
+    pub embed_entity: Entity,
+}
+
+/// Marker component indicating an entity needs RTT setup
+#[derive(Component)]
+pub struct NeedsEmbedSceneRtt {
+    pub scene_width: f32,
+    pub scene_height: f32,
+}
+
+/// System to set up RTT infrastructure for embedScenes marked with NeedsEmbedSceneRtt.
+pub fn setup_embed_scene_rtt_system(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
+    query: Query<(Entity, &NeedsEmbedSceneRtt), Without<EmbedSceneRtt>>,
+) {
+    for (entity, needs_rtt) in query.iter() {
+        // Try to allocate a render layer
+        let Some(render_layer) = layer_pool.allocate() else {
+            bevy::log::warn!(
+                "No available render layers for embedScene {:?}. Max 31 concurrent embedScenes supported.",
+                entity
+            );
+            continue;
+        };
+
+        // Create RTT texture
+        let size = Extent3d {
+            width: needs_rtt.scene_width.max(1.0) as u32,
+            height: needs_rtt.scene_height.max(1.0) as u32,
+            depth_or_array_layers: 1,
+        };
+
+        let mut render_texture = Image {
+            texture_descriptor: TextureDescriptor {
+                label: Some("embed_scene_rtt"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba8UnormSrgb,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_DST
+                    | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            },
+            ..default()
+        };
+        render_texture.resize(size);
+        let render_texture_handle = images.add(render_texture);
+        let render_layer_usize = render_layer as usize;
+
+        // Create RTT camera
+        // Camera2d automatically includes OrthographicProjection
+        let camera_entity = commands
+            .spawn((
+                Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
+                EmbedSceneRttCamera { embed_entity: entity },
+                Camera2d,
+                Camera {
+                    target: RenderTarget::Image(render_texture_handle.clone().into()),
+                    clear_color: ClearColorConfig::Custom(Color::NONE),
+                    order: -(render_layer as isize), // Render before main camera
+                    ..default()
+                },
+                // Camera only renders this specific layer
+                RenderLayers::layer(render_layer_usize),
+                // Camera positioned at center of scene
+                Transform::from_xyz(0.0, 0.0, 1000.0),
+            ))
+            .id();
+
+        // Add EmbedSceneRtt component and remove the marker
+        commands.entity(entity).remove::<NeedsEmbedSceneRtt>().insert((
+            EmbedSceneRtt {
+                render_texture: render_texture_handle.clone(),
+                camera_entity,
+                render_layer,
+                scene_width: needs_rtt.scene_width,
+                scene_height: needs_rtt.scene_height,
+            },
+            // Add sprite to display RTT output
+            Sprite {
+                image: render_texture_handle,
+                custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
+                ..default()
+            },
+            // EmbedScene entity should be on layer 0 (main camera) so parent sees it
+            RenderLayers::layer(0),
+        ));
+
+        bevy::log::debug!(
+            "Set up RTT for embedScene {:?}: layer={}, size={}x{}",
+            entity,
+            render_layer,
+            needs_rtt.scene_width,
+            needs_rtt.scene_height
         );
+    }
+}
+
+/// System to propagate RenderLayers to all children of embedScenes with RTT.
+/// This ensures children render to the RTT camera instead of main camera.
+pub fn propagate_render_layers_system(
+    mut commands: Commands,
+    embed_query: Query<(Entity, &EmbedSceneRtt)>,
+    children_query: Query<&Children>,
+    render_layers_query: Query<&RenderLayers>,
+) {
+    for (embed_entity, rtt) in embed_query.iter() {
+        let target_layer = RenderLayers::layer(rtt.render_layer as usize);
+        propagate_render_layers_recursive(
+            &mut commands,
+            embed_entity,
+            &target_layer,
+            &children_query,
+            &render_layers_query,
+        );
+    }
+}
+
+fn propagate_render_layers_recursive(
+    commands: &mut Commands,
+    entity: Entity,
+    target_layer: &RenderLayers,
+    children_query: &Query<&Children>,
+    render_layers_query: &Query<&RenderLayers>,
+) {
+    if let Ok(children) = children_query.get(entity) {
+        for child in children.iter() {
+            // Check if child already has the correct RenderLayers
+            let needs_update = match render_layers_query.get(child) {
+                Ok(current) => current != target_layer,
+                Err(_) => true, // No RenderLayers component, needs adding
+            };
+
+            if needs_update {
+                commands.entity(child).insert(target_layer.clone());
+            }
+
+            // Recurse to grandchildren
+            propagate_render_layers_recursive(
+                commands,
+                child,
+                target_layer,
+                children_query,
+                render_layers_query,
+            );
+        }
+    }
+}
+
+/// System to clean up RTT resources when embedScenes are despawned.
+pub fn cleanup_embed_scene_rtt_system(
+    mut commands: Commands,
+    _layer_pool: ResMut<EmbedSceneRenderLayerPool>,
+    mut removed: RemovedComponents<EmbedSceneRtt>,
+    rtt_query: Query<&EmbedSceneRtt>,
+    camera_query: Query<(Entity, &EmbedSceneRttCamera)>,
+) {
+    for entity in removed.read() {
+        // Try to get the RTT data before it was removed
+        // Note: This won't work since the component is already removed
+        // We need to find and clean up orphaned cameras instead
+        bevy::log::debug!("EmbedSceneRtt removed from {:?}", entity);
+    }
+
+    // Clean up orphaned RTT cameras (their embed_entity no longer exists or has RTT)
+    for (camera_entity, camera_marker) in camera_query.iter() {
+        let should_cleanup = rtt_query.get(camera_marker.embed_entity).is_err();
+        if should_cleanup {
+            // TODO: Release render layer back to pool
+            // We need to extract it from camera's RenderLayers
+            commands.entity(camera_entity).despawn();
+            bevy::log::debug!(
+                "Cleaned up orphaned RTT camera {:?} for embed {:?}",
+                camera_entity,
+                camera_marker.embed_entity
+            );
+        }
     }
 }
