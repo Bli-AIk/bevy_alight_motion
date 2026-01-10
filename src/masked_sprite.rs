@@ -72,10 +72,10 @@ pub struct StretchSegmentMaterial {
     #[uniform(0)]
     pub color: LinearRgba,
 
-    /// Stretch segment parameters: (angle_radians, stretch_amount_uv, offset_uv, smooth_width)
+    /// Stretch segment parameters: (angle_radians, stretch_px, offset_px, smooth_width)
     /// - angle_radians: rotation of the split line (0 = vertical, PI/2 = horizontal)
-    /// - stretch_amount_uv: stretch amount in UV units (relative to original texture)
-    /// - offset_uv: position of the split line (UV units)
+    /// - stretch_px: stretch amount in pixels
+    /// - offset_px: position of the split line in pixels
     /// - smooth_width: width of the smooth transition zone (0 = hard edge)
     #[uniform(1)]
     pub stretch_params: Vec4,
@@ -86,9 +86,14 @@ pub struct StretchSegmentMaterial {
     #[uniform(2)]
     pub original_size: Vec4,
 
+    /// Mesh center offset: (offset_x, offset_y, 0, 0)
+    /// Used when the transformed AABB center is not at origin (e.g., large offset values)
+    #[uniform(3)]
+    pub mesh_offset: Vec4,
+
     /// The sprite texture
-    #[texture(3)]
-    #[sampler(4)]
+    #[texture(4)]
+    #[sampler(5)]
     pub texture: Option<Handle<Image>>,
 }
 
@@ -99,7 +104,9 @@ impl Default for StretchSegmentMaterial {
             // Default: no stretch effect (stretch=0, smooth=0)
             stretch_params: Vec4::new(0.0, 0.0, 0.0, 0.0),
             // Default original size (will be set properly during spawn)
-            original_size: Vec4::new(100.0, 100.0, 0.0, 0.0),
+            original_size: Vec4::new(100.0, 100.0, 100.0, 100.0),
+            // Default: no offset
+            mesh_offset: Vec4::ZERO,
             texture: None,
         }
     }

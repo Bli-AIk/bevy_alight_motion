@@ -475,6 +475,10 @@ pub fn animate_stretch_segment_system(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
+        // Calculate the center offset of the transformed AABB
+        // This is needed when offset causes all vertices to shift in one direction
+        let center_offset_x = (min_x + max_x) / 2.0;
+        let center_offset_y = (min_y + max_y) / 2.0;
         let half_w = new_width / 2.0;
         let half_h = new_height / 2.0;
 
@@ -483,14 +487,19 @@ pub fn animate_stretch_segment_system(
                 Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
             // Update original_size: xy = original texture, zw = expanded mesh
             material.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
+            // Store mesh center offset for shader
+            material.mesh_offset = Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0);
         }
 
         if (global_time as i32) % 500 < 17 {
             bevy::log::info!(
-                "[StretchSegment] stretch_val={:.1} factor={:.3} half_gap={:.1} size=({:.1},{:.1})->({:.1},{:.1})",
+                "[StretchSegment] stretch_val={:.1} factor={:.3} half_gap={:.1} offset={:.1} center_off=({:.1},{:.1}) size=({:.1},{:.1})->({:.1},{:.1})",
                 stretch_px,
                 stretch_factor,
                 half_gap,
+                offset_px,
+                center_offset_x,
+                center_offset_y,
                 orig_width,
                 orig_height,
                 new_width,
@@ -498,14 +507,13 @@ pub fn animate_stretch_segment_system(
             );
         }
 
-        // Create new mesh with updated size
-        // For simplicity, assume CENTER anchor (no offset needed)
-        // TODO: Handle non-center anchors properly
+        // Create new mesh with ACTUAL bounds (not centered)
+        // This correctly handles the case where offset shifts the entire image
         let vertices = vec![
-            [-half_w, -half_h, 0.0], // bottom-left
-            [half_w, -half_h, 0.0],  // bottom-right
-            [half_w, half_h, 0.0],   // top-right
-            [-half_w, half_h, 0.0],  // top-left
+            [min_x, min_y, 0.0], // bottom-left
+            [max_x, min_y, 0.0], // bottom-right
+            [max_x, max_y, 0.0], // top-right
+            [min_x, max_y, 0.0], // top-left
         ];
         let normals = vec![
             [0.0, 0.0, 1.0],
@@ -1527,6 +1535,7 @@ fn add_visual_components(
                             stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
                             // Initial mesh size equals original size (no stretch yet)
                             original_size: Vec4::new(*width, *height, *width, *height),
+                            mesh_offset: Vec4::ZERO,
                             texture: Some(handle.clone()),
                         });
 
@@ -1613,6 +1622,7 @@ fn add_visual_components(
                         stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
                         // Initial mesh size equals original size (no stretch yet)
                         original_size: Vec4::new(*width, *height, *width, *height),
+                        mesh_offset: Vec4::ZERO,
                         texture: Some(wp.clone()),
                     });
 
@@ -1731,6 +1741,7 @@ fn add_visual_components(
                         stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
                         // Initial mesh size equals original size (no stretch yet)
                         original_size: Vec4::new(*width, *height, *width, *height),
+                        mesh_offset: Vec4::ZERO,
                         texture: Some(handle.clone()),
                     });
 
