@@ -1048,6 +1048,34 @@ fn spawn_layer_entity(
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
 
+    // Check if layer has any effects that need scale baking
+    let has_wipe = layer.animated.wipe_end.value != Some(1.0)
+        || !layer.animated.wipe_end.keyframes.is_empty()
+        || layer.animated.wipe_start.value.is_some()
+        || !layer.animated.wipe_start.keyframes.is_empty();
+
+    let has_stretch = layer.animated.stretch_amount.value.is_some()
+        || !layer.animated.stretch_amount.keyframes.is_empty()
+        || layer.animated.stretch_angle.value.is_some()
+        || !layer.animated.stretch_angle.keyframes.is_empty()
+        || layer.animated.stretch_offset.value.is_some()
+        || !layer.animated.stretch_offset.keyframes.is_empty()
+        || layer.animated.stretch_smooth.value.is_some()
+        || !layer.animated.stretch_smooth.keyframes.is_empty();
+
+    let has_mask = layer.mask_info.is_some();
+    let needs_effect = has_wipe || has_stretch || has_mask;
+
+    // If layer has effects, bake scale into a separate variable and use identity scale for transform
+    // This is because effects need actual pixel sizes, not scaled coordinates
+    let transform_to_use = if needs_effect && layer.blending_mode != crate::scene::AmBlendingMode::Mask {
+        let mut t = layer.transform;
+        t.scale = Vec3::ONE;  // Reset scale - it will be baked into mesh size
+        t
+    } else {
+        layer.transform
+    };
+
     // Create base entity with common components
     let entity = commands
         .spawn((
@@ -1058,7 +1086,7 @@ fn spawn_layer_entity(
             },
             layer.animated.clone(),
             layer.spec.clone(),
-            layer.transform,
+            transform_to_use,
             GlobalTransform::default(),
             Visibility::Inherited,
             InheritedVisibility::default(),
@@ -1315,9 +1343,8 @@ fn add_visual_components(
                             stretch_params,
                         );
 
-                        // Reset entity's scale to 1 since we baked it into the mesh
+                        // Scale is already baked into mesh in spawn_layer_entity
                         commands.entity(entity).insert((
-                            Transform::from_scale(Vec3::ONE),
                             Mesh2d(mesh),
                             MeshMaterial2d(material),
                             UnifiedEffectMarker,
@@ -1365,8 +1392,8 @@ fn add_visual_components(
                     );
 
                     // Reset entity's scale to 1 since we baked it into the mesh
+                    // Scale is already baked into mesh in spawn_layer_entity
                     commands.entity(entity).insert((
-                        Transform::from_scale(Vec3::ONE),
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
                         UnifiedEffectMarker,
@@ -1449,9 +1476,8 @@ fn add_visual_components(
                         stretch_params,
                     );
 
-                    // Reset entity's scale to 1 since we baked it into the mesh
+                    // Scale is already baked into mesh in spawn_layer_entity
                     commands.entity(entity).insert((
-                        Transform::from_scale(Vec3::ONE),
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
                         UnifiedEffectMarker,

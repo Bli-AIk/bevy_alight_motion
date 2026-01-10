@@ -95,7 +95,12 @@ async fn load_amproj(
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let name = file.name().to_string();
+        // Get the filename, preferring raw bytes decoded as UTF-8
+        // The zip library sometimes doesn't correctly handle the UTF-8 flag
+        let name = match std::str::from_utf8(file.name_raw()) {
+            Ok(utf8_name) => utf8_name.to_string(),
+            Err(_) => file.name().to_string(),
+        };
 
         if name.ends_with(".xml") {
             let mut content = String::new();
@@ -110,6 +115,7 @@ async fn load_amproj(
             file.read_to_end(&mut data)?;
             // Store with amproj: prefix for lookup
             let uri = format!("amproj:{}", name);
+            bevy::log::debug!("Loaded embedded image: {}", uri);
             embedded_images.insert(uri, data);
         } else if name.ends_with(".ttf") || name.ends_with(".otf") {
             let mut data = Vec::new();
@@ -128,20 +134,31 @@ async fn load_amproj(
     // Load embedded images as labeled assets
     let mut images = HashMap::new();
     for (uri, data) in &embedded_images {
-        // Determine the image type from the URI extension
         let label = uri.trim_start_matches("amproj:");
-        let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
-
-        // Normalize extension for bevy (jpg -> jpeg)
-        let bevy_extension = match extension.as_str() {
-            "jpg" => "jpeg",
-            other => other,
+        
+        // Detect image format from magic bytes (more reliable than extension)
+        let format: &str = if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+            "png"
+        } else if data.len() >= 2 && data[0..2] == [0xFF, 0xD8] {
+            "jpeg"
+        } else if data.len() >= 4 && &data[0..4] == b"RIFF" && data.len() >= 12 && &data[8..12] == b"WEBP" {
+            "webp"
+        } else {
+            // Fall back to extension
+            let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
+            if extension == "jpg" || extension == "jpeg" {
+                "jpeg"
+            } else if extension == "webp" {
+                "webp"
+            } else {
+                "png"
+            }
         };
 
-        // Try to load the image from raw bytes with correct format
+        // Try to load the image from raw bytes with detected format
         if let Ok(image) = Image::from_buffer(
             data,
-            bevy::image::ImageType::Extension(bevy_extension),
+            bevy::image::ImageType::Extension(format),
             bevy::image::CompressedImageFormats::NONE,
             true,
             bevy::image::ImageSampler::Default,
@@ -149,9 +166,9 @@ async fn load_amproj(
         ) {
             let handle = load_context.add_labeled_asset(label.to_string(), image);
             images.insert(uri.clone(), handle);
-            bevy::log::debug!("Loaded image: {} (format: {})", uri, bevy_extension);
+            bevy::log::debug!("Loaded image: {} (detected format: {})", uri, format);
         } else {
-            bevy::log::warn!("Failed to load image: {} (format: {})", uri, bevy_extension);
+            bevy::log::warn!("Failed to load image: {} (tried format: {})", uri, format);
         }
     }
 
