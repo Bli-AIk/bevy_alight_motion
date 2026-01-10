@@ -655,7 +655,7 @@ fn spawn_embed_scene(
     let pivot = get_initial_pivot(&embed.transform.pivot);
 
     // Apply pivot compensation for initial position
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -1196,26 +1196,43 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
     }
 }
 
-/// Calculate pivot compensation for non-unit scale.
-/// AM transforms around pivot point, Bevy transforms around entity origin.
+/// Calculate pivot compensation for non-unit scale and rotation.
+/// AM transforms around (location + pivot), Bevy transforms around entity origin.
+/// When both pivot and rotation exist, we must consider the full transform chain.
 /// Returns (compensation_x, compensation_y) in Bevy coordinates.
 fn calculate_pivot_compensation(
     pivot: (f32, f32),
     scale: (f32, f32),
-    has_parent: bool,
+    rotation_deg: f32,
+    _has_parent: bool,
 ) -> (f32, f32) {
     let pivot_x = pivot.0;
     let pivot_y = pivot.1;
-    // X compensation
-    let comp_x = pivot_x * (1.0 - scale.0);
-    // Y compensation - pivot_y in AM is Y-down, Bevy is Y-up
-    // For has_parent, Y is already negated in get_initial_location
-    let comp_y = if has_parent {
-        pivot_y * (1.0 - scale.1) // Will be applied after Y negation
-    } else {
-        -pivot_y * (1.0 - scale.1) // Negate because Bevy Y is up
-    };
-    (comp_x, comp_y)
+    let rotation_rad = rotation_deg.to_radians();
+    
+    // Relative position from transform center T to location L in AM coords
+    // = L - T = L - (L + pivot) = -pivot
+    let rel_x = -pivot_x;
+    let rel_y = -pivot_y;
+    
+    // Rotate the relative position (in AM coords, positive rotation is clockwise)
+    let cos_r = rotation_rad.cos();
+    let sin_r = rotation_rad.sin();
+    let rotated_x = rel_x * cos_r - rel_y * sin_r;
+    let rotated_y = rel_x * sin_r + rel_y * cos_r;
+    
+    // Scale the rotated position
+    let scaled_x = rotated_x * scale.0;
+    let scaled_y = rotated_y * scale.1;
+    
+    // The new location in AM coords = T + scaled = (L + pivot) + scaled
+    // Displacement in AM coords = new_location - L = pivot + scaled
+    let disp_am_x = pivot_x + scaled_x;
+    let disp_am_y = pivot_y + scaled_y;
+    
+    // Convert displacement to Bevy coords
+    // X stays the same, Y is negated (AM Y-down, Bevy Y-up)
+    (disp_am_x, -disp_am_y)
 }
 
 /// Get initial opacity from animated property.
@@ -1239,6 +1256,7 @@ fn get_initial_opacity(prop: &AmAnimatedFloat) -> f32 {
 /// Get shape size from properties.
 /// AM's size property represents half-extents (half-width and half-height).
 /// We multiply by 2 to get full dimensions for rendering.
+/// Note: AM may use negative sizes for flipping; we use abs() for dimensions.
 fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) -> (f32, f32) {
     for prop in properties {
         if prop.name == "size" && prop.prop_type == "vec2" {
@@ -1246,7 +1264,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
             if !prop.value.is_empty()
                 && let Ok(size) = crate::schema::parse_vec2(&prop.value)
             {
-                return (size[0] * 2.0, size[1] * 2.0);
+                return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
             }
             // If no static value, check first keyframe
             if !prop.keyframes.is_empty() {
@@ -1258,7 +1276,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 if let Ok(size) = crate::schema::parse_vec2(&sorted[0].value) {
-                    return (size[0] * 2.0, size[1] * 2.0);
+                    return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
                 }
             }
         }
@@ -1269,6 +1287,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
 /// Get shape size animation data from properties.
 /// AM's size property represents half-extents, so we multiply by 2 for full dimensions.
 /// Returns AmAnimatedVec2 with values in full dimensions (width, height).
+/// Note: AM may use negative sizes for flipping; we use abs() for dimensions.
 fn get_shape_size_animation(
     properties: &[crate::schema::AmProperty],
 ) -> crate::schema::AmAnimatedVec2 {
@@ -1276,22 +1295,22 @@ fn get_shape_size_animation(
 
     for prop in properties {
         if prop.name == "size" && prop.prop_type == "vec2" {
-            // Convert static value (half-extents to full dimensions)
+            // Convert static value (half-extents to full dimensions, use abs)
             let value = if !prop.value.is_empty() {
                 crate::schema::parse_vec2(&prop.value)
                     .ok()
-                    .map(|s| [s[0] * 2.0, s[1] * 2.0])
+                    .map(|s| [(s[0] * 2.0).abs(), (s[1] * 2.0).abs()])
             } else {
                 None
             };
 
-            // Convert keyframes (half-extents to full dimensions)
+            // Convert keyframes (half-extents to full dimensions, use abs)
             let keyframes: Vec<AmKeyframe> = prop
                 .keyframes
                 .iter()
                 .map(|kf| {
                     let converted_value = crate::schema::parse_vec2(&kf.value)
-                        .map(|s| format!("{},{}", s[0] * 2.0, s[1] * 2.0))
+                        .map(|s| format!("{},{}", (s[0] * 2.0).abs(), (s[1] * 2.0).abs()))
                         .unwrap_or_else(|_| kf.value.clone());
                     AmKeyframe {
                         time: kf.time,
@@ -1632,6 +1651,10 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
                 // Remap the parent reference
                 if child.parent == 0 {
                     child.parent = embed_id;
+                    // Note: We keep has_parent = false for these children because:
+                    // - Their coordinates are in the nested scene's canvas space
+                    // - They need canvas->center coordinate conversion (not local coords)
+                    // - animated.canvas_width/height already point to the nested scene dimensions
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
                     child.parent = new_parent_id;
                 }
@@ -1725,7 +1748,7 @@ fn collect_layer(
 /// Collect a shape layer's data.
 fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<PendingLayer> {
     let has_parent = shape.parent != 0;
-    let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
@@ -1743,7 +1766,12 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
                 .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
 
     // Calculate anchor and position compensation for non-SDF shapes
-    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+    let (anchor, anchor_comp_x, anchor_comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+
+    // Apply pivot compensation for non-unit scale (matches animate_transform_system logic)
+    let (scale_comp_x, scale_comp_y) = calculate_pivot_compensation((pivot_x, pivot_y), (sx, sy), rotation, has_parent);
+    tx += scale_comp_x;
+    ty += scale_comp_y;
 
     // For SpriteShape, we need to compensate position when anchor is not CENTER
     // For SDF shapes, parent should be at pivot point (for rotation/scale around pivot)
@@ -1752,7 +1780,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         // pivot is relative to center in AM coords, so pivot_point = center + (pivot_x, -pivot_y) in Bevy
         (tx + pivot_x, ty - pivot_y)
     } else {
-        (tx + comp_x, ty + comp_y)
+        (tx + anchor_comp_x, ty + anchor_comp_y)
     };
 
     // For SDF shapes, we don't apply scale to the transform because:
@@ -1814,7 +1842,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         // SDF parent needs to be offset from center to pivot point
         Vec2::new(pivot_x, -pivot_y)
     } else {
-        Vec2::new(comp_x, comp_y)
+        Vec2::new(anchor_comp_x, anchor_comp_y)
     };
 
     Some(PendingLayer {
@@ -1871,12 +1899,18 @@ fn collect_null(
     z: f32,
 ) -> Option<PendingLayer> {
     let has_parent = null.parent != 0;
-    let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&null.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
+    let pivot = get_initial_pivot(&null.transform.pivot);
+
+    // Apply pivot compensation for non-unit scale (matches animate_transform_system logic)
+    let (scale_comp_x, scale_comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
+    tx += scale_comp_x;
+    ty += scale_comp_y;
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -1942,7 +1976,7 @@ fn collect_embed_scene(
     let pivot = get_initial_pivot(&embed.transform.pivot);
 
     // Apply pivot compensation for initial position
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -2258,9 +2292,15 @@ fn collect_text(
     z: f32,
 ) -> Option<PendingLayer> {
     let has_parent = text.parent != 0;
-    let (tx, ty) = get_initial_location(&text.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&text.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&text.transform.rotation);
     let (sx, sy) = get_initial_scale(&text.transform.scale);
+    let pivot = get_initial_pivot(&text.transform.pivot);
+
+    // Apply pivot compensation for non-unit scale (matches animate_transform_system logic)
+    let (scale_comp_x, scale_comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
+    tx += scale_comp_x;
+    ty += scale_comp_y;
 
     // Font name parsing
     let font_name = text
@@ -2379,7 +2419,7 @@ fn collect_image(
     z: f32,
 ) -> Option<PendingLayer> {
     let has_parent = image.parent != 0;
-    let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&image.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
@@ -2389,9 +2429,14 @@ fn collect_image(
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
 
+    // Apply pivot compensation for non-unit scale (matches animate_transform_system logic)
+    let (scale_comp_x, scale_comp_y) = calculate_pivot_compensation((pivot_x, pivot_y), (sx, sy), rotation, has_parent);
+    tx += scale_comp_x;
+    ty += scale_comp_y;
+
     // Calculate anchor and position compensation
-    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
-    let (final_tx, final_ty) = (tx + comp_x, ty + comp_y);
+    let (anchor, anchor_comp_x, anchor_comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
+    let (final_tx, final_ty) = (tx + anchor_comp_x, ty + anchor_comp_y);
 
     let transform = Transform {
         translation: Vec3::new(final_tx, final_ty, z),
@@ -2423,7 +2468,7 @@ fn collect_image(
             effect_pos_y: AmAnimatedFloat::default(),
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
-            anchor_offset: Vec2::new(comp_x, comp_y),
+            anchor_offset: Vec2::new(anchor_comp_x, anchor_comp_y),
             wipe_start: wipe_effect.start,
             wipe_end: wipe_effect.end,
             wipe_angle: wipe_effect.angle,
