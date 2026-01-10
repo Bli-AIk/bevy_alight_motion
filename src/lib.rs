@@ -39,6 +39,7 @@
 //! 3. **Runtime Layer** (`plugin`, `animation`, `scene`): ECS components and systems
 
 pub mod animation;
+pub mod effects;
 pub mod error;
 pub mod loader;
 pub mod masked_sprite;

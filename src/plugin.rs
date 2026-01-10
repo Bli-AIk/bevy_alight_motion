@@ -27,12 +27,13 @@ use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_sdf_opacity_system,
-    animate_sdf_scale_system, animate_size_system, animate_stretch_segment_system,
-    animate_text_opacity_system, animate_transform_system, animate_wipe_effect_system,
+    animate_sdf_scale_system, animate_size_system,
+    animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
     apply_mask_clipping_system, manage_layer_lifecycle_system,
 };
+use crate::effects::EffectRenderPlugin;
 use crate::loader::{AlightMotionLoader, AmProject};
-use crate::masked_sprite::{MaskedSpriteMaterial, StretchSegmentMaterial};
+use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
 use crate::sdf::{hot_reload_shader_system, setup_sdf_shaders_system};
 
@@ -66,8 +67,8 @@ pub struct AlightMotionPlugin;
 impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SmudPlugin)
-            .add_plugins(Material2dPlugin::<MaskedSpriteMaterial>::default())
-            .add_plugins(Material2dPlugin::<StretchSegmentMaterial>::default())
+            .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
+            .add_plugins(EffectRenderPlugin)
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
@@ -82,23 +83,15 @@ impl Plugin for AlightMotionPlugin {
                     spawn_loaded_projects_system,
                     advance_playback_system,
                     manage_layer_lifecycle_system, // Spawn/despawn visuals based on time
-                    // 基于时间生成/销毁可视化组件
                     animate_transform_system,
-                    animate_size_system, // Update size from size property animation (runs before scale)
-                    // 从 size 属性动画更新尺寸（在 scale 之前运行）
+                    animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation
-                    // 基于 scale 动画更新 SDF 尺寸
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
-                    animate_wipe_effect_system, // Apply wipe effect clipping to sprites
-                    // 对精灵应用擦拭效果裁剪
-                    animate_stretch_segment_system, // Apply stretch segment UV distortion
-                    // 应用拉伸片段 UV 扭曲效果
+                    animate_unified_effect_system, // Unified effect system (RTT-ready)
                     apply_mask_clipping_system, // Apply mask clipping to masked layers
-                    // 对被遮罩的图层应用遮罩裁剪
                     hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
-                                              // 按 'R' 键时热重载着色器
                 )
                     .chain(),
             );
