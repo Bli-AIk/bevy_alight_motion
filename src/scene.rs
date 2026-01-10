@@ -1702,7 +1702,6 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
                 .as_ref()
                 .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
 
-
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
 

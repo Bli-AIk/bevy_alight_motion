@@ -130,18 +130,14 @@ async fn load_amproj(
     for (uri, data) in &embedded_images {
         // Determine the image type from the URI extension
         let label = uri.trim_start_matches("amproj:");
-        let extension = label
-            .rsplit('.')
-            .next()
-            .unwrap_or("png")
-            .to_lowercase();
-        
+        let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
+
         // Normalize extension for bevy (jpg -> jpeg)
         let bevy_extension = match extension.as_str() {
             "jpg" => "jpeg",
             other => other,
         };
-        
+
         // Try to load the image from raw bytes with correct format
         if let Ok(image) = Image::from_buffer(
             data,

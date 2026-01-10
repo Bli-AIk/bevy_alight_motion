@@ -372,11 +372,10 @@ pub fn animate_stretch_segment_system(
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
         // Get original sprite size
-        let sprite_size = interpolate_vec2(&animated.size, layer_time)
-            .unwrap_or([100.0, 100.0]);
+        let sprite_size = interpolate_vec2(&animated.size, layer_time).unwrap_or([100.0, 100.0]);
         let orig_width = sprite_size[0].max(1.0);
         let orig_height = sprite_size[1].max(1.0);
-        
+
         // Get stretch segment parameters
         // angle: degrees -> radians (0 = vertical split line, stretch is horizontal)
         let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
@@ -398,7 +397,8 @@ pub fn animate_stretch_segment_system(
             bevy::log::info!(
                 "[StretchSegment] t={:.2}s orig_size=({:.1},{:.1}) stretch_px={:.1} new_width={:.1} angle={:.1}°",
                 global_time / 1000.0,
-                orig_width, orig_height,
+                orig_width,
+                orig_height,
                 stretch_px,
                 orig_width + stretch_px,
                 angle_deg,
@@ -406,34 +406,48 @@ pub fn animate_stretch_segment_system(
         }
 
         // Update mesh size to accommodate stretch by creating a new mesh
-        // AM stretch formula: stretch=135 means width doubles
+        // AM stretch formula: stretch is relative to image size
         // When angle != 0, stretch expands in BOTH X and Y directions
-        
-        let stretch_factor = 1.0 + stretch_px / 50.0;
+
+        // The stretch divisor should scale with image width to maintain consistent visual stretch
+        // Base: 288px width uses divisor 50 (derived from fx_1 example)
+        // Formula: divisor = width / 5.76 ≈ width / 6
+        let base_divisor = orig_width / 5.76;
+        let stretch_factor = 1.0 + stretch_px / base_divisor;
         let actual_stretch_px = orig_width * stretch_factor - orig_width;
-        
+
         // Calculate X and Y expansion based on angle
         // angle=0: all expansion in X, none in Y
         // angle=90: all expansion in Y, none in X
         let expand_x = actual_stretch_px * angle_rad.cos().abs();
         let expand_y = actual_stretch_px * angle_rad.sin().abs();
-        
+
         let new_width = orig_width + expand_x;
         let new_height = orig_height + expand_y;
         let half_w = new_width / 2.0;
         let half_h = new_height / 2.0;
-        
+
         if let Some(material) = materials.get_mut(&material_handle.0) {
-            material.stretch_params = Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
+            material.stretch_params =
+                Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
+            // Update original_size to match the current sprite size (from size property animation)
+            material.original_size = Vec4::new(orig_width, orig_height, 0.0, 0.0);
         }
-        
+
         if (global_time as i32) % 500 < 17 {
             bevy::log::info!(
                 "[StretchSegment] stretch_val={:.1} factor={:.3} expand_x={:.1} expand_y={:.1} size=({:.1},{:.1})->({:.1},{:.1})",
-                stretch_px, stretch_factor, expand_x, expand_y, orig_width, orig_height, new_width, new_height
+                stretch_px,
+                stretch_factor,
+                expand_x,
+                expand_y,
+                orig_width,
+                orig_height,
+                new_width,
+                new_height
             );
         }
-        
+
         // Create new mesh with updated size
         // For simplicity, assume CENTER anchor (no offset needed)
         // TODO: Handle non-center anchors properly
@@ -456,20 +470,23 @@ pub fn animate_stretch_segment_system(
             [0.0, 0.0], // top-left
         ];
         let indices = vec![0u32, 1, 2, 0, 2, 3];
-        
+
         let mut new_mesh = Mesh::new(
             bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD
+                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
         );
         new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
         new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
         new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-        
+
         let new_mesh_handle = meshes.add(new_mesh);
-        
+
         // Replace the Mesh2d component on the entity
-        commands.entity(entity).insert(bevy::mesh::Mesh2d(new_mesh_handle));
+        commands
+            .entity(entity)
+            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
     }
 }
 
@@ -1472,7 +1489,8 @@ fn add_visual_components(
                         bevy::log::info!(
                             "[Visual] Spawned sprite '{}' with stretch segment effect: size=({:.1},{:.1}), angle={:.2}, stretch={:.4}",
                             label,
-                            *width, *height,
+                            *width,
+                            *height,
                             stretch_params.unwrap().x,
                             stretch_params.unwrap().y
                         );
