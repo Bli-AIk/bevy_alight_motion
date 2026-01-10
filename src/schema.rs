@@ -573,6 +573,10 @@ pub struct AmEmbedScene {
     #[serde(rename = "@outTime", default)]
     pub out_time: Option<i32>,
 
+    /// Playback speed multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double speed)
+    #[serde(rename = "@speed", default = "default_speed")]
+    pub speed: f32,
+
     /// Transform data.
     #[serde(default)]
     pub transform: AmTransform,
@@ -583,6 +587,10 @@ pub struct AmEmbedScene {
 
     /// Nested scene.
     pub scene: Box<AmScene>,
+}
+
+fn default_speed() -> f32 {
+    1.0
 }
 
 /// Fill color definition (can be static or animated).

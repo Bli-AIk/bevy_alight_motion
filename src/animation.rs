@@ -85,6 +85,9 @@ pub struct AmAnimated {
     pub stretch_offset: AmAnimatedFloat,
     /// Stretch segment effect smooth width (0 = hard edge).
     pub stretch_smooth: AmAnimatedFloat,
+    /// Speed multiplier from parent embed scenes.
+    /// Local time = (global_time - time_offset) * speed_multiplier
+    pub speed_multiplier: f32,
 }
 
 /// Resource to control animation playback.
@@ -186,7 +189,7 @@ pub fn animate_transform_system(
 
     for (animated, mut transform, _marker, sdf_parent, effect_marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Check if layer is active at current local time
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -196,6 +199,14 @@ pub fn animate_transform_system(
         // Calculate normalized time within layer duration
         let layer_duration = (animated.end_time - animated.start_time) as f32;
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Get current scale for pivot compensation
+        // For SDF shapes and effect sprites, scale is handled separately, so use (1, 1)
+        let current_scale = if sdf_parent.is_some() || effect_marker.is_some() {
+            [1.0_f32, 1.0_f32]
+        } else {
+            interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
+        };
 
         // Interpolate location and convert from AM to Bevy coordinates
         if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
@@ -212,6 +223,19 @@ pub fn animate_transform_system(
                     animated.canvas_height / 2.0 - loc[1],
                 )
             };
+
+            // Apply pivot compensation for non-unit scale
+            // AM transforms around pivot point, Bevy transforms around entity origin
+            // Compensation: pos += pivot * (1 - scale)
+            // Note: pivot.y is in AM coordinates (Y-down), so we need to flip it
+            if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
+                let pivot_x = pivot[0];
+                let pivot_y = pivot[1];
+                // X compensation (positive pivot_x moves transform center to the right)
+                bx += pivot_x * (1.0 - current_scale[0]);
+                // Y compensation (pivot_y in AM is Y-down, Bevy is Y-up, so negate)
+                by -= pivot_y * (1.0 - current_scale[1]);
+            }
 
             // Apply effect position offsets (transform2 effect)
             if let Some(effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
@@ -243,11 +267,8 @@ pub fn animate_transform_system(
         // Interpolate scale
         // Skip for SDF shapes (handled by animate_sdf_scale)
         // Skip for effect sprites (scale is baked into mesh, handled by animate_unified_effect)
-        if sdf_parent.is_none()
-            && effect_marker.is_none()
-            && let Some(scale) = interpolate_vec2(&animated.scale, layer_time)
-        {
-            transform.scale = Vec3::new(scale[0], scale[1], 1.0);
+        if sdf_parent.is_none() && effect_marker.is_none() {
+            transform.scale = Vec3::new(current_scale[0], current_scale[1], 1.0);
         }
     }
 }
@@ -267,7 +288,7 @@ pub fn animate_opacity_system(
 
     for (animated, mut sprite) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Check if layer is active
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -322,7 +343,7 @@ pub fn animate_text_opacity_system(
 
     for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Check if layer is active
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -385,7 +406,7 @@ pub fn animate_sdf_opacity_system(
 
     for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Check if layer is active
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -435,7 +456,7 @@ pub fn animate_sdf_scale_system(
 
     for (animated, children) in parent_query.iter() {
         // Calculate local time
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Skip if outside active time range
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -505,7 +526,7 @@ pub fn animate_size_system(
         }
 
         // Calculate local time
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Skip if outside active time range
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -545,7 +566,7 @@ pub fn animate_size_system(
         }
 
         // Calculate local time
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
         // Skip if outside active time range
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -824,7 +845,8 @@ fn process_pending_layers(
             None => return true, // Parent not in our list, assume active
         };
 
-        let parent_local_time = global_time - (parent.animated.time_offset + time_offset) as f32;
+        let parent_local_time = (global_time - (parent.animated.time_offset + time_offset) as f32)
+            * parent.animated.speed_multiplier;
         let parent_active = parent_local_time >= parent.start_time as f32
             && parent_local_time <= parent.end_time as f32;
 
@@ -837,8 +859,9 @@ fn process_pending_layers(
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
-        // Calculate local time
-        let local_time = global_time - (layer.animated.time_offset + time_offset) as f32;
+        // Calculate local time with speed multiplier
+        let local_time = (global_time - (layer.animated.time_offset + time_offset) as f32)
+            * layer.animated.speed_multiplier;
 
         // Check if layer should be active (considering both own time range and parent's time range)
         let own_time_active =
@@ -1869,7 +1892,7 @@ pub fn animate_unified_effect_system(
 
     for (entity, animated, material_handle) in query.iter() {
         // Calculate local time
-        let local_time = global_time - animated.time_offset as f32;
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
             continue;
         }

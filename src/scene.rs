@@ -174,6 +174,9 @@ pub struct AmSceneConfig {
     pub z_spacing: f32,
     /// Time offset from parent scene (for embedded scenes).
     pub time_offset: i32,
+    /// Cumulative speed multiplier from parent scenes.
+    /// Local time = (global_time - time_offset) * speed_multiplier
+    pub speed_multiplier: f32,
     /// Nesting depth (0 = root scene, 1 = first level embed, etc.)
     pub nesting_depth: u32,
 }
@@ -186,6 +189,7 @@ impl Default for AmSceneConfig {
             flip_y: true,
             z_spacing: 0.1, // Base spacing for root scene
             time_offset: 0,
+            speed_multiplier: 1.0,
             nesting_depth: 0,
         }
     }
@@ -538,6 +542,7 @@ fn spawn_shape(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                speed_multiplier: config.speed_multiplier,
             },
             layer_spec,
             transform,
@@ -617,6 +622,7 @@ fn spawn_null(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                speed_multiplier: config.speed_multiplier,
             },
             AmLayerSpec::Null,
             transform,
@@ -643,17 +649,27 @@ fn spawn_embed_scene(
     z: f32,
 ) -> Entity {
     let has_parent = embed.parent != 0;
-    let (tx, ty) = get_initial_location(&embed.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&embed.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&embed.transform.rotation);
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
+    let pivot = get_initial_pivot(&embed.transform.pivot);
+
+    // Apply pivot compensation for initial position
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    tx += comp_x;
+    ty += comp_y;
 
     bevy::log::trace!(
-        "Registering embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), start_time={}, time_offset={}",
+        "Registering embedScene '{}' (id={}, parent={}): pos=({:.1},{:.1}), pivot=({:.1},{:.1}), scale=({:.2},{:.2}), start_time={}, time_offset={}",
         embed.label,
         embed.id,
         embed.parent,
         tx,
         ty,
+        pivot.0,
+        pivot.1,
+        sx,
+        sy,
         embed.start_time,
         config.time_offset
     );
@@ -703,6 +719,7 @@ fn spawn_embed_scene(
                 stretch_amount: AmAnimatedFloat::default(),
                 stretch_offset: AmAnimatedFloat::default(),
                 stretch_smooth: AmAnimatedFloat::default(),
+                speed_multiplier: config.speed_multiplier,
             },
             AmLayerSpec::EmbedScene,
             transform,
@@ -827,6 +844,7 @@ fn spawn_image(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                speed_multiplier: config.speed_multiplier,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -1031,6 +1049,7 @@ fn spawn_text(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            speed_multiplier: config.speed_multiplier,
         },
         transform,
         GlobalTransform::default(),
@@ -1158,6 +1177,47 @@ fn get_initial_scale(prop: &AmAnimatedVec2) -> (f32, f32) {
     }
 }
 
+/// Get initial pivot from animated property.
+fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
+    if let Some(val) = &prop.value {
+        (val[0], val[1])
+    } else if !prop.keyframes.is_empty() {
+        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        crate::schema::parse_vec2(&sorted[0].value)
+            .unwrap_or([0.0, 0.0])
+            .into()
+    } else {
+        (0.0, 0.0)
+    }
+}
+
+/// Calculate pivot compensation for non-unit scale.
+/// AM transforms around pivot point, Bevy transforms around entity origin.
+/// Returns (compensation_x, compensation_y) in Bevy coordinates.
+fn calculate_pivot_compensation(
+    pivot: (f32, f32),
+    scale: (f32, f32),
+    has_parent: bool,
+) -> (f32, f32) {
+    let pivot_x = pivot.0;
+    let pivot_y = pivot.1;
+    // X compensation
+    let comp_x = pivot_x * (1.0 - scale.0);
+    // Y compensation - pivot_y in AM is Y-down, Bevy is Y-up
+    // For has_parent, Y is already negated in get_initial_location
+    let comp_y = if has_parent {
+        pivot_y * (1.0 - scale.1) // Will be applied after Y negation
+    } else {
+        -pivot_y * (1.0 - scale.1) // Negate because Bevy Y is up
+    };
+    (comp_x, comp_y)
+}
+
 /// Get initial opacity from animated property.
 fn get_initial_opacity(prop: &AmAnimatedFloat) -> f32 {
     if let Some(val) = prop.value {
@@ -1249,27 +1309,6 @@ fn get_shape_size_animation(
     AmAnimatedVec2 {
         value: Some([100.0, 100.0]),
         keyframes: Vec::new(),
-    }
-}
-
-/// Get initial pivot from animated property.
-/// Returns (pivot_x, pivot_y) in pixels. Default is (0, 0) which means center.
-fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
-    if let Some(val) = &prop.value {
-        (val[0], val[1])
-    } else if !prop.keyframes.is_empty() {
-        // Sort keyframes by time and get the first one
-        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
-        sorted.sort_by(|a, b| {
-            a.time
-                .partial_cmp(&b.time)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        crate::schema::parse_vec2(&sorted[0].value)
-            .unwrap_or([0.0, 0.0])
-            .into()
-    } else {
-        (0.0, 0.0)
     }
 }
 
@@ -1811,6 +1850,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            speed_multiplier: config.speed_multiplier,
         },
         spec,
         z_index: z,
@@ -1877,6 +1917,7 @@ fn collect_null(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            speed_multiplier: config.speed_multiplier,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -1895,9 +1936,15 @@ fn collect_embed_scene(
     z: f32,
 ) -> PendingLayer {
     let has_parent = embed.parent != 0;
-    let (tx, ty) = get_initial_location(&embed.transform.location, config, has_parent);
+    let (mut tx, mut ty) = get_initial_location(&embed.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&embed.transform.rotation);
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
+    let pivot = get_initial_pivot(&embed.transform.pivot);
+
+    // Apply pivot compensation for initial position
+    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), has_parent);
+    tx += comp_x;
+    ty += comp_y;
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -1916,6 +1963,7 @@ fn collect_embed_scene(
         time_offset: config.time_offset + embed.start_time,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
+        speed_multiplier: config.speed_multiplier * embed.speed,
         ..config.clone()
     };
 
@@ -1960,6 +2008,7 @@ fn collect_embed_scene(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            speed_multiplier: config.speed_multiplier,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2307,6 +2356,7 @@ fn collect_text(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            speed_multiplier: config.speed_multiplier,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2382,6 +2432,7 @@ fn collect_image(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            speed_multiplier: config.speed_multiplier,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
