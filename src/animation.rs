@@ -416,31 +416,80 @@ pub fn animate_stretch_segment_system(
         let stretch_factor = 1.0 + stretch_px / base_divisor;
         let actual_stretch_px = orig_width * stretch_factor - orig_width;
 
-        // Calculate X and Y expansion based on angle
-        // angle=0: all expansion in X, none in Y
-        // angle=90: all expansion in Y, none in X
-        let expand_x = actual_stretch_px * angle_rad.cos().abs();
-        let expand_y = actual_stretch_px * angle_rad.sin().abs();
+        // Calculate mesh bounding box by simulating vertex transformation
+        // This matches the shader's logic but in reverse (shader moves sample points inward,
+        // so vertices move outward)
+        //
+        // Shader logic:
+        // 1. Rotate point by +angle
+        // 2. If |rotated.x| < half_gap: sample center (rotated.x = 0)
+        // 3. Else: shift inward by half_gap
+        // 4. Rotate back by -angle
+        //
+        // For bounding box, we need to find where the CORNERS of the original image end up
+        // after being pushed OUTWARD by the stretch.
+        let angle_factor = 1.0 - 0.25 * angle_rad.sin().abs(); // matches shader: mix(1.0, 0.75, |sin|)
+        let half_gap = actual_stretch_px * 0.5 * angle_factor;
 
-        let new_width = orig_width + expand_x;
-        let new_height = orig_height + expand_y;
+        // Helper to rotate a 2D point
+        let rotate = |x: f32, y: f32, angle: f32| -> (f32, f32) {
+            let c = angle.cos();
+            let s = angle.sin();
+            (x * c - y * s, x * s + y * c)
+        };
+
+        // Transform a vertex: rotate -> push outward -> rotate back
+        let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
+            // 1. Rotate by +angle
+            let (rx, ry) = rotate(vx, vy, angle_rad);
+            // 2. Push outward (opposite of shader which samples inward)
+            let pushed_x = rx + rx.signum() * half_gap;
+            // 3. Rotate back by -angle
+            rotate(pushed_x, ry, -angle_rad)
+        };
+
+        // Original image corners (centered at origin)
+        let hw = orig_width / 2.0;
+        let hh = orig_height / 2.0;
+        let corners = [
+            (-hw, -hh), // bottom-left
+            (hw, -hh),  // bottom-right
+            (hw, hh),   // top-right
+            (-hw, hh),  // top-left
+        ];
+
+        // Transform all corners and find AABB
+        let mut min_x = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut min_y = f32::MAX;
+        let mut max_y = f32::MIN;
+
+        for (cx, cy) in corners {
+            let (tx, ty) = transform_vertex(cx, cy);
+            min_x = min_x.min(tx);
+            max_x = max_x.max(tx);
+            min_y = min_y.min(ty);
+            max_y = max_y.max(ty);
+        }
+
+        let new_width = max_x - min_x;
+        let new_height = max_y - min_y;
         let half_w = new_width / 2.0;
         let half_h = new_height / 2.0;
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.stretch_params =
                 Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
-            // Update original_size to match the current sprite size (from size property animation)
-            material.original_size = Vec4::new(orig_width, orig_height, 0.0, 0.0);
+            // Update original_size: xy = original texture, zw = expanded mesh
+            material.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
         }
 
         if (global_time as i32) % 500 < 17 {
             bevy::log::info!(
-                "[StretchSegment] stretch_val={:.1} factor={:.3} expand_x={:.1} expand_y={:.1} size=({:.1},{:.1})->({:.1},{:.1})",
+                "[StretchSegment] stretch_val={:.1} factor={:.3} half_gap={:.1} size=({:.1},{:.1})->({:.1},{:.1})",
                 stretch_px,
                 stretch_factor,
-                expand_x,
-                expand_y,
+                half_gap,
                 orig_width,
                 orig_height,
                 new_width,
@@ -1475,7 +1524,8 @@ fn add_visual_components(
                         let material = stretch_materials.add(StretchSegmentMaterial {
                             color: LinearRgba::WHITE,
                             stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
-                            original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                            // Initial mesh size equals original size (no stretch yet)
+                            original_size: Vec4::new(*width, *height, *width, *height),
                             texture: Some(handle.clone()),
                         });
 
@@ -1560,7 +1610,8 @@ fn add_visual_components(
                     let material = stretch_materials.add(StretchSegmentMaterial {
                         color: color.to_linear(),
                         stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
-                        original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                        // Initial mesh size equals original size (no stretch yet)
+                        original_size: Vec4::new(*width, *height, *width, *height),
                         texture: Some(wp.clone()),
                     });
 
@@ -1677,7 +1728,8 @@ fn add_visual_components(
                     let material = stretch_materials.add(StretchSegmentMaterial {
                         color: LinearRgba::WHITE,
                         stretch_params: stretch_params.unwrap_or(Vec4::ZERO),
-                        original_size: Vec4::new(*width, *height, 0.0, 0.0),
+                        // Initial mesh size equals original size (no stretch yet)
+                        original_size: Vec4::new(*width, *height, *width, *height),
                         texture: Some(handle.clone()),
                     });
 

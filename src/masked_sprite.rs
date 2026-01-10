@@ -80,8 +80,9 @@ pub struct StretchSegmentMaterial {
     #[uniform(1)]
     pub stretch_params: Vec4,
 
-    /// Original texture size: (width, height, 0, 0)
-    /// Used for proper pixel-to-UV conversion in the shader
+    /// Original texture size: (width, height, mesh_width, mesh_height)
+    /// - xy: original texture dimensions for UV conversion
+    /// - zw: expanded mesh dimensions for coordinate calculation
     #[uniform(2)]
     pub original_size: Vec4,
 
