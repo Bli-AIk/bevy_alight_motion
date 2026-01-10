@@ -165,6 +165,8 @@ pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>
 /// Only skips updates when force_stopped is true (for inspector editing).
 /// Normal pause still updates animations based on current time.
 /// Note: Scale animation is skipped for SDF shape parents (handled by animate_sdf_scale).
+/// Note: Scale animation is skipped for UnifiedEffectMarker entities (scale baked into mesh).
+#[allow(clippy::type_complexity)]
 pub fn animate_transform_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
@@ -172,6 +174,7 @@ pub fn animate_transform_system(
         &mut Transform,
         &AmLayerMarker,
         Option<&AmSdfShapeParent>,
+        Option<&crate::masked_sprite::UnifiedEffectMarker>,
     )>,
 ) {
     // Skip animation only when force stopped (for inspector editing)
@@ -181,7 +184,7 @@ pub fn animate_transform_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut transform, _marker, sdf_parent) in query.iter_mut() {
+    for (animated, mut transform, _marker, sdf_parent, effect_marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
         let local_time = global_time - animated.time_offset as f32;
 
@@ -237,8 +240,11 @@ pub fn animate_transform_system(
             transform.rotation = Quat::from_rotation_z((-rot).to_radians());
         }
 
-        // Interpolate scale (skip for SDF shapes - their scale is handled by animate_sdf_scale)
+        // Interpolate scale
+        // Skip for SDF shapes (handled by animate_sdf_scale)
+        // Skip for effect sprites (scale is baked into mesh, handled by animate_unified_effect)
         if sdf_parent.is_none()
+            && effect_marker.is_none()
             && let Some(scale) = interpolate_vec2(&animated.scale, layer_time)
         {
             transform.scale = Vec3::new(scale[0], scale[1], 1.0);
@@ -1288,23 +1294,30 @@ fn add_visual_components(
             height,
             anchor,
         } => {
+            // For effects, use scaled dimensions (scale is applied to mesh, not transform)
+            let scaled_width = *width * initial_scale.0;
+            let scaled_height = *height * initial_scale.1;
+            
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
                     if needs_any_effect {
                         // Use UnifiedEffectMaterial for all effect cases
-                        let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                        // Create mesh with SCALED dimensions since effects need actual pixel sizes
+                        let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                         let material = create_unified_material(
                             unified_materials,
                             handle.clone(),
                             LinearRgba::WHITE,
-                            *width,
-                            *height,
+                            scaled_width,
+                            scaled_height,
                             mask_info,
                             wipe_params,
                             stretch_params,
                         );
 
+                        // Reset entity's scale to 1 since we baked it into the mesh
                         commands.entity(entity).insert((
+                            Transform::from_scale(Vec3::ONE),
                             Mesh2d(mesh),
                             MeshMaterial2d(material),
                             UnifiedEffectMarker,
@@ -1312,10 +1325,12 @@ fn add_visual_components(
                         ));
 
                         bevy::log::info!(
-                            "[Visual] Spawned sprite '{}' with unified effect: size=({:.1},{:.1}), mask={}, wipe={}, stretch={}",
+                            "[Visual] Spawned sprite '{}' with unified effect: base_size=({:.1},{:.1}), scaled=({:.1},{:.1}), mask={}, wipe={}, stretch={}",
                             label,
                             *width,
                             *height,
+                            scaled_width,
+                            scaled_height,
                             needs_mask,
                             needs_wipe,
                             needs_stretch
@@ -1337,19 +1352,21 @@ fn add_visual_components(
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
-                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                    let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
                         color.to_linear(),
-                        *width,
-                        *height,
+                        scaled_width,
+                        scaled_height,
                         mask_info,
                         wipe_params,
                         stretch_params,
                     );
 
+                    // Reset entity's scale to 1 since we baked it into the mesh
                     commands.entity(entity).insert((
+                        Transform::from_scale(Vec3::ONE),
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
                         UnifiedEffectMarker,
@@ -1357,8 +1374,10 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned fill sprite '{}' with unified effect",
-                        label
+                        "[Visual] Spawned fill sprite '{}' with unified effect: scaled=({:.1},{:.1})",
+                        label,
+                        scaled_width,
+                        scaled_height
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -1412,21 +1431,27 @@ fn add_visual_components(
             height,
             anchor,
         } => {
+            // For effects, use scaled dimensions
+            let scaled_width = *width * initial_scale.0;
+            let scaled_height = *height * initial_scale.1;
+            
             if let Some(handle) = images.get(image_uri) {
                 if needs_any_effect {
-                    let mesh = create_anchored_rectangle(meshes, *width, *height, anchor);
+                    let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
                         LinearRgba::WHITE,
-                        *width,
-                        *height,
+                        scaled_width,
+                        scaled_height,
                         mask_info,
                         wipe_params,
                         stretch_params,
                     );
 
+                    // Reset entity's scale to 1 since we baked it into the mesh
                     commands.entity(entity).insert((
+                        Transform::from_scale(Vec3::ONE),
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
                         UnifiedEffectMarker,
@@ -1434,8 +1459,10 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned image '{}' with unified effect",
-                        label
+                        "[Visual] Spawned image '{}' with unified effect: scaled=({:.1},{:.1})",
+                        label,
+                        scaled_width,
+                        scaled_height
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -1824,10 +1851,12 @@ pub fn animate_unified_effect_system(
         let layer_duration = (animated.end_time - animated.start_time) as f32;
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
-        // Get sprite base size
+        // Get sprite base size and scale
         let sprite_size = interpolate_vec2(&animated.size, layer_time).unwrap_or([100.0, 100.0]);
-        let orig_width = sprite_size[0].max(1.0);
-        let orig_height = sprite_size[1].max(1.0);
+        let scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        // Actual rendered size = base size * scale
+        let orig_width = (sprite_size[0] * scale[0]).max(1.0);
+        let orig_height = (sprite_size[1] * scale[1]).max(1.0);
 
         // Check which effects are active
         let has_wipe = animated.wipe_end.value != Some(1.0)
