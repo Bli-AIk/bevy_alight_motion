@@ -479,8 +479,6 @@ pub fn animate_stretch_segment_system(
         // This is needed when offset causes all vertices to shift in one direction
         let center_offset_x = (min_x + max_x) / 2.0;
         let center_offset_y = (min_y + max_y) / 2.0;
-        let half_w = new_width / 2.0;
-        let half_h = new_height / 2.0;
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.stretch_params =
@@ -1587,12 +1585,12 @@ fn add_visual_components(
                                 mask.half_size.y
                             );
                         }
-                        if wipe_params.is_some() {
+                        if let Some(wp) = wipe_params {
                             bevy::log::debug!(
                                 "[Visual] Spawned sprite '{}' with wipe effect: start={:.2}, end={:.2}",
                                 label,
-                                wipe_params.unwrap().x,
-                                wipe_params.unwrap().y
+                                wp.x,
+                                wp.y
                             );
                         }
                     } else {
@@ -1668,12 +1666,12 @@ fn add_visual_components(
                             mask.center.y
                         );
                     }
-                    if wipe_params.is_some() {
+                    if let Some(wp_params) = wipe_params {
                         bevy::log::debug!(
                             "[Visual] Spawned fill sprite '{}' with wipe effect: start={:.2}, end={:.2}",
                             label,
-                            wipe_params.unwrap().x,
-                            wipe_params.unwrap().y
+                            wp_params.x,
+                            wp_params.y
                         );
                     }
                 } else {

@@ -576,9 +576,12 @@ mod video_debug {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or(path);
-            
-            println!("[VIDEO DEBUG] Looking for video matching project: {}", base_name);
-            
+
+            println!(
+                "[VIDEO DEBUG] Looking for video matching project: {}",
+                base_name
+            );
+
             for debug_path in &possible_paths {
                 let path = std::path::Path::new(debug_path);
                 if !path.exists() {
@@ -593,7 +596,10 @@ mod video_debug {
                     }
                 }
             }
-            println!("[VIDEO DEBUG] No matching video for '{}', falling back to latest", base_name);
+            println!(
+                "[VIDEO DEBUG] No matching video for '{}', falling back to latest",
+                base_name
+            );
         }
 
         // Fall back to finding the latest video file

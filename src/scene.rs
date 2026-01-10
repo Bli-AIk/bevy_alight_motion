@@ -1285,6 +1285,7 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// - Anchor(0, 0) = center
 /// - Anchor(-0.5, -0.5) = bottom-left corner
 /// - Anchor(0.5, 0.5) = top-right corner
+///
 /// Convert AM pivot (in pixels, relative to center) to Bevy Anchor and position compensation.
 ///
 /// AM pivot: (0, 0) = center, positive X = right, positive Y = down
