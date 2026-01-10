@@ -1,14 +1,17 @@
 // Stretch segment shader - UV domain distortion effect
 //
 // This shader implements the "拉伸片段" (Stretch Segment) effect from Alight Motion.
-// It creates a horizontal split through the center and pushes the halves apart.
+// It creates a split line at a configurable angle and pushes the halves apart.
 //
-// Current implementation: angle=0 only (vertical split line, horizontal stretch)
-// - The image is split vertically at the center
-// - Left and right halves are pushed apart horizontally
-// - The gap is filled with the center column pixels
+// Implementation approach (pixel space rotation):
+// 1. Convert UV to pixel coordinates (using EXPANDED mesh dimensions)
+// 2. Rotate coordinates to align split line vertically
+// 3. Apply horizontal stretch logic in pixel space
+// 4. Rotate back
+// 5. Convert back to UV
 //
-// Stretch formula: stretch=135 → width doubles (1 + stretch/50 factor applied by CPU)
+// Key insight: We must use the EXPANDED mesh dimensions for aspect ratio,
+// not the original image dimensions, because UV [0,1] maps to the expanded mesh.
 //
 // Uniform 0: color (vec4<f32>) - tint color
 // Uniform 1: stretch_params (vec4<f32>) - (angle_radians, stretch_px, offset_uv, smooth_width)
@@ -22,55 +25,80 @@
 @group(2) @binding(3) var base_texture: texture_2d<f32>;
 @group(2) @binding(4) var base_sampler: sampler;
 
+// Helper: rotate 2D vector by angle
+fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return vec2<f32>(
+        v.x * c - v.y * s,
+        v.x * s + v.y * c
+    );
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    // Extract parameters (angle is currently unused - always horizontal stretch)
-    let angle = stretch_params.x;         // Reserved for future angle support
-    let stretch_px = stretch_params.y;    // Actual stretch amount in pixels
+    // Extract parameters
+    let angle = stretch_params.x;         // Angle in radians
+    let stretch_px = stretch_params.y;    // Stretch amount in pixels
     let offset = stretch_params.z;        // Reserved for future offset support
     let smooth_width = stretch_params.w;  // Reserved for future smooth support
     
     let orig_width = original_size.x;
     let orig_height = original_size.y;
     
+    // Calculate EXPANDED mesh dimensions (CPU already expanded the mesh)
+    let mesh_width = orig_width + stretch_px;
+    let mesh_height = orig_height;
+    
     // Input UV [0, 1] covers the EXPANDED mesh
     let uv = mesh.uv;
     
-    // New mesh width after expansion
-    let new_width = orig_width + stretch_px;
+    // 1. Convert UV to pixel coordinates relative to mesh center
+    // UV (0,0) -> pixel (-mesh_width/2, -mesh_height/2)
+    // UV (1,1) -> pixel (+mesh_width/2, +mesh_height/2)
+    let pixel_x = (uv.x - 0.5) * mesh_width;
+    let pixel_y = (uv.y - 0.5) * mesh_height;
+    let pixel_coord = vec2<f32>(pixel_x, pixel_y);
     
-    // Calculate the boundaries in UV space (relative to expanded mesh)
-    let gap_ratio = stretch_px / new_width;
-    let half_gap = gap_ratio * 0.5;
+    // 2. Rotate coordinates by -angle to align split line vertically
+    // In pixel space, 1px = 1px, so rotation is correct
+    let rotated_pixel = rotate_vec(pixel_coord, -angle);
     
-    // UV boundaries:
-    // Left region:   [0, 0.5 - half_gap]
-    // Center gap:    [0.5 - half_gap, 0.5 + half_gap]
-    // Right region:  [0.5 + half_gap, 1.0]
-    let gap_left_uv = 0.5 - half_gap;
-    let gap_right_uv = 0.5 + half_gap;
+    // 3. Apply stretch logic in pixel space
+    // The gap width is stretch_px (the amount we pushed the halves apart)
+    let half_gap = stretch_px * 0.5;
     
-    // Remap UV to sample from original texture
-    var sample_uv_x: f32;
+    var sample_rotated_x: f32;
     
-    if uv.x <= gap_left_uv {
-        // Left region: [0, gap_left_uv] -> [0, 0.5]
-        sample_uv_x = (uv.x / gap_left_uv) * 0.5;
-    } else if uv.x >= gap_right_uv {
-        // Right region: [gap_right_uv, 1.0] -> [0.5, 1.0]
-        let right_uv = (uv.x - gap_right_uv) / (1.0 - gap_right_uv);
-        sample_uv_x = 0.5 + right_uv * 0.5;
+    if abs(rotated_pixel.x) < half_gap {
+        // Inside the gap (green region): sample the center line
+        sample_rotated_x = 0.0;
     } else {
-        // Center gap region: sample the center line of original texture
-        sample_uv_x = 0.5;
+        // Outside the gap (red/blue regions): shift coordinates back
+        // Subtract the gap width to find the original texture position
+        sample_rotated_x = rotated_pixel.x - sign(rotated_pixel.x) * half_gap;
     }
     
-    // Clamp to valid UV range
-    sample_uv_x = clamp(sample_uv_x, 0.0, 1.0);
+    // Combine with unchanged Y coordinate
+    let final_rotated = vec2<f32>(sample_rotated_x, rotated_pixel.y);
+    
+    // 4. Rotate back to original orientation
+    let unrotated_pixel = rotate_vec(final_rotated, angle);
+    
+    // 5. Convert back to UV coordinates
+    // Note: we're sampling from the ORIGINAL texture, so use orig_width/height
+    let final_uv = vec2<f32>(
+        (unrotated_pixel.x / orig_width) + 0.5,
+        (unrotated_pixel.y / orig_height) + 0.5
+    );
+    
+    // 6. Boundary check - discard pixels outside valid UV range
+    if final_uv.x < 0.0 || final_uv.x > 1.0 || final_uv.y < 0.0 || final_uv.y > 1.0 {
+        discard;
+    }
     
     // Sample the texture
-    let sample_uv = vec2<f32>(sample_uv_x, uv.y);
-    let tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    let tex_color = textureSample(base_texture, base_sampler, final_uv);
     
     // Apply color tint
     var final_color = tex_color * color;
