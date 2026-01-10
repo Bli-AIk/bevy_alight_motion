@@ -60,9 +60,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let pixel_y = (uv.y - 0.5) * mesh_height;
     let pixel_coord = vec2<f32>(pixel_x, pixel_y);
     
-    // 2. Rotate coordinates by -angle to align split line vertically
+    // 2. Rotate coordinates by +angle to align split line vertically
     // In pixel space, 1px = 1px, so rotation is correct
-    let rotated_pixel = rotate_vec(pixel_coord, -angle);
+    let rotated_pixel = rotate_vec(pixel_coord, angle);
     
     // 3. Apply stretch logic in pixel space
     // The gap width is stretch_px (the amount we pushed the halves apart)
@@ -83,7 +83,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let final_rotated = vec2<f32>(sample_rotated_x, rotated_pixel.y);
     
     // 4. Rotate back to original orientation
-    let unrotated_pixel = rotate_vec(final_rotated, angle);
+    let unrotated_pixel = rotate_vec(final_rotated, -angle);
     
     // 5. Convert back to UV coordinates
     // Note: we're sampling from the ORIGINAL texture, so use orig_width/height
