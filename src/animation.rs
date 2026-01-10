@@ -384,9 +384,8 @@ pub fn animate_stretch_segment_system(
         // stretch: pixel value (how much to expand the sprite)
         let stretch_px = interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
 
-        // offset: pixel value -> UV space (currently unused in shader)
+        // offset: pixel value (position of split line, perpendicular to the line)
         let offset_px = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
-        let offset_uv = offset_px / orig_width;
 
         // smooth: 0.0-1.0 value (currently unused in shader)
         let smooth = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
@@ -422,7 +421,7 @@ pub fn animate_stretch_segment_system(
         //
         // Shader logic:
         // 1. Rotate point by +angle
-        // 2. If |rotated.x| < half_gap: sample center (rotated.x = 0)
+        // 2. If |rotated.x - offset| < half_gap: sample split line (rotated.x = offset)
         // 3. Else: shift inward by half_gap
         // 4. Rotate back by -angle
         //
@@ -439,11 +438,13 @@ pub fn animate_stretch_segment_system(
         };
 
         // Transform a vertex: rotate -> push outward -> rotate back
+        // offset_px shifts the split line position (negated to match AM direction)
         let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
             // 1. Rotate by +angle
             let (rx, ry) = rotate(vx, vy, angle_rad);
-            // 2. Push outward (opposite of shader which samples inward)
-            let pushed_x = rx + rx.signum() * half_gap;
+            // 2. Push outward relative to split line at x=-offset_px
+            let shifted_x = rx + offset_px;
+            let pushed_x = rx + shifted_x.signum() * half_gap;
             // 3. Rotate back by -angle
             rotate(pushed_x, ry, -angle_rad)
         };
@@ -479,7 +480,7 @@ pub fn animate_stretch_segment_system(
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.stretch_params =
-                Vec4::new(angle_rad, actual_stretch_px, offset_uv, smooth_width);
+                Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
             // Update original_size: xy = original texture, zw = expanded mesh
             material.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
         }

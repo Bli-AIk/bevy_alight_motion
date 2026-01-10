@@ -1,17 +1,17 @@
 // Stretch segment shader - UV domain distortion effect
 //
 // This shader implements the "拉伸片段" (Stretch Segment) effect from Alight Motion.
-// It creates a split line at a configurable angle and pushes the halves apart.
+// It creates a split line at a configurable angle and position, and pushes the halves apart.
 //
 // Implementation approach (pixel space rotation):
 // 1. Convert UV to pixel coordinates (using EXPANDED mesh dimensions from CPU)
 // 2. Rotate coordinates to align split line vertically
-// 3. Apply horizontal stretch logic in pixel space
+// 3. Apply horizontal stretch logic in pixel space (with offset for split line position)
 // 4. Rotate back
 // 5. Convert back to UV (relative to original texture)
 //
 // Uniform 0: color (vec4<f32>) - tint color
-// Uniform 1: stretch_params (vec4<f32>) - (angle_radians, stretch_px, offset_uv, smooth_width)
+// Uniform 1: stretch_params (vec4<f32>) - (angle_radians, stretch_px, offset_px, smooth_width)
 // Uniform 2: original_size (vec4<f32>) - (original_width, original_height, mesh_width, mesh_height)
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
@@ -37,7 +37,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract parameters
     let angle = stretch_params.x;         // Angle in radians
     let stretch_px = stretch_params.y;    // Stretch amount in pixels
-    let offset = stretch_params.z;        // Reserved for future offset support
+    let offset_px = stretch_params.z;     // Offset of split line in pixels (perpendicular to line)
     let smooth_width = stretch_params.w;  // Reserved for future smooth support
     
     let orig_width = original_size.x;
@@ -64,16 +64,33 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let rotated_pixel = rotate_vec(pixel_coord, angle);
     
     // 3. Apply stretch logic in pixel space
-    // half_gap was calculated above, matching CPU calculation
+    // The split line is at x = -offset_px (after rotation, negative because AM uses opposite direction)
+    // We shift our coordinate system so the split line is at x = 0
+    let shifted_x = rotated_pixel.x + offset_px;
+    
     var sample_rotated_x: f32;
     
-    if abs(rotated_pixel.x) < half_gap {
-        // Inside the gap (green region): sample the center line
-        sample_rotated_x = 0.0;
+    if abs(shifted_x) < half_gap {
+        // Inside the gap (green region): sample the split line position
+        sample_rotated_x = -offset_px;
     } else {
         // Outside the gap (red/blue regions): shift coordinates back
         // Subtract the gap width to find the original texture position
-        sample_rotated_x = rotated_pixel.x - sign(rotated_pixel.x) * half_gap;
+        // But only if we're on the "gap side" of the original image
+        // This ensures that when the split line is completely outside the image,
+        // we don't apply any shift (image just appears offset)
+        let original_sample_x = rotated_pixel.x - sign(shifted_x) * half_gap;
+        
+        // Check if we're crossing the split line by applying the shift
+        // If original_sample_x and rotated_pixel.x have different signs relative to split line,
+        // clamp to the split line position
+        let original_shifted = original_sample_x + offset_px;
+        if sign(shifted_x) != sign(original_shifted) {
+            // The shift would cross the split line, clamp to split line
+            sample_rotated_x = -offset_px;
+        } else {
+            sample_rotated_x = original_sample_x;
+        }
     }
     
     // Combine with unchanged Y coordinate
