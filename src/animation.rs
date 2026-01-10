@@ -208,11 +208,6 @@ pub fn animate_transform_system(
             interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
         };
 
-        // Get current rotation for pivot compensation (in radians)
-        let current_rotation_rad = interpolate_float(&animated.rotation, layer_time)
-            .unwrap_or(0.0)
-            .to_radians();
-
         // Interpolate location and convert from AM to Bevy coordinates
         if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
             let (mut bx, mut by) = if animated.has_parent {
@@ -229,45 +224,17 @@ pub fn animate_transform_system(
                 )
             };
 
-            // Apply pivot compensation for non-unit scale AND rotation
-            // AM transforms around (location + pivot), Bevy transforms around entity origin
-            // When both pivot and rotation exist, we must:
-            // 1. Consider relative position from transform center to location = -pivot
-            // 2. Rotate this relative position by rotation angle
-            // 3. Scale the rotated position
-            // 4. Compute the displacement from original location
+            // Apply pivot compensation for non-unit scale
+            // AM transforms around pivot point, Bevy transforms around entity origin
+            // Compensation: pos += pivot * (1 - scale)
+            // Note: pivot.y is in AM coordinates (Y-down), so we need to flip it
             if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
                 let pivot_x = pivot[0];
                 let pivot_y = pivot[1];
-                
-                // Relative position from transform center T to location L in AM coords
-                // = L - T = L - (L + pivot) = -pivot
-                let rel_x = -pivot_x;
-                let rel_y = -pivot_y;
-                
-                // Rotate the relative position (in AM coords, positive rotation is clockwise)
-                let cos_r = current_rotation_rad.cos();
-                let sin_r = current_rotation_rad.sin();
-                let rotated_x = rel_x * cos_r - rel_y * sin_r;
-                let rotated_y = rel_x * sin_r + rel_y * cos_r;
-                
-                // Scale the rotated position
-                let scaled_x = rotated_x * current_scale[0];
-                let scaled_y = rotated_y * current_scale[1];
-                
-                // The new location in AM coords = T + scaled = (L + pivot) + scaled
-                // Displacement in AM coords = new_location - L = pivot + scaled
-                let disp_am_x = pivot_x + scaled_x;
-                let disp_am_y = pivot_y + scaled_y;
-                
-                // Convert displacement to Bevy coords
-                // X stays the same, Y is negated (AM Y-down, Bevy Y-up)
-                bx += disp_am_x;
-                if animated.has_parent {
-                    by -= disp_am_y;
-                } else {
-                    by -= disp_am_y;
-                }
+                // X compensation (positive pivot_x moves transform center to the right)
+                bx += pivot_x * (1.0 - current_scale[0]);
+                // Y compensation (pivot_y in AM is Y-down, Bevy is Y-up, so negate)
+                by -= pivot_y * (1.0 - current_scale[1]);
             }
 
             // Apply effect position offsets (transform2 effect)
