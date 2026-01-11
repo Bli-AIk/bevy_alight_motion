@@ -272,12 +272,12 @@ pub fn animate_transform_system(
             bx += animated.anchor_offset.x;
             by += animated.anchor_offset.y;
 
-            // Apply embed offset compensation for layers that are children of embed scenes.
-            // Formula: target = current / fit_scale - embed_position
-            // We use inv_fit_scale (1/fit_scale) to avoid division.
+            // Apply inv_fit_scale for embed content to compensate for project scaling.
+            // With spatial decoupling, embed content renders to RTT at origin - no position offset needed.
+            // The embed_offset is only used as a flag (Vec2 != ZERO) to identify embed content.
             if animated.embed_offset != Vec2::ZERO {
-                bx = bx * animated.inv_fit_scale - animated.embed_offset.x;
-                by = by * animated.inv_fit_scale - animated.embed_offset.y;
+                bx *= animated.inv_fit_scale;
+                by *= animated.inv_fit_scale;
             }
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
@@ -954,6 +954,7 @@ fn process_pending_layers(
         to_spawn.iter().map(|&idx| pending.layers[idx].id).collect();
 
     // Helper function to count dependency depth (how many ancestors are also being spawned)
+    // For embed content, we also need to consider containing_embed_id as a dependency
     fn count_spawn_depth(
         layer_id: u64,
         layers: &[PendingLayer],
@@ -970,13 +971,22 @@ fn process_pending_layers(
             None => return 0,
         };
 
-        if layer.parent == 0 || !spawning_ids.contains(&layer.parent) {
-            // No parent being spawned this frame, depth is 0
+        // Calculate depth from parent chain
+        let parent_depth = if layer.parent == 0 || !spawning_ids.contains(&layer.parent) {
             0
         } else {
-            // Parent is also being spawned, add 1 and recurse
             1 + count_spawn_depth(layer.parent, layers, spawning_ids, visited)
-        }
+        };
+
+        // For embed content, containing_embed_id must also be spawned first
+        let embed_depth = if layer.containing_embed_id == 0 || !spawning_ids.contains(&layer.containing_embed_id) {
+            0
+        } else {
+            1 + count_spawn_depth(layer.containing_embed_id, layers, spawning_ids, visited)
+        };
+
+        // Return the maximum depth to ensure all dependencies are spawned first
+        parent_depth.max(embed_depth)
     }
 
     // Sort by depth (lower depth = spawn first)
@@ -1019,14 +1029,17 @@ fn process_pending_layers(
             fonts,
             white_pixel,
             actual_parent,
+            parent_entity, // project_entity for embed content attachment
             pending.inv_fit_scale,
+            &pending.spawned_entities,
         );
 
         bevy::log::info!(
-            "[Lifecycle] Spawning '{}' (id={}, parent={}, z={:.6}, time={}..{}ms)",
+            "[Lifecycle] Spawning '{}' (id={}, parent={}, embed={}, z={:.6}, time={}..{}ms)",
             layer.label,
             layer.id,
             layer.parent,
+            layer.containing_embed_id,
             layer.transform.translation.z,
             layer.start_time,
             layer.end_time
@@ -1083,6 +1096,11 @@ fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
 }
 
 /// Spawn a complete entity from a PendingLayer.
+/// 
+/// For spatial decoupling of embed content:
+/// - If `containing_embed_id != 0`, the entity is NOT made a Bevy child of its parent
+/// - Instead, it's attached to the project root with `AmEmbedContentMarker`
+/// - This prevents Transform inheritance from embed entity (no double rotation)
 #[allow(clippy::too_many_arguments)]
 fn spawn_layer_entity(
     commands: &mut Commands,
@@ -1095,7 +1113,9 @@ fn spawn_layer_entity(
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
     parent_entity: Entity,
+    _project_entity: Entity, // Unused for embed content (they exist in world space)
     inv_fit_scale: f32,
+    spawned_entities: &HashMap<u64, Entity>,
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
 
@@ -1251,8 +1271,38 @@ fn spawn_layer_entity(
         );
     }
 
-    // Add as child of parent
-    commands.entity(parent_entity).add_child(entity);
+    // Spatial decoupling: embed content is NOT made a Bevy child of the embed entity
+    // This prevents Transform inheritance (no double rotation/scale)
+    if layer.containing_embed_id != 0 {
+        // This is embed content - DO NOT attach to any parent entity
+        // The content exists in world space and renders to the embed's RTT camera
+        // NOTE: We explicitly do NOT call add_child() here - this is spatial decoupling!
+        // The entity remains a root-level entity in world space.
+        
+        // Look up the embed entity and add marker for lifecycle management
+        if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
+            commands.entity(entity).insert(crate::scene::AmEmbedContentMarker {
+                embed_entity,
+                embed_id: layer.containing_embed_id,
+            });
+            bevy::log::info!(
+                "[Lifecycle] Embed content '{}' (entity {:?}) exists in world space, belongs to embed {} ({:?})",
+                layer.label,
+                entity,
+                layer.containing_embed_id,
+                embed_entity
+            );
+        } else {
+            bevy::log::warn!(
+                "[Lifecycle] Embed {} not found for content '{}', marker not added",
+                layer.containing_embed_id,
+                layer.label
+            );
+        }
+    } else {
+        // Regular layer - add as child of parent
+        commands.entity(parent_entity).add_child(entity);
+    }
 
     entity
 }

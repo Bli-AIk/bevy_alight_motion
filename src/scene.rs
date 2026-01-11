@@ -14,6 +14,25 @@ use crate::schema::{
 };
 use crate::sdf::AmSdfShaders;
 
+/// Component to track embed scene's content entities.
+/// Content entities are spatially decoupled (not Bevy children) but logically belong to this embed.
+/// This enables proper cleanup when the embed is despawned.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmEmbedContent {
+    /// Entity IDs of content layers belonging to this embed.
+    pub content_entities: Vec<Entity>,
+}
+
+/// Component marking an entity as content of an embed scene.
+/// Used for lifecycle management - when the parent embed is despawned, these are too.
+#[derive(Component, Debug, Clone)]
+pub struct AmEmbedContentMarker {
+    /// The embed entity this content belongs to.
+    pub embed_entity: Entity,
+    /// The embed's layer ID (for lookup in pending layers).
+    pub embed_id: u64,
+}
+
 /// Component bundle for an AM project root.
 #[derive(Bundle)]
 pub struct AmProjectBundle {
@@ -166,6 +185,9 @@ pub struct PendingLayer {
     pub mask_info: Option<AmMaskInfo>,
     /// For EmbedScene: internal scene dimensions for RTT clipping
     pub embed_scene_size: Option<(f32, f32)>,
+    /// The embed layer ID this content belongs to (0 = not in embed, uses spatial decoupling).
+    /// When set, this layer is rendered to the embed's RTT and not parented to embed entity.
+    pub containing_embed_id: u64,
 }
 
 /// Configuration for scene building.
@@ -1625,12 +1647,19 @@ pub fn collect_pending_layers(
 
 /// Flatten a tree of PendingLayers into a single list.
 /// Children of embed scenes are extracted and their parent is set to the embed's ID.
+/// For spatial decoupling, children of embeds have their `containing_embed_id` set.
 fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
+    flatten_pending_layers_inner(layers, 0)
+}
+
+/// Inner recursive function with containing_embed tracking.
+fn flatten_pending_layers_inner(layers: Vec<PendingLayer>, current_embed_id: u64) -> Vec<PendingLayer> {
     let mut result = Vec::new();
 
     for layer in layers {
-        let embed_id = layer.id;
+        let layer_id = layer.id;
         let children = layer.children.clone();
+        let is_embed = matches!(layer.spec, AmLayerSpec::EmbedScene);
 
         // Get embed's Bevy position for child coordinate adjustment
         let embed_bevy_pos = layer.transform.translation;
@@ -1638,20 +1667,27 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
         layer_without_children.children = Vec::new();
+        // Set containing_embed_id if we're inside an embed
+        layer_without_children.containing_embed_id = current_embed_id;
         result.push(layer_without_children);
 
         // Recursively flatten children and update their parent reference
         // We need to remap IDs to make them unique per embed instance
         if !children.is_empty() {
-            let flattened_children = flatten_pending_layers(children);
+            // Determine the embed ID for children:
+            // - If this layer IS an embed, children belong to it
+            // - Otherwise, inherit the current embed context
+            let child_embed_id = if is_embed { layer_id } else { current_embed_id };
+            
+            let flattened_children = flatten_pending_layers_inner(children, child_embed_id);
 
             // Build a map of old ID -> new ID for this embed's children
             let mut id_remap: std::collections::HashMap<u64, u64> =
                 std::collections::HashMap::new();
             for child in &flattened_children {
-                // Create unique ID by combining embed_id and child_id
+                // Create unique ID by combining layer_id and child_id
                 // Use wrapping operations to handle large IDs
-                let unique_id = embed_id.wrapping_mul(1_000_000).wrapping_add(child.id);
+                let unique_id = layer_id.wrapping_mul(1_000_000).wrapping_add(child.id);
                 id_remap.insert(child.id, unique_id);
             }
 
@@ -1663,22 +1699,33 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
 
                 // Remap the parent reference and adjust coordinates
                 if child.parent == 0 {
-                    child.parent = embed_id;
+                    child.parent = layer_id;
 
-                    // Adjust child coordinates to compensate for embed's position.
-                    // When a child becomes a Bevy child of the embed entity, its local
-                    // coordinates are relative to the embed entity.
+                    // For spatial decoupling, embed children are NOT Bevy children of embed.
+                    // They render directly to the RTT camera at origin (0,0).
+                    // The child's coordinates were calculated relative to inner canvas center,
+                    // which is exactly where the RTT camera is positioned - no adjustment needed.
                     //
-                    // The child's coordinates were calculated relative to inner canvas center.
-                    // But as a Bevy child, they need to be relative to embed entity's origin.
-                    // Since embed is at embed_bevy_pos, we subtract it from child's coordinates.
-                    child.transform.translation.x -= embed_bevy_pos.x;
-                    child.transform.translation.y -= embed_bevy_pos.y;
-
-                    // Store embed offset for animation system to use
-                    child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
+                    // We still set embed_offset and inv_fit_scale for size compensation:
+                    // - inv_fit_scale: compensate for project fit scaling on sprite sizes
+                    // - embed_offset: used to identify this as embed content (Vec2 != ZERO)
+                    //
+                    // NOTE: We no longer subtract embed_bevy_pos from coordinates since content
+                    // renders directly at origin for the RTT camera.
+                    if is_embed {
+                        // Store embed offset to identify as embed content (triggers inv_fit_scale use)
+                        // The actual value is not used for coordinate adjustment anymore
+                        child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
+                    }
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
                     child.parent = new_parent_id;
+                }
+
+                // Remap containing_embed_id if it was set to a child ID
+                if child.containing_embed_id != 0 {
+                    if let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id) {
+                        child.containing_embed_id = new_embed_id;
+                    }
                 }
 
                 // Also update the layer_id in animated component
@@ -1909,6 +1956,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         },
         mask_info: None,
         embed_scene_size: None,
+        containing_embed_id: 0,
     })
 }
 
@@ -1975,6 +2023,7 @@ fn collect_null(
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
         embed_scene_size: None,
+        containing_embed_id: 0,
     })
 }
 
@@ -2069,6 +2118,7 @@ fn collect_embed_scene(
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
+        containing_embed_id: 0,
     }
 }
 
@@ -2426,6 +2476,7 @@ fn collect_text(
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
         embed_scene_size: None,
+        containing_embed_id: 0,
     })
 }
 
@@ -2504,6 +2555,7 @@ fn collect_image(
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
         embed_scene_size: None,
+        containing_embed_id: 0,
     })
 }
 

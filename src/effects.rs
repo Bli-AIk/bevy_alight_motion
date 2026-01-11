@@ -34,6 +34,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
+use std::collections::HashMap;
 
 // ============================================================================
 // Effect Parameters
@@ -419,6 +420,7 @@ impl Plugin for EffectRenderPlugin {
                     setup_embed_scene_rtt_system,
                     propagate_render_layers_system,
                     cleanup_embed_scene_rtt_system,
+                    cleanup_embed_content_system,
                 ),
             );
     }
@@ -590,53 +592,91 @@ pub fn setup_embed_scene_rtt_system(
     }
 }
 
-/// System to propagate RenderLayers to all children of embedScenes with RTT.
-/// This ensures children render to the RTT camera instead of main camera.
+/// System to propagate RenderLayers to embed content entities.
+/// 
+/// With spatial decoupling, embed content entities are NOT Bevy children of the embed entity.
+/// Instead, they have `AmEmbedContentMarker` component that identifies which embed they belong to.
+/// This system assigns the correct RenderLayers so content renders to the embed's RTT camera.
 pub fn propagate_render_layers_system(
     mut commands: Commands,
     embed_query: Query<(Entity, &EmbedSceneRtt)>,
-    children_query: Query<&Children>,
+    content_query: Query<(Entity, &crate::scene::AmEmbedContentMarker), Without<EmbedSceneRtt>>,
     render_layers_query: Query<&RenderLayers>,
 ) {
-    for (embed_entity, rtt) in embed_query.iter() {
-        let target_layer = RenderLayers::layer(rtt.render_layer as usize);
-        propagate_render_layers_recursive(
-            &mut commands,
-            embed_entity,
-            &target_layer,
-            &children_query,
-            &render_layers_query,
-        );
-    }
-}
+    // Build a map of embed entity -> render layer
+    let embed_layers: HashMap<Entity, u8> = embed_query
+        .iter()
+        .map(|(entity, rtt)| (entity, rtt.render_layer))
+        .collect();
 
-fn propagate_render_layers_recursive(
-    commands: &mut Commands,
-    entity: Entity,
-    target_layer: &RenderLayers,
-    children_query: &Query<&Children>,
-    render_layers_query: &Query<&RenderLayers>,
-) {
-    if let Ok(children) = children_query.get(entity) {
-        for child in children.iter() {
-            // Check if child already has the correct RenderLayers
-            let needs_update = match render_layers_query.get(child) {
-                Ok(current) => current != target_layer,
-                Err(_) => true, // No RenderLayers component, needs adding
+    // Debug: Log embed and content counts
+    static mut FRAME_COUNT: u32 = 0;
+    unsafe {
+        FRAME_COUNT += 1;
+        if FRAME_COUNT % 300 == 1 {
+            bevy::log::info!(
+                "[RenderLayers] embeds with RTT: {}, content entities: {}",
+                embed_layers.len(),
+                content_query.iter().count()
+            );
+        }
+    }
+
+    // Assign RenderLayers to all embed content based on their marker
+    for (content_entity, marker) in content_query.iter() {
+        if let Some(&render_layer) = embed_layers.get(&marker.embed_entity) {
+            let target_layer = RenderLayers::layer(render_layer as usize);
+            
+            // Check if already has correct RenderLayers
+            let needs_update = match render_layers_query.get(content_entity) {
+                Ok(current) => *current != target_layer,
+                Err(_) => true,
             };
 
             if needs_update {
-                commands.entity(child).insert(target_layer.clone());
+                commands.entity(content_entity).insert(target_layer);
+                bevy::log::info!(
+                    "[RenderLayers] Assigned layer {} to embed content {:?} (embed {:?})",
+                    render_layer,
+                    content_entity,
+                    marker.embed_entity
+                );
             }
+        } else {
+            // Embed not found in query - may not have EmbedSceneRtt yet
+            unsafe {
+                if FRAME_COUNT % 300 == 1 {
+                    bevy::log::warn!(
+                        "[RenderLayers] Content {:?} belongs to embed {:?} which has no RTT yet",
+                        content_entity,
+                        marker.embed_entity
+                    );
+                }
+            }
+        }
+    }
+}
 
-            // Recurse to grandchildren
-            propagate_render_layers_recursive(
-                commands,
-                child,
-                target_layer,
-                children_query,
-                render_layers_query,
+/// System to clean up embed content when embeds are despawned.
+/// Since content entities are spatially decoupled (not Bevy children), they won't be
+/// automatically despawned when the embed is despawned. This system handles cleanup.
+pub fn cleanup_embed_content_system(
+    mut commands: Commands,
+    content_query: Query<(Entity, &crate::scene::AmEmbedContentMarker)>,
+    embed_exists_query: Query<Entity>,
+) {
+    // Find content whose embed entity no longer exists at all
+    // Note: We check if the entity exists, not if it has EmbedSceneRtt
+    // This is because EmbedSceneRtt might be added asynchronously
+    for (content_entity, marker) in content_query.iter() {
+        if embed_exists_query.get(marker.embed_entity).is_err() {
+            // Embed entity no longer exists (despawned), despawn content
+            bevy::log::debug!(
+                "Despawning orphaned embed content {:?} (embed entity {:?} no longer exists)",
+                content_entity,
+                marker.embed_entity
             );
+            commands.entity(content_entity).despawn();
         }
     }
 }
