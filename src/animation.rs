@@ -25,6 +25,15 @@ use bevy::prelude::*;
 use crate::scene::AmLayerMarker;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe, Easing};
 
+/// DEBUG: 拉伸效果乘数，用于调试编组内图片的拉伸计算
+/// 当前问题："编组 2 Copy" 内的图片拉伸效果过大
+/// 调整此值直到编组内图片的拉伸效果与AM一致
+/// 然后报告该值，用于推导正确的计算公式
+/// 
+/// 默认值 1.0 = 当前行为（可能过大）
+/// 尝试 0.5, 0.6, 0.7 等值来减小拉伸
+
+
 /// Component marking an entity as part of an AM animation.
 ///
 /// 标记实体为 AM 动画一部分的组件。
@@ -2064,6 +2073,7 @@ pub fn animate_unified_effect_system(
         let rot_sin = transform_rotation_rad.sin().abs();
         let world_width = orig_width * rot_cos + orig_height * rot_sin;
         let world_height = orig_width * rot_sin + orig_height * rot_cos;
+        let _ = world_height; // Reserved for future use
 
         // Check which effects are active
         let has_wipe = animated.wipe_end.value != Some(1.0)
@@ -2113,17 +2123,30 @@ pub fn animate_unified_effect_system(
                 let smooth_width = smooth * 0.3;
 
                 // Calculate mesh expansion for stretch segment effect
-                // 
+                //
                 // For rotated elements, we use a weighted average of world_width and orig_width
                 // to correctly scale the stretch amount:
                 // - base_size = 0.8 * world_width + 0.2 * orig_width
-                // 
+                //
                 // This formula was derived from black-box testing:
                 // - Non-rotated: world_width = orig_width, so base_size = orig_width (unchanged)
                 // - Rotated 90°: world_width = orig_height, gives correct stretch reduction (~0.89x)
-                let base_size = 0.8 * world_width + 0.2 * orig_width;
+                //
+                // Special case: when size.y is negative (AM uses this for certain flip/transform
+                // operations), the stretch calculation needs to use the diagonal length instead.
+                // This was discovered through black-box testing: negative size.y elements need
+                // base_size = sqrt(orig_width^2 + orig_height^2) to match AM's stretch behavior.
+                let has_negative_size_y = sprite_size[1] < 0.0;
+                let base_size = if has_negative_size_y {
+                    // For negative height, use diagonal length as base
+                    (orig_width * orig_width + orig_height * orig_height).sqrt()
+                } else {
+                    // Normal case: weighted average formula
+                    0.8 * world_width + 0.2 * orig_width
+                };
                 let base_divisor = base_size / 5.76;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
+
                 let actual_stretch_px = orig_width * stretch_factor - orig_width;
 
                 let angle_factor = 1.0 - 0.25 * angle_rad.sin().abs();
