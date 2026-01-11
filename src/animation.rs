@@ -2050,8 +2050,9 @@ pub fn animate_unified_effect_system(
         let sprite_size = interpolate_vec2(&animated.size, layer_time).unwrap_or([100.0, 100.0]);
         let scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
         // Actual rendered size = base size * scale
-        let orig_width = (sprite_size[0] * scale[0]).max(1.0);
-        let orig_height = (sprite_size[1] * scale[1]).max(1.0);
+        // Use abs() because negative size in AM behaves same as positive (no flip)
+        let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
+        let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
 
         // Get transform rotation angle for effect compensation
         // In Bevy, rotation is stored as Quat, extract Z rotation
