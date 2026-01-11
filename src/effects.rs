@@ -486,6 +486,8 @@ pub struct EmbedSceneRtt {
 pub struct EmbedSceneRttCamera {
     /// Reference to parent embedScene entity
     pub embed_entity: Entity,
+    /// The render layer index (1-31) - stored here for cleanup when embed is despawned
+    pub render_layer: u8,
 }
 
 /// Marker component indicating an entity needs RTT setup
@@ -545,6 +547,7 @@ pub fn setup_embed_scene_rtt_system(
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
                 EmbedSceneRttCamera {
                     embed_entity: entity,
+                    render_layer, // Store for cleanup
                 },
                 Camera2d,
                 Camera {
@@ -696,15 +699,13 @@ pub fn cleanup_embed_content_system(
 /// System to clean up RTT resources when embedScenes are despawned.
 pub fn cleanup_embed_scene_rtt_system(
     mut commands: Commands,
-    _layer_pool: ResMut<EmbedSceneRenderLayerPool>,
+    mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
     mut removed: RemovedComponents<EmbedSceneRtt>,
     rtt_query: Query<&EmbedSceneRtt>,
     camera_query: Query<(Entity, &EmbedSceneRttCamera)>,
 ) {
     for entity in removed.read() {
-        // Try to get the RTT data before it was removed
-        // Note: This won't work since the component is already removed
-        // We need to find and clean up orphaned cameras instead
+        // Log that RTT was removed - we'll clean up the camera in the next part
         bevy::log::debug!("EmbedSceneRtt removed from {:?}", entity);
     }
 
@@ -712,14 +713,15 @@ pub fn cleanup_embed_scene_rtt_system(
     for (camera_entity, camera_marker) in camera_query.iter() {
         let should_cleanup = rtt_query.get(camera_marker.embed_entity).is_err();
         if should_cleanup {
-            // TODO: Release render layer back to pool
-            // We need to extract it from camera's RenderLayers
-            commands.entity(camera_entity).despawn();
+            // Release render layer back to pool
+            layer_pool.release(camera_marker.render_layer);
             bevy::log::debug!(
-                "Cleaned up orphaned RTT camera {:?} for embed {:?}",
+                "Released render layer {} from orphaned RTT camera {:?} for embed {:?}",
+                camera_marker.render_layer,
                 camera_entity,
                 camera_marker.embed_entity
             );
+            commands.entity(camera_entity).despawn();
         }
     }
 }
