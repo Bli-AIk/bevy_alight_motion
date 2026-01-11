@@ -2112,12 +2112,16 @@ pub fn animate_unified_effect_system(
                 let smooth = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
                 let smooth_width = smooth * 0.3;
 
-                // Calculate mesh expansion (same logic as animate_stretch_segment_system)
-                // Use geometric mean of local width and world width for base_divisor
-                // This correctly handles both rotated and non-rotated elements:
-                // - Non-rotated: sqrt(orig_w * orig_w) = orig_w (ratio = 1.0)
-                // - Rotated 90°: sqrt(orig_w * orig_h) gives ratio ≈ 0.8 as tested
-                let base_size = (orig_width * world_width).sqrt();
+                // Calculate mesh expansion for stretch segment effect
+                // 
+                // For rotated elements, we use a weighted average of world_width and orig_width
+                // to correctly scale the stretch amount:
+                // - base_size = 0.8 * world_width + 0.2 * orig_width
+                // 
+                // This formula was derived from black-box testing:
+                // - Non-rotated: world_width = orig_width, so base_size = orig_width (unchanged)
+                // - Rotated 90°: world_width = orig_height, gives correct stretch reduction (~0.89x)
+                let base_size = 0.8 * world_width + 0.2 * orig_width;
                 let base_divisor = base_size / 5.76;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
                 let actual_stretch_px = orig_width * stretch_factor - orig_width;
