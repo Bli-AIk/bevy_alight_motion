@@ -2113,9 +2113,12 @@ pub fn animate_unified_effect_system(
                 let smooth_width = smooth * 0.3;
 
                 // Calculate mesh expansion (same logic as animate_stretch_segment_system)
-                // Use world_width for base_divisor calculation because AM's stretch effect
-                // operates in world space, not local space
-                let base_divisor = world_width / 5.76;
+                // Use geometric mean of local width and world width for base_divisor
+                // This correctly handles both rotated and non-rotated elements:
+                // - Non-rotated: sqrt(orig_w * orig_w) = orig_w (ratio = 1.0)
+                // - Rotated 90°: sqrt(orig_w * orig_h) gives ratio ≈ 0.8 as tested
+                let base_size = (orig_width * world_width).sqrt();
+                let base_divisor = base_size / 5.76;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
                 let actual_stretch_px = orig_width * stretch_factor - orig_width;
 
