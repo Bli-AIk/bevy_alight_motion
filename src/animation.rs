@@ -92,6 +92,10 @@ pub struct AmAnimated {
     /// When this layer is a child of an embed scene, this stores the embed's
     /// Bevy position so the animation system can compensate for it.
     pub embed_offset: Vec2,
+    /// Inverse fit scale for embed children coordinate adjustment.
+    /// When the project is scaled to fit window, embed children need their coordinates
+    /// scaled by 1/fit_scale to compensate for the root scaling.
+    pub inv_fit_scale: f32,
 }
 
 /// Resource to control animation playback.
@@ -269,10 +273,12 @@ pub fn animate_transform_system(
             by += animated.anchor_offset.y;
             
             // Apply embed offset compensation for layers that are children of embed scenes.
-            // This adjusts coordinates so that children are positioned correctly relative
-            // to their embed parent entity.
-            bx -= animated.embed_offset.x;
-            by -= animated.embed_offset.y;
+            // Formula: target = current / fit_scale - embed_position
+            // We use inv_fit_scale (1/fit_scale) to avoid division.
+            if animated.embed_offset != Vec2::ZERO {
+                bx = bx * animated.inv_fit_scale - animated.embed_offset.x;
+                by = by * animated.inv_fit_scale - animated.embed_offset.y;
+            }
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
@@ -1011,6 +1017,7 @@ fn process_pending_layers(
             fonts,
             white_pixel,
             actual_parent,
+            pending.inv_fit_scale,
         );
 
         bevy::log::info!(
@@ -1086,6 +1093,7 @@ fn spawn_layer_entity(
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
     parent_entity: Entity,
+    inv_fit_scale: f32,
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
 
@@ -1117,6 +1125,12 @@ fn spawn_layer_entity(
         layer.transform
     };
 
+    // Clone animated component and set inv_fit_scale for embed children
+    let mut animated = layer.animated.clone();
+    if animated.embed_offset != Vec2::ZERO {
+        animated.inv_fit_scale = inv_fit_scale;
+    }
+
     // Create base entity with common components
     let entity = commands
         .spawn((
@@ -1125,7 +1139,7 @@ fn spawn_layer_entity(
                 id: layer.id,
                 label: layer.label.clone(),
             },
-            layer.animated.clone(),
+            animated,
             layer.spec.clone(),
             transform_to_use,
             GlobalTransform::default(),

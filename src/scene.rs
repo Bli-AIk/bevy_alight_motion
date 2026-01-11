@@ -48,6 +48,10 @@ pub struct AmPendingLayers {
     pub layers: Vec<PendingLayer>,
     /// Mapping from layer ID to entity (for spawned layers).
     pub spawned_entities: HashMap<u64, Entity>,
+    /// Inverse fit scale for embed children coordinate adjustment.
+    /// When the project is scaled to fit window, embed children need their coordinates
+    /// scaled by 1/fit_scale to compensate for the root scaling.
+    pub inv_fit_scale: f32,
 }
 
 /// Component marking an AM layer entity.
@@ -547,6 +551,7 @@ fn spawn_shape(
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
+                inv_fit_scale: 1.0,
             },
             layer_spec,
             transform,
@@ -628,6 +633,7 @@ fn spawn_null(
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
+                inv_fit_scale: 1.0,
             },
             AmLayerSpec::Null,
             transform,
@@ -726,6 +732,7 @@ fn spawn_embed_scene(
                 stretch_smooth: AmAnimatedFloat::default(),
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
+                inv_fit_scale: 1.0,
             },
             AmLayerSpec::EmbedScene,
             // Mark for RTT setup (will enable clipping to scene bounds)
@@ -857,6 +864,7 @@ fn spawn_image(
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
+                inv_fit_scale: 1.0,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -1062,7 +1070,8 @@ fn spawn_text(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         transform,
         GlobalTransform::default(),
@@ -1887,7 +1896,8 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         spec,
         z_index: z,
@@ -1956,7 +1966,8 @@ fn collect_null(
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -2049,7 +2060,8 @@ fn collect_embed_scene(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2399,7 +2411,8 @@ fn collect_text(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2477,7 +2490,8 @@ fn collect_image(
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
+            embed_offset: Vec2::ZERO,
+            inv_fit_scale: 1.0,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

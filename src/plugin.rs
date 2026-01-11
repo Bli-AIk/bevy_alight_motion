@@ -156,7 +156,8 @@ fn spawn_loaded_projects_system(
             // Update playback duration
             playback.total_time_ms = project.scene.total_time as f32;
 
-            // Apply resolution scaling
+            // Apply resolution scaling and compute inverse scale for embed children
+            let mut fit_scale = 1.0f32;
             match *resolution_config {
                 AmProjectResolution::None => {
                     // Default scale 1.0
@@ -165,11 +166,11 @@ fn spawn_loaded_projects_system(
                     if let Some(window) = window_query.iter().next() {
                         let s_x = window.width() / (project.scene.width as f32);
                         let s_y = window.height() / (project.scene.height as f32);
-                        let scale = s_x.min(s_y);
-                        transform.scale = Vec3::splat(scale);
+                        fit_scale = s_x.min(s_y);
+                        transform.scale = Vec3::splat(fit_scale);
                         bevy::log::info!(
                             "Scaled project to fit window: scale={:.4} (win={}x{})",
-                            scale,
+                            fit_scale,
                             window.width(),
                             window.height()
                         );
@@ -179,32 +180,32 @@ fn spawn_loaded_projects_system(
                     if let Some(window) = window_query.iter().next() {
                         let s_x = window.width() / (project.scene.width as f32);
                         let s_y = window.height() / (project.scene.height as f32);
-                        let scale = s_x.max(s_y);
-                        transform.scale = Vec3::splat(scale);
+                        fit_scale = s_x.max(s_y);
+                        transform.scale = Vec3::splat(fit_scale);
                         bevy::log::info!(
                             "Scaled project to cover window: scale={:.4} (win={}x{})",
-                            scale,
+                            fit_scale,
                             window.width(),
                             window.height()
                         );
                     }
                 }
                 AmProjectResolution::FixedWidth(target_width) => {
-                    let scale = target_width / (project.scene.width as f32);
-                    transform.scale = Vec3::splat(scale);
+                    fit_scale = target_width / (project.scene.width as f32);
+                    transform.scale = Vec3::splat(fit_scale);
                     bevy::log::info!(
                         "Scaled project to fixed width {}: scale={:.4}",
                         target_width,
-                        scale
+                        fit_scale
                     );
                 }
                 AmProjectResolution::FixedHeight(target_height) => {
-                    let scale = target_height / (project.scene.height as f32);
-                    transform.scale = Vec3::splat(scale);
+                    fit_scale = target_height / (project.scene.height as f32);
+                    transform.scale = Vec3::splat(fit_scale);
                     bevy::log::info!(
                         "Scaled project to fixed height {}: scale={:.4}",
                         target_height,
-                        scale
+                        fit_scale
                     );
                 }
             }
@@ -230,11 +231,13 @@ fn spawn_loaded_projects_system(
             );
 
             // Add the pending layers component to the project root
+            // Store inverse fit scale for embed children coordinate adjustment
             commands
                 .entity(entity)
                 .insert(crate::scene::AmPendingLayers {
                     layers: pending_layers,
                     spawned_entities: std::collections::HashMap::new(),
+                    inv_fit_scale: 1.0 / fit_scale,
                 });
 
             root.spawned = true;
