@@ -546,6 +546,7 @@ fn spawn_shape(
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
             },
             layer_spec,
             transform,
@@ -626,6 +627,7 @@ fn spawn_null(
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
             },
             AmLayerSpec::Null,
             transform,
@@ -723,6 +725,7 @@ fn spawn_embed_scene(
                 stretch_offset: AmAnimatedFloat::default(),
                 stretch_smooth: AmAnimatedFloat::default(),
                 speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
             },
             AmLayerSpec::EmbedScene,
             // Mark for RTT setup (will enable clipping to scene bounds)
@@ -853,6 +856,7 @@ fn spawn_image(
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
                 speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -1058,6 +1062,7 @@ fn spawn_text(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         transform,
         GlobalTransform::default(),
@@ -1617,6 +1622,9 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
     for layer in layers {
         let embed_id = layer.id;
         let children = layer.children.clone();
+        
+        // Get embed's Bevy position for child coordinate adjustment
+        let embed_bevy_pos = layer.transform.translation;
 
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
@@ -1644,9 +1652,22 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
                 // Remap the child's ID
                 child.id = *id_remap.get(&old_id).unwrap_or(&old_id);
 
-                // Remap the parent reference
+                // Remap the parent reference and adjust coordinates
                 if child.parent == 0 {
                     child.parent = embed_id;
+                    
+                    // Adjust child coordinates to compensate for embed's position.
+                    // When a child becomes a Bevy child of the embed entity, its local
+                    // coordinates are relative to the embed entity. 
+                    //
+                    // The child's coordinates were calculated relative to inner canvas center.
+                    // But as a Bevy child, they need to be relative to embed entity's origin.
+                    // Since embed is at embed_bevy_pos, we subtract it from child's coordinates.
+                    child.transform.translation.x -= embed_bevy_pos.x;
+                    child.transform.translation.y -= embed_bevy_pos.y;
+                    
+                    // Store embed offset for animation system to use
+                    child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
                     child.parent = new_parent_id;
                 }
@@ -1866,6 +1887,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         spec,
         z_index: z,
@@ -1934,6 +1956,7 @@ fn collect_null(
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -2026,6 +2049,7 @@ fn collect_embed_scene(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2375,6 +2399,7 @@ fn collect_text(
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2452,6 +2477,7 @@ fn collect_image(
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
             speed_multiplier: config.speed_multiplier,
+                embed_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

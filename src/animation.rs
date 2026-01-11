@@ -88,6 +88,10 @@ pub struct AmAnimated {
     /// Speed multiplier from parent embed scenes.
     /// Local time = (global_time - time_offset) * speed_multiplier
     pub speed_multiplier: f32,
+    /// Embed parent offset (Bevy coords) for coordinate adjustment.
+    /// When this layer is a child of an embed scene, this stores the embed's
+    /// Bevy position so the animation system can compensate for it.
+    pub embed_offset: Vec2,
 }
 
 /// Resource to control animation playback.
@@ -263,6 +267,12 @@ pub fn animate_transform_system(
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
             bx += animated.anchor_offset.x;
             by += animated.anchor_offset.y;
+            
+            // Apply embed offset compensation for layers that are children of embed scenes.
+            // This adjusts coordinates so that children are positioned correctly relative
+            // to their embed parent entity.
+            bx -= animated.embed_offset.x;
+            by -= animated.embed_offset.y;
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
