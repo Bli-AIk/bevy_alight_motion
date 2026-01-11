@@ -603,7 +603,9 @@ pub fn animate_size_system(
 
         // Interpolate size (full dimensions for Sprite)
         if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
-            sprite.custom_size = Some(Vec2::new(size[0].abs(), size[1].abs()));
+            // Apply inv_fit_scale for embed children to compensate for fit_scale
+            let scale = animated.inv_fit_scale;
+            sprite.custom_size = Some(Vec2::new(size[0].abs() * scale, size[1].abs() * scale));
         }
     }
 }
@@ -1210,6 +1212,16 @@ fn spawn_layer_entity(
             None
         };
 
+        // Calculate size scale factor for embed children
+        // Embed children need to be scaled up by inv_fit_scale to compensate for
+        // the root scene's fit_scale. This is because RTT renders at original size
+        // but the final sprite is scaled down by fit_scale.
+        let size_scale = if layer.animated.embed_offset != Vec2::ZERO {
+            inv_fit_scale
+        } else {
+            1.0
+        };
+
         add_visual_components(
             commands,
             shaders,
@@ -1228,6 +1240,7 @@ fn spawn_layer_entity(
             initial_wipe,
             initial_stretch,
             layer.embed_scene_size,
+            size_scale,
         );
     } else {
         bevy::log::info!(
@@ -1264,6 +1277,7 @@ fn add_visual_components(
     wipe_params: Option<Vec4>,
     stretch_params: Option<Vec4>,
     embed_scene_size: Option<(f32, f32)>,
+    size_scale: f32,
 ) {
     use crate::masked_sprite::{UnifiedEffectMaterial, UnifiedEffectMarker};
     use bevy::mesh::Mesh2d;
@@ -1379,9 +1393,13 @@ fn add_visual_components(
             height,
             anchor,
         } => {
+            // Apply size_scale for embed children to compensate for fit_scale
+            let base_width = *width * size_scale;
+            let base_height = *height * size_scale;
+            
             // For effects, use scaled dimensions (scale is applied to mesh, not transform)
-            let scaled_width = *width * initial_scale.0;
-            let scaled_height = *height * initial_scale.1;
+            let scaled_width = base_width * initial_scale.0;
+            let scaled_height = base_height * initial_scale.1;
             
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
@@ -1411,8 +1429,8 @@ fn add_visual_components(
                         bevy::log::info!(
                             "[Visual] Spawned sprite '{}' with unified effect: base_size=({:.1},{:.1}), scaled=({:.1},{:.1}), mask={}, wipe={}, stretch={}",
                             label,
-                            *width,
-                            *height,
+                            base_width,
+                            base_height,
                             scaled_width,
                             scaled_height,
                             needs_mask,
@@ -1425,7 +1443,7 @@ fn add_visual_components(
                             Sprite {
                                 image: handle.clone(),
                                 color: Color::WHITE,
-                                custom_size: Some(Vec2::new(*width, *height)),
+                                custom_size: Some(Vec2::new(base_width, base_height)),
                                 ..default()
                             },
                             *anchor,
@@ -1468,7 +1486,7 @@ fn add_visual_components(
                         Sprite {
                             image: wp.clone(),
                             color,
-                            custom_size: Some(Vec2::new(*width, *height)),
+                            custom_size: Some(Vec2::new(base_width, base_height)),
                             ..default()
                         },
                         *anchor,
@@ -1515,9 +1533,13 @@ fn add_visual_components(
             height,
             anchor,
         } => {
+            // Apply size_scale for embed children to compensate for fit_scale
+            let base_width = *width * size_scale;
+            let base_height = *height * size_scale;
+            
             // For effects, use scaled dimensions
-            let scaled_width = *width * initial_scale.0;
-            let scaled_height = *height * initial_scale.1;
+            let scaled_width = base_width * initial_scale.0;
+            let scaled_height = base_height * initial_scale.1;
             
             if let Some(handle) = images.get(image_uri) {
                 if needs_any_effect {
@@ -1552,7 +1574,7 @@ fn add_visual_components(
                         Sprite {
                             image: handle.clone(),
                             color: Color::WHITE,
-                            custom_size: Some(Vec2::new(*width, *height)),
+                            custom_size: Some(Vec2::new(base_width, base_height)),
                             ..default()
                         },
                         *anchor,
