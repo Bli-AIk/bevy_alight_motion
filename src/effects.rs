@@ -559,6 +559,18 @@ pub fn setup_embed_scene_rtt_system(
                 Transform::from_xyz(0.0, 0.0, 1000.0),
             ))
             .id();
+        
+        // Configure orthographic projection to match embed's internal scene size
+        // This ensures content renders at correct positions relative to scene center
+        commands.entity(camera_entity).insert(Projection::Orthographic(OrthographicProjection {
+            // Scale factor to fit content - default is 1.0 which means 1 unit = 1 pixel
+            scale: 1.0,
+            // Near/far planes
+            near: -1000.0,
+            far: 1000.0,
+            // Viewport origin at center (default for Camera2d)
+            ..OrthographicProjection::default_2d()
+        }));
 
         // Add EmbedSceneRtt component and remove the marker
         commands

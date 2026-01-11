@@ -272,13 +272,9 @@ pub fn animate_transform_system(
             bx += animated.anchor_offset.x;
             by += animated.anchor_offset.y;
 
-            // Apply inv_fit_scale for embed content to compensate for project scaling.
-            // With spatial decoupling, embed content renders to RTT at origin - no position offset needed.
-            // The embed_offset is only used as a flag (Vec2 != ZERO) to identify embed content.
-            if animated.embed_offset != Vec2::ZERO {
-                bx *= animated.inv_fit_scale;
-                by *= animated.inv_fit_scale;
-            }
+            // For embed content: coordinates are already in embed's internal canvas space
+            // They render to RTT camera at origin - no scaling needed for position
+            // The inv_fit_scale is only used for sprite SIZE compensation, not position
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
