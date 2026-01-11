@@ -1,5 +1,9 @@
 # bevy_alight_motion 已实现功能文档
 
+> **参考目标版本**：此仓库的 AM 工程与调试参考目标版本均为 **Alemon-Android Preview7.5 4.3.4.3019 (43475)**。
+>
+> Alemon 是 AM 的社区版本，可能会与官方版本存在差异，请注意。
+
 本文档详细说明 `bevy_alight_motion` 目前已实现的 Alight Motion (AM) 功能。
 
 如果您发现功能缺失或有误，请提交 Issue 或 PR。
@@ -24,6 +28,27 @@
 | **音频**   | `<audio>`      | 仅解析，暂不播放            | ❌  | -        |
 | **相机**   | `<camera>`     | 仅解析，暂不支持相机效果        | ❌  | -        |
 | **视频**   | `<video>`      | 仅解析，暂不支持视频播放        | ❌  | -        |
+
+### 嵌入场景（编组）分辨率支持
+
+编组 (`<embedScene>`) 支持自定义分辨率，内部场景的 `width` 和 `height` 属性定义了编组的内部画布尺寸。超出该尺寸的内部图层内容将被裁剪。
+
+**实现特性**：
+
+- 支持不同分辨率的编组（如 500x500、1600x900 等）
+- 编组分辨率限制在本库中始终正确生效，无论编组是否有旋转/缩放变换
+
+**AM 已知 Bug 说明**：
+
+在 AM 中发现，编组分辨率原本应该限制住内部图层的显示范围。但是如果对编组使用旋转变换，在接近 45
+度的倍数时，这个限制范围会被错误地扩大为一个正方形区域。
+
+此 Bug 在以下版本中均得到了复现：
+
+- Alemon-Android Preview7.5 4.3.4.3019 (43475)
+- Alemon 提供的 Alight Motion 类原生-Android 5.0.249.1002172 MIX3 (1002172)
+
+我们认为这是 AM 自身的 Bug，本库不刻意还原该行为。本库的实现是：**无论编组旋转与否，分辨率限制都正确生效**。
 
 ---
 
@@ -218,31 +243,68 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32
 | **播放控制**   | 播放/暂停/循环/速度         | ✅  | #1       |
 | **调试功能**   | 热重载、检查器集成           | ✅  | #1       |
 
-### 已验证示例
+---
 
-以下示例文件已完美运行：
+## 示例文件对照
 
-- `basic_pivot` - 锚点/枢轴功能测试
-- `basic_pv` - 基础位置和可见性
-- `basic_shape` - 形状渲染测试
+以下列出 `assets/am/` 目录中的示例文件及其对应的功能验证：
+
+### 基础示例 (basic_*)
+
+| 示例文件                                | 验证功能                   | 状态 |
+|-------------------------------------|------------------------|:--:|
+| `basic_pivot.amproj`                | 锚点/枢轴功能、位置补偿           | ✅  |
+| `basic_shape.amproj`                | 矩形和圆形渲染、颜色填充、媒体填充、描边   | ✅  |
+| `basic_resolution_group.amproj`     | 编组分辨率限制、编组旋转/缩放        | ✅  |
+| `basic_resolution_group_ex.amproj`  | 编组分辨率限制的扩展测试           | ✅  |
+| `basic_resolution_group_ex2.amproj` | 针对编组旋转 显示范围扩大 bug的专项测试 | ⚠️ |
+
+### 效果示例 (fx_*)
+
+| 示例文件                              | 验证功能          | 状态 |
+|-----------------------------------|---------------|:--:|
+| `fx_1_stretch_segment.amproj`     | 拉伸片段效果基本功能    | ✅  |
+| `fx_1_ex_stretch_segment.amproj`  | 拉伸片段效果扩展测试    | ✅  |
+| `fx_1_ex2_stretch_segment.amproj` | 拉伸片段效果角度/偏移测试 | ✅  |
+| `fx_2_gaussian_blur.amproj`       | 高斯模糊效果        | ❌  |
+| `fx_3_grid.amproj`                | 网格效果          | ❌  |
 
 ---
 
 ## 架构说明
 
+### RTT (Render-to-Texture) 架构
+
+本库采用 RTT 架构来支持效果渲染和编组裁剪：
+
+1. **UnifiedEffectMaterial** - 统一效果材质，在单个 pass 中处理遮罩、擦拭、拉伸片段等效果
+2. **EmbedClipMaterial** - 编组裁剪材质，用于编组场景的 OBB 裁剪
+3. **PingPongBuffer** - 双缓冲系统，为复杂多 pass 效果预留（目前未使用）
+
 ### 渲染方式
 
-| 情况         | 渲染方式                   |
-|------------|------------------------|
-| 颜色填充 + 无描边 | Bevy Sprite            |
-| 颜色填充 + 有描边 | SDF (bevy_smud)        |
-| 圆形 (任何填充)  | SDF (bevy_smud)        |
-| 媒体填充       | MaskedSpriteMaterial   |
-| 媒体填充 + 效果  | StretchSegmentMaterial |
+| 情况              | 渲染方式                    |
+|-----------------|-------------------------|
+| 颜色填充 + 无描边      | Bevy Sprite             |
+| 颜色填充 + 有描边      | SDF (bevy_smud)         |
+| 圆形 (任何填充)       | SDF (bevy_smud)         |
+| 媒体填充            | Bevy Sprite             |
+| 媒体填充 + 效果       | UnifiedEffectMaterial   |
+| 编组 (embedScene) | EmbedClipMaterial + RTT |
 
 ### 效果叠加策略
 
-> **注意**：AM 允许任意效果叠加。当前实现使用自定义材质，未来可能需要多 pass 渲染或渲染到纹理以支持复杂效果组合。
+当前实现使用 `UnifiedEffectMaterial` 在单个 shader pass 中处理多种效果组合：
+
+- 遮罩裁剪 (Mask)
+- 擦拭过渡 (Wipe)
+- 拉伸片段 (Stretch Segment)
+
+对于编组场景 (embedScene)：
+
+- 使用独立的 RTT 相机渲染编组内容
+- 通过 RenderLayers 实现图层隔离
+- 使用 `EmbedClipMaterial` 进行 OBB 裁剪
 
 ---
 
@@ -250,7 +312,9 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32
 
 - `src/schema.rs` - AM XML 数据结构定义
 - `src/scene.rs` - 场景构建和实体生成
-- `src/animation.rs` - 动画系统
+- `src/animation.rs` - 动画系统和效果渲染
+- `src/effects.rs` - RTT 架构和 PingPong 缓冲
 - `src/sdf.rs` - SDF 形状渲染
-- `src/masked_sprite.rs` - 自定义材质
-- `assets/shaders/` - WGSL 着色器
+- `src/masked_sprite.rs` - UnifiedEffectMaterial 定义
+- `assets/shaders/unified_effect.wgsl` - 统一效果着色器
+- `assets/shaders/embed_clip.wgsl` - 编组裁剪着色器
