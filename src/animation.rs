@@ -599,9 +599,9 @@ pub fn animate_size_system(
 
         // Interpolate size (full dimensions for Sprite)
         if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
-            // Apply inv_fit_scale for embed children to compensate for fit_scale
-            let scale = animated.inv_fit_scale;
-            sprite.custom_size = Some(Vec2::new(size[0].abs() * scale, size[1].abs() * scale));
+            // Use original size - no scaling needed
+            // For embed content, the final display size is affected by embed's inherited fit_scale
+            sprite.custom_size = Some(Vec2::new(size[0].abs(), size[1].abs()));
         }
     }
 }
@@ -1229,15 +1229,9 @@ fn spawn_layer_entity(
             None
         };
 
-        // Calculate size scale factor for embed children
-        // Embed children need to be scaled up by inv_fit_scale to compensate for
-        // the root scene's fit_scale. This is because RTT renders at original size
-        // but the final sprite is scaled down by fit_scale.
-        let size_scale = if layer.animated.embed_offset != Vec2::ZERO {
-            inv_fit_scale
-        } else {
-            1.0
-        };
+        // For embed content rendered to RTT, use original size (no scaling)
+        // The final display size will be affected by embed's inherited fit_scale
+        let size_scale = 1.0;
 
         add_visual_components(
             commands,
