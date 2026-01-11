@@ -2025,6 +2025,7 @@ pub fn animate_unified_effect_system(
         Entity,
         &AmAnimated,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
+        &Transform,
     )>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -2035,7 +2036,7 @@ pub fn animate_unified_effect_system(
 
     let global_time = playback.current_time_ms;
 
-    for (entity, animated, material_handle) in query.iter() {
+    for (entity, animated, material_handle, transform) in query.iter() {
         // Calculate local time
         let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -2051,6 +2052,10 @@ pub fn animate_unified_effect_system(
         // Actual rendered size = base size * scale
         let orig_width = (sprite_size[0] * scale[0]).max(1.0);
         let orig_height = (sprite_size[1] * scale[1]).max(1.0);
+
+        // Get transform rotation angle for effect compensation
+        // In Bevy, rotation is stored as Quat, extract Z rotation
+        let (_, _, transform_rotation_rad) = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
 
         // Check which effects are active
         let has_wipe = animated.wipe_end.value != Some(1.0)
@@ -2087,7 +2092,11 @@ pub fn animate_unified_effect_system(
 
                 let angle_deg =
                     interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
-                let angle_rad = angle_deg.to_radians();
+                // Compensate for transform rotation: subtract transform rotation from effect angle
+                // This ensures the stretch effect is applied in world space, not local space
+                // Note: transform rotation is already negated in animate_transform_system (for Bevy's coord system)
+                // So we add it back here to get the original AM rotation value
+                let angle_rad = angle_deg.to_radians() + transform_rotation_rad;
                 let stretch_px =
                     interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
                 let offset_px =
