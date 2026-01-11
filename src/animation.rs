@@ -196,7 +196,9 @@ pub fn animate_transform_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker) in query.iter_mut() {
+    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker) in
+        query.iter_mut()
+    {
         // Calculate local time (accounting for time offset from parent scene)
         let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
@@ -252,23 +254,26 @@ pub fn animate_transform_system(
                     // In AM, objects rotate/scale around (location + pivot)
                     // Bevy rotates/scales around Transform.translation
                     // We calculate where the visual center ends up after rotation/scale around pivot
-                    
+
                     // Get current rotation
-                    let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                    let rotation_deg =
+                        interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
                     let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
-                    
+
                     // Convert pivot to Bevy Y direction
                     let pivot_bevy_y = -pivot_y;
-                    
+
                     // Object offset from rotation center is -pivot
                     // After scaling
                     let scaled_offset_x = -pivot_x * current_scale[0];
                     let scaled_offset_y = -pivot_bevy_y * current_scale[1];
-                    
+
                     // After rotation
-                    let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                    let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-                    
+                    let rotated_offset_x =
+                        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+                    let rotated_offset_y =
+                        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
                     // Compensation: rotated_offset - original_offset = rotated_offset + pivot
                     bx += rotated_offset_x + pivot_x;
                     by += rotated_offset_y + pivot_bevy_y;
@@ -1002,7 +1007,9 @@ fn process_pending_layers(
         };
 
         // For embed content, containing_embed_id must also be spawned first
-        let embed_depth = if layer.containing_embed_id == 0 || !spawning_ids.contains(&layer.containing_embed_id) {
+        let embed_depth = if layer.containing_embed_id == 0
+            || !spawning_ids.contains(&layer.containing_embed_id)
+        {
             0
         } else {
             1 + count_spawn_depth(layer.containing_embed_id, layers, spawning_ids, visited)
@@ -1119,7 +1126,7 @@ fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
 }
 
 /// Spawn a complete entity from a PendingLayer.
-/// 
+///
 /// For spatial decoupling of embed content:
 /// - If `containing_embed_id != 0`, the entity is NOT made a Bevy child of its parent
 /// - Instead, it's attached to the project root with `AmEmbedContentMarker`
@@ -1295,13 +1302,15 @@ fn spawn_layer_entity(
         // The content exists in world space and renders to the embed's RTT camera
         // NOTE: We explicitly do NOT call add_child() here - this is spatial decoupling!
         // The entity remains a root-level entity in world space.
-        
+
         // Look up the embed entity and add marker for lifecycle management
         if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
-            commands.entity(entity).insert(crate::scene::AmEmbedContentMarker {
-                embed_entity,
-                embed_id: layer.containing_embed_id,
-            });
+            commands
+                .entity(entity)
+                .insert(crate::scene::AmEmbedContentMarker {
+                    embed_entity,
+                    embed_id: layer.containing_embed_id,
+                });
             bevy::log::info!(
                 "[Lifecycle] Embed content '{}' (entity {:?}) exists in world space, belongs to embed {} ({:?})",
                 layer.label,

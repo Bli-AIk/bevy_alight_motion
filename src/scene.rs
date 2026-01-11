@@ -188,6 +188,10 @@ pub struct PendingLayer {
     /// The embed layer ID this content belongs to (0 = not in embed, uses spatial decoupling).
     /// When set, this layer is rendered to the embed's RTT and not parented to embed entity.
     pub containing_embed_id: u64,
+    /// Whether this layer came from a deeply nested scene (nesting_depth > 1).
+    /// Layers from deeply nested scenes should not be spatially decoupled at outer levels
+    /// because they need to be Bevy children so transforms of intermediate embeds propagate.
+    pub from_deeply_nested_scene: bool,
 }
 
 /// Configuration for scene building.
@@ -1249,7 +1253,7 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 ///
 /// Returns (compensation_x, compensation_y) in Bevy coordinates.
 /// Calculate the final position for an entity with pivot-based rotation and scaling.
-/// 
+///
 /// In AM, pivot defines the rotation/scaling center relative to the object's location.
 /// When rotation and scaling are applied around the pivot, the object's visual center
 /// moves to a new position.
@@ -1273,8 +1277,10 @@ fn calculate_embed_position_compensation(
 
     // After rotation (Bevy uses opposite rotation direction)
     let rotation_rad = (-rotation_deg).to_radians();
-    let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-    let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+    let rotated_offset_x =
+        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+    let rotated_offset_y =
+        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
 
     // The compensation is: rotated_offset - original_offset
     // original_offset is -pivot, so: rotated_offset + pivot
@@ -1672,7 +1678,8 @@ pub fn collect_pending_layers(
     }
 
     // Flatten all nested children into a single list
-    let flattened = flatten_pending_layers(pending_layers);
+    // Pass nesting_depth so that nested embeds know their absolute depth in the hierarchy
+    let flattened = flatten_pending_layers(pending_layers, config.nesting_depth);
 
     bevy::log::trace!(
         "Collected {} pending layers (after flatten)",
@@ -1683,13 +1690,26 @@ pub fn collect_pending_layers(
 
 /// Flatten a tree of PendingLayers into a single list.
 /// Children of embed scenes are extracted and their parent is set to the embed's ID.
-/// For spatial decoupling, children of embeds have their `containing_embed_id` set.
-fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
-    flatten_pending_layers_inner(layers, 0)
+/// For spatial decoupling, only DIRECT children of top-level embeds have their `containing_embed_id` set.
+/// Nested embeds become normal Bevy children so transforms propagate correctly.
+/// `nesting_depth` is the absolute depth in the scene hierarchy (0 = top-level, 1 = inside one embed, etc.)
+fn flatten_pending_layers(layers: Vec<PendingLayer>, nesting_depth: u32) -> Vec<PendingLayer> {
+    flatten_pending_layers_inner(layers, 0, 0, nesting_depth)
 }
 
 /// Inner recursive function with containing_embed tracking.
-fn flatten_pending_layers_inner(layers: Vec<PendingLayer>, current_embed_id: u64) -> Vec<PendingLayer> {
+/// `embed_depth`: local depth within this flatten call (0 = not inside any embed in this call)
+/// `base_nesting_depth`: absolute scene nesting level when flatten was called (0 = top-level scene)
+///
+/// Spatial decoupling logic:
+/// - Only content inside top-level embeds (base_nesting_depth == 0 && embed_depth == 1) gets spatially decoupled
+/// - Content inside nested embeds (base_nesting_depth > 0 OR embed_depth > 1) becomes Bevy children
+fn flatten_pending_layers_inner(
+    layers: Vec<PendingLayer>,
+    current_embed_id: u64,
+    embed_depth: u32,
+    base_nesting_depth: u32,
+) -> Vec<PendingLayer> {
     let mut result = Vec::new();
 
     for layer in layers {
@@ -1703,19 +1723,37 @@ fn flatten_pending_layers_inner(layers: Vec<PendingLayer>, current_embed_id: u64
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
         layer_without_children.children = Vec::new();
-        // Set containing_embed_id if we're inside an embed
-        layer_without_children.containing_embed_id = current_embed_id;
+        // Only set containing_embed_id for direct NON-EMBED children of top-level embeds
+        // that were NOT collected from a nested scene:
+        // - base_nesting_depth == 0: we're flattening the top-level scene
+        // - embed_depth == 1: this is a direct child of a top-level embed
+        // - !is_embed: not an embed layer (embeds need to be Bevy children for transform propagation)
+        // - !from_deeply_nested_scene: wasn't collected from inside another embed's scene
+        let from_nested = layer_without_children.from_deeply_nested_scene;
+        let should_decouple =
+            base_nesting_depth == 0 && embed_depth == 1 && !is_embed && !from_nested;
+        let assigned_embed_id = if should_decouple { current_embed_id } else { 0 };
+        layer_without_children.containing_embed_id = assigned_embed_id;
         result.push(layer_without_children);
 
         // Recursively flatten children and update their parent reference
         // We need to remap IDs to make them unique per embed instance
         if !children.is_empty() {
-            // Determine the embed ID for children:
-            // - If this layer IS an embed, children belong to it
-            // - Otherwise, inherit the current embed context
-            let child_embed_id = if is_embed { layer_id } else { current_embed_id };
-            
-            let flattened_children = flatten_pending_layers_inner(children, child_embed_id);
+            // Determine the embed ID and depth for children:
+            // - If this layer IS an embed, its children are at depth+1
+            // - Otherwise, inherit the current context
+            let (child_embed_id, child_depth) = if is_embed {
+                (layer_id, embed_depth + 1)
+            } else {
+                (current_embed_id, embed_depth)
+            };
+
+            let flattened_children = flatten_pending_layers_inner(
+                children,
+                child_embed_id,
+                child_depth,
+                base_nesting_depth,
+            );
 
             // Build a map of old ID -> new ID for this embed's children
             let mut id_remap: std::collections::HashMap<u64, u64> =
@@ -1993,6 +2031,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         mask_info: None,
         embed_scene_size: None,
         containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
     })
 }
 
@@ -2060,6 +2099,7 @@ fn collect_null(
         mask_info: None,
         embed_scene_size: None,
         containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
     })
 }
 
@@ -2080,7 +2120,8 @@ fn collect_embed_scene(
     // For embed scenes with rotation/scale and non-zero pivot, we need to calculate
     // the correct position compensation. In AM, objects rotate/scale around (location + pivot).
     // Bevy rotates/scales around the Transform.translation, so we need to adjust.
-    let (comp_x, comp_y) = calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
+    let (comp_x, comp_y) =
+        calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -2157,6 +2198,7 @@ fn collect_embed_scene(
         mask_info: None,
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
         containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
     }
 }
 
@@ -2515,6 +2557,7 @@ fn collect_text(
         mask_info: None,
         embed_scene_size: None,
         containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
     })
 }
 
@@ -2594,6 +2637,7 @@ fn collect_image(
         mask_info: None,
         embed_scene_size: None,
         containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
     })
 }
 

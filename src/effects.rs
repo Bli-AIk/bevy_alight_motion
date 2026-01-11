@@ -562,18 +562,20 @@ pub fn setup_embed_scene_rtt_system(
                 Transform::from_xyz(0.0, 0.0, 1000.0),
             ))
             .id();
-        
+
         // Configure orthographic projection to match embed's internal scene size
         // This ensures content renders at correct positions relative to scene center
-        commands.entity(camera_entity).insert(Projection::Orthographic(OrthographicProjection {
-            // Scale factor to fit content - default is 1.0 which means 1 unit = 1 pixel
-            scale: 1.0,
-            // Near/far planes
-            near: -1000.0,
-            far: 1000.0,
-            // Viewport origin at center (default for Camera2d)
-            ..OrthographicProjection::default_2d()
-        }));
+        commands
+            .entity(camera_entity)
+            .insert(Projection::Orthographic(OrthographicProjection {
+                // Scale factor to fit content - default is 1.0 which means 1 unit = 1 pixel
+                scale: 1.0,
+                // Near/far planes
+                near: -1000.0,
+                far: 1000.0,
+                // Viewport origin at center (default for Camera2d)
+                ..OrthographicProjection::default_2d()
+            }));
 
         // Add EmbedSceneRtt component and remove the marker
         commands
@@ -608,7 +610,7 @@ pub fn setup_embed_scene_rtt_system(
 }
 
 /// System to propagate RenderLayers to embed content entities.
-/// 
+///
 /// With spatial decoupling, embed content entities are NOT Bevy children of the embed entity.
 /// Instead, they have `AmEmbedContentMarker` component that identifies which embed they belong to.
 /// This system assigns the correct RenderLayers so content renders to the embed's RTT camera.
@@ -641,7 +643,7 @@ pub fn propagate_render_layers_system(
     for (content_entity, marker) in content_query.iter() {
         if let Some(&render_layer) = embed_layers.get(&marker.embed_entity) {
             let target_layer = RenderLayers::layer(render_layer as usize);
-            
+
             // Check if already has correct RenderLayers
             let needs_update = match render_layers_query.get(content_entity) {
                 Ok(current) => *current != target_layer,
