@@ -1248,6 +1248,42 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// The key insight is that pivot compensation is about WHERE the scale happens, not about rotation.
 ///
 /// Returns (compensation_x, compensation_y) in Bevy coordinates.
+/// Calculate the final position for an entity with pivot-based rotation and scaling.
+/// 
+/// In AM, pivot defines the rotation/scaling center relative to the object's location.
+/// When rotation and scaling are applied around the pivot, the object's visual center
+/// moves to a new position.
+///
+/// This function calculates the position compensation so that the entity's Transform.translation
+/// results in the correct visual position after Bevy applies rotation and scaling.
+fn calculate_embed_position_compensation(
+    pivot: (f32, f32),
+    scale: (f32, f32),
+    rotation_deg: f32,
+    has_parent: bool,
+) -> (f32, f32) {
+    // Convert pivot to Bevy coordinates (X same, Y flipped if root)
+    let pivot_x = pivot.0;
+    let pivot_y = if has_parent { pivot.1 } else { -pivot.1 };
+
+    // Object offset from rotation center is -pivot (in Bevy coords)
+    // After scaling
+    let scaled_offset_x = -pivot_x * scale.0;
+    let scaled_offset_y = -pivot_y * scale.1;
+
+    // After rotation (Bevy uses opposite rotation direction)
+    let rotation_rad = (-rotation_deg).to_radians();
+    let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+    let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+    // The compensation is: rotated_offset - original_offset
+    // original_offset is -pivot, so: rotated_offset + pivot
+    let comp_x = rotated_offset_x + pivot_x;
+    let comp_y = rotated_offset_y + pivot_y;
+
+    (comp_x, comp_y)
+}
+
 fn calculate_pivot_compensation(
     pivot: (f32, f32),
     scale: (f32, f32),
@@ -2041,8 +2077,10 @@ fn collect_embed_scene(
     let (sx, sy) = get_initial_scale(&embed.transform.scale);
     let pivot = get_initial_pivot(&embed.transform.pivot);
 
-    // Apply pivot compensation for initial position
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
+    // For embed scenes with rotation/scale and non-zero pivot, we need to calculate
+    // the correct position compensation. In AM, objects rotate/scale around (location + pivot).
+    // Bevy rotates/scales around the Transform.translation, so we need to adjust.
+    let (comp_x, comp_y) = calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 

@@ -184,6 +184,7 @@ pub fn animate_transform_system(
         &AmAnimated,
         &mut Transform,
         &AmLayerMarker,
+        &crate::scene::AmLayerSpec,
         Option<&AmSdfShapeParent>,
         Option<&crate::masked_sprite::UnifiedEffectMarker>,
     )>,
@@ -195,7 +196,7 @@ pub fn animate_transform_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut transform, _marker, sdf_parent, effect_marker) in query.iter_mut() {
+    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker) in query.iter_mut() {
         // Calculate local time (accounting for time offset from parent scene)
         let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
 
@@ -235,6 +236,7 @@ pub fn animate_transform_system(
             // Apply pivot offset and compensation
             // AM transforms around (location + pivot), Bevy transforms around entity origin
             // For SDF shapes: translation should be at transform center (location + pivot)
+            // For embed scenes: need full rotation-aware pivot compensation
             // For other shapes: need pivot compensation for non-unit scale
             if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
                 let pivot_x = pivot[0];
@@ -245,6 +247,31 @@ pub fn animate_transform_system(
                     // Simply add pivot offset (Y flip for Bevy coordinates)
                     bx += pivot_x;
                     by -= pivot_y;
+                } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
+                    // Embed scenes: need rotation-aware pivot compensation
+                    // In AM, objects rotate/scale around (location + pivot)
+                    // Bevy rotates/scales around Transform.translation
+                    // We calculate where the visual center ends up after rotation/scale around pivot
+                    
+                    // Get current rotation
+                    let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                    let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
+                    
+                    // Convert pivot to Bevy Y direction
+                    let pivot_bevy_y = -pivot_y;
+                    
+                    // Object offset from rotation center is -pivot
+                    // After scaling
+                    let scaled_offset_x = -pivot_x * current_scale[0];
+                    let scaled_offset_y = -pivot_bevy_y * current_scale[1];
+                    
+                    // After rotation
+                    let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+                    let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+                    
+                    // Compensation: rotated_offset - original_offset = rotated_offset + pivot
+                    bx += rotated_offset_x + pivot_x;
+                    by += rotated_offset_y + pivot_bevy_y;
                 } else {
                     // Non-SDF shapes: need pivot compensation for scale
                     // Formula: pivot * (1 - scale) compensates for scale around pivot
