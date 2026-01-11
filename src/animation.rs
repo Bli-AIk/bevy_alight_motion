@@ -2058,6 +2058,13 @@ pub fn animate_unified_effect_system(
         // In Bevy, rotation is stored as Quat, extract Z rotation
         let (_, _, transform_rotation_rad) = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
 
+        // Calculate "world-space" dimensions for stretch calculations
+        // When element is rotated, its local width/height swap in world space
+        let rot_cos = transform_rotation_rad.cos().abs();
+        let rot_sin = transform_rotation_rad.sin().abs();
+        let world_width = orig_width * rot_cos + orig_height * rot_sin;
+        let world_height = orig_width * rot_sin + orig_height * rot_cos;
+
         // Check which effects are active
         let has_wipe = animated.wipe_end.value != Some(1.0)
             || !animated.wipe_end.keyframes.is_empty()
@@ -2106,7 +2113,9 @@ pub fn animate_unified_effect_system(
                 let smooth_width = smooth * 0.3;
 
                 // Calculate mesh expansion (same logic as animate_stretch_segment_system)
-                let base_divisor = orig_width / 5.76;
+                // Use world_width for base_divisor calculation because AM's stretch effect
+                // operates in world space, not local space
+                let base_divisor = world_width / 5.76;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
                 let actual_stretch_px = orig_width * stretch_factor - orig_width;
 
