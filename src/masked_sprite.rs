@@ -122,9 +122,15 @@ impl UnifiedEffectMaterial {
         self.effect_flags.z = if enabled { 1.0 } else { 0.0 };
     }
 
-    pub fn is_mask_enabled(&self) -> bool { self.effect_flags.x > 0.5 }
-    pub fn is_wipe_enabled(&self) -> bool { self.effect_flags.y > 0.5 }
-    pub fn is_stretch_enabled(&self) -> bool { self.effect_flags.z > 0.5 }
+    pub fn is_mask_enabled(&self) -> bool {
+        self.effect_flags.x > 0.5
+    }
+    pub fn is_wipe_enabled(&self) -> bool {
+        self.effect_flags.y > 0.5
+    }
+    pub fn is_stretch_enabled(&self) -> bool {
+        self.effect_flags.z > 0.5
+    }
 }
 
 impl Material2d for UnifiedEffectMaterial {

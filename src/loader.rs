@@ -135,25 +135,30 @@ async fn load_amproj(
     let mut images = HashMap::new();
     for (uri, data) in &embedded_images {
         let label = uri.trim_start_matches("amproj:");
-        
+
         // Detect image format from magic bytes (more reliable than extension)
-        let format: &str = if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
-            "png"
-        } else if data.len() >= 2 && data[0..2] == [0xFF, 0xD8] {
-            "jpeg"
-        } else if data.len() >= 4 && &data[0..4] == b"RIFF" && data.len() >= 12 && &data[8..12] == b"WEBP" {
-            "webp"
-        } else {
-            // Fall back to extension
-            let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
-            if extension == "jpg" || extension == "jpeg" {
+        let format: &str =
+            if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+                "png"
+            } else if data.len() >= 2 && data[0..2] == [0xFF, 0xD8] {
                 "jpeg"
-            } else if extension == "webp" {
+            } else if data.len() >= 4
+                && &data[0..4] == b"RIFF"
+                && data.len() >= 12
+                && &data[8..12] == b"WEBP"
+            {
                 "webp"
             } else {
-                "png"
-            }
-        };
+                // Fall back to extension
+                let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
+                if extension == "jpg" || extension == "jpeg" {
+                    "jpeg"
+                } else if extension == "webp" {
+                    "webp"
+                } else {
+                    "png"
+                }
+            };
 
         // Try to load the image from raw bytes with detected format
         if let Ok(image) = Image::from_buffer(

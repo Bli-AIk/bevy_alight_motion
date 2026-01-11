@@ -239,7 +239,7 @@ pub fn animate_transform_system(
             if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
                 let pivot_x = pivot[0];
                 let pivot_y = pivot[1];
-                
+
                 if sdf_parent.is_some() {
                     // SDF shapes: translation is at transform center (location + pivot)
                     // Simply add pivot offset (Y flip for Bevy coordinates)
@@ -271,7 +271,7 @@ pub fn animate_transform_system(
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
             bx += animated.anchor_offset.x;
             by += animated.anchor_offset.y;
-            
+
             // Apply embed offset compensation for layers that are children of embed scenes.
             // Formula: target = current / fit_scale - embed_position
             // We use inv_fit_scale (1/fit_scale) to avoid division.
@@ -1119,13 +1119,14 @@ fn spawn_layer_entity(
 
     // If layer has effects, bake scale into a separate variable and use identity scale for transform
     // This is because effects need actual pixel sizes, not scaled coordinates
-    let transform_to_use = if needs_effect && layer.blending_mode != crate::scene::AmBlendingMode::Mask {
-        let mut t = layer.transform;
-        t.scale = Vec3::ONE;  // Reset scale - it will be baked into mesh size
-        t
-    } else {
-        layer.transform
-    };
+    let transform_to_use =
+        if needs_effect && layer.blending_mode != crate::scene::AmBlendingMode::Mask {
+            let mut t = layer.transform;
+            t.scale = Vec3::ONE; // Reset scale - it will be baked into mesh size
+            t
+        } else {
+            layer.transform
+        };
 
     // Clone animated component and set inv_fit_scale for embed children
     let mut animated = layer.animated.clone();
@@ -1279,9 +1280,9 @@ fn add_visual_components(
     embed_scene_size: Option<(f32, f32)>,
     size_scale: f32,
 ) {
-    use crate::masked_sprite::{UnifiedEffectMaterial, UnifiedEffectMarker};
+    use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
     use bevy::mesh::Mesh2d;
-    
+
     // Determine which effects are needed
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
@@ -1315,12 +1316,7 @@ fn add_visual_components(
             [0.0, 0.0, 1.0],
         ];
 
-        let uvs = vec![
-            [0.0, 1.0],
-            [1.0, 1.0],
-            [1.0, 0.0],
-            [0.0, 0.0],
-        ];
+        let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
 
         let indices = vec![0, 1, 2, 0, 2, 3];
 
@@ -1396,17 +1392,18 @@ fn add_visual_components(
             // Apply size_scale for embed children to compensate for fit_scale
             let base_width = *width * size_scale;
             let base_height = *height * size_scale;
-            
+
             // For effects, use scaled dimensions (scale is applied to mesh, not transform)
             let scaled_width = base_width * initial_scale.0;
             let scaled_height = base_height * initial_scale.1;
-            
+
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
                     if needs_any_effect {
                         // Use UnifiedEffectMaterial for all effect cases
                         // Create mesh with SCALED dimensions since effects need actual pixel sizes
-                        let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                        let mesh =
+                            create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                         let material = create_unified_material(
                             unified_materials,
                             handle.clone(),
@@ -1454,7 +1451,8 @@ fn add_visual_components(
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
-                    let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                    let mesh =
+                        create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
@@ -1536,14 +1534,15 @@ fn add_visual_components(
             // Apply size_scale for embed children to compensate for fit_scale
             let base_width = *width * size_scale;
             let base_height = *height * size_scale;
-            
+
             // For effects, use scaled dimensions
             let scaled_width = base_width * initial_scale.0;
             let scaled_height = base_height * initial_scale.1;
-            
+
             if let Some(handle) = images.get(image_uri) {
                 if needs_any_effect {
-                    let mesh = create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                    let mesh =
+                        create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
@@ -1591,7 +1590,7 @@ fn add_visual_components(
             fill_color,
         } => {
             use bevy::text::Justify;
-            
+
             let color = extract_fill_color(fill_color);
             let justify = match align.as_str() {
                 "center" => Justify::Center,
@@ -1999,7 +1998,8 @@ pub fn animate_unified_effect_system(
                 let wipe_start = interpolate_float(&animated.wipe_start, layer_time).unwrap_or(0.0);
                 let wipe_end = interpolate_float(&animated.wipe_end, layer_time).unwrap_or(1.0);
                 let wipe_angle = interpolate_float(&animated.wipe_angle, layer_time).unwrap_or(0.0);
-                let wipe_feather = interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
+                let wipe_feather =
+                    interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
                 material.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
             } else {
                 material.set_wipe_enabled(false);
@@ -2008,11 +2008,14 @@ pub fn animate_unified_effect_system(
             // Update stretch segment parameters if needed
             if has_stretch {
                 material.set_stretch_enabled(true);
-                
-                let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
+
+                let angle_deg =
+                    interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
                 let angle_rad = angle_deg.to_radians();
-                let stretch_px = interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
-                let offset_px = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
+                let stretch_px =
+                    interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
+                let offset_px =
+                    interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
                 let smooth = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
                 let smooth_width = smooth * 0.3;
 
@@ -2060,7 +2063,8 @@ pub fn animate_unified_effect_system(
                 let center_offset_y = (min_y + max_y) / 2.0;
 
                 // Update material parameters
-                material.stretch_params = Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
+                material.stretch_params =
+                    Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
                 material.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
                 material.mesh_offset = Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0);
 
@@ -2077,12 +2081,7 @@ pub fn animate_unified_effect_system(
                     [0.0, 0.0, 1.0],
                     [0.0, 0.0, 1.0],
                 ];
-                let uvs = vec![
-                    [0.0, 1.0],
-                    [1.0, 1.0],
-                    [1.0, 0.0],
-                    [0.0, 0.0],
-                ];
+                let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
                 let indices = vec![0u32, 1, 2, 0, 2, 3];
 
                 let mut new_mesh = Mesh::new(
@@ -2096,7 +2095,9 @@ pub fn animate_unified_effect_system(
                 new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
                 let new_mesh_handle = meshes.add(new_mesh);
-                commands.entity(entity).insert(bevy::mesh::Mesh2d(new_mesh_handle));
+                commands
+                    .entity(entity)
+                    .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 material.set_stretch_enabled(false);
             }

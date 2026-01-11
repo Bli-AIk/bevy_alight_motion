@@ -27,9 +27,9 @@ use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_sdf_opacity_system,
-    animate_sdf_scale_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
-    apply_mask_clipping_system, manage_layer_lifecycle_system,
+    animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
+    animate_transform_system, animate_unified_effect_system, apply_mask_clipping_system,
+    manage_layer_lifecycle_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::loader::{AlightMotionLoader, AmProject};
@@ -90,8 +90,8 @@ impl Plugin for AlightMotionPlugin {
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
                     animate_unified_effect_system, // Unified effect system (RTT-ready)
-                    apply_mask_clipping_system, // Apply mask clipping to masked layers
-                    hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
+                    apply_mask_clipping_system,    // Apply mask clipping to masked layers
+                    hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
                 )
                     .chain(),
             );

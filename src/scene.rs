@@ -1221,10 +1221,10 @@ fn get_initial_pivot(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// Calculate pivot compensation for non-unit scale.
 /// AM transforms around (location + pivot), Bevy transforms around entity origin.
 /// This function calculates the position compensation needed when scale != 1.
-/// 
+///
 /// Note: Rotation is handled by Bevy's transform system - we don't need to compensate for it here.
 /// The key insight is that pivot compensation is about WHERE the scale happens, not about rotation.
-/// 
+///
 /// Returns (compensation_x, compensation_y) in Bevy coordinates.
 fn calculate_pivot_compensation(
     pivot: (f32, f32),
@@ -1234,7 +1234,7 @@ fn calculate_pivot_compensation(
 ) -> (f32, f32) {
     let pivot_x = pivot.0;
     let pivot_y = pivot.1;
-    
+
     // Compensation formula: pivot * (1 - scale)
     // This moves the entity position to keep the visual center correct after scaling
     let comp_x = pivot_x * (1.0 - scale.0);
@@ -1243,7 +1243,7 @@ fn calculate_pivot_compensation(
     } else {
         -pivot_y * (1.0 - scale.1) // Flip Y for Bevy (AM Y-down, Bevy Y-up)
     };
-    
+
     (comp_x, comp_y)
 }
 
@@ -1631,7 +1631,7 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
     for layer in layers {
         let embed_id = layer.id;
         let children = layer.children.clone();
-        
+
         // Get embed's Bevy position for child coordinate adjustment
         let embed_bevy_pos = layer.transform.translation;
 
@@ -1664,17 +1664,17 @@ fn flatten_pending_layers(layers: Vec<PendingLayer>) -> Vec<PendingLayer> {
                 // Remap the parent reference and adjust coordinates
                 if child.parent == 0 {
                     child.parent = embed_id;
-                    
+
                     // Adjust child coordinates to compensate for embed's position.
                     // When a child becomes a Bevy child of the embed entity, its local
-                    // coordinates are relative to the embed entity. 
+                    // coordinates are relative to the embed entity.
                     //
                     // The child's coordinates were calculated relative to inner canvas center.
                     // But as a Bevy child, they need to be relative to embed entity's origin.
                     // Since embed is at embed_bevy_pos, we subtract it from child's coordinates.
                     child.transform.translation.x -= embed_bevy_pos.x;
                     child.transform.translation.y -= embed_bevy_pos.y;
-                    
+
                     // Store embed offset for animation system to use
                     child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {

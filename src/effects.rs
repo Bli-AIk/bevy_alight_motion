@@ -28,8 +28,8 @@
 //!
 //! 3. **Always RTT-Ready**: All code paths assume RTT architecture. There is no "legacy mode".
 
-use bevy::camera::visibility::RenderLayers;
 use bevy::camera::RenderTarget;
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -121,19 +121,31 @@ impl EffectLayer {
         self
     }
 
-    pub fn has_effects(&self) -> bool { !self.effects.is_empty() }
-    pub fn effect_count(&self) -> usize { self.effects.len() }
-    pub fn mark_dirty(&mut self) { self.dirty = true; }
+    pub fn has_effects(&self) -> bool {
+        !self.effects.is_empty()
+    }
+    pub fn effect_count(&self) -> usize {
+        self.effects.len()
+    }
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
 
     // Effect type checks
     pub fn has_wipe(&self) -> bool {
-        self.effects.iter().any(|e| matches!(e, EffectType::Wipe(_)))
+        self.effects
+            .iter()
+            .any(|e| matches!(e, EffectType::Wipe(_)))
     }
     pub fn has_stretch_segment(&self) -> bool {
-        self.effects.iter().any(|e| matches!(e, EffectType::StretchSegment(_)))
+        self.effects
+            .iter()
+            .any(|e| matches!(e, EffectType::StretchSegment(_)))
     }
     pub fn has_mask(&self) -> bool {
-        self.effects.iter().any(|e| matches!(e, EffectType::Mask(_)))
+        self.effects
+            .iter()
+            .any(|e| matches!(e, EffectType::Mask(_)))
     }
 
     // Getters
@@ -221,7 +233,12 @@ impl PingPongBuffer {
     pub fn new(images: &mut Assets<Image>, size: Vec2) -> Self {
         let tex_a = Self::create_rtt(images, size, "ping_pong_a");
         let tex_b = Self::create_rtt(images, size, "ping_pong_b");
-        Self { tex_a, tex_b, size, read_index: 0 }
+        Self {
+            tex_a,
+            tex_b,
+            size,
+            read_index: 0,
+        }
     }
 
     fn create_rtt(images: &mut Assets<Image>, size: Vec2, label: &'static str) -> Handle<Image> {
@@ -252,23 +269,37 @@ impl PingPongBuffer {
 
     /// Get the current read (input) texture
     pub fn read_texture(&self) -> &Handle<Image> {
-        if self.read_index == 0 { &self.tex_a } else { &self.tex_b }
+        if self.read_index == 0 {
+            &self.tex_a
+        } else {
+            &self.tex_b
+        }
     }
 
     /// Get the current write (output) texture
     pub fn write_texture(&self) -> &Handle<Image> {
-        if self.read_index == 0 { &self.tex_b } else { &self.tex_a }
+        if self.read_index == 0 {
+            &self.tex_b
+        } else {
+            &self.tex_a
+        }
     }
 
     /// Swap after completing a pass
-    pub fn swap(&mut self) { self.read_index = 1 - self.read_index; }
+    pub fn swap(&mut self) {
+        self.read_index = 1 - self.read_index;
+    }
 
     /// Reset to initial state
-    pub fn reset(&mut self) { self.read_index = 0; }
+    pub fn reset(&mut self) {
+        self.read_index = 0;
+    }
 
     /// Resize buffers if needed
     pub fn resize_if_needed(&mut self, images: &mut Assets<Image>, new_size: Vec2) {
-        if (self.size - new_size).length_squared() < 0.01 { return; }
+        if (self.size - new_size).length_squared() < 0.01 {
+            return;
+        }
 
         let extent = Extent3d {
             width: new_size.x.max(1.0) as u32,
@@ -276,8 +307,12 @@ impl PingPongBuffer {
             depth_or_array_layers: 1,
         };
 
-        if let Some(img) = images.get_mut(&self.tex_a) { img.resize(extent); }
-        if let Some(img) = images.get_mut(&self.tex_b) { img.resize(extent); }
+        if let Some(img) = images.get_mut(&self.tex_a) {
+            img.resize(extent);
+        }
+        if let Some(img) = images.get_mut(&self.tex_b) {
+            img.resize(extent);
+        }
         self.size = new_size;
     }
 }
@@ -298,7 +333,8 @@ pub fn setup_effect_buffers_system(
             commands.entity(entity).insert(buffer);
             bevy::log::debug!(
                 "Created RTT buffer for {:?}, size {:?}",
-                entity, effect_layer.source_size
+                entity,
+                effect_layer.source_size
             );
         }
     }
@@ -315,9 +351,7 @@ pub fn update_effect_buffers_system(
 }
 
 /// Mark layers dirty when changed (triggers re-render)
-pub fn mark_dirty_on_change_system(
-    mut query: Query<&mut EffectLayer, Changed<EffectLayer>>
-) {
+pub fn mark_dirty_on_change_system(mut query: Query<&mut EffectLayer, Changed<EffectLayer>>) {
     for mut layer in query.iter_mut() {
         layer.dirty = true;
     }
@@ -328,7 +362,12 @@ pub fn mark_dirty_on_change_system(
 // ============================================================================
 
 pub fn vec4_to_wipe_params(v: Vec4) -> WipeParams {
-    WipeParams { start: v.x, end: v.y, angle: v.z, feather: v.w }
+    WipeParams {
+        start: v.x,
+        end: v.y,
+        angle: v.z,
+        feather: v.w,
+    }
 }
 
 pub fn wipe_params_to_vec4(p: &WipeParams) -> Vec4 {
@@ -336,7 +375,12 @@ pub fn wipe_params_to_vec4(p: &WipeParams) -> Vec4 {
 }
 
 pub fn vec4_to_stretch_params(v: Vec4) -> StretchSegmentParams {
-    StretchSegmentParams { angle: v.x, stretch: v.y, offset: v.z, smooth: v.w }
+    StretchSegmentParams {
+        angle: v.x,
+        stretch: v.y,
+        offset: v.z,
+        smooth: v.w,
+    }
 }
 
 pub fn stretch_params_to_vec4(p: &StretchSegmentParams) -> Vec4 {
@@ -344,7 +388,12 @@ pub fn stretch_params_to_vec4(p: &StretchSegmentParams) -> Vec4 {
 }
 
 pub fn vec4_to_mask_params(v: Vec4) -> MaskParams {
-    MaskParams { center_x: v.x, center_y: v.y, half_width: v.z, half_height: v.w }
+    MaskParams {
+        center_x: v.x,
+        center_y: v.y,
+        half_width: v.z,
+        half_height: v.w,
+    }
 }
 
 pub fn mask_params_to_vec4(p: &MaskParams) -> Vec4 {
@@ -382,16 +431,10 @@ impl Plugin for EffectRenderPlugin {
 /// Resource managing the pool of available RenderLayers for embedScenes.
 /// Bevy supports up to 32 RenderLayers (0-31). Layer 0 is reserved for the main camera.
 /// We use layers 1-31 for embedScene RTT rendering.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct EmbedSceneRenderLayerPool {
     /// Bitset tracking which layers are in use (bit N = layer N+1)
     used_layers: u32,
-}
-
-impl Default for EmbedSceneRenderLayerPool {
-    fn default() -> Self {
-        Self { used_layers: 0 }
-    }
 }
 
 impl EmbedSceneRenderLayerPool {
@@ -409,7 +452,7 @@ impl EmbedSceneRenderLayerPool {
 
     /// Release a render layer back to the pool.
     pub fn release(&mut self, layer: u8) {
-        if layer >= 1 && layer <= 31 {
+        if (1..=31).contains(&layer) {
             self.used_layers &= !(1 << (layer - 1));
         }
     }
@@ -498,7 +541,9 @@ pub fn setup_embed_scene_rtt_system(
         let camera_entity = commands
             .spawn((
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
-                EmbedSceneRttCamera { embed_entity: entity },
+                EmbedSceneRttCamera {
+                    embed_entity: entity,
+                },
                 Camera2d,
                 Camera {
                     target: RenderTarget::Image(render_texture_handle.clone().into()),
@@ -514,23 +559,26 @@ pub fn setup_embed_scene_rtt_system(
             .id();
 
         // Add EmbedSceneRtt component and remove the marker
-        commands.entity(entity).remove::<NeedsEmbedSceneRtt>().insert((
-            EmbedSceneRtt {
-                render_texture: render_texture_handle.clone(),
-                camera_entity,
-                render_layer,
-                scene_width: needs_rtt.scene_width,
-                scene_height: needs_rtt.scene_height,
-            },
-            // Add sprite to display RTT output
-            Sprite {
-                image: render_texture_handle,
-                custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
-                ..default()
-            },
-            // EmbedScene entity should be on layer 0 (main camera) so parent sees it
-            RenderLayers::layer(0),
-        ));
+        commands
+            .entity(entity)
+            .remove::<NeedsEmbedSceneRtt>()
+            .insert((
+                EmbedSceneRtt {
+                    render_texture: render_texture_handle.clone(),
+                    camera_entity,
+                    render_layer,
+                    scene_width: needs_rtt.scene_width,
+                    scene_height: needs_rtt.scene_height,
+                },
+                // Add sprite to display RTT output
+                Sprite {
+                    image: render_texture_handle,
+                    custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
+                    ..default()
+                },
+                // EmbedScene entity should be on layer 0 (main camera) so parent sees it
+                RenderLayers::layer(0),
+            ));
 
         bevy::log::debug!(
             "Set up RTT for embedScene {:?}: layer={}, size={}x{}",
