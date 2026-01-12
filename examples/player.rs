@@ -1,27 +1,50 @@
 //! Example player for Alight Motion projects.
+//! 用以播放 Alight Motion 工程的示例播放器。
 //!
-//! Usage:
-//!   cargo run -p bevy_alight_motion --example player -- <project_name>
-//!   cargo run -p bevy_alight_motion --example player --features debug -- <project_name>
-//!   cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
-//!   cargo run -p bevy_alight_motion --example player --features video-comparison -- <project_name>
+//! # Usage / 用法
 //!
-//! Available projects:
-//!   - simple_gb (default)
-//!   - complex_1
-//!   - complex_2
-//!   - complex_3
+//! ### Interactive Playback / 交互式播放
+//! ```bash
+//! cargo run -p bevy_alight_motion --example player -- <project_name>
+//! ```
 //!
-//! Controls:
-//! - Space: Play/Pause toggle
-//! - R: Reset to beginning (keeps current play state)
-//! - P: Replay from beginning (resets and plays)
-//! - Left/Right: Seek backward/forward by 50ms
-//! - Up/Down: Speed up/slow down playback
-//! - L: Toggle loop mode
-//! - F1: Toggle inspector window (requires --features debug)
-//! - F4: Toggle debug image overlay
-//! - F6: Toggle video debug overlay (requires --features video-debug)
+//! ### With Debug Inspector / 启用 Debug 面板
+//! ```bash
+//! cargo run -p bevy_alight_motion --example player --features debug -- <project_name>
+//! ```
+//!
+//! ### With Video Overlay / 启用视频覆盖层
+//! ```bash
+//! cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
+//! ```
+//!
+//! ### Run Video Comparison Test / 运行视频比对测试
+//! ```bash
+//! cargo run -p bevy_alight_motion --example player --features video-comparison -- <project_name>
+//! ```
+//! This runs a non-interactive test that compares rendered frames against a reference video
+//! and generates a report in the `reports/` directory.
+//!
+//! （此命令会运行一个非交互式测试，将渲染结果与参考视频逐帧比对，并在 `reports/` 目录下生成报告。）
+//!
+//! # Available projects / 可用工程
+//!   - `simple_gb` (default)
+//!   - `basic_shape`
+//!   - `basic_pivot`
+//!   - `complex_1`
+//!   - `complex_2`
+//!   - `complex_3`
+//!
+//! # Controls (Interactive Mode) / 交互模式下的按键操作
+//! - **Space**: Play/Pause toggle
+//! - **R**: Reset to beginning (keeps current play state)
+//! - **P**: Replay from beginning (resets and plays)
+//! - **Left/Right**: Seek backward/forward by 50ms
+//! - **Up/Down**: Speed up/slow down playback
+//! - **L**: Toggle loop mode
+//! - **F1**: Toggle inspector window (requires `--features debug`)
+//! - **F4**: Toggle debug image overlay
+//! - **F6**: Toggle video debug overlay (requires `--features video-debug`)
 
 #[path = "video_utils.rs"]
 mod video_utils;
