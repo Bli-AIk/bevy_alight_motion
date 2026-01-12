@@ -995,24 +995,25 @@ mod video_comparison_systems {
                     .to_rgba8();
 
                 // Compare
-                let (similarity, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
+                let (result, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
+                
+                // Use content similarity for scoring to avoid dilution by empty background
+                let similarity = result.content_similarity;
                 state.frame_scores.push(similarity);
-
-                // Save diff if similarity < 1.0 (or threshold)
-                // Always save diff for report? Or just for failures?
-                // Let's save a diff if < 0.98
+                
+                // Save diff if similarity < 0.98
                 if similarity < 0.98 {
                     let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                     diff_img.save(diff_path).unwrap();
                     println!(
-                        "[FRAME {:03}] Similarity: {:.4} (FAIL/WARN)",
-                        frame_idx, similarity
+                        "[FRAME {:03}] Similarity: {:.4} (FAIL/WARN) | Content: {:.4}, Match: {:.1}%",
+                        frame_idx, similarity, result.content_similarity, result.pixel_match_rate * 100.0
                     );
                 } else {
                     if frame_idx % 10 == 0 {
                         println!(
-                            "[FRAME {:03}] Similarity: {:.4} (OK)",
-                            frame_idx, similarity
+                            "[FRAME {:03}] Similarity: {:.4} (OK) | Content: {:.4}, Match: {:.1}%",
+                            frame_idx, similarity, result.content_similarity, result.pixel_match_rate * 100.0
                         );
                     }
                 }

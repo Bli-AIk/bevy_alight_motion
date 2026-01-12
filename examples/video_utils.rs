@@ -203,17 +203,47 @@ pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
     }
 }
 
-/// Compare two images and return a similarity score (0.0 to 1.0) and a diff image
-/// Similarity 1.0 means identical.
+/// Result of an image comparison operation
 #[cfg(feature = "video-comparison")]
-pub fn compare_images(img1: &image::RgbaImage, img2: &image::RgbaImage) -> (f32, image::RgbaImage) {
+#[derive(Debug, Clone, Copy)]
+pub struct ComparisonResult {
+    /// Similarity over the entire image area (0.0 - 1.0)
+    pub global_similarity: f32,
+    /// Similarity over only the non-empty content area (0.0 - 1.0)
+    /// This metric ignores pixels that are background/empty in both images.
+    /// Used to prevent empty space from diluting errors in small objects.
+    pub content_similarity: f32,
+    /// Percentage of pixels that are considered a "match" (diff < threshold)
+    pub pixel_match_rate: f32,
+    /// Count of pixels that differ
+    pub differing_pixels: u64,
+}
+
+/// Compare two images and return detailed similarity metrics and a diff image.
+#[cfg(feature = "video-comparison")]
+pub fn compare_images(
+    img1: &image::RgbaImage,
+    img2: &image::RgbaImage,
+) -> (ComparisonResult, image::RgbaImage) {
     use image::Pixel;
 
     let width = img1.width().min(img2.width());
     let height = img1.height().min(img2.height());
 
     let mut diff_image = image::RgbaImage::new(width, height);
-    let mut total_diff: u64 = 0;
+    
+    let mut total_diff_global: u64 = 0;
+    let mut total_max_global: u64 = 0;
+    
+    let mut total_diff_content: u64 = 0;
+    let mut total_max_content: u64 = 0;
+    
+    let mut matching_pixels: u64 = 0;
+    let mut differing_pixels: u64 = 0;
+    
+    // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
+    // Small noise tolerance (e.g., compression artifacts)
+    const MATCH_THRESHOLD: u64 = 10; 
 
     for y in 0..height {
         for x in 0..width {
@@ -223,25 +253,71 @@ pub fn compare_images(img1: &image::RgbaImage, img2: &image::RgbaImage) -> (f32,
             let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
             let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
             let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
-            let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64; // Optionally ignore alpha if background is black
+            let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
 
             let pixel_diff = r_diff + g_diff + b_diff + a_diff;
-            total_diff += pixel_diff;
+            
+            // Update global stats
+            total_diff_global += pixel_diff;
+            total_max_global += 255 * 4;
+
+            // Check if pixel is "empty" (transparent or black with no alpha)
+            // We consider a pixel content if it has alpha > 0 or color > 0
+            // Assuming black transparent is empty. 
+            // Actually, let's just check if it's NOT (0,0,0,0) or black background.
+            // For AM, background is usually black.
+            // Let's define "empty" as alpha=0 OR (r=0,g=0,b=0).
+            let p1_empty = p1[3] == 0 || (p1[0] == 0 && p1[1] == 0 && p1[2] == 0);
+            let p2_empty = p2[3] == 0 || (p2[0] == 0 && p2[1] == 0 && p2[2] == 0);
+            
+            let is_content = !p1_empty || !p2_empty;
+            
+            if is_content {
+                total_diff_content += pixel_diff;
+                total_max_content += 255 * 4;
+            }
+
+            // Match rate
+            if pixel_diff <= MATCH_THRESHOLD {
+                matching_pixels += 1;
+            } else {
+                differing_pixels += 1;
+            }
 
             // Generate diff pixel (emphasize difference)
-            if pixel_diff > 0 {
+            if pixel_diff > MATCH_THRESHOLD {
                 // Red scale based on diff
                 let intensity = (pixel_diff.min(255) as u8).max(50);
                 diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
             } else {
-                // Transparent or faint copy of original
+                // Transparent
                 diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
             }
         }
     }
 
-    let max_diff = (width as u64) * (height as u64) * 255 * 4;
-    let similarity = 1.0 - (total_diff as f64 / max_diff as f64) as f32;
+    let global_similarity = if total_max_global > 0 {
+        1.0 - (total_diff_global as f32 / total_max_global as f32)
+    } else {
+        1.0
+    };
+    
+    let content_similarity = if total_max_content > 0 {
+        1.0 - (total_diff_content as f32 / total_max_content as f32)
+    } else {
+        // If both images are completely empty, they are identical
+        1.0 
+    };
+    
+    let pixel_match_rate = matching_pixels as f32 / (width * height) as f32;
 
-    (similarity, diff_image)
+    (
+        ComparisonResult {
+            global_similarity,
+            content_similarity,
+            pixel_match_rate,
+            differing_pixels,
+        },
+        diff_image,
+    )
 }
