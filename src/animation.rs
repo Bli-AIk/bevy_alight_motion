@@ -29,10 +29,15 @@ use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe,
 /// 当前问题："编组 2 Copy" 内的图片拉伸效果过大
 /// 调整此值直到编组内图片的拉伸效果与AM一致
 /// 然后报告该值，用于推导正确的计算公式
-/// 
-/// 默认值 1.0 = 当前行为（可能过大）
-/// 尝试 0.5, 0.6, 0.7 等值来减小拉伸
-
+///
+/// 负height元素使用对角线公式：base_size = sqrt(w^2 + h^2) * SCALE_FACTOR
+/// 当前测试表明需要的修正因子是 1/0.615 = 1.626
+/// 而纯对角线公式给出 1.634
+/// 所以需要额外的缩放因子 = 1.626 / 1.634 = 0.995
+///
+/// 默认值 1.0 = 纯对角线公式
+/// 尝试 0.99, 0.98 等值来增大拉伸
+pub const DEBUG_NEGATIVE_HEIGHT_SCALE: f32 = 1.05;
 
 /// Component marking an entity as part of an AM animation.
 ///
@@ -2138,8 +2143,9 @@ pub fn animate_unified_effect_system(
                 // base_size = sqrt(orig_width^2 + orig_height^2) to match AM's stretch behavior.
                 let has_negative_size_y = sprite_size[1] < 0.0;
                 let base_size = if has_negative_size_y {
-                    // For negative height, use diagonal length as base
+                    // For negative height, use diagonal length as base, with optional scale factor
                     (orig_width * orig_width + orig_height * orig_height).sqrt()
+                        * DEBUG_NEGATIVE_HEIGHT_SCALE
                 } else {
                     // Normal case: weighted average formula
                     0.8 * world_width + 0.2 * orig_width
