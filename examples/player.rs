@@ -1017,7 +1017,14 @@ use video_debug_systems::*;
                 TestStage::Initializing => {} // Handled in setup
     
                 TestStage::SettingTime => {
-                    if state.current_frame >= state.frame_paths.len() {
+                    // Check for max frame limit (useful for quick debugging)
+                    let max_frames = std::env::var("MAX_FRAMES")
+                        .ok()
+                        .and_then(|s| s.parse::<usize>().ok());
+                    let frame_limit = max_frames.unwrap_or(state.frame_paths.len());
+                    
+                    if state.current_frame >= state.frame_paths.len() 
+                        || state.current_frame >= frame_limit {
                         state.stage = TestStage::Finished;
                         return;
                     }

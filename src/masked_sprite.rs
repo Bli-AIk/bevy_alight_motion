@@ -1,6 +1,6 @@
 //! Unified Effect Material for the RTT effect system.
 //!
-//! This material combines basic effects (mask, wipe, stretch) in a single shader pass.
+//! This material combines basic effects (mask, wipe, stretch, blur) in a single shader pass.
 //! It is part of the RTT architecture and optimized for common single-layer effect chains.
 //!
 //! For complex multi-pass scenarios (e.g., group effects), the RTT ping-pong buffer
@@ -14,18 +14,19 @@ use bevy::{
     sprite_render::{AlphaMode2d, Material2d},
 };
 
-/// Unified material supporting mask, wipe, and stretch segment effects.
+/// Unified material supporting mask, wipe, stretch segment, and blur effects.
 ///
 /// Effect flags control which effects are active:
 /// - `effect_flags.x > 0.5`: Mask enabled
 /// - `effect_flags.y > 0.5`: Wipe enabled
 /// - `effect_flags.z > 0.5`: Stretch segment enabled
+/// - `effect_flags.w > 0.5`: Blur enabled
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct UnifiedEffectMaterial {
     #[uniform(0)]
     pub color: LinearRgba,
 
-    /// Effect flags: (mask, wipe, stretch, reserved)
+    /// Effect flags: (mask, wipe, stretch, blur)
     #[uniform(1)]
     pub effect_flags: Vec4,
 
@@ -49,6 +50,10 @@ pub struct UnifiedEffectMaterial {
     #[uniform(6)]
     pub mesh_offset: Vec4,
 
+    /// Blur: (strength, 0, 0, 0)
+    #[uniform(9)]
+    pub blur_params: Vec4,
+
     #[texture(7)]
     #[sampler(8)]
     pub texture: Option<Handle<Image>>,
@@ -64,6 +69,7 @@ impl Default for UnifiedEffectMaterial {
             stretch_params: Vec4::ZERO,
             original_size: Vec4::new(100.0, 100.0, 100.0, 100.0),
             mesh_offset: Vec4::ZERO,
+            blur_params: Vec4::ZERO,
             texture: None,
         }
     }
@@ -110,6 +116,12 @@ impl UnifiedEffectMaterial {
         self
     }
 
+    pub fn with_blur(mut self, strength: f32) -> Self {
+        self.effect_flags.w = 1.0;
+        self.blur_params = Vec4::new(strength, 0.0, 0.0, 0.0);
+        self
+    }
+
     pub fn set_mask_enabled(&mut self, enabled: bool) {
         self.effect_flags.x = if enabled { 1.0 } else { 0.0 };
     }
@@ -122,6 +134,10 @@ impl UnifiedEffectMaterial {
         self.effect_flags.z = if enabled { 1.0 } else { 0.0 };
     }
 
+    pub fn set_blur_enabled(&mut self, enabled: bool) {
+        self.effect_flags.w = if enabled { 1.0 } else { 0.0 };
+    }
+
     pub fn is_mask_enabled(&self) -> bool {
         self.effect_flags.x > 0.5
     }
@@ -130,6 +146,9 @@ impl UnifiedEffectMaterial {
     }
     pub fn is_stretch_enabled(&self) -> bool {
         self.effect_flags.z > 0.5
+    }
+    pub fn is_blur_enabled(&self) -> bool {
+        self.effect_flags.w > 0.5
     }
 }
 

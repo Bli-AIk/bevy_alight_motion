@@ -1,20 +1,22 @@
 // Unified effect shader - combines multiple effects in a single pass
 //
-// This shader supports three effects that can be enabled/disabled via flags:
+// This shader supports four effects that can be enabled/disabled via flags:
 // 1. Mask clipping (rectangular region)
 // 2. Wipe transition (progressive reveal/hide)
 // 3. Stretch segment (UV domain distortion)
+// 4. Gaussian blur (box blur approximation)
 //
 // Each effect can be toggled on/off via the effect_flags uniform.
 //
 // Uniform layout:
 // 0: color (vec4) - tint color
-// 1: effect_flags (vec4) - (mask_enabled, wipe_enabled, stretch_enabled, reserved)
+// 1: effect_flags (vec4) - (mask_enabled, wipe_enabled, stretch_enabled, blur_enabled)
 // 2: mask_params (vec4) - (center_x, center_y, half_width, half_height)
 // 3: wipe_params (vec4) - (wipe_start, wipe_end, wipe_angle, wipe_feather)
 // 4: stretch_params (vec4) - (angle_radians, stretch_px, offset_px, smooth_width)
 // 5: original_size (vec4) - (orig_width, orig_height, mesh_width, mesh_height)
 // 6: mesh_offset (vec4) - (center_offset_x, center_offset_y, 0, 0)
+// 9: blur_params (vec4) - (strength, 0, 0, 0)
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -27,6 +29,7 @@
 @group(2) @binding(6) var<uniform> mesh_offset: vec4<f32>;
 @group(2) @binding(7) var base_texture: texture_2d<f32>;
 @group(2) @binding(8) var base_sampler: sampler;
+@group(2) @binding(9) var<uniform> blur_params: vec4<f32>;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -126,12 +129,54 @@ fn apply_mask(world_pos: vec2<f32>) -> bool {
     return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
 }
 
+// Apply Gaussian blur - samples multiple points and averages them
+// This is a box blur approximation for performance in a single pass
+// blur_params: x = blur radius in pixels, y = original width, z = original height
+fn apply_blur(uv: vec2<f32>, blur_radius: f32) -> vec4<f32> {
+    let tex_size = vec2<f32>(textureDimensions(base_texture, 0));
+    let pixel_size = 1.0 / tex_size;
+    
+    // Number of samples per direction (more samples = better quality but slower)
+    let samples = 15;
+    let half_samples = f32(samples - 1) / 2.0;
+    
+    var total_color = vec4<f32>(0.0);
+    var total_weight = 0.0;
+    
+    // Sample in a grid pattern with Gaussian-like weights
+    for (var i = 0; i < samples; i = i + 1) {
+        for (var j = 0; j < samples; j = j + 1) {
+            let offset_x = (f32(i) - half_samples) / half_samples;  // -1 to 1
+            let offset_y = (f32(j) - half_samples) / half_samples;  // -1 to 1
+            
+            // Gaussian weight based on distance from center
+            let dist_sq = offset_x * offset_x + offset_y * offset_y;
+            let weight = exp(-dist_sq * 2.0);  // Gaussian falloff
+            
+            // Calculate sample position
+            let sample_offset = vec2<f32>(offset_x, offset_y) * blur_radius * pixel_size;
+            let sample_uv = uv + sample_offset;
+            
+            // Clamp to texture bounds (this causes edge darkening but maintains size)
+            let clamped_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+            
+            let sample_color = textureSample(base_texture, base_sampler, clamped_uv);
+            total_color += sample_color * weight;
+            total_weight += weight;
+        }
+    }
+    
+    // Normalize by total weight
+    return total_color / total_weight;
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
     let mask_enabled = effect_flags.x > 0.5;
     let wipe_enabled = effect_flags.y > 0.5;
     let stretch_enabled = effect_flags.z > 0.5;
+    let blur_enabled = effect_flags.w > 0.5;
     
     // Start with input UV
     var sample_uv = mesh.uv;
@@ -146,8 +191,18 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     
-    // Sample texture at computed UV
-    let tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    // Sample texture - with or without blur
+    var tex_color: vec4<f32>;
+    if blur_enabled {
+        let blur_radius = blur_params.x;
+        if blur_radius > 0.001 {
+            tex_color = apply_blur(sample_uv, blur_radius);
+        } else {
+            tex_color = textureSample(base_texture, base_sampler, sample_uv);
+        }
+    } else {
+        tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
     
     // Apply mask clipping if enabled
     if mask_enabled {

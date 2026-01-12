@@ -432,6 +432,7 @@ fn spawn_shape(
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -575,6 +576,7 @@ fn spawn_shape(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
@@ -603,6 +605,7 @@ fn spawn_null(
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -657,6 +660,7 @@ fn spawn_null(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
@@ -756,6 +760,7 @@ fn spawn_embed_scene(
                 stretch_amount: AmAnimatedFloat::default(),
                 stretch_offset: AmAnimatedFloat::default(),
                 stretch_smooth: AmAnimatedFloat::default(),
+                blur_strength: AmAnimatedFloat::default(),
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
@@ -821,6 +826,7 @@ fn spawn_image(
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
     let wipe_effect = extract_wipe_effect(&image.effects);
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
 
     // Get size from properties
@@ -888,6 +894,7 @@ fn spawn_image(
                 stretch_amount: stretch_segment.stretch,
                 stretch_offset: stretch_segment.offset,
                 stretch_smooth: stretch_segment.smooth,
+                blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
@@ -1095,6 +1102,7 @@ fn spawn_text(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -1626,6 +1634,41 @@ fn extract_stretch_segment_effect(effects: &[AmEffect]) -> StretchSegmentParams 
     params
 }
 
+/// Gaussian blur effect parameters extracted from effects.
+#[derive(Debug, Clone, Default)]
+pub struct GaussianBlurParams {
+    /// Blur strength (0 = no blur, higher = more blur)
+    pub strength: AmAnimatedFloat,
+}
+
+impl GaussianBlurParams {
+    /// Check if this has any blur effect parameters set
+    pub fn has_effect(&self) -> bool {
+        self.strength.value.is_some() || !self.strength.keyframes.is_empty()
+    }
+}
+
+/// Extract Gaussian blur effect parameters from effects.
+fn extract_gaussian_blur_effect(effects: &[AmEffect]) -> GaussianBlurParams {
+    let mut params = GaussianBlurParams::default();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.gaussianblur" {
+            for prop in &effect.properties {
+                if prop.name == "strength" {
+                    if !prop.keyframes.is_empty() {
+                        params.strength.keyframes = prop.keyframes.clone();
+                    } else if let Ok(v) = prop.value.parse::<f32>() {
+                        params.strength.value = Some(v);
+                    }
+                }
+            }
+        }
+    }
+
+    params
+}
+
 /// Truncate a string to a maximum length, adding "..." if truncated.
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -1897,6 +1940,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
@@ -2016,6 +2060,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -2048,6 +2093,7 @@ fn collect_null(
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -2088,6 +2134,7 @@ fn collect_null(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -2187,6 +2234,7 @@ fn collect_embed_scene(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -2540,6 +2588,7 @@ fn collect_text(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -2574,6 +2623,7 @@ fn collect_image(
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let wipe_effect = extract_wipe_effect(&image.effects);
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -2621,6 +2671,7 @@ fn collect_image(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,

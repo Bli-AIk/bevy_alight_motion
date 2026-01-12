@@ -99,6 +99,8 @@ pub struct AmAnimated {
     pub stretch_offset: AmAnimatedFloat,
     /// Stretch segment effect smooth width (0 = hard edge).
     pub stretch_smooth: AmAnimatedFloat,
+    /// Gaussian blur effect strength (0 = no blur).
+    pub blur_strength: AmAnimatedFloat,
     /// Speed multiplier from parent embed scenes.
     /// Local time = (global_time - time_offset) * speed_multiplier
     pub speed_multiplier: f32,
@@ -1251,6 +1253,10 @@ fn spawn_layer_entity(
             || layer.animated.stretch_smooth.value.is_some()
             || !layer.animated.stretch_smooth.keyframes.is_empty();
 
+        // Check if layer has blur effect
+        let has_blur = layer.animated.blur_strength.value.is_some()
+            || !layer.animated.blur_strength.keyframes.is_empty();
+
         // Get initial wipe params
         let initial_wipe = if has_wipe {
             let wipe_start = layer.animated.wipe_start.value.unwrap_or(0.0);
@@ -1277,6 +1283,16 @@ fn spawn_layer_entity(
             None
         };
 
+        // Get initial blur params
+        let initial_blur = if has_blur {
+            let blur_strength = layer.animated.blur_strength.value.unwrap_or(0.0);
+            // AM strength ~0-10, multiply by 3 for pixel radius
+            let blur_radius = blur_strength * 3.0;
+            Some(Vec4::new(blur_radius, 0.0, 0.0, 0.0))
+        } else {
+            None
+        };
+
         // For embed content rendered to RTT, use original size (no scaling)
         // The final display size will be affected by embed's inherited fit_scale
         let size_scale = 1.0;
@@ -1298,6 +1314,7 @@ fn spawn_layer_entity(
             initial_scale,
             initial_wipe,
             initial_stretch,
+            initial_blur,
             layer.embed_scene_size,
             size_scale,
         );
@@ -1367,6 +1384,7 @@ fn add_visual_components(
     initial_scale: (f32, f32),
     wipe_params: Option<Vec4>,
     stretch_params: Option<Vec4>,
+    blur_params: Option<Vec4>,
     embed_scene_size: Option<(f32, f32)>,
     size_scale: f32,
 ) {
@@ -1377,7 +1395,8 @@ fn add_visual_components(
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
     let needs_mask = mask_info.is_some();
-    let needs_any_effect = needs_stretch || needs_wipe || needs_mask;
+    let needs_blur = blur_params.is_some();
+    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -1432,6 +1451,7 @@ fn add_visual_components(
         mask_info: &Option<AmMaskInfo>,
         wipe_params: Option<Vec4>,
         stretch_params: Option<Vec4>,
+        blur_params: Option<Vec4>,
     ) -> Handle<UnifiedEffectMaterial> {
         let mut material = UnifiedEffectMaterial {
             color,
@@ -1442,6 +1462,7 @@ fn add_visual_components(
             original_size: Vec4::new(width, height, width, height),
             mesh_offset: Vec4::ZERO,
             texture: Some(texture),
+            blur_params: Vec4::ZERO,
         };
 
         // Enable mask if present
@@ -1467,6 +1488,12 @@ fn add_visual_components(
             material.stretch_params = sp;
         }
 
+        // Enable blur if present
+        if let Some(bp) = blur_params {
+            material.effect_flags.w = 1.0;
+            material.blur_params = bp;
+        }
+
         unified_materials.add(material)
     }
 
@@ -1483,29 +1510,28 @@ fn add_visual_components(
             let base_width = *width * size_scale;
             let base_height = *height * size_scale;
 
-            // For effects, use scaled dimensions (scale is applied to mesh, not transform)
-            let scaled_width = base_width * initial_scale.0;
-            let scaled_height = base_height * initial_scale.1;
-
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
                     if needs_any_effect {
                         // Use UnifiedEffectMaterial for all effect cases
-                        // Create mesh with SCALED dimensions since effects need actual pixel sizes
+                        // Create mesh with BASE dimensions (not scaled)
+                        // Transform.scale will handle the actual scaling
+                        // Effects work in UV space (0-1), so they don't need scaled pixel sizes
                         let mesh =
-                            create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                            create_anchored_rectangle(meshes, base_width, base_height, anchor);
                         let material = create_unified_material(
                             unified_materials,
                             handle.clone(),
                             LinearRgba::WHITE,
-                            scaled_width,
-                            scaled_height,
+                            base_width,
+                            base_height,
                             mask_info,
                             wipe_params,
                             stretch_params,
+                            blur_params,
                         );
 
-                        // Scale is already baked into mesh in spawn_layer_entity
+                        // Transform.scale from scene.rs will handle the scaling
                         commands.entity(entity).insert((
                             Mesh2d(mesh),
                             MeshMaterial2d(material),
@@ -1514,15 +1540,14 @@ fn add_visual_components(
                         ));
 
                         bevy::log::info!(
-                            "[Visual] Spawned sprite '{}' with unified effect: base_size=({:.1},{:.1}), scaled=({:.1},{:.1}), mask={}, wipe={}, stretch={}",
+                            "[Visual] Spawned sprite '{}' with unified effect: base_size=({:.1},{:.1}), mask={}, wipe={}, stretch={}, blur={}",
                             label,
                             base_width,
                             base_height,
-                            scaled_width,
-                            scaled_height,
                             needs_mask,
                             needs_wipe,
-                            needs_stretch
+                            needs_stretch,
+                            needs_blur
                         );
                     } else {
                         // No effects - use normal sprite
@@ -1542,20 +1567,20 @@ fn add_visual_components(
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
                     let mesh =
-                        create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                        create_anchored_rectangle(meshes, base_width, base_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
                         color.to_linear(),
-                        scaled_width,
-                        scaled_height,
+                        base_width,
+                        base_height,
                         mask_info,
                         wipe_params,
                         stretch_params,
+                        blur_params,
                     );
 
-                    // Reset entity's scale to 1 since we baked it into the mesh
-                    // Scale is already baked into mesh in spawn_layer_entity
+                    // Transform.scale from scene.rs will handle the scaling
                     commands.entity(entity).insert((
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
@@ -1564,10 +1589,10 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned fill sprite '{}' with unified effect: scaled=({:.1},{:.1})",
+                        "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1})",
                         label,
-                        scaled_width,
-                        scaled_height
+                        base_width,
+                        base_height
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -1625,26 +1650,25 @@ fn add_visual_components(
             let base_width = *width * size_scale;
             let base_height = *height * size_scale;
 
-            // For effects, use scaled dimensions
-            let scaled_width = base_width * initial_scale.0;
-            let scaled_height = base_height * initial_scale.1;
-
             if let Some(handle) = images.get(image_uri) {
                 if needs_any_effect {
+                    // Create mesh with BASE dimensions (not scaled)
+                    // Transform.scale will handle the actual scaling
                     let mesh =
-                        create_anchored_rectangle(meshes, scaled_width, scaled_height, anchor);
+                        create_anchored_rectangle(meshes, base_width, base_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
                         LinearRgba::WHITE,
-                        scaled_width,
-                        scaled_height,
+                        base_width,
+                        base_height,
                         mask_info,
                         wipe_params,
                         stretch_params,
+                        blur_params,
                     );
 
-                    // Scale is already baked into mesh in spawn_layer_entity
+                    // Transform.scale from scene.rs will handle the scaling
                     commands.entity(entity).insert((
                         Mesh2d(mesh),
                         MeshMaterial2d(material),
@@ -1653,10 +1677,10 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned image '{}' with unified effect: scaled=({:.1},{:.1})",
+                        "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1})",
                         label,
-                        scaled_width,
-                        scaled_height
+                        base_width,
+                        base_height
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -2107,6 +2131,28 @@ pub fn animate_unified_effect_system(
                 material.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
             } else {
                 material.set_wipe_enabled(false);
+            }
+
+            // Update blur parameters if needed
+            let has_blur = animated.blur_strength.value.is_some()
+                || !animated.blur_strength.keyframes.is_empty();
+            if has_blur {
+                let blur_strength =
+                    interpolate_float(&animated.blur_strength, layer_time).unwrap_or(0.0);
+                if blur_strength > 0.001 {
+                    material.set_blur_enabled(true);
+                    // AM strength 2.0 produces very strong blur
+                    // Through testing: strength * 50 gives approximately correct pixel radius
+                    let blur_radius_px = blur_strength * 50.0;
+                    // Pass the actual pixel radius to shader
+                    // blur_params.x = blur radius in pixels
+                    // For now, don't expand mesh - just accept clipping at boundaries
+                    material.blur_params = Vec4::new(blur_radius_px, orig_width, orig_height, 0.0);
+                } else {
+                    material.set_blur_enabled(false);
+                }
+            } else {
+                material.set_blur_enabled(false);
             }
 
             // Update stretch segment parameters if needed
