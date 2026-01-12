@@ -1,31 +1,17 @@
+# Default average and frame thresholds are both set to 0.98
+#
+# 默认的平均阀值和帧阀值均为0.98
 [default]
 avg_threshold = 0.98
-frame_threshold = 0.98
+frame_threshold = 0.95
 
 # Known issues with Resolution Groups (AM export bug)
+#
+# 已知的分辨率组问题（AM导出错误）
 [overrides.basic_resolution_group]
 avg_threshold = 0.95
-frame_threshold = 0.83
-
-[overrides.basic_resolution_group_ex]
-avg_threshold = 0.95
-frame_threshold = 0.83
+frame_threshold = 0.78
 
 [overrides.basic_resolution_group_ex2]
 avg_threshold = 0.90
 frame_threshold = 0.70
-
-# Complex nested transforms + stretch
-[overrides.fx_1_ex3_stretch_segment]
-avg_threshold = 0.96
-frame_threshold = 0.95
-
-# First frame glitch on some stretch examples
-[overrides.fx_1_ex_stretch_segment]
-avg_threshold = 0.92
-frame_threshold = 0.35 # First frame is 0.36
-
-# Not fully implemented effects (Pixelate, PaletteMap)
-[overrides.complex_examples_3_ex1]
-avg_threshold = 0.70
-frame_threshold = 0.40

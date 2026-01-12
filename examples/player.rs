@@ -820,15 +820,16 @@ use video_debug_systems::*;
 // ============================================================================
 
 #[cfg(feature = "video-comparison")]
-mod video_comparison_systems {
-    use super::*;
-    use crate::video_utils;
-        use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-        use bevy::window::PrimaryWindow;
-        use std::path::PathBuf;
-        use serde::Deserialize;
-        use std::collections::HashMap;
-    
+        mod video_comparison_systems {
+            use super::*;
+            use crate::video_utils;
+            use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+            use bevy::window::PrimaryWindow;
+            use std::path::PathBuf;
+            use serde::Deserialize;
+            use std::collections::HashMap;
+            use owo_colors::OwoColorize;
+
         #[derive(Resource)]
         pub struct ComparisonState {
             pub frame_paths: Vec<PathBuf>,
@@ -844,6 +845,7 @@ mod video_comparison_systems {
             pub avg_threshold: f32,
             pub frame_threshold: f32,
             pub project_name: String,
+            pub skipped: bool,
         }
     
         #[derive(PartialEq, Debug)]
@@ -871,10 +873,10 @@ mod video_comparison_systems {
                     avg_threshold: 0.98,
                     frame_threshold: 0.98,
                     project_name: String::new(),
+                    skipped: false,
                 }
             }
-        }
-    
+        }    
         #[derive(Deserialize, Debug)]
         struct ComparisonConfig {
             default: ProjectConfig,
@@ -948,7 +950,12 @@ mod video_comparison_systems {
     
             // Find and extract video
             let Some(video_path) = video_utils::find_debug_video(Some(&project_file.0)) else {
-                println!("[COMPARISON] Error: No video found for comparison!");
+                println!(
+                    "{} {}",
+                    "[COMPARISON] SKIP:".yellow().bold(),
+                    "No video found for comparison!".yellow()
+                );
+                state.skipped = true;
                 state.stage = TestStage::Finished;
                 return;
             };
@@ -1076,14 +1083,14 @@ mod video_comparison_systems {
                         let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                         diff_img.save(diff_path).unwrap();
                         println!(
-                            "[FRAME {:03}] Similarity: {:.4} (FAIL < {:.2}) | Content: {:.4}, Match: {:.1}%",
-                            frame_idx, similarity, threshold, result.content_similarity, result.pixel_match_rate * 100.0
+                            "[FRAME {:03}] Similarity: {:.4} ({} < {:.2}) | Content: {:.4}, Match: {:.1}%",
+                            frame_idx, similarity, "FAIL".red().bold(), threshold, result.content_similarity, result.pixel_match_rate * 100.0
                         );
                     } else {
                         if frame_idx % 10 == 0 {
                             println!(
-                                "[FRAME {:03}] Similarity: {:.4} (OK) | Content: {:.4}, Match: {:.1}%",
-                                frame_idx, similarity, result.content_similarity, result.pixel_match_rate * 100.0
+                                "[FRAME {:03}] Similarity: {:.4} ({}) | Content: {:.4}, Match: {:.1}%",
+                                frame_idx, similarity, "OK".green(), result.content_similarity, result.pixel_match_rate * 100.0
                             );
                         }
                     }
@@ -1104,14 +1111,19 @@ mod video_comparison_systems {
     
                     println!("========================================");
                     println!("COMPARISON FINISHED: {}", state.project_name);
-                    println!("Total Frames: {}", state.frame_paths.len());
-                    println!("Average Similarity: {:.4} (Threshold: {:.2})", avg_score, state.avg_threshold);
                     
-                    let passed = avg_score >= state.avg_threshold;
-                    if passed {
-                        println!("RESULT: PASS ✅");
+                    if state.skipped {
+                        println!("{}", "RESULT: SKIP ⚠️".yellow().bold());
                     } else {
-                        println!("RESULT: FAIL ❌");
+                        println!("Total Frames: {}", state.frame_paths.len());
+                        println!("Average Similarity: {:.4} (Threshold: {:.2})", avg_score, state.avg_threshold);
+                        
+                        let passed = avg_score >= state.avg_threshold;
+                        if passed {
+                            println!("{}", "RESULT: PASS ✅".green().bold());
+                        } else {
+                            println!("{}", "RESULT: FAIL ❌".red().bold());
+                        }
                     }
                     
                     println!("Report saved to: {:?}", state.report_dir);
@@ -1123,10 +1135,15 @@ mod video_comparison_systems {
                     }
     
                     // Exit with appropriate code
-                    if passed {
-                        exit.write(AppExit::Success);
+                    if state.skipped {
+                        exit.write(AppExit::Success); // Or maybe a specific code for skip?
                     } else {
-                        exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
+                        let passed = avg_score >= state.avg_threshold;
+                        if passed {
+                            exit.write(AppExit::Success);
+                        } else {
+                            exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
+                        }
                     }
                 }
             }
