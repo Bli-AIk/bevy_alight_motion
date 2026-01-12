@@ -4,6 +4,7 @@
 //!   cargo run -p bevy_alight_motion --example player -- <project_name>
 //!   cargo run -p bevy_alight_motion --example player --features debug -- <project_name>
 //!   cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
+//!   cargo run -p bevy_alight_motion --example player --features video-comparison -- <project_name>
 //!
 //! Available projects:
 //!   - simple_gb (default)
@@ -21,6 +22,9 @@
 //! - F1: Toggle inspector window (requires --features debug)
 //! - F4: Toggle debug image overlay
 //! - F6: Toggle video debug overlay (requires --features video-debug)
+
+#[path = "video_utils.rs"]
+mod video_utils;
 
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
@@ -51,20 +55,33 @@ fn main() {
     let project_file = get_project_file();
     println!("Loading project: {}", project_file);
 
+    // Default resolution
+    let mut resolution = Vec2::new(1280.0, 960.0);
+
+    // In comparison mode, try to match video resolution
+    #[cfg(feature = "video-comparison")]
+    {
+        if let Some(video_path) = video_utils::find_debug_video(Some(&project_file)) {
+             // ...
+             println!("Comparison mode: Using default resolution for now. Ensure video matches.");
+        }
+    }
+
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: format!("Alight Motion Player - {}", project_file),
-            resolution: (1280, 960).into(),
+            resolution: bevy::window::WindowResolution::new(resolution.x as u32, resolution.y as u32),
             resizable: false,
+            // In comparison mode, we might want to hide the window or keep it for debugging
             ..default()
         }),
         ..default()
     }))
     // Black background matching AM project
     .insert_resource(ClearColor(Color::BLACK))
-    .insert_resource(ProjectFile(project_file))
+    .insert_resource(ProjectFile(project_file.clone()))
     .insert_resource(AmProjectResolution::FitWindow)
     .init_resource::<DebugOverlaySettings>()
     .init_resource::<MaskDebugSettings>()
@@ -89,6 +106,15 @@ fn main() {
             .add_systems(Startup, setup_video_debug)
             .add_systems(Update, (load_video_frames, update_video_debug_overlay));
         println!("Video debug mode enabled: Press F6 to toggle video overlay");
+    }
+
+    // Add video comparison systems
+    #[cfg(feature = "video-comparison")]
+    {
+        app.init_resource::<video_comparison_systems::ComparisonState>()
+            .add_systems(Startup, video_comparison_systems::setup_comparison)
+            .add_systems(Update, video_comparison_systems::comparison_loop);
+        println!("Video comparison mode enabled: Running automated test...");
     }
 
     // Add inspector plugin when debug feature is enabled
@@ -117,44 +143,49 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
     // Load the AM project from assets folder
     load_am_project(&mut commands, &asset_server, &project_file.0);
 
-    // Spawn UI for status display
-    commands.spawn((
-        Text::new("Loading..."),
-        TextFont {
-            font_size: 20.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        StatusText,
-    ));
+    // Only spawn UI if NOT in comparison mode
+    #[cfg(not(feature = "video-comparison"))]
+    {
+        // Spawn UI for status display
+        commands.spawn((
+            Text::new("Loading..."),
+            TextFont {
+                font_size: 20.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..default()
+            },
+            StatusText,
+        ));
 
-    // Instructions - clear English key descriptions
-    commands.spawn((
-        Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [F5] Force Stop | [Left/Right] Seek | [Up/Down] Speed | [L] Loop"),
-        TextFont {
-            font_size: 16.0,
-            ..default()
-        },
-        TextColor(Color::srgba(0.8, 0.8, 0.8, 1.0)),
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-    ));
+        // Instructions
+        commands.spawn((
+            Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [F5] Force Stop | [Left/Right] Seek | [Up/Down] Speed | [L] Loop"),
+            TextFont {
+                font_size: 16.0,
+                ..default()
+            },
+            TextColor(Color::srgba(0.8, 0.8, 0.8, 1.0)),
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..default()
+            },
+        ));
+    }
 }
 
 /// Debug system to print sprite info once
 fn debug_sprites(
     query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
 ) {
+    #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, sprite) in query.iter() {
         let global_z = global_transform.translation().z;
         println!(
@@ -171,11 +202,11 @@ fn debug_sprites(
     }
 }
 
-/// Debug system to print SDF shape info once (to verify GlobalTransform z propagation)
-/// Run in PostUpdate to ensure GlobalTransform is propagated
+/// Debug system to print SDF shape info once
 fn debug_sdf_shapes(
     query: Query<(&Name, &Transform, &GlobalTransform), Added<bevy_smud::SmudShape>>,
 ) {
+    #[cfg(not(feature = "video-comparison"))]
     for (name, transform, global_transform) in query.iter() {
         let local_z = transform.translation.z;
         let global_z = global_transform.translation().z;
@@ -187,51 +218,55 @@ fn debug_sdf_shapes(
 }
 
 fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlayback>) {
-    // Play/Pause toggle
-    if keyboard.just_pressed(KeyCode::Space) {
-        playback.toggle();
-    }
+    // Disable manual input in comparison mode
+    #[cfg(not(feature = "video-comparison"))]
+    {
+        // Play/Pause toggle
+        if keyboard.just_pressed(KeyCode::Space) {
+            playback.toggle();
+        }
 
-    // Reset (keeps current play/pause state)
-    if keyboard.just_pressed(KeyCode::KeyR) {
-        playback.reset();
-    }
+        // Reset (keeps current play/pause state)
+        if keyboard.just_pressed(KeyCode::KeyR) {
+            playback.reset();
+        }
 
-    // Replay (reset and start playing)
-    if keyboard.just_pressed(KeyCode::KeyP) {
-        playback.reset();
-        playback.playing = true;
-    }
+        // Replay (reset and start playing)
+        if keyboard.just_pressed(KeyCode::KeyP) {
+            playback.reset();
+            playback.playing = true;
+        }
 
-    // Force stop toggle (F5) - freezes all animation updates for inspector editing
-    if keyboard.just_pressed(KeyCode::F5) {
-        playback.toggle_force_stop();
-        let status = if playback.force_stopped { "ON" } else { "OFF" };
-        println!(
-            "Force stop: {} (animation updates frozen for inspector editing)",
-            status
-        );
-    }
+        // Force stop toggle (F5) - freezes all animation updates for inspector editing
+        if keyboard.just_pressed(KeyCode::F5) {
+            playback.toggle_force_stop();
+            let status = if playback.force_stopped { "ON" } else { "OFF" };
+            println!(
+                "Force stop: {} (animation updates frozen for inspector editing)",
+                status
+            );
+        }
 
-    // Seek backward/forward by 50ms
-    if keyboard.pressed(KeyCode::ArrowLeft) {
-        playback.current_time_ms = (playback.current_time_ms - 50.0).max(0.0);
-    }
-    if keyboard.pressed(KeyCode::ArrowRight) {
-        playback.current_time_ms = (playback.current_time_ms + 50.0).min(playback.total_time_ms);
-    }
+        // Seek backward/forward by 50ms
+        if keyboard.pressed(KeyCode::ArrowLeft) {
+            playback.current_time_ms = (playback.current_time_ms - 50.0).max(0.0);
+        }
+        if keyboard.pressed(KeyCode::ArrowRight) {
+            playback.current_time_ms = (playback.current_time_ms + 50.0).min(playback.total_time_ms);
+        }
 
-    // Speed control (up = faster, down = slower)
-    if keyboard.just_pressed(KeyCode::ArrowUp) {
-        playback.speed = (playback.speed + 0.1).min(4.0);
-    }
-    if keyboard.just_pressed(KeyCode::ArrowDown) {
-        playback.speed = (playback.speed - 0.1).max(0.1);
-    }
+        // Speed control (up = faster, down = slower)
+        if keyboard.just_pressed(KeyCode::ArrowUp) {
+            playback.speed = (playback.speed + 0.1).min(4.0);
+        }
+        if keyboard.just_pressed(KeyCode::ArrowDown) {
+            playback.speed = (playback.speed - 0.1).max(0.1);
+        }
 
-    // Loop mode toggle
-    if keyboard.just_pressed(KeyCode::KeyL) {
-        playback.looping = !playback.looping;
+        // Loop mode toggle
+        if keyboard.just_pressed(KeyCode::KeyL) {
+            playback.looping = !playback.looping;
+        }
     }
 }
 
@@ -395,15 +430,15 @@ fn find_latest_debug_image() -> Option<String> {
     }
 
     if !found_debug_folder {
-        println!("Debug folder not found in any of the expected locations");
+        // println!("Debug folder not found in any of the expected locations");
         return None;
     }
 
     if let Some((path, _)) = latest_file {
-        println!("Selected latest debug image: {}", path);
+        // println!("Selected latest debug image: {}", path);
         Some(path)
     } else {
-        println!("No image files found in debug folder");
+        // println!("No image files found in debug folder");
         None
     }
 }
@@ -430,84 +465,86 @@ fn toggle_mask_debug(
     mask_query: Query<&bevy_alight_motion::scene::AmMaskInfo, Without<MaskDebugVisual>>,
     debug_visual_query: Query<Entity, With<MaskDebugVisual>>,
 ) {
-    if keyboard.just_pressed(KeyCode::KeyM) {
-        settings.show_masks = !settings.show_masks;
+    #[cfg(not(feature = "video-comparison"))]
+    {
+        if keyboard.just_pressed(KeyCode::KeyM) {
+            settings.show_masks = !settings.show_masks;
 
-        if settings.show_masks {
-            // Spawn mask visualization entities for each mask
-            // First, find unique mask centers (masks may be shared across many entities)
-            let mut seen_masks: std::collections::HashSet<(i32, i32, i32, i32)> =
-                std::collections::HashSet::new();
+            if settings.show_masks {
+                // Spawn mask visualization entities for each mask
+                // First, find unique mask centers (masks may be shared across many entities)
+                let mut seen_masks: std::collections::HashSet<(i32, i32, i32, i32)> =
+                    std::collections::HashSet::new();
 
-            for mask_info in mask_query.iter() {
-                // Create a key based on mask position and size (rounded to int for comparison)
-                let key = (
-                    (mask_info.center.x * 10.0) as i32,
-                    (mask_info.center.y * 10.0) as i32,
-                    (mask_info.half_size.x * 10.0) as i32,
-                    (mask_info.half_size.y * 10.0) as i32,
-                );
+                for mask_info in mask_query.iter() {
+                    // Create a key based on mask position and size (rounded to int for comparison)
+                    let key = (
+                        (mask_info.center.x * 10.0) as i32,
+                        (mask_info.center.y * 10.0) as i32,
+                        (mask_info.half_size.x * 10.0) as i32,
+                        (mask_info.half_size.y * 10.0) as i32,
+                    );
 
-                if seen_masks.contains(&key) {
-                    continue;
-                }
-                seen_masks.insert(key);
+                    if seen_masks.contains(&key) {
+                        continue;
+                    }
+                    seen_masks.insert(key);
 
-                // Spawn a semi-transparent rectangle to visualize the mask
-                println!(
-                    "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
-                    mask_info.center.x,
-                    mask_info.center.y,
-                    mask_info.half_size.x * 2.0,
-                    mask_info.half_size.y * 2.0
-                );
-
-                // Create a sprite to show the mask region
-                commands.spawn((
-                    Name::new("MaskDebugVisual"),
-                    MaskDebugVisual,
-                    Sprite {
-                        color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
-                        custom_size: Some(Vec2::new(
-                            mask_info.half_size.x * 2.0,
-                            mask_info.half_size.y * 2.0,
-                        )),
-                        ..default()
-                    },
-                    Transform::from_translation(Vec3::new(
+                    // Spawn a semi-transparent rectangle to visualize the mask
+                    println!(
+                        "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
                         mask_info.center.x,
                         mask_info.center.y,
-                        100.0, // High z to render on top
-                    )),
-                ));
-            }
+                        mask_info.half_size.x * 2.0,
+                        mask_info.half_size.y * 2.0
+                    );
 
-            if seen_masks.is_empty() {
-                println!("[MASK DEBUG] No masks found to visualize");
+                    // Create a sprite to show the mask region
+                    commands.spawn((
+                        Name::new("MaskDebugVisual"),
+                        MaskDebugVisual,
+                        Sprite {
+                            color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
+                            custom_size: Some(Vec2::new(
+                                mask_info.half_size.x * 2.0,
+                                mask_info.half_size.y * 2.0,
+                            )),
+                            ..default()
+                        },
+                        Transform::from_translation(Vec3::new(
+                            mask_info.center.x,
+                            mask_info.center.y,
+                            100.0, // High z to render on top
+                        )),
+                    ));
+                }
+
+                if seen_masks.is_empty() {
+                    println!("[MASK DEBUG] No masks found to visualize");
+                } else {
+                    println!("[MASK DEBUG] Showing {} mask region(s)", seen_masks.len());
+                }
             } else {
-                println!("[MASK DEBUG] Showing {} mask region(s)", seen_masks.len());
+                // Remove debug visualizations
+                let count = debug_visual_query.iter().count();
+                for entity in debug_visual_query.iter() {
+                    commands.entity(entity).despawn();
+                }
+                println!("[MASK DEBUG] Hidden {} mask visualization(s)", count);
             }
-        } else {
-            // Remove debug visualizations
-            let count = debug_visual_query.iter().count();
-            for entity in debug_visual_query.iter() {
-                commands.entity(entity).despawn();
-            }
-            println!("[MASK DEBUG] Hidden {} mask visualization(s)", count);
         }
     }
 }
 
 // ============================================================================
 // Video Debug Overlay (requires --features video-debug)
-// Uses ffmpeg to extract frames at startup, then plays them as an overlay
 // ============================================================================
 
 #[cfg(feature = "video-debug")]
-mod video_debug {
+mod video_debug_systems {
     use super::*;
+    use crate::video_utils;
     use std::path::PathBuf;
-    use std::process::Command;
 
     /// Resource to control video debug overlay state
     #[derive(Resource)]
@@ -559,210 +596,13 @@ mod video_debug {
     #[derive(Component)]
     pub struct VideoDebugImageNode;
 
-    /// Find video file for debug overlay
-    /// First try to find a video with the same name as the project, then fall back to latest
-    fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
-        use std::fs;
-        use std::time::SystemTime;
-
-        let possible_paths = ["crates/bevy_alight_motion/assets/debug", "assets/debug"];
-        let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
-
-        // First, try to find a video matching the project name
-        if let Some(path) = project_path {
-            // Extract just the filename without directory and extension
-            // e.g., "am/fx_1_stretch_segment.amproj" -> "fx_1_stretch_segment"
-            let base_name = std::path::Path::new(path)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(path);
-
-            println!(
-                "[VIDEO DEBUG] Looking for video matching project: {}",
-                base_name
-            );
-
-            for debug_path in &possible_paths {
-                let path = std::path::Path::new(debug_path);
-                if !path.exists() {
-                    continue;
-                }
-
-                for ext in &extensions {
-                    let video_file = path.join(format!("{}.{}", base_name, ext));
-                    if video_file.exists() {
-                        println!("[VIDEO DEBUG] Found matching video: {:?}", video_file);
-                        return Some(video_file);
-                    }
-                }
-            }
-            println!(
-                "[VIDEO DEBUG] No matching video for '{}', falling back to latest",
-                base_name
-            );
-        }
-
-        // Fall back to finding the latest video file
-        let mut latest_file: Option<(PathBuf, SystemTime)> = None;
-
-        for debug_path in &possible_paths {
-            let path = std::path::Path::new(debug_path);
-            if !path.exists() {
-                continue;
-            }
-
-            if let Ok(entries) = fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    if let Ok(file_type) = entry.file_type() {
-                        if file_type.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                if let Some(extension) = file_name.split('.').next_back() {
-                                    if extensions.contains(&extension.to_lowercase().as_str()) {
-                                        if let Ok(metadata) = entry.metadata() {
-                                            if let Ok(modified) = metadata.modified() {
-                                                if latest_file.is_none()
-                                                    || latest_file.as_ref().unwrap().1 < modified
-                                                {
-                                                    latest_file = Some((entry.path(), modified));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if latest_file.is_some() {
-                    break;
-                }
-            }
-        }
-
-        latest_file.map(|(path, _)| path)
-    }
-
-    /// Get video info using ffprobe
-    fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
-        // Get frame rate
-        let fps_output = Command::new("ffprobe")
-            .args([
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=r_frame_rate",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-            ])
-            .arg(video_path)
-            .output()
-            .ok()?;
-
-        let fps_str = String::from_utf8_lossy(&fps_output.stdout);
-        let fps = parse_fps(&fps_str.trim()).unwrap_or(12.0);
-
-        // Get duration
-        let duration_output = Command::new("ffprobe")
-            .args([
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-            ])
-            .arg(video_path)
-            .output()
-            .ok()?;
-
-        let duration_str = String::from_utf8_lossy(&duration_output.stdout);
-        let duration: f32 = duration_str.trim().parse().unwrap_or(0.0);
-
-        Some((fps, duration))
-    }
-
-    /// Parse FPS from ffprobe output (handles formats like "12/1" or "29.97")
-    fn parse_fps(s: &str) -> Option<f32> {
-        if s.contains('/') {
-            let parts: Vec<&str> = s.split('/').collect();
-            if parts.len() == 2 {
-                let num: f32 = parts[0].parse().ok()?;
-                let den: f32 = parts[1].parse().ok()?;
-                if den > 0.0 {
-                    return Some(num / den);
-                }
-            }
-        }
-        s.parse().ok()
-    }
-
-    /// Extract frames from video using ffmpeg
-    fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
-        use std::fs;
-
-        // Create frames directory inside assets/debug
-        let possible_assets_dirs = [
-            "crates/bevy_alight_motion/assets/debug/_video_frames",
-            "assets/debug/_video_frames",
-        ];
-
-        let mut frames_dir = None;
-        for dir_path in &possible_assets_dirs {
-            let parent = std::path::Path::new(dir_path).parent()?;
-            if parent.exists() {
-                frames_dir = Some(PathBuf::from(dir_path));
-                break;
-            }
-        }
-
-        let frames_dir = frames_dir?;
-
-        // Clean up existing frames
-        if frames_dir.exists() {
-            let _ = fs::remove_dir_all(&frames_dir);
-        }
-        fs::create_dir_all(&frames_dir).ok()?;
-
-        println!("[VIDEO DEBUG] Extracting frames to {:?}", frames_dir);
-
-        // Extract frames using ffmpeg
-        let output_pattern = frames_dir.join("frame_%06d.png");
-        let status = Command::new("ffmpeg")
-            .args(["-i"])
-            .arg(video_path)
-            .args([
-                "-vf",
-                &format!("fps={}", fps),
-                "-y", // Overwrite existing files
-            ])
-            .arg(&output_pattern)
-            .output();
-
-        match status {
-            Ok(output) => {
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("[VIDEO DEBUG] ffmpeg error: {}", stderr);
-                    return None;
-                }
-                Some(frames_dir)
-            }
-            Err(e) => {
-                println!("[VIDEO DEBUG] Failed to run ffmpeg: {:?}", e);
-                None
-            }
-        }
-    }
-
     /// Setup video debug overlay on startup
     pub fn setup_video_debug(
         mut state: ResMut<VideoDebugState>,
         project_file: Res<super::ProjectFile>,
     ) {
-        // Find video file - first try matching project name, then fallback to latest
-        let Some(video_path) = find_debug_video(Some(&project_file.0)) else {
+        // Find video file
+        let Some(video_path) = video_utils::find_debug_video(Some(&project_file.0)) else {
             println!("[VIDEO DEBUG] No video file found in debug folder");
             return;
         };
@@ -770,7 +610,7 @@ mod video_debug {
         println!("[VIDEO DEBUG] Found video: {:?}", video_path);
 
         // Get video info
-        let Some((fps, duration)) = get_video_info(&video_path) else {
+        let Some((fps, duration)) = video_utils::get_video_info(&video_path) else {
             println!("[VIDEO DEBUG] Failed to get video info");
             return;
         };
@@ -781,7 +621,7 @@ mod video_debug {
         );
 
         // Extract frames
-        let Some(temp_dir) = extract_frames(&video_path, fps) else {
+        let Some(temp_dir) = video_utils::extract_frames(&video_path, fps) else {
             println!("[VIDEO DEBUG] Failed to extract frames");
             return;
         };
@@ -839,47 +679,6 @@ mod video_debug {
             "[VIDEO DEBUG] Loading {} frame handles...",
             state.frame_handles.len()
         );
-    }
-
-    /// Check if all video frames are loaded and pause playback until ready
-    pub fn check_video_frames_ready(
-        mut state: ResMut<VideoDebugState>,
-        mut playback: ResMut<AmPlayback>,
-        images: Res<Assets<Image>>,
-    ) {
-        if state.frames_ready || state.frame_handles.is_empty() {
-            return;
-        }
-
-        // Check if all frame images are loaded
-        let loaded_count = state
-            .frame_handles
-            .iter()
-            .filter(|handle| images.get(*handle).is_some())
-            .count();
-
-        let total = state.frame_handles.len();
-
-        if loaded_count < total {
-            // Still loading - ensure playback is paused and at beginning
-            if playback.playing {
-                playback.playing = false;
-                playback.current_time_ms = 0.0;
-                println!(
-                    "[VIDEO DEBUG] Waiting for frames: {}/{}",
-                    loaded_count, total
-                );
-            }
-        } else {
-            // All frames loaded!
-            state.frames_ready = true;
-            playback.playing = true;
-            playback.current_time_ms = 0.0;
-            println!(
-                "[VIDEO DEBUG] All {} frames ready, starting playback!",
-                total
-            );
-        }
     }
 
     /// Update video debug overlay each frame
@@ -987,4 +786,221 @@ mod video_debug {
 }
 
 #[cfg(feature = "video-debug")]
-pub use video_debug::*;
+use video_debug_systems::*;
+
+// ============================================================================
+// Video Comparison (requires --features video-comparison)
+// ============================================================================
+
+#[cfg(feature = "video-comparison")]
+mod video_comparison_systems {
+    use super::*;
+    use crate::video_utils;
+    use std::path::PathBuf;
+    use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+    use bevy::window::PrimaryWindow;
+
+    #[derive(Resource)]
+    pub struct ComparisonState {
+        pub frame_paths: Vec<PathBuf>,
+        pub current_frame: usize,
+        pub fps: f32,
+        pub temp_dir: Option<PathBuf>,
+        pub stage: TestStage,
+        pub wait_timer: f32,
+        pub total_diff: f64,
+        pub frame_scores: Vec<f32>,
+        pub report_dir: PathBuf,
+    }
+    
+    #[derive(PartialEq, Debug)]
+    pub enum TestStage {
+        Initializing,
+        SettingTime,
+        WaitingForRender,
+        Capturing,
+        Comparing,
+        Finished,
+    }
+
+    impl Default for ComparisonState {
+        fn default() -> Self {
+            Self {
+                frame_paths: Vec::new(),
+                current_frame: 0,
+                fps: 12.0,
+                temp_dir: None,
+                stage: TestStage::Initializing,
+                wait_timer: 0.0,
+                total_diff: 0.0,
+                frame_scores: Vec::new(),
+                report_dir: PathBuf::from("comparison_report"),
+            }
+        }
+    }
+    
+    pub fn setup_comparison(
+        mut state: ResMut<ComparisonState>,
+        project_file: Res<super::ProjectFile>,
+    ) {
+        // Prepare report dir
+        let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let report_dir = PathBuf::from("reports").join(format!("run_{}", timestamp));
+        std::fs::create_dir_all(&report_dir).expect("Failed to create report dir");
+        state.report_dir = report_dir;
+
+        // Find and extract video
+        let Some(video_path) = video_utils::find_debug_video(Some(&project_file.0)) else {
+            println!("[COMPARISON] Error: No video found for comparison!");
+            state.stage = TestStage::Finished;
+            return;
+        };
+
+        println!("[COMPARISON] Using video: {:?}", video_path);
+        
+        let Some((fps, _)) = video_utils::get_video_info(&video_path) else {
+            println!("[COMPARISON] Failed to get video info");
+            state.stage = TestStage::Finished;
+            return;
+        };
+        
+        state.fps = fps;
+
+        let Some(temp_dir) = video_utils::extract_frames(&video_path, fps) else {
+             println!("[COMPARISON] Failed to extract frames");
+             state.stage = TestStage::Finished;
+             return;
+        };
+        
+        state.temp_dir = Some(temp_dir.clone());
+        
+        // Collect paths
+        let mut frame_paths: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "png").unwrap_or(false) {
+                    frame_paths.push(path);
+                }
+            }
+        }
+        frame_paths.sort();
+        state.frame_paths = frame_paths;
+        
+        println!("[COMPARISON] Starting comparison of {} frames...", state.frame_paths.len());
+        state.stage = TestStage::SettingTime;
+    }
+
+    pub fn comparison_loop(
+        mut state: ResMut<ComparisonState>,
+        mut playback: ResMut<AmPlayback>,
+        mut commands: Commands,
+        window_query: Query<Entity, With<PrimaryWindow>>,
+        time: Res<Time>,
+        mut exit: EventWriter<AppExit>,
+    ) {
+        match state.stage {
+            TestStage::Initializing => {}, // Handled in setup
+            
+            TestStage::SettingTime => {
+                if state.current_frame >= state.frame_paths.len() {
+                    state.stage = TestStage::Finished;
+                    return;
+                }
+                
+                // Set precise time for this frame
+                let time_sec = state.current_frame as f32 / state.fps;
+                playback.playing = false; // Ensure paused
+                playback.current_time_ms = time_sec * 1000.0;
+                playback.force_stopped = false; // Allow update
+                
+                // Advance stage
+                state.wait_timer = 0.1; // Wait a bit for layout/render
+                state.stage = TestStage::WaitingForRender;
+            }
+            
+            TestStage::WaitingForRender => {
+                state.wait_timer -= time.delta_secs();
+                if state.wait_timer <= 0.0 {
+                    state.stage = TestStage::Capturing;
+                }
+            }
+            
+            TestStage::Capturing => {
+                // let window_entity = window_query.single(); // Not needed for Screenshot::primary_window()
+                let frame_idx = state.current_frame;
+                let report_dir = state.report_dir.clone();
+                let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
+                
+                // Trigger screenshot
+                commands.spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(shot_path));
+                
+                state.stage = TestStage::Comparing;
+            }
+            
+            TestStage::Comparing => {
+                let frame_idx = state.current_frame;
+                let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
+                
+                if !shot_path.exists() {
+                    // Still saving...
+                    return;
+                }
+                
+                // Give it a tiny moment to flush? Filesystem race is rare but possible.
+                // Load images
+                let shot_img = match image::open(&shot_path) {
+                    Ok(img) => img.to_rgba8(),
+                    Err(_) => return, // Wait more?
+                };
+                
+                let ref_path = &state.frame_paths[frame_idx];
+                let ref_img = image::open(ref_path).expect("Failed to open ref image").to_rgba8();
+                
+                // Compare
+                let (similarity, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
+                state.frame_scores.push(similarity);
+                
+                // Save diff if similarity < 1.0 (or threshold)
+                // Always save diff for report? Or just for failures?
+                // Let's save a diff if < 0.99
+                if similarity < 0.99 {
+                    let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
+                    diff_img.save(diff_path).unwrap();
+                    println!("[FRAME {:03}] Similarity: {:.4} (FAIL/WARN)", frame_idx, similarity);
+                } else {
+                     if frame_idx % 10 == 0 {
+                        println!("[FRAME {:03}] Similarity: {:.4} (OK)", frame_idx, similarity);
+                     }
+                }
+                
+                // Clean up shot to save space? Keep it for now.
+                
+                state.current_frame += 1;
+                state.stage = TestStage::SettingTime;
+            }
+            
+            TestStage::Finished => {
+                // Generate Report
+                let avg_score: f32 = if state.frame_scores.is_empty() { 0.0 } else {
+                    state.frame_scores.iter().sum::<f32>() / state.frame_scores.len() as f32
+                };
+                
+                println!("========================================");
+                println!("COMPARISON FINISHED");
+                println!("Total Frames: {}", state.frame_paths.len());
+                println!("Average Similarity: {:.4}", avg_score);
+                println!("Report saved to: {:?}", state.report_dir);
+                println!("========================================");
+                
+                // Cleanup temp dir
+                if let Some(temp_dir) = &state.temp_dir {
+                    let _ = std::fs::remove_dir_all(temp_dir);
+                }
+                
+                exit.write(AppExit::Success);
+            }
+        }
+    }
+}
