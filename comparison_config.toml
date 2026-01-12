@@ -10,7 +10,7 @@ frame_threshold = 0.95
 # 已知的分辨率组问题（AM导出错误）
 [overrides.basic_resolution_group]
 avg_threshold = 0.95
-frame_threshold = 0.78
+frame_threshold = 0.75
 
 [overrides.basic_resolution_group_ex2]
 avg_threshold = 0.90
