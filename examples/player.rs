@@ -1000,8 +1000,8 @@ mod video_comparison_systems {
 
                 // Save diff if similarity < 1.0 (or threshold)
                 // Always save diff for report? Or just for failures?
-                // Let's save a diff if < 0.99
-                if similarity < 0.99 {
+                // Let's save a diff if < 0.98
+                if similarity < 0.98 {
                     let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                     diff_img.save(diff_path).unwrap();
                     println!(
