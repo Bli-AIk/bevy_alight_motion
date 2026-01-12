@@ -62,8 +62,8 @@ fn main() {
     #[cfg(feature = "video-comparison")]
     {
         if let Some(video_path) = video_utils::find_debug_video(Some(&project_file)) {
-             // ...
-             println!("Comparison mode: Using default resolution for now. Ensure video matches.");
+            // ...
+            println!("Comparison mode: Using default resolution for now. Ensure video matches.");
         }
     }
 
@@ -72,7 +72,10 @@ fn main() {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: format!("Alight Motion Player - {}", project_file),
-            resolution: bevy::window::WindowResolution::new(resolution.x as u32, resolution.y as u32),
+            resolution: bevy::window::WindowResolution::new(
+                resolution.x as u32,
+                resolution.y as u32,
+            ),
             resizable: false,
             // In comparison mode, we might want to hide the window or keep it for debugging
             ..default()
@@ -252,7 +255,8 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlay
             playback.current_time_ms = (playback.current_time_ms - 50.0).max(0.0);
         }
         if keyboard.pressed(KeyCode::ArrowRight) {
-            playback.current_time_ms = (playback.current_time_ms + 50.0).min(playback.total_time_ms);
+            playback.current_time_ms =
+                (playback.current_time_ms + 50.0).min(playback.total_time_ms);
         }
 
         // Speed control (up = faster, down = slower)
@@ -796,9 +800,9 @@ use video_debug_systems::*;
 mod video_comparison_systems {
     use super::*;
     use crate::video_utils;
-    use std::path::PathBuf;
     use bevy::render::view::screenshot::{Screenshot, save_to_disk};
     use bevy::window::PrimaryWindow;
+    use std::path::PathBuf;
 
     #[derive(Resource)]
     pub struct ComparisonState {
@@ -812,7 +816,7 @@ mod video_comparison_systems {
         pub frame_scores: Vec<f32>,
         pub report_dir: PathBuf,
     }
-    
+
     #[derive(PartialEq, Debug)]
     pub enum TestStage {
         Initializing,
@@ -838,13 +842,16 @@ mod video_comparison_systems {
             }
         }
     }
-    
+
     pub fn setup_comparison(
         mut state: ResMut<ComparisonState>,
         project_file: Res<super::ProjectFile>,
     ) {
         // Prepare report dir
-        let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         let report_dir = PathBuf::from("reports").join(format!("run_{}", timestamp));
         std::fs::create_dir_all(&report_dir).expect("Failed to create report dir");
         state.report_dir = report_dir;
@@ -857,23 +864,23 @@ mod video_comparison_systems {
         };
 
         println!("[COMPARISON] Using video: {:?}", video_path);
-        
+
         let Some((fps, _)) = video_utils::get_video_info(&video_path) else {
             println!("[COMPARISON] Failed to get video info");
             state.stage = TestStage::Finished;
             return;
         };
-        
+
         state.fps = fps;
 
         let Some(temp_dir) = video_utils::extract_frames(&video_path, fps) else {
-             println!("[COMPARISON] Failed to extract frames");
-             state.stage = TestStage::Finished;
-             return;
+            println!("[COMPARISON] Failed to extract frames");
+            state.stage = TestStage::Finished;
+            return;
         };
-        
+
         state.temp_dir = Some(temp_dir.clone());
-        
+
         // Collect paths
         let mut frame_paths: Vec<PathBuf> = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&temp_dir) {
@@ -886,8 +893,11 @@ mod video_comparison_systems {
         }
         frame_paths.sort();
         state.frame_paths = frame_paths;
-        
-        println!("[COMPARISON] Starting comparison of {} frames...", state.frame_paths.len());
+
+        println!(
+            "[COMPARISON] Starting comparison of {} frames...",
+            state.frame_paths.len()
+        );
         state.stage = TestStage::SettingTime;
     }
 
@@ -900,105 +910,116 @@ mod video_comparison_systems {
         mut exit: EventWriter<AppExit>,
     ) {
         match state.stage {
-            TestStage::Initializing => {}, // Handled in setup
-            
+            TestStage::Initializing => {} // Handled in setup
+
             TestStage::SettingTime => {
                 if state.current_frame >= state.frame_paths.len() {
                     state.stage = TestStage::Finished;
                     return;
                 }
-                
+
                 // Set precise time for this frame
                 let time_sec = state.current_frame as f32 / state.fps;
                 playback.playing = false; // Ensure paused
                 playback.current_time_ms = time_sec * 1000.0;
                 playback.force_stopped = false; // Allow update
-                
+
                 // Advance stage
                 state.wait_timer = 0.1; // Wait a bit for layout/render
                 state.stage = TestStage::WaitingForRender;
             }
-            
+
             TestStage::WaitingForRender => {
                 state.wait_timer -= time.delta_secs();
                 if state.wait_timer <= 0.0 {
                     state.stage = TestStage::Capturing;
                 }
             }
-            
+
             TestStage::Capturing => {
                 // let window_entity = window_query.single(); // Not needed for Screenshot::primary_window()
                 let frame_idx = state.current_frame;
                 let report_dir = state.report_dir.clone();
                 let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
-                
+
                 // Trigger screenshot
-                commands.spawn(Screenshot::primary_window())
+                commands
+                    .spawn(Screenshot::primary_window())
                     .observe(save_to_disk(shot_path));
-                
+
                 state.stage = TestStage::Comparing;
             }
-            
+
             TestStage::Comparing => {
                 let frame_idx = state.current_frame;
                 let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
-                
+
                 if !shot_path.exists() {
                     // Still saving...
                     return;
                 }
-                
+
                 // Give it a tiny moment to flush? Filesystem race is rare but possible.
                 // Load images
                 let shot_img = match image::open(&shot_path) {
                     Ok(img) => img.to_rgba8(),
                     Err(_) => return, // Wait more?
                 };
-                
+
                 let ref_path = &state.frame_paths[frame_idx];
-                let ref_img = image::open(ref_path).expect("Failed to open ref image").to_rgba8();
-                
+                let ref_img = image::open(ref_path)
+                    .expect("Failed to open ref image")
+                    .to_rgba8();
+
                 // Compare
                 let (similarity, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
                 state.frame_scores.push(similarity);
-                
+
                 // Save diff if similarity < 1.0 (or threshold)
                 // Always save diff for report? Or just for failures?
                 // Let's save a diff if < 0.99
                 if similarity < 0.99 {
                     let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                     diff_img.save(diff_path).unwrap();
-                    println!("[FRAME {:03}] Similarity: {:.4} (FAIL/WARN)", frame_idx, similarity);
+                    println!(
+                        "[FRAME {:03}] Similarity: {:.4} (FAIL/WARN)",
+                        frame_idx, similarity
+                    );
                 } else {
-                     if frame_idx % 10 == 0 {
-                        println!("[FRAME {:03}] Similarity: {:.4} (OK)", frame_idx, similarity);
-                     }
+                    if frame_idx % 10 == 0 {
+                        println!(
+                            "[FRAME {:03}] Similarity: {:.4} (OK)",
+                            frame_idx, similarity
+                        );
+                    }
                 }
-                
+
                 // Clean up shot to save space? Keep it for now.
-                
+
                 state.current_frame += 1;
                 state.stage = TestStage::SettingTime;
             }
-            
+
             TestStage::Finished => {
                 // Generate Report
-                let avg_score: f32 = if state.frame_scores.is_empty() { 0.0 } else {
+                let avg_score: f32 = if state.frame_scores.is_empty() {
+                    0.0
+                } else {
                     state.frame_scores.iter().sum::<f32>() / state.frame_scores.len() as f32
                 };
-                
+
                 println!("========================================");
                 println!("COMPARISON FINISHED");
                 println!("Total Frames: {}", state.frame_paths.len());
                 println!("Average Similarity: {:.4}", avg_score);
                 println!("Report saved to: {:?}", state.report_dir);
                 println!("========================================");
-                
+
                 // Cleanup temp dir
                 if let Some(temp_dir) = &state.temp_dir {
                     let _ = std::fs::remove_dir_all(temp_dir);
                 }
-                
+
                 exit.write(AppExit::Success);
             }
         }

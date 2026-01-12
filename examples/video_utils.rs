@@ -1,6 +1,6 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::fs;
 
 /// Find video file for debug/comparison
 /// First try to find a video with the same name as the project, then fall back to latest
@@ -206,31 +206,28 @@ pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
 /// Compare two images and return a similarity score (0.0 to 1.0) and a diff image
 /// Similarity 1.0 means identical.
 #[cfg(feature = "video-comparison")]
-pub fn compare_images(
-    img1: &image::RgbaImage,
-    img2: &image::RgbaImage,
-) -> (f32, image::RgbaImage) {
+pub fn compare_images(img1: &image::RgbaImage, img2: &image::RgbaImage) -> (f32, image::RgbaImage) {
     use image::Pixel;
-    
+
     let width = img1.width().min(img2.width());
     let height = img1.height().min(img2.height());
-    
+
     let mut diff_image = image::RgbaImage::new(width, height);
     let mut total_diff: u64 = 0;
-    
+
     for y in 0..height {
         for x in 0..width {
             let p1 = img1.get_pixel(x, y);
             let p2 = img2.get_pixel(x, y);
-            
+
             let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
             let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
             let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
             let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64; // Optionally ignore alpha if background is black
-            
+
             let pixel_diff = r_diff + g_diff + b_diff + a_diff;
             total_diff += pixel_diff;
-            
+
             // Generate diff pixel (emphasize difference)
             if pixel_diff > 0 {
                 // Red scale based on diff
@@ -238,13 +235,13 @@ pub fn compare_images(
                 diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
             } else {
                 // Transparent or faint copy of original
-                diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0])); 
+                diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
             }
         }
     }
-    
+
     let max_diff = (width as u64) * (height as u64) * 255 * 4;
     let similarity = 1.0 - (total_diff as f64 / max_diff as f64) as f32;
-    
+
     (similarity, diff_image)
 }
