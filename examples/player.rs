@@ -837,7 +837,7 @@ use video_debug_systems::*;
             pub fps: f32,
             pub temp_dir: Option<PathBuf>,
             pub stage: TestStage,
-            pub wait_timer: f32,
+            pub wait_frames: u32,  // Wait frame count instead of timer for stability
             pub total_diff: f64,
             pub frame_scores: Vec<f32>,
             pub report_dir: PathBuf,
@@ -866,7 +866,7 @@ use video_debug_systems::*;
                     fps: 12.0,
                     temp_dir: None,
                     stage: TestStage::Initializing,
-                    wait_timer: 0.0,
+                    wait_frames: 0,  // Frame counter for stable waiting
                     total_diff: 0.0,
                     frame_scores: Vec::new(),
                     report_dir: PathBuf::from("comparison_report"),
@@ -1002,10 +1002,17 @@ use video_debug_systems::*;
             mut state: ResMut<ComparisonState>,
             mut playback: ResMut<AmPlayback>,
             mut commands: Commands,
-            window_query: Query<Entity, With<PrimaryWindow>>,
-            time: Res<Time>,
+            _window_query: Query<Entity, With<PrimaryWindow>>,
+            _time: Res<Time>,
             mut exit: EventWriter<AppExit>,
         ) {
+            // Use frame-based waiting instead of time-based for determinism
+            // Wait at least 3 frames to ensure:
+            // 1. Animation system processes new time
+            // 2. Transform updates propagate
+            // 3. Render pipeline is flushed
+            const WAIT_FRAMES: u32 = 3;
+            
             match state.stage {
                 TestStage::Initializing => {} // Handled in setup
     
@@ -1021,20 +1028,19 @@ use video_debug_systems::*;
                     playback.current_time_ms = time_sec * 1000.0;
                     playback.force_stopped = false; // Allow update
     
-                    // Advance stage
-                    state.wait_timer = 0.1; // Wait a bit for layout/render
+                    // Start frame counter
+                    state.wait_frames = 0;
                     state.stage = TestStage::WaitingForRender;
                 }
     
                 TestStage::WaitingForRender => {
-                    state.wait_timer -= time.delta_secs();
-                    if state.wait_timer <= 0.0 {
+                    state.wait_frames += 1;
+                    if state.wait_frames >= WAIT_FRAMES {
                         state.stage = TestStage::Capturing;
                     }
                 }
     
                 TestStage::Capturing => {
-                    // let window_entity = window_query.single(); // Not needed for Screenshot::primary_window()
                     let frame_idx = state.current_frame;
                     let report_dir = state.report_dir.clone();
                     let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
