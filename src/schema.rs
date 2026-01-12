@@ -814,6 +814,9 @@ pub enum Easing {
     Step { x: f32, y: f32 },
     /// Cubic bezier curve with control points.
     CubicBezier { x1: f32, y1: f32, x2: f32, y2: f32 },
+    /// Bounce easing (standard ease-out-bounce).
+    /// Parameters are stored but currently ignored in evaluation (using standard bounce).
+    Bounce { p1: f32, p2: f32 },
 }
 
 impl Easing {
@@ -838,6 +841,11 @@ impl Easing {
                 let y2 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(1.0);
                 Easing::CubicBezier { x1, y1, x2, y2 }
             }
+            Some("bounce") => {
+                let p1 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let p2 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                Easing::Bounce { p1, p2 }
+            }
             _ => Easing::Linear,
         }
     }
@@ -851,7 +859,27 @@ impl Easing {
                 if t < 1.0 { 0.0 } else { 1.0 }
             }
             Easing::CubicBezier { x1, y1, x2, y2 } => cubic_bezier_y_for_x(t, *x1, *y1, *x2, *y2),
+            Easing::Bounce { .. } => ease_out_bounce(t),
         }
+    }
+}
+
+/// Standard Ease-Out-Bounce function.
+fn ease_out_bounce(x: f32) -> f32 {
+    let n1 = 7.5625;
+    let d1 = 2.75;
+
+    if x < 1.0 / d1 {
+        n1 * x * x
+    } else if x < 2.0 / d1 {
+        let x = x - 1.5 / d1;
+        n1 * x * x + 0.75
+    } else if x < 2.5 / d1 {
+        let x = x - 2.25 / d1;
+        n1 * x * x + 0.9375
+    } else {
+        let x = x - 2.625 / d1;
+        n1 * x * x + 0.984375
     }
 }
 
