@@ -1575,8 +1575,45 @@ fn add_visual_components(
 
             if *is_media && !image_uri.is_empty() {
                 if let Some(handle) = images.get(image_uri) {
-                    if needs_any_effect {
-                        // Use UnifiedEffectMaterial for all effect cases
+                    // Check if ONLY blur is needed (no mask/wipe/stretch)
+                    // In this case, use Sprite + RTT blur for best quality
+                    let blur_only = needs_blur && !needs_mask && !needs_wipe && !needs_stretch;
+                    
+                    if blur_only {
+                        // Use RTT-based Gaussian blur for best quality
+                        // Sprite will be replaced by RTT output in GaussianBlurPlugin
+                        let scaled_width = base_width * initial_scale.0.abs();
+                        let scaled_height = base_height * initial_scale.1.abs();
+                        
+                        // Calculate blur radius from blur_params
+                        let blur_radius = blur_params.map(|bp| bp.x).unwrap_or(0.0);
+                        
+                        commands.entity(entity).insert((
+                            Sprite {
+                                image: handle.clone(),
+                                color: Color::WHITE,
+                                custom_size: Some(Vec2::new(scaled_width, scaled_height)),
+                                ..default()
+                            },
+                            *anchor,
+                            crate::gaussian_blur::GaussianBlurEffect {
+                                radius: blur_radius,
+                                width: scaled_width,
+                                height: scaled_height,
+                                rtt_ready: false,
+                            },
+                            AmVisualSpawned,
+                        ));
+                        
+                        bevy::log::info!(
+                            "[Visual] Spawned sprite '{}' with RTT Gaussian blur: size=({:.1},{:.1}), radius={:.1}",
+                            label,
+                            scaled_width,
+                            scaled_height,
+                            blur_radius
+                        );
+                    } else if needs_any_effect {
+                        // Use UnifiedEffectMaterial for combined effects (mask/wipe/stretch + optional blur)
                         // For effect layers, Transform.scale is reset to Vec3::ONE in spawn_layer_entity
                         // So we must bake the scale into the mesh dimensions
                         let scaled_width = base_width * initial_scale.0.abs();
@@ -2491,6 +2528,56 @@ pub fn animate_unified_effect_system(
                     .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 material.set_stretch_enabled(false);
+            }
+        }
+    }
+}
+
+/// System to animate RTT-based Gaussian blur effect.
+/// This updates the GaussianBlurEffect component's radius based on animation keyframes.
+pub fn animate_rtt_blur_system(
+    playback: Res<AmPlayback>,
+    mut query: Query<(
+        &AmAnimated,
+        &mut crate::gaussian_blur::GaussianBlurEffect,
+    )>,
+) {
+    // Skip animation only when force stopped
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, mut blur_effect) in query.iter_mut() {
+        // Calculate local time (accounting for time offset from parent scene)
+        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+
+        // Check if layer is active at current local time
+        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+            continue;
+        }
+
+        // Calculate normalized time within layer duration
+        let layer_duration = (animated.end_time - animated.start_time) as f32;
+        if layer_duration <= 0.0 {
+            continue;
+        }
+        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+
+        // Check if this layer has blur animation
+        let has_blur = animated.blur_strength.value.is_some()
+            || !animated.blur_strength.keyframes.is_empty();
+
+        if has_blur {
+            let blur_strength =
+                interpolate_float(&animated.blur_strength, layer_time).unwrap_or(0.0);
+            // AM strength 2.0 produces very strong blur
+            // Use strength * 80 for closer match to AM's blur intensity
+            let blur_radius_px = blur_strength * 80.0;
+            
+            if (blur_effect.radius - blur_radius_px).abs() > 0.1 {
+                blur_effect.radius = blur_radius_px;
             }
         }
     }

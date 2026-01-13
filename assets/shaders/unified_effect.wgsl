@@ -143,29 +143,19 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
     let pixel_size_x = 1.0 / orig_width;
     let pixel_size_y = 1.0 / orig_height;
     
-    // Sigma for Gaussian - standard relationship (covers ~3 sigma = 99.7% of distribution)
-    let sigma = radius / 3.0;
+    // Sigma = radius / 2.0 for softer, more natural light diffusion (closer to Alight Motion)
+    let sigma = max(radius / 2.0, 0.01);
     
     var total_color = vec4<f32>(0.0);
     var total_weight = 0.0;
     
-    // Determine sample radius - we need to sample out to ~3*sigma for good coverage
-    // But limit to reasonable bounds for performance
-    let sample_radius = i32(min(max(radius, 1.0), 48.0));
+    // Sample radius covers 3*sigma for good distribution coverage
+    // Cap at reasonable value for performance, but no step skipping to avoid artifacts
+    let sample_radius = i32(min(ceil(sigma * 3.0), 64.0));
     
-    // For large blur radius, use step size > 1 to reduce sample count
-    // This leverages GPU's bilinear filtering for interpolation
-    var step = 1;
-    if sample_radius > 16 {
-        step = 2;
-    }
-    if sample_radius > 32 {
-        step = 3;
-    }
-    
-    // 2D grid sampling with Gaussian weights
-    for (var dy = -sample_radius; dy <= sample_radius; dy = dy + step) {
-        for (var dx = -sample_radius; dx <= sample_radius; dx = dx + step) {
+    // 2D grid sampling with Gaussian weights - no step skipping for quality
+    for (var dy = -sample_radius; dy <= sample_radius; dy = dy + 1) {
+        for (var dx = -sample_radius; dx <= sample_radius; dx = dx + 1) {
             let offset_x = f32(dx) * pixel_size_x;
             let offset_y = f32(dy) * pixel_size_y;
             let sample_uv = uv + vec2<f32>(offset_x, offset_y);
@@ -174,7 +164,7 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
             let weight = gaussian_weight_2d(f32(dx), f32(dy), sigma);
             
             // Skip negligible weights for performance
-            if weight < 0.0005 {
+            if weight < 0.001 {
                 continue;
             }
             

@@ -406,27 +406,37 @@ pub fn setup_blur_rtt_system(
 
 /// System to update blur parameters when radius changes.
 pub fn update_blur_params_system(
-    query: Query<(&GaussianBlurEffect, &GaussianBlurRtt), Changed<GaussianBlurEffect>>,
+    query: Query<(Entity, &GaussianBlurEffect, &GaussianBlurRtt), Changed<GaussianBlurEffect>>,
     mut h_materials: ResMut<Assets<GaussianBlurHMaterial>>,
     mut v_materials: ResMut<Assets<GaussianBlurVMaterial>>,
-    mesh_query: Query<(&BlurPassMesh, &MeshMaterial2d<GaussianBlurHMaterial>)>,
+    mesh_h_query: Query<(&BlurPassMesh, &MeshMaterial2d<GaussianBlurHMaterial>)>,
     mesh_v_query: Query<(&BlurPassMesh, &MeshMaterial2d<GaussianBlurVMaterial>)>,
 ) {
-    for (blur_effect, rtt) in query.iter() {
-        // Update horizontal material
-        for (mesh_marker, material_handle) in mesh_query.iter() {
-            if mesh_marker.pass == 0 {
+    for (entity, blur_effect, _rtt) in query.iter() {
+        // Update horizontal material for this entity
+        for (mesh_marker, material_handle) in mesh_h_query.iter() {
+            if mesh_marker.parent_entity == entity && mesh_marker.pass == 0 {
                 if let Some(material) = h_materials.get_mut(&material_handle.0) {
                     material.set_radius(blur_effect.radius);
+                    bevy::log::debug!(
+                        "[BlurRTT] Updated H material radius to {:.1} for {:?}",
+                        blur_effect.radius,
+                        entity
+                    );
                 }
             }
         }
 
-        // Update vertical material
+        // Update vertical material for this entity
         for (mesh_marker, material_handle) in mesh_v_query.iter() {
-            if mesh_marker.pass == 1 {
+            if mesh_marker.parent_entity == entity && mesh_marker.pass == 1 {
                 if let Some(material) = v_materials.get_mut(&material_handle.0) {
                     material.set_radius(blur_effect.radius);
+                    bevy::log::debug!(
+                        "[BlurRTT] Updated V material radius to {:.1} for {:?}",
+                        blur_effect.radius,
+                        entity
+                    );
                 }
             }
         }

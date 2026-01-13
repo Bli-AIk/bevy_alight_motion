@@ -1,7 +1,10 @@
 // Gaussian Blur Vertical Pass
 // 
 // This shader implements the vertical pass of a separable Gaussian blur.
-// Uses optimized kernel with bilinear filtering.
+// Uses optimized 1D kernel with proper transparent boundary handling.
+//
+// Key fix: Out-of-bounds samples contribute zero color but WEIGHT is always accumulated.
+// This ensures edge pixels fade to transparent instead of stretching (Clamp).
 //
 // The separable approach splits 2D Gaussian blur into two 1D passes:
 // - First: Horizontal blur (gaussian_blur_h.wgsl)
@@ -22,7 +25,6 @@ fn gaussian_weight(offset: f32, sigma: f32) -> f32 {
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let radius = blur_params.x;
-    let tex_width = blur_params.y;
     let tex_height = blur_params.z;
     
     // Early exit for no blur
@@ -30,53 +32,55 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         return textureSample(base_texture, base_sampler, mesh.uv);
     }
     
+    // Sigma = radius / 2.0 for softer, more natural light diffusion (matches H pass)
+    let sigma = max(radius / 2.0, 0.01);
     let pixel_size = 1.0 / tex_height;
-    let sigma = radius / 2.5;
     
     var total_color = vec4<f32>(0.0);
     var total_weight = 0.0;
     
-    // Adaptive kernel size based on radius
-    let num_samples = i32(min(radius * 2.0, 32.0));  // Cap at 32 samples per side
+    // Cover 3*sigma range with hard cap for performance
+    let num_samples = i32(min(ceil(sigma * 3.0), 100.0));
     
-    // Center sample
-    let center_sample = textureSample(base_texture, base_sampler, mesh.uv);
-    total_color += center_sample;
+    // 1. Center sample
+    total_color += textureSample(base_texture, base_sampler, mesh.uv);
     total_weight += 1.0;
     
-    // Symmetric sampling (up and down)
+    // 2. Symmetric sampling (up and down)
     for (var i = 1; i <= num_samples; i = i + 1) {
         let offset = f32(i);
         let weight = gaussian_weight(offset, sigma);
         
-        // Skip negligible weights
+        // Performance: truncate negligible weights
         if weight < 0.001 {
             break;
         }
         
         let offset_uv = offset * pixel_size;
         
-        // Sample up
+        // --- KEY FIX: Transparent boundary logic ---
+        
+        // Up sample
         let uv_up = mesh.uv + vec2<f32>(0.0, offset_uv);
-        if uv_up.y <= 1.0 {
-            let sample_up = textureSample(base_texture, base_sampler, uv_up);
-            total_color += sample_up * weight;
-            total_weight += weight;
+        if uv_up.y <= 1.0 && uv_up.y >= 0.0 {
+            total_color += textureSample(base_texture, base_sampler, uv_up) * weight;
+        }
+        // Out-of-bounds: don't add color (equivalent to adding vec4(0.0) * weight)
+        
+        // Down sample
+        let uv_down = mesh.uv - vec2<f32>(0.0, offset_uv);
+        if uv_down.y >= 0.0 && uv_down.y <= 1.0 {
+            total_color += textureSample(base_texture, base_sampler, uv_down) * weight;
         }
         
-        // Sample down
-        let uv_down = mesh.uv - vec2<f32>(0.0, offset_uv);
-        if uv_down.y >= 0.0 {
-            let sample_down = textureSample(base_texture, base_sampler, uv_down);
-            total_color += sample_down * weight;
-            total_weight += weight;
-        }
+        // CRITICAL: Always accumulate weight regardless of bounds!
+        // This ensures edge regions get larger denominator -> color trends to transparent
+        total_weight += 2.0 * weight;
     }
     
     // Normalize
-    if total_weight > 0.001 {
+    if total_weight > 0.0001 {
         return total_color / total_weight;
-    } else {
-        return vec4<f32>(0.0);
     }
+    return vec4<f32>(0.0);
 }
