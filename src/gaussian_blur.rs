@@ -269,33 +269,49 @@ pub fn setup_blur_rtt_system(
             continue;
         };
 
-        let width = blur_effect.width;
-        let height = blur_effect.height;
+        let orig_width = blur_effect.width;
+        let orig_height = blur_effect.height;
+        
+        // Calculate blur expansion - the blur glow extends beyond original bounds
+        // Use 2x radius for full coverage of the Gaussian distribution
+        let blur_expansion = blur_effect.radius * 2.0;
+        
+        // Expanded dimensions for RTT textures (original + expansion on all sides)
+        let expanded_width = orig_width + blur_expansion * 2.0;
+        let expanded_height = orig_height + blur_expansion * 2.0;
 
-        // Create RTT textures
-        let rtt_h = create_rtt_texture(&mut images, width, height, "blur_rtt_h");
-        let rtt_v = create_rtt_texture(&mut images, width, height, "blur_rtt_v");
+        // Create RTT textures with expanded dimensions
+        let rtt_h = create_rtt_texture(&mut images, expanded_width, expanded_height, "blur_rtt_h");
+        let rtt_v = create_rtt_texture(&mut images, expanded_width, expanded_height, "blur_rtt_v");
 
-        // Create mesh for blur passes (full-screen quad in RTT space)
-        let blur_mesh = create_blur_mesh(&mut meshes, width, height);
+        // Create mesh for blur passes with expanded dimensions
+        // The mesh is centered, so it covers [-expanded_width/2, expanded_width/2]
+        let blur_mesh = create_blur_mesh_with_uv_expansion(
+            &mut meshes,
+            orig_width,
+            orig_height,
+            blur_expansion,
+        );
 
         // Get original texture from sprite
         let original_texture = sprite.image.clone();
 
         // Create horizontal blur material
+        // Pass original dimensions for correct UV calculations in shader
         let h_material = h_materials.add(GaussianBlurHMaterial::new(
             original_texture.clone(),
             blur_effect.radius,
-            width,
-            height,
+            orig_width,
+            orig_height,
         ));
 
         // Create vertical blur material (input is rtt_h output)
+        // Pass expanded dimensions since rtt_h is expanded
         let v_material = v_materials.add(GaussianBlurVMaterial::new(
             rtt_h.clone(),
             blur_effect.radius,
-            width,
-            height,
+            expanded_width,
+            expanded_height,
         ));
 
         // Create horizontal blur pass mesh entity
@@ -351,6 +367,20 @@ pub fn setup_blur_rtt_system(
             ))
             .id();
 
+        // Set orthographic projection to match RTT dimensions
+        commands.entity(camera_h).insert(Projection::Orthographic(OrthographicProjection {
+            near: -1000.0,
+            far: 1000.0,
+            scale: 1.0,
+            area: Rect::new(
+                -expanded_width / 2.0,
+                -expanded_height / 2.0,
+                expanded_width / 2.0,
+                expanded_height / 2.0,
+            ),
+            ..OrthographicProjection::default_2d()
+        }));
+
         // Create camera for vertical pass
         let camera_v = commands
             .spawn((
@@ -372,7 +402,22 @@ pub fn setup_blur_rtt_system(
             ))
             .id();
 
+        // Set orthographic projection to match RTT dimensions
+        commands.entity(camera_v).insert(Projection::Orthographic(OrthographicProjection {
+            near: -1000.0,
+            far: 1000.0,
+            scale: 1.0,
+            area: Rect::new(
+                -expanded_width / 2.0,
+                -expanded_height / 2.0,
+                expanded_width / 2.0,
+                expanded_height / 2.0,
+            ),
+            ..OrthographicProjection::default_2d()
+        }));
+
         // Update the original entity's sprite to display final RTT output
+        // Use expanded dimensions so the blur glow is visible
         commands.entity(entity).insert((
             GaussianBlurRtt {
                 rtt_h,
@@ -387,17 +432,19 @@ pub fn setup_blur_rtt_system(
             },
             Sprite {
                 image: rtt_v,
-                custom_size: Some(Vec2::new(width, height)),
+                custom_size: Some(Vec2::new(expanded_width, expanded_height)),
                 ..default()
             },
         ));
 
         bevy::log::info!(
-            "[BlurRTT] Set up blur RTT for {:?}: radius={:.1}, size={}x{}, layers=({}, {})",
+            "[BlurRTT] Set up blur RTT for {:?}: radius={:.1}, orig={}x{}, expanded={}x{}, layers=({}, {})",
             entity,
             blur_effect.radius,
-            width,
-            height,
+            orig_width,
+            orig_height,
+            expanded_width,
+            expanded_height,
             layer_h,
             layer_v
         );
@@ -510,9 +557,23 @@ fn create_rtt_texture(images: &mut Assets<Image>, width: f32, height: f32, _labe
 }
 
 fn create_blur_mesh(meshes: &mut Assets<Mesh>, width: f32, height: f32) -> Handle<Mesh> {
-    let hw = width / 2.0;
-    let hh = height / 2.0;
+    create_blur_mesh_with_uv_expansion(meshes, width, height, 0.0)
+}
 
+/// Create a mesh for blur passes with UV expansion for glow overflow.
+/// The mesh is physically expanded by blur_expansion on each side,
+/// and UVs extend beyond [0,1] range to sample the transparent boundary.
+fn create_blur_mesh_with_uv_expansion(
+    meshes: &mut Assets<Mesh>,
+    orig_width: f32,
+    orig_height: f32,
+    blur_expansion: f32,
+) -> Handle<Mesh> {
+    // Expanded half-dimensions
+    let hw = orig_width / 2.0 + blur_expansion;
+    let hh = orig_height / 2.0 + blur_expansion;
+
+    // Vertices cover expanded area
     let vertices = vec![
         [-hw, -hh, 0.0],
         [hw, -hh, 0.0],
@@ -527,11 +588,25 @@ fn create_blur_mesh(meshes: &mut Assets<Mesh>, width: f32, height: f32) -> Handl
         [0.0, 0.0, 1.0],
     ];
 
+    // UV expansion - extend beyond [0,1] to sample transparent boundary
+    // This allows the shader to blend edge pixels with transparent (fade out)
+    let uv_expand_x = if orig_width > 0.0 {
+        blur_expansion / orig_width
+    } else {
+        0.0
+    };
+    let uv_expand_y = if orig_height > 0.0 {
+        blur_expansion / orig_height
+    } else {
+        0.0
+    };
+
+    // UVs with expansion: negative values and >1 values sample outside original texture
     let uvs = vec![
-        [0.0, 1.0],
-        [1.0, 1.0],
-        [1.0, 0.0],
-        [0.0, 0.0],
+        [-uv_expand_x, 1.0 + uv_expand_y],           // bottom-left
+        [1.0 + uv_expand_x, 1.0 + uv_expand_y],     // bottom-right
+        [1.0 + uv_expand_x, -uv_expand_y],          // top-right
+        [-uv_expand_x, -uv_expand_y],               // top-left
     ];
 
     let indices = vec![0u32, 1, 2, 0, 2, 3];

@@ -2577,6 +2577,12 @@ pub fn animate_rtt_blur_system(
             let blur_radius_px = blur_strength * 80.0;
             
             if (blur_effect.radius - blur_radius_px).abs() > 0.1 {
+                bevy::log::debug!(
+                    "[BlurAnim] Updating blur radius: {:.1} -> {:.1} (strength={:.3})",
+                    blur_effect.radius,
+                    blur_radius_px,
+                    blur_strength
+                );
                 blur_effect.radius = blur_radius_px;
             }
         }
