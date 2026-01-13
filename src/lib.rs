@@ -41,6 +41,7 @@
 pub mod animation;
 pub mod effects;
 pub mod error;
+pub mod gaussian_blur;
 pub mod loader;
 pub mod masked_sprite;
 pub mod plugin;

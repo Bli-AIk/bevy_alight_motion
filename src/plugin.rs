@@ -32,6 +32,7 @@ use crate::animation::{
     manage_layer_lifecycle_system,
 };
 use crate::effects::EffectRenderPlugin;
+use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurVMaterial, GaussianBlurPlugin};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
@@ -68,7 +69,10 @@ impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SmudPlugin)
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
+            .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())
+            .add_plugins(Material2dPlugin::<GaussianBlurVMaterial>::default())
             .add_plugins(EffectRenderPlugin)
+            .add_plugins(GaussianBlurPlugin)
             .init_asset::<AmProject>()
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()

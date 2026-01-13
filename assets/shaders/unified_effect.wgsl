@@ -4,7 +4,7 @@
 // 1. Mask clipping (rectangular region)
 // 2. Wipe transition (progressive reveal/hide)
 // 3. Stretch segment (UV domain distortion)
-// 4. Gaussian blur (box blur approximation)
+// 4. Gaussian blur (optimized cross-shaped sampling)
 //
 // Each effect can be toggled on/off via the effect_flags uniform.
 //
@@ -16,7 +16,7 @@
 // 4: stretch_params (vec4) - (angle_radians, stretch_px, offset_px, smooth_width)
 // 5: original_size (vec4) - (orig_width, orig_height, mesh_width, mesh_height)
 // 6: mesh_offset (vec4) - (center_offset_x, center_offset_y, 0, 0)
-// 9: blur_params (vec4) - (strength, 0, 0, 0)
+// 9: blur_params (vec4) - (radius_px, orig_width, orig_height, expansion_px)
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -46,7 +46,6 @@ fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let angle = stretch_params.x;
     let stretch_px = stretch_params.y;
     let offset_px = stretch_params.z;
-    // smooth_width is stretch_params.w (reserved for future use)
     
     let orig_width = original_size.x;
     let orig_height = original_size.y;
@@ -56,19 +55,14 @@ fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let center_off_x = mesh_offset.x;
     let center_off_y = mesh_offset.y;
     
-    // Calculate half_gap
     let angle_factor = mix(1.0, 0.75, abs(sin(angle)));
     let half_gap = stretch_px * 0.5 * angle_factor;
     
-    // Convert UV to pixel coordinates
     let pixel_x = (uv.x - 0.5) * mesh_width + center_off_x;
     let pixel_y = (uv.y - 0.5) * mesh_height + center_off_y;
     let pixel_coord = vec2<f32>(pixel_x, pixel_y);
     
-    // Rotate to align split line vertically
     let rotated_pixel = rotate_vec(pixel_coord, angle);
-    
-    // Apply stretch logic
     let shifted_x = rotated_pixel.x + offset_px;
     
     var sample_rotated_x: f32;
@@ -81,28 +75,25 @@ fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let final_rotated = vec2<f32>(sample_rotated_x, rotated_pixel.y);
     let unrotated_pixel = rotate_vec(final_rotated, -angle);
     
-    // Convert back to UV
     return vec2<f32>(
         (unrotated_pixel.x / orig_width) + 0.5,
         (unrotated_pixel.y / orig_height) + 0.5
     );
 }
 
-// Apply wipe effect - returns alpha multiplier (0.0 = fully clipped, 1.0 = fully visible)
+// Apply wipe effect - returns alpha multiplier
 fn apply_wipe(uv: vec2<f32>) -> f32 {
     let wipe_start = wipe_params.x;
     let wipe_end = wipe_params.y;
     let wipe_angle = wipe_params.z;
     let wipe_feather = wipe_params.w;
     
-    // Rotate UV for angled wipe
     let cos_angle = cos(wipe_angle);
     let sin_angle = sin(wipe_angle);
     let centered_uv = uv - vec2<f32>(0.5, 0.5);
     let rotated_x = centered_uv.x * cos_angle + centered_uv.y * sin_angle;
     let wipe_coord = rotated_x + 0.5;
     
-    // Calculate wipe alpha
     if wipe_feather > 0.0 {
         let start_dist = wipe_coord - wipe_start;
         let end_dist = wipe_end - wipe_coord;
@@ -120,7 +111,6 @@ fn apply_mask(world_pos: vec2<f32>) -> bool {
     let mask_center = mask_params.xy;
     let mask_half_size = mask_params.zw;
     
-    // Very large mask means "no mask"
     if mask_half_size.x > 5000.0 {
         return true;
     }
@@ -129,73 +119,90 @@ fn apply_mask(world_pos: vec2<f32>) -> bool {
     return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
 }
 
-// Apply blur using concentric ring sampling with Gaussian weights
-// Out-of-bounds samples contribute to weight (creating edge fadeout) but not color
-// blur_params: x = blur radius in pixels, y = original width, z = original height, w = expansion pixels
-fn apply_blur(uv: vec2<f32>, blur_radius: f32) -> vec4<f32> {
-    // Get the original image dimensions from blur_params
+// Gaussian weight function
+fn gaussian_weight(offset: f32, sigma: f32) -> f32 {
+    return exp(-(offset * offset) / (2.0 * sigma * sigma));
+}
+
+// 2D Gaussian weight function
+fn gaussian_weight_2d(dx: f32, dy: f32, sigma: f32) -> f32 {
+    let d2 = dx * dx + dy * dy;
+    return exp(-d2 / (2.0 * sigma * sigma));
+}
+
+// True 2D Gaussian blur with correct transparent boundary handling
+// Boundary pixels outside [0,1] are treated as transparent (rgba(0,0,0,0))
+// and participate in the weighted average to create proper edge fade-out
+// blur_params: x = radius_px, y = orig_width, z = orig_height, w = expansion_px
+fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
+    let radius = blur_params.x;
     let orig_width = blur_params.y;
     let orig_height = blur_params.z;
     
     // Pixel size in UV space
-    let pixel_size = vec2<f32>(1.0 / orig_width, 1.0 / orig_height);
+    let pixel_size_x = 1.0 / orig_width;
+    let pixel_size_y = 1.0 / orig_height;
     
-    // Gaussian sigma - larger sigma = more spread out blur
-    let sigma = blur_radius / 2.5;
-    let sigma_sq_2 = 2.0 * sigma * sigma;
+    // Sigma for Gaussian - standard relationship (covers ~3 sigma = 99.7% of distribution)
+    let sigma = radius / 3.0;
     
     var total_color = vec4<f32>(0.0);
     var total_weight = 0.0;
     
-    // Use adaptive sampling - more samples for larger radii
-    let num_rings = 12;
-    let base_samples = 8;
+    // Determine sample radius - we need to sample out to ~3*sigma for good coverage
+    // But limit to reasonable bounds for performance
+    let sample_radius = i32(min(max(radius, 1.0), 48.0));
     
-    // Center sample
-    if uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 {
-        let center_color = textureSample(base_texture, base_sampler, uv);
-        total_color += center_color;
+    // For large blur radius, use step size > 1 to reduce sample count
+    // This leverages GPU's bilinear filtering for interpolation
+    var step = 1;
+    if sample_radius > 16 {
+        step = 2;
     }
-    total_weight += 1.0;  // Always count center
+    if sample_radius > 32 {
+        step = 3;
+    }
     
-    // Sample in concentric rings
-    for (var ring = 1; ring <= num_rings; ring = ring + 1) {
-        let ring_f = f32(ring);
-        let ring_radius = blur_radius * ring_f / f32(num_rings);
-        
-        // Gaussian weight for this ring distance
-        let dist_sq = ring_radius * ring_radius;
-        let ring_weight = exp(-dist_sq / sigma_sq_2);
-        
-        // Skip if weight is negligible
-        if ring_weight < 0.001 {
-            continue;
-        }
-        
-        // More samples for outer rings (proportional to circumference)
-        let samples_in_ring = base_samples + ring * 2;
-        let angle_step = 6.28318530718 / f32(samples_in_ring);
-        
-        for (var s = 0; s < samples_in_ring; s = s + 1) {
-            let angle = f32(s) * angle_step;
-            let offset_px = vec2<f32>(cos(angle), sin(angle)) * ring_radius;
-            let sample_uv = uv + offset_px * pixel_size;
+    // 2D grid sampling with Gaussian weights
+    for (var dy = -sample_radius; dy <= sample_radius; dy = dy + step) {
+        for (var dx = -sample_radius; dx <= sample_radius; dx = dx + step) {
+            let offset_x = f32(dx) * pixel_size_x;
+            let offset_y = f32(dy) * pixel_size_y;
+            let sample_uv = uv + vec2<f32>(offset_x, offset_y);
             
-            // Add color only if within bounds
-            if sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0 {
-                let sample_color = textureSample(base_texture, base_sampler, sample_uv);
-                total_color += sample_color * ring_weight;
+            // Calculate 2D Gaussian weight
+            let weight = gaussian_weight_2d(f32(dx), f32(dy), sigma);
+            
+            // Skip negligible weights for performance
+            if weight < 0.0005 {
+                continue;
             }
-            // Always add weight (creates fadeout at edges)
-            total_weight += ring_weight;
+            
+            // Sample color - treat out-of-bounds as transparent (rgba(0,0,0,0))
+            // This is the key fix: boundary pixels participate in weighted average
+            // with zero color contribution, causing proper edge fade-out
+            var sample_color: vec4<f32>;
+            if sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0 {
+                // Within bounds: normal sampling
+                sample_color = textureSample(base_texture, base_sampler, sample_uv);
+            } else {
+                // Outside bounds: transparent black
+                sample_color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
+            
+            // Always accumulate both color and weight
+            total_color += sample_color * weight;
+            total_weight += weight;
         }
     }
     
-    // Normalize
-    if total_weight > 0.001 {
+    // Normalize - with the fix above, total_weight should always be non-zero
+    // for any UV that the 2D grid covers (which includes all mesh pixels)
+    if total_weight > 0.0001 {
         return total_color / total_weight;
     } else {
-        return vec4<f32>(0.0);
+        // Extreme edge case: return transparent
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 }
 
@@ -207,26 +214,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let stretch_enabled = effect_flags.z > 0.5;
     let blur_enabled = effect_flags.w > 0.5;
     
-    // Get blur expansion from blur_params.w (set when mesh is expanded for blur)
-    // blur_params: x = radius, y = orig_width, z = orig_height, w = expansion_pixels
-    let blur_expansion = blur_params.w;
-    let orig_width = blur_params.y;
-    let orig_height = blur_params.z;
-    
-    // Calculate UV remapping for expanded mesh
-    // When mesh is expanded, incoming UV goes from [-expand_ratio, 1+expand_ratio]
-    // We need to map this to texture space where [0,1] is the original texture
     var sample_uv = mesh.uv;
     
-    // If there's blur expansion, the mesh UVs already account for it
-    // via the expanded UV range set in create_anchored_rectangle_with_blur
-    // No additional remapping needed - the shader boundary checks handle it
-    
-    // Apply stretch segment effect if enabled (before blur, operates on texture UVs)
+    // Apply stretch segment effect if enabled (before blur)
     if stretch_enabled {
         sample_uv = apply_stretch_segment(mesh.uv);
         
-        // Boundary check for stretch
         if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
             discard;
         }
@@ -238,10 +231,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if blur_enabled {
         let blur_radius = blur_params.x;
         if blur_radius > 0.5 {
-            // Blur is active - sample with blur
-            tex_color = apply_blur(sample_uv, blur_radius);
+            tex_color = apply_blur(sample_uv);
         } else {
-            // No significant blur
             tex_color = textureSample(base_texture, base_sampler, sample_uv);
         }
     } else {
