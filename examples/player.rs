@@ -689,15 +689,22 @@ mod video_debug_systems {
         }
 
         // Load all frames as images using relative asset paths
-        // Convert absolute paths to relative paths under assets/
+        // frame_paths contain absolute paths like:
+        // /path/to/crates/bevy_alight_motion/assets/debug/_video_frames/video_name/frame_000001.png
+        // We need to extract the asset-relative path: debug/_video_frames/video_name/frame_000001.png
         state.frame_handles = state
             .frame_paths
             .iter()
-            .map(|path| {
-                // Extract just the filename and construct asset-relative path
-                let filename = path.file_name().unwrap().to_string_lossy();
-                let asset_path = format!("debug/_video_frames/{}", filename);
-                asset_server.load(asset_path)
+            .filter_map(|path| {
+                // Find "debug/_video_frames" in the path and extract everything after "assets/"
+                let path_str = path.to_string_lossy();
+                if let Some(idx) = path_str.find("debug/_video_frames") {
+                    let asset_path = &path_str[idx..];
+                    Some(asset_server.load(asset_path.to_string()))
+                } else {
+                    println!("[VIDEO DEBUG] Could not find asset path in: {:?}", path);
+                    None
+                }
             })
             .collect();
 
