@@ -129,45 +129,74 @@ fn apply_mask(world_pos: vec2<f32>) -> bool {
     return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
 }
 
-// Apply Gaussian blur - samples multiple points and averages them
-// This is a box blur approximation for performance in a single pass
-// blur_params: x = blur radius in pixels, y = original width, z = original height
+// Apply blur using concentric ring sampling with Gaussian weights
+// Out-of-bounds samples contribute to weight (creating edge fadeout) but not color
+// blur_params: x = blur radius in pixels, y = original width, z = original height, w = expansion pixels
 fn apply_blur(uv: vec2<f32>, blur_radius: f32) -> vec4<f32> {
-    let tex_size = vec2<f32>(textureDimensions(base_texture, 0));
-    let pixel_size = 1.0 / tex_size;
+    // Get the original image dimensions from blur_params
+    let orig_width = blur_params.y;
+    let orig_height = blur_params.z;
     
-    // Number of samples per direction (more samples = better quality but slower)
-    let samples = 15;
-    let half_samples = f32(samples - 1) / 2.0;
+    // Pixel size in UV space
+    let pixel_size = vec2<f32>(1.0 / orig_width, 1.0 / orig_height);
+    
+    // Gaussian sigma - larger sigma = more spread out blur
+    let sigma = blur_radius / 2.5;
+    let sigma_sq_2 = 2.0 * sigma * sigma;
     
     var total_color = vec4<f32>(0.0);
     var total_weight = 0.0;
     
-    // Sample in a grid pattern with Gaussian-like weights
-    for (var i = 0; i < samples; i = i + 1) {
-        for (var j = 0; j < samples; j = j + 1) {
-            let offset_x = (f32(i) - half_samples) / half_samples;  // -1 to 1
-            let offset_y = (f32(j) - half_samples) / half_samples;  // -1 to 1
+    // Use adaptive sampling - more samples for larger radii
+    let num_rings = 12;
+    let base_samples = 8;
+    
+    // Center sample
+    if uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 {
+        let center_color = textureSample(base_texture, base_sampler, uv);
+        total_color += center_color;
+    }
+    total_weight += 1.0;  // Always count center
+    
+    // Sample in concentric rings
+    for (var ring = 1; ring <= num_rings; ring = ring + 1) {
+        let ring_f = f32(ring);
+        let ring_radius = blur_radius * ring_f / f32(num_rings);
+        
+        // Gaussian weight for this ring distance
+        let dist_sq = ring_radius * ring_radius;
+        let ring_weight = exp(-dist_sq / sigma_sq_2);
+        
+        // Skip if weight is negligible
+        if ring_weight < 0.001 {
+            continue;
+        }
+        
+        // More samples for outer rings (proportional to circumference)
+        let samples_in_ring = base_samples + ring * 2;
+        let angle_step = 6.28318530718 / f32(samples_in_ring);
+        
+        for (var s = 0; s < samples_in_ring; s = s + 1) {
+            let angle = f32(s) * angle_step;
+            let offset_px = vec2<f32>(cos(angle), sin(angle)) * ring_radius;
+            let sample_uv = uv + offset_px * pixel_size;
             
-            // Gaussian weight based on distance from center
-            let dist_sq = offset_x * offset_x + offset_y * offset_y;
-            let weight = exp(-dist_sq * 2.0);  // Gaussian falloff
-            
-            // Calculate sample position
-            let sample_offset = vec2<f32>(offset_x, offset_y) * blur_radius * pixel_size;
-            let sample_uv = uv + sample_offset;
-            
-            // Clamp to texture bounds (this causes edge darkening but maintains size)
-            let clamped_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
-            
-            let sample_color = textureSample(base_texture, base_sampler, clamped_uv);
-            total_color += sample_color * weight;
-            total_weight += weight;
+            // Add color only if within bounds
+            if sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0 {
+                let sample_color = textureSample(base_texture, base_sampler, sample_uv);
+                total_color += sample_color * ring_weight;
+            }
+            // Always add weight (creates fadeout at edges)
+            total_weight += ring_weight;
         }
     }
     
-    // Normalize by total weight
-    return total_color / total_weight;
+    // Normalize
+    if total_weight > 0.001 {
+        return total_color / total_weight;
+    } else {
+        return vec4<f32>(0.0);
+    }
 }
 
 @fragment
@@ -178,10 +207,22 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let stretch_enabled = effect_flags.z > 0.5;
     let blur_enabled = effect_flags.w > 0.5;
     
-    // Start with input UV
+    // Get blur expansion from blur_params.w (set when mesh is expanded for blur)
+    // blur_params: x = radius, y = orig_width, z = orig_height, w = expansion_pixels
+    let blur_expansion = blur_params.w;
+    let orig_width = blur_params.y;
+    let orig_height = blur_params.z;
+    
+    // Calculate UV remapping for expanded mesh
+    // When mesh is expanded, incoming UV goes from [-expand_ratio, 1+expand_ratio]
+    // We need to map this to texture space where [0,1] is the original texture
     var sample_uv = mesh.uv;
     
-    // Apply stretch segment effect if enabled
+    // If there's blur expansion, the mesh UVs already account for it
+    // via the expanded UV range set in create_anchored_rectangle_with_blur
+    // No additional remapping needed - the shader boundary checks handle it
+    
+    // Apply stretch segment effect if enabled (before blur, operates on texture UVs)
     if stretch_enabled {
         sample_uv = apply_stretch_segment(mesh.uv);
         
@@ -193,11 +234,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // Sample texture - with or without blur
     var tex_color: vec4<f32>;
+    
     if blur_enabled {
         let blur_radius = blur_params.x;
-        if blur_radius > 0.001 {
+        if blur_radius > 0.5 {
+            // Blur is active - sample with blur
             tex_color = apply_blur(sample_uv, blur_radius);
         } else {
+            // No significant blur
             tex_color = textureSample(base_texture, base_sampler, sample_uv);
         }
     } else {

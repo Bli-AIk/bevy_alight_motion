@@ -1180,8 +1180,11 @@ fn spawn_layer_entity(
         || layer.animated.stretch_smooth.value.is_some()
         || !layer.animated.stretch_smooth.keyframes.is_empty();
 
+    let has_blur = layer.animated.blur_strength.value.is_some()
+        || !layer.animated.blur_strength.keyframes.is_empty();
+
     let has_mask = layer.mask_info.is_some();
-    let needs_effect = has_wipe || has_stretch || has_mask;
+    let needs_effect = has_wipe || has_stretch || has_mask || has_blur;
 
     // If layer has effects, bake scale into a separate variable and use identity scale for transform
     // This is because effects need actual pixel sizes, not scaled coordinates
@@ -1283,14 +1286,29 @@ fn spawn_layer_entity(
             None
         };
 
-        // Get initial blur params
+        // Get initial blur params and calculate max blur for mesh expansion
         let initial_blur = if has_blur {
             let blur_strength = layer.animated.blur_strength.value.unwrap_or(0.0);
-            // AM strength ~0-10, multiply by 3 for pixel radius
-            let blur_radius = blur_strength * 3.0;
+            // AM strength 2.0 produces very strong blur
+            // Use strength * 80 to match animate_unified_effect_system
+            let blur_radius = blur_strength * 80.0;
             Some(Vec4::new(blur_radius, 0.0, 0.0, 0.0))
         } else {
             None
+        };
+
+        // Calculate maximum blur strength from keyframes for mesh expansion
+        let max_blur_radius = if has_blur {
+            let mut max_strength = layer.animated.blur_strength.value.unwrap_or(0.0);
+            for kf in &layer.animated.blur_strength.keyframes {
+                if let Ok(v) = kf.value.parse::<f32>() {
+                    max_strength = max_strength.max(v);
+                }
+            }
+            // Same multiplier as used in animation system
+            max_strength * 80.0
+        } else {
+            0.0
         };
 
         // For embed content rendered to RTT, use original size (no scaling)
@@ -1317,6 +1335,7 @@ fn spawn_layer_entity(
             initial_blur,
             layer.embed_scene_size,
             size_scale,
+            max_blur_radius,
         );
     } else {
         bevy::log::info!(
@@ -1387,6 +1406,7 @@ fn add_visual_components(
     blur_params: Option<Vec4>,
     embed_scene_size: Option<(f32, f32)>,
     size_scale: f32,
+    max_blur_radius: f32,
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
     use bevy::mesh::Mesh2d;
@@ -1405,17 +1425,50 @@ fn add_visual_components(
         height: f32,
         anchor: &bevy::sprite::Anchor,
     ) -> Handle<Mesh> {
+        create_anchored_rectangle_with_blur(meshes, width, height, anchor, 0.0)
+    }
+
+    // Helper function to create a rectangle mesh with anchor offset and blur expansion
+    // blur_expansion: additional pixels to add on each side for blur overflow
+    fn create_anchored_rectangle_with_blur(
+        meshes: &mut Assets<Mesh>,
+        width: f32,
+        height: f32,
+        anchor: &bevy::sprite::Anchor,
+        blur_expansion: f32,
+    ) -> Handle<Mesh> {
         let anchor_vec = anchor.as_vec();
+        // Anchor offset based on original size (this positions the image center)
         let offset_x = -anchor_vec.x * width;
         let offset_y = -anchor_vec.y * height;
+
+        // Original half-sizes
         let half_w = width / 2.0;
         let half_h = height / 2.0;
 
+        // Vertices expand outward from original rectangle by blur_expansion
+        // This keeps the image centered while expanding the mesh for blur overflow
         let vertices = vec![
-            [offset_x - half_w, offset_y - half_h, 0.0],
-            [offset_x + half_w, offset_y - half_h, 0.0],
-            [offset_x + half_w, offset_y + half_h, 0.0],
-            [offset_x - half_w, offset_y + half_h, 0.0],
+            [
+                offset_x - half_w - blur_expansion,
+                offset_y - half_h - blur_expansion,
+                0.0,
+            ],
+            [
+                offset_x + half_w + blur_expansion,
+                offset_y - half_h - blur_expansion,
+                0.0,
+            ],
+            [
+                offset_x + half_w + blur_expansion,
+                offset_y + half_h + blur_expansion,
+                0.0,
+            ],
+            [
+                offset_x - half_w - blur_expansion,
+                offset_y + half_h + blur_expansion,
+                0.0,
+            ],
         ];
 
         let normals = vec![
@@ -1425,7 +1478,17 @@ fn add_visual_components(
             [0.0, 0.0, 1.0],
         ];
 
-        let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+        // UV coordinates that map the expanded mesh to extended texture sampling
+        // When blur_expansion > 0, UVs extend beyond 0-1 range
+        // The shader's blur function handles out-of-bounds by treating them as transparent
+        let uv_expand_x = blur_expansion / width;
+        let uv_expand_y = blur_expansion / height;
+        let uvs = vec![
+            [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
+            [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
+            [1.0 + uv_expand_x, -uv_expand_y],      // top-right
+            [-uv_expand_x, -uv_expand_y],           // top-left
+        ];
 
         let indices = vec![0, 1, 2, 0, 2, 3];
 
@@ -1514,24 +1577,46 @@ fn add_visual_components(
                 if let Some(handle) = images.get(image_uri) {
                     if needs_any_effect {
                         // Use UnifiedEffectMaterial for all effect cases
-                        // Create mesh with BASE dimensions (not scaled)
-                        // Transform.scale will handle the actual scaling
-                        // Effects work in UV space (0-1), so they don't need scaled pixel sizes
-                        let mesh =
-                            create_anchored_rectangle(meshes, base_width, base_height, anchor);
+                        // For effect layers, Transform.scale is reset to Vec3::ONE in spawn_layer_entity
+                        // So we must bake the scale into the mesh dimensions
+                        let scaled_width = base_width * initial_scale.0.abs();
+                        let scaled_height = base_height * initial_scale.1.abs();
+
+                        // Don't expand mesh statically - blur will work within original bounds
+                        // For proper glow effect, we'd need dynamic mesh resizing per frame
+                        // which is complex. For now, blur fades naturally at edges.
+                        let blur_expansion = 0.0;
+
+                        let mesh = create_anchored_rectangle_with_blur(
+                            meshes,
+                            scaled_width,
+                            scaled_height,
+                            anchor,
+                            blur_expansion,
+                        );
+
+                        // Pass blur expansion info to material via blur_params.w
+                        // This allows shader to correctly map UVs for the expanded mesh
+                        let blur_params_with_expansion = blur_params.map(|mut bp| {
+                            bp.y = scaled_width;
+                            bp.z = scaled_height;
+                            bp.w = blur_expansion;
+                            bp
+                        });
+
                         let material = create_unified_material(
                             unified_materials,
                             handle.clone(),
                             LinearRgba::WHITE,
-                            base_width,
-                            base_height,
+                            scaled_width,
+                            scaled_height,
                             mask_info,
                             wipe_params,
                             stretch_params,
-                            blur_params,
+                            blur_params_with_expansion,
                         );
 
-                        // Transform.scale from scene.rs will handle the scaling
+                        // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
                         commands.entity(entity).insert((
                             Mesh2d(mesh),
                             MeshMaterial2d(material),
@@ -1540,10 +1625,11 @@ fn add_visual_components(
                         ));
 
                         bevy::log::info!(
-                            "[Visual] Spawned sprite '{}' with unified effect: base_size=({:.1},{:.1}), mask={}, wipe={}, stretch={}, blur={}",
+                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}",
                             label,
-                            base_width,
-                            base_height,
+                            scaled_width,
+                            scaled_height,
+                            blur_expansion,
                             needs_mask,
                             needs_wipe,
                             needs_stretch,
@@ -1566,8 +1652,7 @@ fn add_visual_components(
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
-                    let mesh =
-                        create_anchored_rectangle(meshes, base_width, base_height, anchor);
+                    let mesh = create_anchored_rectangle(meshes, base_width, base_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
@@ -1654,8 +1739,7 @@ fn add_visual_components(
                 if needs_any_effect {
                     // Create mesh with BASE dimensions (not scaled)
                     // Transform.scale will handle the actual scaling
-                    let mesh =
-                        create_anchored_rectangle(meshes, base_width, base_height, anchor);
+                    let mesh = create_anchored_rectangle(meshes, base_width, base_height, anchor);
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
@@ -2053,8 +2137,73 @@ pub fn apply_mask_clipping_system(
 // Unified Effect Material Animation System
 // ============================================================================
 
+/// Helper function to update mesh vertices and UVs for dynamic blur expansion.
+/// This allows the blur glow/halo effect to extend beyond original image boundaries.
+/// Note: This assumes CENTER anchor since anchor info is not stored in AmAnimated.
+fn update_mesh_for_blur(
+    mesh: &mut Mesh,
+    width: f32,
+    height: f32,
+    _anchor: &bevy::sprite::Anchor, // Reserved for future use
+    blur_expansion: f32,
+) {
+    // For center anchor, offset is 0
+    let offset_x = 0.0;
+    let offset_y = 0.0;
+
+    // Original half-sizes
+    let half_w = width / 2.0;
+    let half_h = height / 2.0;
+
+    // Vertices expand outward from original rectangle by blur_expansion
+    let vertices: Vec<[f32; 3]> = vec![
+        [
+            offset_x - half_w - blur_expansion,
+            offset_y - half_h - blur_expansion,
+            0.0,
+        ],
+        [
+            offset_x + half_w + blur_expansion,
+            offset_y - half_h - blur_expansion,
+            0.0,
+        ],
+        [
+            offset_x + half_w + blur_expansion,
+            offset_y + half_h + blur_expansion,
+            0.0,
+        ],
+        [
+            offset_x - half_w - blur_expansion,
+            offset_y + half_h + blur_expansion,
+            0.0,
+        ],
+    ];
+
+    // UV coordinates that map the expanded mesh to extended texture sampling
+    let uv_expand_x = if width > 0.0 {
+        blur_expansion / width
+    } else {
+        0.0
+    };
+    let uv_expand_y = if height > 0.0 {
+        blur_expansion / height
+    } else {
+        0.0
+    };
+    let uvs: Vec<[f32; 2]> = vec![
+        [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
+        [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
+        [1.0 + uv_expand_x, -uv_expand_y],      // top-right
+        [-uv_expand_x, -uv_expand_y],           // top-left
+    ];
+
+    // Update mesh attributes
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+}
+
 /// System to animate effects on sprites using UnifiedEffectMaterial.
-/// This system handles all effect types (wipe, stretch segment, mask) in a single pass.
+/// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
 /// It is designed for the RTT architecture where effects are stackable.
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
@@ -2064,6 +2213,7 @@ pub fn animate_unified_effect_system(
         &AmAnimated,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &Transform,
+        &bevy::mesh::Mesh2d,
     )>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -2074,7 +2224,7 @@ pub fn animate_unified_effect_system(
 
     let global_time = playback.current_time_ms;
 
-    for (entity, animated, material_handle, transform) in query.iter() {
+    for (entity, animated, material_handle, transform, mesh2d) in query.iter() {
         // Calculate local time
         let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -2142,14 +2292,78 @@ pub fn animate_unified_effect_system(
                 if blur_strength > 0.001 {
                     material.set_blur_enabled(true);
                     // AM strength 2.0 produces very strong blur
-                    // Through testing: strength * 50 gives approximately correct pixel radius
-                    let blur_radius_px = blur_strength * 50.0;
-                    // Pass the actual pixel radius to shader
+                    // Testing shows AM blur is much stronger than expected
+                    // Use strength * 80 for closer match to AM's blur intensity
+                    let blur_radius_px = blur_strength * 80.0;
+
+                    // Expand mesh to allow blur overflow (circular glow effect)
+                    // The blur samples beyond the texture boundary, so mesh needs to be larger
+                    // AM's blur glow extends significantly - use 2x radius for full coverage
+                    let blur_expansion = blur_radius_px * 2.0;
+
+                    // Pass blur parameters to shader
                     // blur_params.x = blur radius in pixels
-                    // For now, don't expand mesh - just accept clipping at boundaries
-                    material.blur_params = Vec4::new(blur_radius_px, orig_width, orig_height, 0.0);
+                    // blur_params.y = original width (for UV calculations)
+                    // blur_params.z = original height (for UV calculations)
+                    // blur_params.w = blur expansion in pixels
+                    material.blur_params =
+                        Vec4::new(blur_radius_px, orig_width, orig_height, blur_expansion);
+
+                    // Update mesh bounds for blur overflow
+                    // Create new mesh with expanded bounds (similar to stretch segment approach)
+                    let half_w = orig_width / 2.0;
+                    let half_h = orig_height / 2.0;
+
+                    // Vertices expand outward by blur_expansion
+                    let min_x = -half_w - blur_expansion;
+                    let max_x = half_w + blur_expansion;
+                    let min_y = -half_h - blur_expansion;
+                    let max_y = half_h + blur_expansion;
+
+                    // Calculate UV coordinates that extend beyond 0-1 for blur sampling
+                    // The shader will treat out-of-bounds samples as transparent
+                    let uv_expand_x = blur_expansion / orig_width;
+                    let uv_expand_y = blur_expansion / orig_height;
+
+                    let vertices = vec![
+                        [min_x, min_y, 0.0],
+                        [max_x, min_y, 0.0],
+                        [max_x, max_y, 0.0],
+                        [min_x, max_y, 0.0],
+                    ];
+                    let normals = vec![
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                    ];
+                    // UV coords extend beyond [0,1] to sample the expanded blur area
+                    let uvs = vec![
+                        [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
+                        [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
+                        [1.0 + uv_expand_x, -uv_expand_y],      // top-right
+                        [-uv_expand_x, -uv_expand_y],           // top-left
+                    ];
+                    let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+                    let mut new_mesh = Mesh::new(
+                        bevy::mesh::PrimitiveTopology::TriangleList,
+                        bevy::asset::RenderAssetUsages::RENDER_WORLD
+                            | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                    );
+                    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+
+                    let new_mesh_handle = meshes.add(new_mesh);
+                    commands
+                        .entity(entity)
+                        .insert(bevy::mesh::Mesh2d(new_mesh_handle));
                 } else {
                     material.set_blur_enabled(false);
+                    // Reset mesh to original bounds when blur is disabled
+                    // This ensures no leftover expansion from previous frames
                 }
             } else {
                 material.set_blur_enabled(false);

@@ -820,100 +820,111 @@ use video_debug_systems::*;
 // ============================================================================
 
 #[cfg(feature = "video-comparison")]
-        mod video_comparison_systems {
-            use super::*;
-            use crate::video_utils;
-            use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-            use bevy::window::PrimaryWindow;
-            use std::path::PathBuf;
-            use serde::Deserialize;
-            use std::collections::HashMap;
-            use owo_colors::OwoColorize;
+mod video_comparison_systems {
+    use super::*;
+    use crate::video_utils;
+    use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+    use bevy::window::PrimaryWindow;
+    use owo_colors::OwoColorize;
+    use serde::Deserialize;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
-        #[derive(Resource)]
-        pub struct ComparisonState {
-            pub frame_paths: Vec<PathBuf>,
-            pub current_frame: usize,
-            pub fps: f32,
-            pub temp_dir: Option<PathBuf>,
-            pub stage: TestStage,
-            pub wait_frames: u32,  // Wait frame count instead of timer for stability
-            pub total_diff: f64,
-            pub frame_scores: Vec<f32>,
-            pub report_dir: PathBuf,
-            // Config thresholds
-            pub avg_threshold: f32,
-            pub frame_threshold: f32,
-            pub project_name: String,
-            pub skipped: bool,
+    #[derive(Resource)]
+    pub struct ComparisonState {
+        pub frame_paths: Vec<PathBuf>,
+        pub current_frame: usize,
+        pub fps: f32,
+        pub temp_dir: Option<PathBuf>,
+        pub stage: TestStage,
+        pub wait_frames: u32, // Wait frame count instead of timer for stability
+        pub total_diff: f64,
+        pub frame_scores: Vec<f32>,
+        pub report_dir: PathBuf,
+        // Config thresholds
+        pub avg_threshold: f32,
+        pub frame_threshold: f32,
+        pub project_name: String,
+        pub skipped: bool,
+    }
+
+    #[derive(PartialEq, Debug)]
+    pub enum TestStage {
+        Initializing,
+        WaitingForProjectLoad, // Wait for project to load and first frame to render
+        SettingTime,
+        WaitingForRender,
+        Capturing,
+        Comparing,
+        Finished,
+    }
+
+    impl Default for ComparisonState {
+        fn default() -> Self {
+            Self {
+                frame_paths: Vec::new(),
+                current_frame: 0,
+                fps: 12.0,
+                temp_dir: None,
+                stage: TestStage::Initializing,
+                wait_frames: 0, // Frame counter for stable waiting
+                total_diff: 0.0,
+                frame_scores: Vec::new(),
+                report_dir: PathBuf::from("comparison_report"),
+                avg_threshold: 0.98,
+                frame_threshold: 0.98,
+                project_name: String::new(),
+                skipped: false,
+            }
         }
-    
-        #[derive(PartialEq, Debug)]
-        pub enum TestStage {
-            Initializing,
-            SettingTime,
-            WaitingForRender,
-            Capturing,
-            Comparing,
-            Finished,
-        }
-    
-        impl Default for ComparisonState {
-            fn default() -> Self {
-                Self {
-                    frame_paths: Vec::new(),
-                    current_frame: 0,
-                    fps: 12.0,
-                    temp_dir: None,
-                    stage: TestStage::Initializing,
-                    wait_frames: 0,  // Frame counter for stable waiting
-                    total_diff: 0.0,
-                    frame_scores: Vec::new(),
-                    report_dir: PathBuf::from("comparison_report"),
-                    avg_threshold: 0.98,
-                    frame_threshold: 0.98,
-                    project_name: String::new(),
-                    skipped: false,
+    }
+    #[derive(Deserialize, Debug)]
+    struct ComparisonConfig {
+        default: ProjectConfig,
+        #[serde(default)]
+        overrides: HashMap<String, ProjectConfig>,
+    }
+
+    #[derive(Deserialize, Debug, Clone, Copy)]
+    struct ProjectConfig {
+        avg_threshold: f32,
+        frame_threshold: f32,
+    }
+
+    pub fn setup_comparison(
+        mut state: ResMut<ComparisonState>,
+        project_file: Res<super::ProjectFile>,
+    ) {
+        // Prepare report dir
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let report_dir = PathBuf::from("reports").join(format!("run_{}", timestamp));
+        std::fs::create_dir_all(&report_dir).expect("Failed to create report dir");
+        state.report_dir = report_dir;
+
+        // Extract project name from path
+        let project_name = std::path::Path::new(&project_file.0)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        state.project_name = project_name.clone();
+
+        // Load configuration
+        let config_path = "crates/bevy_alight_motion/comparison_config.toml";
+        let config = if let Ok(content) = std::fs::read_to_string(config_path) {
+            match toml::from_str::<ComparisonConfig>(&content) {
+                Ok(cfg) => Some(cfg),
+                Err(e) => {
+                    println!("[COMPARISON] Error parsing config: {}", e);
+                    None
                 }
             }
-        }    
-        #[derive(Deserialize, Debug)]
-        struct ComparisonConfig {
-            default: ProjectConfig,
-            #[serde(default)]
-            overrides: HashMap<String, ProjectConfig>,
-        }
-    
-        #[derive(Deserialize, Debug, Clone, Copy)]
-        struct ProjectConfig {
-            avg_threshold: f32,
-            frame_threshold: f32,
-        }
-    
-        pub fn setup_comparison(
-            mut state: ResMut<ComparisonState>,
-            project_file: Res<super::ProjectFile>,
-        ) {
-            // Prepare report dir
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            let report_dir = PathBuf::from("reports").join(format!("run_{}", timestamp));
-            std::fs::create_dir_all(&report_dir).expect("Failed to create report dir");
-            state.report_dir = report_dir;
-    
-            // Extract project name from path
-            let project_name = std::path::Path::new(&project_file.0)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            state.project_name = project_name.clone();
-    
-            // Load configuration
-            let config_path = "crates/bevy_alight_motion/comparison_config.toml";
-            let config = if let Ok(content) = std::fs::read_to_string(config_path) {
+        } else {
+            // Try simpler path if running from crate root
+            if let Ok(content) = std::fs::read_to_string("comparison_config.toml") {
                 match toml::from_str::<ComparisonConfig>(&content) {
                     Ok(cfg) => Some(cfg),
                     Err(e) => {
@@ -922,243 +933,267 @@ use video_debug_systems::*;
                     }
                 }
             } else {
-                // Try simpler path if running from crate root
-                if let Ok(content) = std::fs::read_to_string("comparison_config.toml") {
-                    match toml::from_str::<ComparisonConfig>(&content) {
-                        Ok(cfg) => Some(cfg),
-                        Err(e) => {
-                            println!("[COMPARISON] Error parsing config: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    println!("[COMPARISON] Config file not found, using defaults");
-                    None
-                }
-            };
-    
-            // Apply configuration
-            if let Some(cfg) = config {
-                let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
-                state.avg_threshold = settings.avg_threshold;
-                state.frame_threshold = settings.frame_threshold;
-                println!(
-                    "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}",
-                    project_name, state.avg_threshold, state.frame_threshold
-                );
+                println!("[COMPARISON] Config file not found, using defaults");
+                None
             }
-    
-            // Find and extract video
-            let Some(video_path) = video_utils::find_debug_video(Some(&project_file.0)) else {
-                println!(
-                    "{} {}",
-                    "[COMPARISON] SKIP:".yellow().bold(),
-                    "No video found for comparison!".yellow()
-                );
-                state.skipped = true;
-                state.stage = TestStage::Finished;
-                return;
-            };
-    
-            println!("[COMPARISON] Using video: {:?}", video_path);
-    
-            let Some((fps, _)) = video_utils::get_video_info(&video_path) else {
-                println!("[COMPARISON] Failed to get video info");
-                state.stage = TestStage::Finished;
-                return;
-            };
-    
-            state.fps = fps;
-    
-            let Some(temp_dir) = video_utils::extract_frames(&video_path, fps) else {
-                println!("[COMPARISON] Failed to extract frames");
-                state.stage = TestStage::Finished;
-                return;
-            };
-    
-            state.temp_dir = Some(temp_dir.clone());
-    
-            // Collect paths
-            let mut frame_paths: Vec<PathBuf> = Vec::new();
-            if let Ok(entries) = std::fs::read_dir(&temp_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().map(|e| e == "png").unwrap_or(false) {
-                        frame_paths.push(path);
-                    }
-                }
-            }
-            frame_paths.sort();
-            state.frame_paths = frame_paths;
-    
+        };
+
+        // Apply configuration
+        if let Some(cfg) = config {
+            let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
+            state.avg_threshold = settings.avg_threshold;
+            state.frame_threshold = settings.frame_threshold;
             println!(
-                "[COMPARISON] Starting comparison of {} frames...",
-                state.frame_paths.len()
+                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}",
+                project_name, state.avg_threshold, state.frame_threshold
             );
-            state.stage = TestStage::SettingTime;
         }
-    
-        pub fn comparison_loop(
-            mut state: ResMut<ComparisonState>,
-            mut playback: ResMut<AmPlayback>,
-            mut commands: Commands,
-            _window_query: Query<Entity, With<PrimaryWindow>>,
-            _time: Res<Time>,
-            mut exit: EventWriter<AppExit>,
-        ) {
-            // Use frame-based waiting instead of time-based for determinism
-            // Wait at least 3 frames to ensure:
-            // 1. Animation system processes new time
-            // 2. Transform updates propagate
-            // 3. Render pipeline is flushed
-            const WAIT_FRAMES: u32 = 3;
-            
-            match state.stage {
-                TestStage::Initializing => {} // Handled in setup
-    
-                TestStage::SettingTime => {
-                    // Check for max frame limit (useful for quick debugging)
-                    let max_frames = std::env::var("MAX_FRAMES")
-                        .ok()
-                        .and_then(|s| s.parse::<usize>().ok());
-                    let frame_limit = max_frames.unwrap_or(state.frame_paths.len());
-                    
-                    if state.current_frame >= state.frame_paths.len() 
-                        || state.current_frame >= frame_limit {
-                        state.stage = TestStage::Finished;
-                        return;
-                    }
-    
-                    // Set precise time for this frame
-                    let time_sec = state.current_frame as f32 / state.fps;
-                    playback.playing = false; // Ensure paused
-                    playback.current_time_ms = time_sec * 1000.0;
-                    playback.force_stopped = false; // Allow update
-    
-                    // Start frame counter
-                    state.wait_frames = 0;
-                    state.stage = TestStage::WaitingForRender;
+
+        // Find and extract video
+        let Some(video_path) = video_utils::find_debug_video(Some(&project_file.0)) else {
+            println!(
+                "{} {}",
+                "[COMPARISON] SKIP:".yellow().bold(),
+                "No video found for comparison!".yellow()
+            );
+            state.skipped = true;
+            state.stage = TestStage::Finished;
+            return;
+        };
+
+        println!("[COMPARISON] Using video: {:?}", video_path);
+
+        let Some((fps, _)) = video_utils::get_video_info(&video_path) else {
+            println!("[COMPARISON] Failed to get video info");
+            state.stage = TestStage::Finished;
+            return;
+        };
+
+        state.fps = fps;
+
+        let Some(temp_dir) = video_utils::extract_frames(&video_path, fps) else {
+            println!("[COMPARISON] Failed to extract frames");
+            state.stage = TestStage::Finished;
+            return;
+        };
+
+        state.temp_dir = Some(temp_dir.clone());
+
+        // Collect paths
+        let mut frame_paths: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "png").unwrap_or(false) {
+                    frame_paths.push(path);
                 }
-    
-                TestStage::WaitingForRender => {
+            }
+        }
+        frame_paths.sort();
+        state.frame_paths = frame_paths;
+
+        println!(
+            "[COMPARISON] Starting comparison of {} frames...",
+            state.frame_paths.len()
+        );
+        state.stage = TestStage::WaitingForProjectLoad;
+        state.wait_frames = 0;
+    }
+
+    pub fn comparison_loop(
+        mut state: ResMut<ComparisonState>,
+        mut playback: ResMut<AmPlayback>,
+        mut commands: Commands,
+        _window_query: Query<Entity, With<PrimaryWindow>>,
+        _time: Res<Time>,
+        mut exit: EventWriter<AppExit>,
+        // Query to check if project is loaded
+        project_query: Query<&bevy_alight_motion::scene::AmProjectRoot>,
+    ) {
+        // Use frame-based waiting instead of time-based for determinism
+        // Wait at least 3 frames to ensure:
+        // 1. Animation system processes new time
+        // 2. Transform updates propagate
+        // 3. Render pipeline is flushed
+        const WAIT_FRAMES: u32 = 3;
+        // Wait more frames for initial load to ensure textures are uploaded to GPU
+        const INITIAL_WAIT_FRAMES: u32 = 10;
+
+        match state.stage {
+            TestStage::Initializing => {} // Handled in setup
+
+            TestStage::WaitingForProjectLoad => {
+                // Check if project is loaded by looking for a spawned AmProjectRoot
+                let project_loaded = project_query.iter().any(|root| root.spawned);
+
+                if project_loaded {
                     state.wait_frames += 1;
-                    if state.wait_frames >= WAIT_FRAMES {
-                        state.stage = TestStage::Capturing;
+                    // Wait additional frames for GPU texture upload and first render
+                    if state.wait_frames >= INITIAL_WAIT_FRAMES {
+                        println!("[COMPARISON] Project loaded, starting comparison...");
+                        state.wait_frames = 0;
+                        state.stage = TestStage::SettingTime;
                     }
                 }
-    
-                TestStage::Capturing => {
-                    let frame_idx = state.current_frame;
-                    let report_dir = state.report_dir.clone();
-                    let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
-    
-                    // Trigger screenshot
-                    commands
-                        .spawn(Screenshot::primary_window())
-                        .observe(save_to_disk(shot_path));
-    
-                    state.stage = TestStage::Comparing;
+                // If not loaded yet, just wait
+            }
+
+            TestStage::SettingTime => {
+                // Check for max frame limit (useful for quick debugging)
+                let max_frames = std::env::var("MAX_FRAMES")
+                    .ok()
+                    .and_then(|s| s.parse::<usize>().ok());
+                let frame_limit = max_frames.unwrap_or(state.frame_paths.len());
+
+                if state.current_frame >= state.frame_paths.len()
+                    || state.current_frame >= frame_limit
+                {
+                    state.stage = TestStage::Finished;
+                    return;
                 }
-    
-                TestStage::Comparing => {
-                    let frame_idx = state.current_frame;
-                    let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
-    
-                    if !shot_path.exists() {
-                        // Still saving...
-                        return;
-                    }
-    
-                    // Give it a tiny moment to flush? Filesystem race is rare but possible.
-                    // Load images
-                    let shot_img = match image::open(&shot_path) {
-                        Ok(img) => img.to_rgba8(),
-                        Err(_) => return, // Wait more?
-                    };
-    
-                    let ref_path = &state.frame_paths[frame_idx];
-                    let ref_img = image::open(ref_path)
-                        .expect("Failed to open ref image")
-                        .to_rgba8();
-    
-                    // Compare
-                    let (result, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
-                    
-                    // Use content similarity for scoring to avoid dilution by empty background
-                    let similarity = result.content_similarity;
-                    state.frame_scores.push(similarity);
-    
-                    // Check against configured frame threshold
-                    let threshold = state.frame_threshold;
-                    
-                    // Save diff if similarity < threshold
-                    if similarity < threshold {
-                        let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
-                        diff_img.save(diff_path).unwrap();
+
+                // Set precise time for this frame
+                let time_sec = state.current_frame as f32 / state.fps;
+                playback.playing = false; // Ensure paused
+                playback.current_time_ms = time_sec * 1000.0;
+                playback.force_stopped = false; // Allow update
+
+                // Start frame counter
+                state.wait_frames = 0;
+                state.stage = TestStage::WaitingForRender;
+            }
+
+            TestStage::WaitingForRender => {
+                state.wait_frames += 1;
+                if state.wait_frames >= WAIT_FRAMES {
+                    state.stage = TestStage::Capturing;
+                }
+            }
+
+            TestStage::Capturing => {
+                let frame_idx = state.current_frame;
+                let report_dir = state.report_dir.clone();
+                let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
+
+                // Trigger screenshot
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(shot_path));
+
+                state.stage = TestStage::Comparing;
+            }
+
+            TestStage::Comparing => {
+                let frame_idx = state.current_frame;
+                let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
+
+                if !shot_path.exists() {
+                    // Still saving...
+                    return;
+                }
+
+                // Give it a tiny moment to flush? Filesystem race is rare but possible.
+                // Load images
+                let shot_img = match image::open(&shot_path) {
+                    Ok(img) => img.to_rgba8(),
+                    Err(_) => return, // Wait more?
+                };
+
+                let ref_path = &state.frame_paths[frame_idx];
+                let ref_img = image::open(ref_path)
+                    .expect("Failed to open ref image")
+                    .to_rgba8();
+
+                // Compare
+                let (result, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
+
+                // Use content similarity for scoring to avoid dilution by empty background
+                let similarity = result.content_similarity;
+                state.frame_scores.push(similarity);
+
+                // Check against configured frame threshold
+                let threshold = state.frame_threshold;
+
+                // Save diff if similarity < threshold
+                if similarity < threshold {
+                    let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
+                    diff_img.save(diff_path).unwrap();
+                    println!(
+                        "[FRAME {:03}] Similarity: {:.4} ({} < {:.2}) | Content: {:.4}, Match: {:.1}%",
+                        frame_idx,
+                        similarity,
+                        "FAIL".red().bold(),
+                        threshold,
+                        result.content_similarity,
+                        result.pixel_match_rate * 100.0
+                    );
+                } else {
+                    if frame_idx % 10 == 0 {
                         println!(
-                            "[FRAME {:03}] Similarity: {:.4} ({} < {:.2}) | Content: {:.4}, Match: {:.1}%",
-                            frame_idx, similarity, "FAIL".red().bold(), threshold, result.content_similarity, result.pixel_match_rate * 100.0
+                            "[FRAME {:03}] Similarity: {:.4} ({}) | Content: {:.4}, Match: {:.1}%",
+                            frame_idx,
+                            similarity,
+                            "OK".green(),
+                            result.content_similarity,
+                            result.pixel_match_rate * 100.0
                         );
-                    } else {
-                        if frame_idx % 10 == 0 {
-                            println!(
-                                "[FRAME {:03}] Similarity: {:.4} ({}) | Content: {:.4}, Match: {:.1}%",
-                                frame_idx, similarity, "OK".green(), result.content_similarity, result.pixel_match_rate * 100.0
-                            );
-                        }
                     }
-    
-                    // Clean up shot to save space? Keep it for now.
-    
-                    state.current_frame += 1;
-                    state.stage = TestStage::SettingTime;
                 }
-    
-                TestStage::Finished => {
-                    // Generate Report
-                    let avg_score: f32 = if state.frame_scores.is_empty() {
-                        0.0
+
+                // Clean up shot to save space? Keep it for now.
+
+                state.current_frame += 1;
+                state.stage = TestStage::SettingTime;
+            }
+
+            TestStage::Finished => {
+                // Generate Report
+                let avg_score: f32 = if state.frame_scores.is_empty() {
+                    0.0
+                } else {
+                    state.frame_scores.iter().sum::<f32>() / state.frame_scores.len() as f32
+                };
+
+                println!("========================================");
+                println!("COMPARISON FINISHED: {}", state.project_name);
+
+                if state.skipped {
+                    println!("{}", "RESULT: SKIP ⚠️".yellow().bold());
+                } else {
+                    println!("Total Frames: {}", state.frame_paths.len());
+                    println!(
+                        "Average Similarity: {:.4} (Threshold: {:.2})",
+                        avg_score, state.avg_threshold
+                    );
+
+                    let passed = avg_score >= state.avg_threshold;
+                    if passed {
+                        println!("{}", "RESULT: PASS ✅".green().bold());
                     } else {
-                        state.frame_scores.iter().sum::<f32>() / state.frame_scores.len() as f32
-                    };
-    
-                    println!("========================================");
-                    println!("COMPARISON FINISHED: {}", state.project_name);
-                    
-                    if state.skipped {
-                        println!("{}", "RESULT: SKIP ⚠️".yellow().bold());
-                    } else {
-                        println!("Total Frames: {}", state.frame_paths.len());
-                        println!("Average Similarity: {:.4} (Threshold: {:.2})", avg_score, state.avg_threshold);
-                        
-                        let passed = avg_score >= state.avg_threshold;
-                        if passed {
-                            println!("{}", "RESULT: PASS ✅".green().bold());
-                        } else {
-                            println!("{}", "RESULT: FAIL ❌".red().bold());
-                        }
+                        println!("{}", "RESULT: FAIL ❌".red().bold());
                     }
-                    
-                    println!("Report saved to: {:?}", state.report_dir);
-                    println!("========================================");
-    
-                    // Cleanup temp dir
-                    if let Some(temp_dir) = &state.temp_dir {
-                        let _ = std::fs::remove_dir_all(temp_dir);
-                    }
-    
-                    // Exit with appropriate code
-                    if state.skipped {
-                        exit.write(AppExit::Success); // Or maybe a specific code for skip?
+                }
+
+                println!("Report saved to: {:?}", state.report_dir);
+                println!("========================================");
+
+                // Cleanup temp dir
+                if let Some(temp_dir) = &state.temp_dir {
+                    let _ = std::fs::remove_dir_all(temp_dir);
+                }
+
+                // Exit with appropriate code
+                if state.skipped {
+                    exit.write(AppExit::Success); // Or maybe a specific code for skip?
+                } else {
+                    let passed = avg_score >= state.avg_threshold;
+                    if passed {
+                        exit.write(AppExit::Success);
                     } else {
-                        let passed = avg_score >= state.avg_threshold;
-                        if passed {
-                            exit.write(AppExit::Success);
-                        } else {
-                            exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
-                        }
+                        exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
                     }
                 }
             }
         }
     }
+}

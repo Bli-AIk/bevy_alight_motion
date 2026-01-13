@@ -141,32 +141,41 @@ fn parse_fps(s: &str) -> Option<f32> {
 
 /// Extract frames from video using ffmpeg
 /// Returns the directory where frames are stored
+/// Each video gets its own subdirectory based on the video filename to allow parallel extraction
 pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
-    // Create frames directory inside assets/debug
+    // Get video name for unique subdirectory
+    let video_name = video_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+
+    // Create frames directory inside assets/debug, with unique subdirectory per video
     let possible_assets_dirs = [
         "crates/bevy_alight_motion/assets/debug/_video_frames",
         "assets/debug/_video_frames",
     ];
 
-    let mut frames_dir = None;
+    let mut base_frames_dir = None;
     for dir_path in &possible_assets_dirs {
         let parent = Path::new(dir_path).parent()?;
         if parent.exists() {
-            frames_dir = Some(PathBuf::from(dir_path));
+            base_frames_dir = Some(PathBuf::from(dir_path));
             break;
         }
     }
 
     // If no existing parent dir found (e.g. running from wrong CWD), try to create one relative to video
-    if frames_dir.is_none() {
+    if base_frames_dir.is_none() {
         if let Some(parent) = video_path.parent() {
-            frames_dir = Some(parent.join("_video_frames"));
+            base_frames_dir = Some(parent.join("_video_frames"));
         }
     }
 
-    let frames_dir = frames_dir?;
+    let base_frames_dir = base_frames_dir?;
+    // Use video-specific subdirectory to avoid race conditions in parallel tests
+    let frames_dir = base_frames_dir.join(video_name);
 
-    // Clean up existing frames
+    // Clean up existing frames for this video
     if frames_dir.exists() {
         let _ = fs::remove_dir_all(&frames_dir);
     }
@@ -231,19 +240,19 @@ pub fn compare_images(
     let height = img1.height().min(img2.height());
 
     let mut diff_image = image::RgbaImage::new(width, height);
-    
+
     let mut total_diff_global: u64 = 0;
     let mut total_max_global: u64 = 0;
-    
+
     let mut total_diff_content: u64 = 0;
     let mut total_max_content: u64 = 0;
-    
+
     let mut matching_pixels: u64 = 0;
     let mut differing_pixels: u64 = 0;
-    
+
     // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
     // Small noise tolerance (e.g., compression artifacts)
-    const MATCH_THRESHOLD: u64 = 10; 
+    const MATCH_THRESHOLD: u64 = 10;
 
     for y in 0..height {
         for x in 0..width {
@@ -256,22 +265,22 @@ pub fn compare_images(
             let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
 
             let pixel_diff = r_diff + g_diff + b_diff + a_diff;
-            
+
             // Update global stats
             total_diff_global += pixel_diff;
             total_max_global += 255 * 4;
 
             // Check if pixel is "empty" (transparent or black with no alpha)
             // We consider a pixel content if it has alpha > 0 or color > 0
-            // Assuming black transparent is empty. 
+            // Assuming black transparent is empty.
             // Actually, let's just check if it's NOT (0,0,0,0) or black background.
             // For AM, background is usually black.
             // Let's define "empty" as alpha=0 OR (r=0,g=0,b=0).
             let p1_empty = p1[3] == 0 || (p1[0] == 0 && p1[1] == 0 && p1[2] == 0);
             let p2_empty = p2[3] == 0 || (p2[0] == 0 && p2[1] == 0 && p2[2] == 0);
-            
+
             let is_content = !p1_empty || !p2_empty;
-            
+
             if is_content {
                 total_diff_content += pixel_diff;
                 total_max_content += 255 * 4;
@@ -301,14 +310,14 @@ pub fn compare_images(
     } else {
         1.0
     };
-    
+
     let content_similarity = if total_max_content > 0 {
         1.0 - (total_diff_content as f32 / total_max_content as f32)
     } else {
         // If both images are completely empty, they are identical
-        1.0 
+        1.0
     };
-    
+
     let pixel_match_rate = matching_pixels as f32 / (width * height) as f32;
 
     (
