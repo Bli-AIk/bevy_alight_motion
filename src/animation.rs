@@ -112,6 +112,11 @@ pub struct AmAnimated {
     /// When the project is scaled to fit window, embed children need their coordinates
     /// scaled by 1/fit_scale to compensate for the root scaling.
     pub inv_fit_scale: f32,
+    /// Stroke width animation data (for SDF shapes with stroke).
+    pub stroke_width: AmAnimatedFloat,
+    /// Base alpha from fill color (0.0-1.0).
+    /// Opacity animation is multiplied by this value to preserve original fill transparency.
+    pub base_alpha: f32,
 }
 
 /// Resource to control animation playback.
@@ -369,7 +374,10 @@ pub fn animate_opacity_system(
 
         // Get opacity from animation data, default to 1.0 if not specified
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-        sprite.color.set_alpha(opacity.clamp(0.0, 1.0));
+        // Multiply by base_alpha to preserve original fill color transparency
+        // e.g., if fillColor has alpha=0, the sprite should remain invisible regardless of opacity animation
+        let final_alpha = opacity * animated.base_alpha;
+        sprite.color.set_alpha(final_alpha.clamp(0.0, 1.0));
     }
 }
 
@@ -449,7 +457,9 @@ pub fn animate_text_opacity_system(
 
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-        text_color.0.set_alpha(opacity.clamp(0.0, 1.0));
+        // Multiply by base_alpha to preserve original fill color transparency
+        let final_alpha = opacity * animated.base_alpha;
+        text_color.0.set_alpha(final_alpha.clamp(0.0, 1.0));
     }
 }
 
@@ -492,7 +502,9 @@ pub fn animate_sdf_opacity_system(
 
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-        smud_shape.color.set_alpha(opacity.clamp(0.0, 1.0));
+        // Multiply by base_alpha to preserve original fill color transparency
+        let final_alpha = opacity * animated.base_alpha;
+        smud_shape.color.set_alpha(final_alpha.clamp(0.0, 1.0));
     }
 }
 
@@ -538,6 +550,14 @@ pub fn animate_sdf_scale_system(
         // Get animation scale from keyframes
         let anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
+        // Get animated stroke width (or use base value from sdf_params if no animation)
+        let stroke_width_animated = if !animated.stroke_width.keyframes.is_empty() {
+            interpolate_float(&animated.stroke_width, layer_time).unwrap_or(0.0)
+        } else {
+            // No animation, will use sdf_params.stroke_width below
+            -1.0 // Sentinel value to indicate no animation
+        };
+
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
             if let Ok((mut smud_shape, sdf_params, mut transform)) = sdf_query.get_mut(child) {
@@ -545,11 +565,18 @@ pub fn animate_sdf_scale_system(
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
 
+                // Use animated stroke width if available, otherwise use base value
+                let final_stroke_width = if stroke_width_animated >= 0.0 {
+                    stroke_width_animated
+                } else {
+                    sdf_params.stroke_width
+                };
+
                 // Update params: (half_width, half_height, stroke_width, packed_stroke)
                 smud_shape.params = Vec4::new(
                     scaled_half_width,
                     scaled_half_height,
-                    sdf_params.stroke_width,
+                    final_stroke_width,
                     sdf_params.packed_stroke,
                 );
 
@@ -1578,16 +1605,16 @@ fn add_visual_components(
                     // Check if ONLY blur is needed (no mask/wipe/stretch)
                     // In this case, use Sprite + RTT blur for best quality
                     let blur_only = needs_blur && !needs_mask && !needs_wipe && !needs_stretch;
-                    
+
                     if blur_only {
                         // Use RTT-based Gaussian blur for best quality
                         // Sprite will be replaced by RTT output in GaussianBlurPlugin
                         let scaled_width = base_width * initial_scale.0.abs();
                         let scaled_height = base_height * initial_scale.1.abs();
-                        
+
                         // Calculate blur radius from blur_params
                         let blur_radius = blur_params.map(|bp| bp.x).unwrap_or(0.0);
-                        
+
                         commands.entity(entity).insert((
                             Sprite {
                                 image: handle.clone(),
@@ -1604,7 +1631,7 @@ fn add_visual_components(
                             },
                             AmVisualSpawned,
                         ));
-                        
+
                         bevy::log::info!(
                             "[Visual] Spawned sprite '{}' with RTT Gaussian blur: size=({:.1},{:.1}), radius={:.1}",
                             label,
@@ -2537,10 +2564,7 @@ pub fn animate_unified_effect_system(
 /// This updates the GaussianBlurEffect component's radius based on animation keyframes.
 pub fn animate_rtt_blur_system(
     playback: Res<AmPlayback>,
-    mut query: Query<(
-        &AmAnimated,
-        &mut crate::gaussian_blur::GaussianBlurEffect,
-    )>,
+    mut query: Query<(&AmAnimated, &mut crate::gaussian_blur::GaussianBlurEffect)>,
 ) {
     // Skip animation only when force stopped
     if playback.force_stopped {
@@ -2566,8 +2590,8 @@ pub fn animate_rtt_blur_system(
         let layer_time = (local_time - animated.start_time as f32) / layer_duration;
 
         // Check if this layer has blur animation
-        let has_blur = animated.blur_strength.value.is_some()
-            || !animated.blur_strength.keyframes.is_empty();
+        let has_blur =
+            animated.blur_strength.value.is_some() || !animated.blur_strength.keyframes.is_empty();
 
         if has_blur {
             let blur_strength =
@@ -2575,7 +2599,7 @@ pub fn animate_rtt_blur_system(
             // AM strength 2.0 produces very strong blur
             // Use strength * 80 for closer match to AM's blur intensity
             let blur_radius_px = blur_strength * 80.0;
-            
+
             if (blur_effect.radius - blur_radius_px).abs() > 0.1 {
                 bevy::log::debug!(
                     "[BlurAnim] Updating blur radius: {:.1} -> {:.1} (strength={:.3})",

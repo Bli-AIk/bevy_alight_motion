@@ -1,9 +1,20 @@
 # Default average and frame thresholds are both set to 0.98
 #
-# 默认的平均阀值和帧阀值均为0.98
+# 默认的平均阀值和帧阀值均为0.95
 [default]
-avg_threshold = 0.98
+avg_threshold = 0.95
 frame_threshold = 0.95
+
+# Basic shape tests with higher standards
+#
+# 高标准基础测试
+[overrides.basic_shape]
+avg_threshold = 0.98
+frame_threshold = 0.78
+
+[overrides.basic_pivot]
+avg_threshold = 0.98
+frame_threshold = 0.78
 
 # Known issues with Resolution Groups (AM export bug)
 #

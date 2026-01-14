@@ -32,7 +32,7 @@ use crate::animation::{
     apply_mask_clipping_system, manage_layer_lifecycle_system,
 };
 use crate::effects::EffectRenderPlugin;
-use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurVMaterial, GaussianBlurPlugin};
+use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};

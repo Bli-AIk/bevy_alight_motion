@@ -271,11 +271,11 @@ pub fn setup_blur_rtt_system(
 
         let orig_width = blur_effect.width;
         let orig_height = blur_effect.height;
-        
+
         // Calculate blur expansion - the blur glow extends beyond original bounds
         // Use 2x radius for full coverage of the Gaussian distribution
         let blur_expansion = blur_effect.radius * 2.0;
-        
+
         // Expanded dimensions for RTT textures (original + expansion on all sides)
         let expanded_width = orig_width + blur_expansion * 2.0;
         let expanded_height = orig_height + blur_expansion * 2.0;
@@ -368,18 +368,20 @@ pub fn setup_blur_rtt_system(
             .id();
 
         // Set orthographic projection to match RTT dimensions
-        commands.entity(camera_h).insert(Projection::Orthographic(OrthographicProjection {
-            near: -1000.0,
-            far: 1000.0,
-            scale: 1.0,
-            area: Rect::new(
-                -expanded_width / 2.0,
-                -expanded_height / 2.0,
-                expanded_width / 2.0,
-                expanded_height / 2.0,
-            ),
-            ..OrthographicProjection::default_2d()
-        }));
+        commands
+            .entity(camera_h)
+            .insert(Projection::Orthographic(OrthographicProjection {
+                near: -1000.0,
+                far: 1000.0,
+                scale: 1.0,
+                area: Rect::new(
+                    -expanded_width / 2.0,
+                    -expanded_height / 2.0,
+                    expanded_width / 2.0,
+                    expanded_height / 2.0,
+                ),
+                ..OrthographicProjection::default_2d()
+            }));
 
         // Create camera for vertical pass
         let camera_v = commands
@@ -403,18 +405,20 @@ pub fn setup_blur_rtt_system(
             .id();
 
         // Set orthographic projection to match RTT dimensions
-        commands.entity(camera_v).insert(Projection::Orthographic(OrthographicProjection {
-            near: -1000.0,
-            far: 1000.0,
-            scale: 1.0,
-            area: Rect::new(
-                -expanded_width / 2.0,
-                -expanded_height / 2.0,
-                expanded_width / 2.0,
-                expanded_height / 2.0,
-            ),
-            ..OrthographicProjection::default_2d()
-        }));
+        commands
+            .entity(camera_v)
+            .insert(Projection::Orthographic(OrthographicProjection {
+                near: -1000.0,
+                far: 1000.0,
+                scale: 1.0,
+                area: Rect::new(
+                    -expanded_width / 2.0,
+                    -expanded_height / 2.0,
+                    expanded_width / 2.0,
+                    expanded_height / 2.0,
+                ),
+                ..OrthographicProjection::default_2d()
+            }));
 
         // Update the original entity's sprite to display final RTT output
         // Use expanded dimensions so the blur glow is visible
@@ -530,7 +534,12 @@ pub fn cleanup_blur_rtt_system(
 // Helper functions
 // ============================================================================
 
-fn create_rtt_texture(images: &mut Assets<Image>, width: f32, height: f32, _label: &str) -> Handle<Image> {
+fn create_rtt_texture(
+    images: &mut Assets<Image>,
+    width: f32,
+    height: f32,
+    _label: &str,
+) -> Handle<Image> {
     let extent = Extent3d {
         width: width.max(1.0) as u32,
         height: height.max(1.0) as u32,
@@ -603,10 +612,10 @@ fn create_blur_mesh_with_uv_expansion(
 
     // UVs with expansion: negative values and >1 values sample outside original texture
     let uvs = vec![
-        [-uv_expand_x, 1.0 + uv_expand_y],           // bottom-left
-        [1.0 + uv_expand_x, 1.0 + uv_expand_y],     // bottom-right
-        [1.0 + uv_expand_x, -uv_expand_y],          // top-right
-        [-uv_expand_x, -uv_expand_y],               // top-left
+        [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
+        [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
+        [1.0 + uv_expand_x, -uv_expand_y],      // top-right
+        [-uv_expand_x, -uv_expand_y],           // top-left
     ];
 
     let indices = vec![0u32, 1, 2, 0, 2, 3];
@@ -632,14 +641,13 @@ pub struct GaussianBlurPlugin;
 
 impl Plugin for GaussianBlurPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BlurRenderLayerPool>()
-            .add_systems(
-                Update,
-                (
-                    setup_blur_rtt_system,
-                    update_blur_params_system,
-                    cleanup_blur_rtt_system,
-                ),
-            );
+        app.init_resource::<BlurRenderLayerPool>().add_systems(
+            Update,
+            (
+                setup_blur_rtt_system,
+                update_blur_params_system,
+                cleanup_blur_rtt_system,
+            ),
+        );
     }
 }

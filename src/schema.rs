@@ -498,12 +498,16 @@ pub struct AmStrokeColor {
     pub value: String,
 }
 
-/// Stroke size element.
+/// Stroke size element (can be static or animated).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AmStrokeSize {
-    /// Size value.
+    /// Static size value (if not animated).
     #[serde(rename = "@value", default)]
-    pub value: f32,
+    pub value: Option<f32>,
+
+    /// Keyframes (if animated).
+    #[serde(rename = "kf", default)]
+    pub keyframes: Vec<AmKeyframe>,
 }
 
 /// Null object (invisible parent controller).

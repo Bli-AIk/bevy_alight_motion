@@ -465,10 +465,12 @@ fn spawn_shape(
     // Also use SDF for circles (better quality than sprite rect)
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
-            || shape
-                .stroke
-                .as_ref()
-                .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
+            || shape.stroke.as_ref().is_some_and(|s| {
+                s.size.as_ref().is_some_and(|sz| {
+                    // Check if stroke has a value > 0 or has keyframes
+                    sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
+                })
+            }));
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -494,7 +496,16 @@ fn spawn_shape(
     let layer_spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
         let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
-        let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
+        // Get initial stroke width (use static value or first keyframe value)
+        let stroke_width = stroke
+            .size
+            .as_ref()
+            .and_then(|s| {
+                // Prefer static value, fall back to first keyframe value
+                s.value
+                    .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
+            })
+            .unwrap_or(0.0);
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -543,6 +554,9 @@ fn spawn_shape(
         Vec2::new(comp_x, comp_y)
     };
 
+    let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
+    let base_alpha = get_base_alpha(&shape.fill_color);
+
     commands
         .spawn((
             Name::new(entity_name),
@@ -580,6 +594,8 @@ fn spawn_shape(
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
+                stroke_width: stroke_width_anim,
+                base_alpha,
             },
             layer_spec,
             transform,
@@ -664,6 +680,8 @@ fn spawn_null(
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
+                stroke_width: AmAnimatedFloat::default(),
+                base_alpha: 1.0, // Null objects are fully opaque
             },
             AmLayerSpec::Null,
             transform,
@@ -764,6 +782,8 @@ fn spawn_embed_scene(
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
+                stroke_width: AmAnimatedFloat::default(),
+                base_alpha: get_base_alpha(&embed.fill_color),
             },
             AmLayerSpec::EmbedScene,
             // Mark for RTT setup (will enable clipping to scene bounds)
@@ -898,6 +918,8 @@ fn spawn_image(
                 speed_multiplier: config.speed_multiplier,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
+                stroke_width: AmAnimatedFloat::default(),
+                base_alpha: 1.0, // Image layers are fully opaque
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -1106,6 +1128,8 @@ fn spawn_text(
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: get_base_alpha(&text.fill_color),
         },
         transform,
         GlobalTransform::default(),
@@ -1411,6 +1435,62 @@ fn get_shape_size_animation(
         value: Some([100.0, 100.0]),
         keyframes: Vec::new(),
     }
+}
+
+/// Extract stroke width animation from AmStroke.
+/// Returns AmAnimatedFloat with static value or keyframes from stroke.size.
+fn get_stroke_width_animation(
+    stroke: Option<&crate::schema::AmStroke>,
+) -> crate::schema::AmAnimatedFloat {
+    use crate::schema::{AmAnimatedFloat, AmKeyframe};
+
+    if let Some(stroke) = stroke {
+        if let Some(ref size) = stroke.size {
+            // Check if there are keyframes
+            if !size.keyframes.is_empty() {
+                return AmAnimatedFloat {
+                    value: size.value,
+                    keyframes: size.keyframes.clone(),
+                };
+            }
+            // Static value only
+            return AmAnimatedFloat {
+                value: size.value,
+                keyframes: Vec::new(),
+            };
+        }
+    }
+
+    // Default: no stroke width
+    AmAnimatedFloat {
+        value: Some(0.0),
+        keyframes: Vec::new(),
+    }
+}
+
+/// Extract base alpha from fill color.
+/// Returns the alpha component of the fill color (0.0-1.0).
+/// If fill_color is None or has no valid value, returns 1.0 (fully opaque).
+fn get_base_alpha(fill_color: &Option<crate::schema::AmFillColor>) -> f32 {
+    if let Some(fc) = fill_color {
+        if !fc.value.is_empty() {
+            if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                return c[3]; // alpha is the 4th component
+            }
+        } else if !fc.keyframes.is_empty() {
+            // For animated fill color, use the first keyframe's alpha
+            let mut sorted: Vec<_> = fc.keyframes.iter().collect();
+            sorted.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Ok(c) = crate::schema::parse_color(&sorted[0].value) {
+                return c[3];
+            }
+        }
+    }
+    1.0 // Default to fully opaque
 }
 
 /// Convert AM pivot (in pixels, relative to center) to Bevy Anchor.
@@ -1947,10 +2027,12 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
 
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
-            || shape
-                .stroke
-                .as_ref()
-                .is_some_and(|s| s.size.as_ref().is_some_and(|sz| sz.value > 0.0)));
+            || shape.stroke.as_ref().is_some_and(|s| {
+                s.size.as_ref().is_some_and(|sz| {
+                    // Check if stroke has a value > 0 or has keyframes
+                    sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
+                })
+            }));
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -1981,7 +2063,16 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
         let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
-        let stroke_width = stroke.size.as_ref().map(|s| s.value).unwrap_or(0.0);
+        // Get initial stroke width (use static value or first keyframe value)
+        let stroke_width = stroke
+            .size
+            .as_ref()
+            .and_then(|s| {
+                // Prefer static value, fall back to first keyframe value
+                s.value
+                    .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
+            })
+            .unwrap_or(0.0);
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -2027,6 +2118,8 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         Vec2::new(comp_x, comp_y)
     };
 
+    let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
+
     Some(PendingLayer {
         id: shape.id,
         label: shape.label.clone(),
@@ -2064,6 +2157,8 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: stroke_width_anim,
+            base_alpha: get_base_alpha(&shape.fill_color),
         },
         spec,
         z_index: z,
@@ -2138,6 +2233,8 @@ fn collect_null(
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: 1.0, // Null objects are fully opaque
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -2238,6 +2335,8 @@ fn collect_embed_scene(
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: get_base_alpha(&embed.fill_color),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -2592,6 +2691,8 @@ fn collect_text(
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: get_base_alpha(&text.fill_color),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2675,6 +2776,8 @@ fn collect_image(
             speed_multiplier: config.speed_multiplier,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: 1.0, // Image layers are fully opaque
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
