@@ -1,10 +1,11 @@
 // Unified effect shader - combines multiple effects in a single pass
 //
-// This shader supports four effects that can be enabled/disabled via flags:
+// This shader supports five effects that can be enabled/disabled via flags:
 // 1. Mask clipping (rectangular region)
 // 2. Wipe transition (progressive reveal/hide)
 // 3. Stretch segment (UV domain distortion)
 // 4. Gaussian blur (optimized cross-shaped sampling)
+// 5. Palette map (color quantization to palette)
 //
 // Each effect can be toggled on/off via the effect_flags uniform.
 //
@@ -17,6 +18,8 @@
 // 5: original_size (vec4) - (orig_width, orig_height, mesh_width, mesh_height)
 // 6: mesh_offset (vec4) - (center_offset_x, center_offset_y, 0, 0)
 // 9: blur_params (vec4) - (radius_px, orig_width, orig_height, expansion_px)
+// 10: palette_flags (vec4) - (enabled, count, shades, alpha)
+// 11-18: palette_colors 1-8
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -30,6 +33,15 @@
 @group(2) @binding(7) var base_texture: texture_2d<f32>;
 @group(2) @binding(8) var base_sampler: sampler;
 @group(2) @binding(9) var<uniform> blur_params: vec4<f32>;
+@group(2) @binding(10) var<uniform> palette_flags: vec4<f32>;
+@group(2) @binding(11) var<uniform> palette_color1: vec4<f32>;
+@group(2) @binding(12) var<uniform> palette_color2: vec4<f32>;
+@group(2) @binding(13) var<uniform> palette_color3: vec4<f32>;
+@group(2) @binding(14) var<uniform> palette_color4: vec4<f32>;
+@group(2) @binding(15) var<uniform> palette_color5: vec4<f32>;
+@group(2) @binding(16) var<uniform> palette_color6: vec4<f32>;
+@group(2) @binding(17) var<uniform> palette_color7: vec4<f32>;
+@group(2) @binding(18) var<uniform> palette_color8: vec4<f32>;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -196,6 +208,81 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
     }
 }
 
+// Get palette color by index (0-7)
+fn get_palette_color(index: i32) -> vec4<f32> {
+    switch(index) {
+        case 0: { return palette_color1; }
+        case 1: { return palette_color2; }
+        case 2: { return palette_color3; }
+        case 3: { return palette_color4; }
+        case 4: { return palette_color5; }
+        case 5: { return palette_color6; }
+        case 6: { return palette_color7; }
+        case 7: { return palette_color8; }
+        default: { return palette_color1; }
+    }
+}
+
+// Calculate color distance with bias toward brighter palette colors
+// This helps match AM's palette mapping behavior where brighter colors
+// are preferred for pixels with moderate luminance
+fn color_distance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
+    let diff = c1 - c2;
+    let dist = dot(diff, diff);
+    
+    // Calculate luminance of input color
+    let input_lum = dot(c1, vec3<f32>(0.299, 0.587, 0.114));
+    
+    // If palette color is very dark (black), add penalty for bright inputs
+    // This biases the algorithm toward selecting non-black colors for brighter pixels
+    let palette_lum = dot(c2, vec3<f32>(0.299, 0.587, 0.114));
+    if palette_lum < 0.01 && input_lum > 0.03 {
+        return dist + input_lum * 2.5; // Add penalty proportional to input brightness
+    }
+    
+    return dist;
+}
+
+// Apply palette map effect - quantize color to nearest palette color
+fn apply_palette_map(input_color: vec4<f32>) -> vec4<f32> {
+    let palette_count = i32(palette_flags.y);
+    let shades_enabled = palette_flags.z > 0.5;
+    
+    // Extract RGB from input (keep alpha separate)
+    let input_rgb = input_color.rgb;
+    
+    // Find nearest palette color
+    var min_dist = 1000000.0;
+    var nearest_index = 0;
+    
+    for (var i = 0; i < palette_count; i = i + 1) {
+        let palette_rgb = get_palette_color(i).rgb;
+        let dist = color_distance(input_rgb, palette_rgb);
+        if dist < min_dist {
+            min_dist = dist;
+            nearest_index = i;
+        }
+    }
+    
+    let nearest_color = get_palette_color(nearest_index);
+    
+    // If shades enabled, blend based on luminance difference
+    var result_rgb: vec3<f32>;
+    if shades_enabled {
+        // Calculate luminance of input and nearest palette color
+        let input_lum = dot(input_rgb, vec3<f32>(0.299, 0.587, 0.114));
+        let palette_lum = dot(nearest_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+        
+        // Adjust palette color brightness to match input luminance
+        let lum_ratio = input_lum / max(palette_lum, 0.001);
+        result_rgb = nearest_color.rgb * clamp(lum_ratio, 0.0, 2.0);
+    } else {
+        result_rgb = nearest_color.rgb;
+    }
+    
+    return vec4<f32>(result_rgb, input_color.a);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
@@ -203,6 +290,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let wipe_enabled = effect_flags.y > 0.5;
     let stretch_enabled = effect_flags.z > 0.5;
     let blur_enabled = effect_flags.w > 0.5;
+    let palette_enabled = palette_flags.x > 0.5;
     
     var sample_uv = mesh.uv;
     
@@ -227,6 +315,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+    
+    // Apply palette map effect if enabled
+    if palette_enabled {
+        let palette_alpha = palette_flags.w;
+        let quantized_color = apply_palette_map(tex_color);
+        // Blend between original and quantized based on palette alpha
+        tex_color = mix(tex_color, quantized_color, palette_alpha);
     }
     
     // Apply mask clipping if enabled

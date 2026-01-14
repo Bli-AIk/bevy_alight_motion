@@ -117,6 +117,8 @@ pub struct AmAnimated {
     /// Base alpha from fill color (0.0-1.0).
     /// Opacity animation is multiplied by this value to preserve original fill transparency.
     pub base_alpha: f32,
+    /// Palette map effect alpha (effect strength, 0.0-1.0).
+    pub palette_alpha: AmAnimatedFloat,
 }
 
 /// Resource to control animation playback.
@@ -818,7 +820,7 @@ fn parse_keyframe_vec2(s: &str) -> Option<[f32; 2]> {
 use crate::loader::AmProject;
 use crate::plugin::AmWhitePixel;
 use crate::scene::{
-    AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPendingLayers, AmVisualSpawned, PendingLayer,
+    AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmPendingLayers, AmVisualSpawned, PendingLayer,
 };
 use bevy::asset::Assets;
 use bevy_smud::prelude::*;
@@ -1351,6 +1353,7 @@ fn spawn_layer_entity(
             entity,
             &layer.spec,
             &layer.mask_info,
+            layer.palette_params.as_ref(),
             images,
             fonts,
             white_pixel,
@@ -1422,6 +1425,7 @@ fn add_visual_components(
     entity: Entity,
     spec: &AmLayerSpec,
     mask_info: &Option<AmMaskInfo>,
+    palette_params: Option<&AmPaletteMapParams>,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
@@ -1443,7 +1447,8 @@ fn add_visual_components(
     let needs_wipe = wipe_params.is_some();
     let needs_mask = mask_info.is_some();
     let needs_blur = blur_params.is_some();
-    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur;
+    let needs_palette = palette_params.is_some();
+    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur || needs_palette;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -1542,6 +1547,7 @@ fn add_visual_components(
         wipe_params: Option<Vec4>,
         stretch_params: Option<Vec4>,
         blur_params: Option<Vec4>,
+        palette_params: Option<&AmPaletteMapParams>,
     ) -> Handle<UnifiedEffectMaterial> {
         let mut material = UnifiedEffectMaterial {
             color,
@@ -1553,6 +1559,15 @@ fn add_visual_components(
             mesh_offset: Vec4::ZERO,
             texture: Some(texture),
             blur_params: Vec4::ZERO,
+            palette_flags: Vec4::ZERO,
+            palette_color1: Vec4::ZERO,
+            palette_color2: Vec4::ZERO,
+            palette_color3: Vec4::ZERO,
+            palette_color4: Vec4::ZERO,
+            palette_color5: Vec4::ZERO,
+            palette_color6: Vec4::ZERO,
+            palette_color7: Vec4::ZERO,
+            palette_color8: Vec4::ZERO,
         };
 
         // Enable mask if present
@@ -1582,6 +1597,22 @@ fn add_visual_components(
         if let Some(bp) = blur_params {
             material.effect_flags.w = 1.0;
             material.blur_params = bp;
+        }
+
+        // Enable palette map if present
+        if let Some(palette) = palette_params {
+            material.palette_flags.x = 1.0; // enabled
+            material.palette_flags.y = palette.count as f32;
+            material.palette_flags.z = if palette.shades { 1.0 } else { 0.0 };
+            material.palette_flags.w = palette.initial_alpha;
+            material.palette_color1 = palette.colors[0];
+            material.palette_color2 = palette.colors[1];
+            material.palette_color3 = palette.colors[2];
+            material.palette_color4 = palette.colors[3];
+            material.palette_color5 = palette.colors[4];
+            material.palette_color6 = palette.colors[5];
+            material.palette_color7 = palette.colors[6];
+            material.palette_color8 = palette.colors[7];
         }
 
         unified_materials.add(material)
@@ -1678,6 +1709,7 @@ fn add_visual_components(
                             wipe_params,
                             stretch_params,
                             blur_params_with_expansion,
+                            palette_params,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -1689,7 +1721,7 @@ fn add_visual_components(
                         ));
 
                         bevy::log::info!(
-                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}",
+                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}",
                             label,
                             scaled_width,
                             scaled_height,
@@ -1697,7 +1729,8 @@ fn add_visual_components(
                             needs_mask,
                             needs_wipe,
                             needs_stretch,
-                            needs_blur
+                            needs_blur,
+                            needs_palette
                         );
                     } else {
                         // No effects - use normal sprite
@@ -1727,6 +1760,7 @@ fn add_visual_components(
                         wipe_params,
                         stretch_params,
                         blur_params,
+                        palette_params,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -1814,6 +1848,7 @@ fn add_visual_components(
                         wipe_params,
                         stretch_params,
                         blur_params,
+                        palette_params,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -2556,6 +2591,16 @@ pub fn animate_unified_effect_system(
                     .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 material.set_stretch_enabled(false);
+            }
+
+            // Update palette map alpha if present
+            let has_palette = animated.palette_alpha.value.is_some()
+                || !animated.palette_alpha.keyframes.is_empty();
+            let palette_enabled = material.is_palette_enabled();
+            if has_palette && palette_enabled {
+                let palette_alpha =
+                    interpolate_float(&animated.palette_alpha, layer_time).unwrap_or(1.0);
+                material.set_palette_alpha(palette_alpha);
             }
         }
     }

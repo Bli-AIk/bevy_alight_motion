@@ -54,6 +54,28 @@ pub struct UnifiedEffectMaterial {
     #[uniform(9)]
     pub blur_params: Vec4,
 
+    /// Palette map flags: (enabled, count, shades, alpha)
+    #[uniform(10)]
+    pub palette_flags: Vec4,
+
+    /// Palette colors 1-4: each Vec4 contains (r, g, b, a) for one color
+    #[uniform(11)]
+    pub palette_color1: Vec4,
+    #[uniform(12)]
+    pub palette_color2: Vec4,
+    #[uniform(13)]
+    pub palette_color3: Vec4,
+    #[uniform(14)]
+    pub palette_color4: Vec4,
+    #[uniform(15)]
+    pub palette_color5: Vec4,
+    #[uniform(16)]
+    pub palette_color6: Vec4,
+    #[uniform(17)]
+    pub palette_color7: Vec4,
+    #[uniform(18)]
+    pub palette_color8: Vec4,
+
     #[texture(7)]
     #[sampler(8)]
     pub texture: Option<Handle<Image>>,
@@ -70,6 +92,15 @@ impl Default for UnifiedEffectMaterial {
             original_size: Vec4::new(100.0, 100.0, 100.0, 100.0),
             mesh_offset: Vec4::ZERO,
             blur_params: Vec4::ZERO,
+            palette_flags: Vec4::ZERO,
+            palette_color1: Vec4::ZERO,
+            palette_color2: Vec4::ZERO,
+            palette_color3: Vec4::ZERO,
+            palette_color4: Vec4::ZERO,
+            palette_color5: Vec4::ZERO,
+            palette_color6: Vec4::ZERO,
+            palette_color7: Vec4::ZERO,
+            palette_color8: Vec4::ZERO,
             texture: None,
         }
     }
@@ -138,6 +169,40 @@ impl UnifiedEffectMaterial {
         self.effect_flags.w = if enabled { 1.0 } else { 0.0 };
     }
 
+    /// Set palette map effect parameters
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_palette_map(
+        mut self,
+        count: u8,
+        shades: bool,
+        alpha: f32,
+        colors: &[Vec4; 8],
+    ) -> Self {
+        self.palette_flags = Vec4::new(
+            1.0,                             // enabled
+            count as f32,                    // count (1-8)
+            if shades { 1.0 } else { 0.0 },  // shades
+            alpha,                           // alpha (effect strength)
+        );
+        self.palette_color1 = colors[0];
+        self.palette_color2 = colors[1];
+        self.palette_color3 = colors[2];
+        self.palette_color4 = colors[3];
+        self.palette_color5 = colors[4];
+        self.palette_color6 = colors[5];
+        self.palette_color7 = colors[6];
+        self.palette_color8 = colors[7];
+        self
+    }
+
+    pub fn set_palette_enabled(&mut self, enabled: bool) {
+        self.palette_flags.x = if enabled { 1.0 } else { 0.0 };
+    }
+
+    pub fn set_palette_alpha(&mut self, alpha: f32) {
+        self.palette_flags.w = alpha;
+    }
+
     pub fn is_mask_enabled(&self) -> bool {
         self.effect_flags.x > 0.5
     }
@@ -149,6 +214,9 @@ impl UnifiedEffectMaterial {
     }
     pub fn is_blur_enabled(&self) -> bool {
         self.effect_flags.w > 0.5
+    }
+    pub fn is_palette_enabled(&self) -> bool {
+        self.palette_flags.x > 0.5
     }
 }
 

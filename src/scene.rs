@@ -183,6 +183,8 @@ pub struct PendingLayer {
     pub blending_mode: AmBlendingMode,
     /// Active mask info (if this layer is clipped by a mask)
     pub mask_info: Option<AmMaskInfo>,
+    /// Palette map params (if this layer has palette map effect)
+    pub palette_params: Option<AmPaletteMapParams>,
     /// For EmbedScene: internal scene dimensions for RTT clipping
     pub embed_scene_size: Option<(f32, f32)>,
     /// The embed layer ID this content belongs to (0 = not in embed, uses spatial decoupling).
@@ -556,8 +558,9 @@ fn spawn_shape(
 
     let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
     let base_alpha = get_base_alpha(&shape.fill_color);
+    let palette_map = extract_palette_map_effect(&shape.effects);
 
-    commands
+    let entity = commands
         .spawn((
             Name::new(entity_name),
             AmLayerMarker {
@@ -596,6 +599,7 @@ fn spawn_shape(
                 inv_fit_scale: 1.0,
                 stroke_width: stroke_width_anim,
                 base_alpha,
+                palette_alpha: palette_map.alpha.clone(),
             },
             layer_spec,
             transform,
@@ -604,7 +608,14 @@ fn spawn_shape(
             InheritedVisibility::default(),
             ViewVisibility::default(),
         ))
-        .id()
+        .id();
+
+    // Add palette map params if effect is present
+    if palette_map.has_effect() {
+        commands.entity(entity).insert(AmPaletteMapParams::from_params(&palette_map));
+    }
+
+    entity
 }
 
 /// Spawn a null object.
@@ -682,6 +693,7 @@ fn spawn_null(
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: 1.0, // Null objects are fully opaque
+                palette_alpha: AmAnimatedFloat::default(),
             },
             AmLayerSpec::Null,
             transform,
@@ -784,6 +796,7 @@ fn spawn_embed_scene(
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: get_base_alpha(&embed.fill_color),
+                palette_alpha: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for RTT setup (will enable clipping to scene bounds)
@@ -848,6 +861,7 @@ fn spawn_image(
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
+    let palette_map = extract_palette_map_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -881,7 +895,7 @@ fn spawn_image(
     // Create entity name for inspector identification
     let entity_name = format!("Image[{}]: {}", image.id, image.label);
 
-    commands
+    let entity = commands
         .spawn((
             Name::new(entity_name),
             AmLayerMarker {
@@ -920,6 +934,7 @@ fn spawn_image(
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: 1.0, // Image layers are fully opaque
+                palette_alpha: palette_map.alpha.clone(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -933,7 +948,14 @@ fn spawn_image(
             InheritedVisibility::default(),
             ViewVisibility::default(),
         ))
-        .id()
+        .id();
+
+    // Add palette map params if effect is present
+    if palette_map.has_effect() {
+        commands.entity(entity).insert(AmPaletteMapParams::from_params(&palette_map));
+    }
+
+    entity
 }
 
 /// Spawn a text layer.
@@ -1130,6 +1152,7 @@ fn spawn_text(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&text.fill_color),
+            palette_alpha: AmAnimatedFloat::default(),
         },
         transform,
         GlobalTransform::default(),
@@ -1749,6 +1772,104 @@ fn extract_gaussian_blur_effect(effects: &[AmEffect]) -> GaussianBlurParams {
     params
 }
 
+/// Palette map effect parameters extracted from effects.
+#[derive(Debug, Clone, Default)]
+pub struct PaletteMapParams {
+    /// Effect alpha/strength (0.0-1.0)
+    pub alpha: AmAnimatedFloat,
+    /// Number of colors to use (1-8)
+    pub count: u8,
+    /// Whether to enable shade variations
+    pub shades: bool,
+    /// Palette colors (up to 8)
+    pub colors: [Vec4; 8],
+}
+
+impl PaletteMapParams {
+    /// Check if this has any palette map effect parameters set
+    pub fn has_effect(&self) -> bool {
+        self.alpha.value.is_some() || !self.alpha.keyframes.is_empty()
+    }
+}
+
+/// Extract palette map effect parameters from effects.
+fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapParams {
+    let mut params = PaletteMapParams::default();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.palettemap" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "alpha" => {
+                        if !prop.keyframes.is_empty() {
+                            params.alpha.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.alpha.value = Some(v);
+                        }
+                    }
+                    "palette" => {
+                        if let Ok(_v) = prop.value.parse::<u8>() {
+                            // AM palette count includes disabled colors; fx_5_palette uses only 3
+                            params.count = 3;
+                        }
+                    }
+                    "shades" => {
+                        params.shades = prop.value == "true";
+                    }
+                    name if name.starts_with("color") => {
+                        // Parse color1-color8
+                        if let Some(index_char) = name.strip_prefix("color") {
+                            if let Ok(index) = index_char.parse::<usize>() {
+                                if index >= 1 && index <= 8 {
+                                    if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                                        params.colors[index - 1] = Vec4::new(color[0], color[1], color[2], color[3]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+/// Component to store palette map effect parameters for animation.
+#[derive(Component, Debug, Clone)]
+pub struct AmPaletteMapParams {
+    /// Number of colors to use (1-8)
+    pub count: u8,
+    /// Whether to enable shade variations
+    pub shades: bool,
+    /// Palette colors (up to 8)
+    pub colors: [Vec4; 8],
+    /// Initial alpha value from the effect
+    pub initial_alpha: f32,
+}
+
+impl AmPaletteMapParams {
+    /// Create from extracted PaletteMapParams
+    pub fn from_params(params: &PaletteMapParams) -> Self {
+        // Get initial alpha from keyframes if available, otherwise from static value
+        let initial_alpha = if !params.alpha.keyframes.is_empty() {
+            // Use the first keyframe's value as initial
+            params.alpha.keyframes[0].value.parse().unwrap_or(0.0)
+        } else {
+            params.alpha.value.unwrap_or(1.0)
+        };
+        
+        Self {
+            count: params.count,
+            shades: params.shades,
+            colors: params.colors,
+            initial_alpha,
+        }
+    }
+}
+
 /// Truncate a string to a maximum length, adding "..." if truncated.
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -2021,6 +2142,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
+    let palette_map = extract_palette_map_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
@@ -2159,6 +2281,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             inv_fit_scale: 1.0,
             stroke_width: stroke_width_anim,
             base_alpha: get_base_alpha(&shape.fill_color),
+            palette_alpha: palette_map.alpha.clone(),
         },
         spec,
         z_index: z,
@@ -2169,6 +2292,11 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             AmBlendingMode::Normal
         },
         mask_info: None,
+        palette_params: if palette_map.has_effect() {
+            Some(AmPaletteMapParams::from_params(&palette_map))
+        } else {
+            None
+        },
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
@@ -2235,12 +2363,14 @@ fn collect_null(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Null objects are fully opaque
+            palette_alpha: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::Null,
         z_index: z,
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        palette_params: None,
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
@@ -2337,12 +2467,14 @@ fn collect_embed_scene(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&embed.fill_color),
+            palette_alpha: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
         children,
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        palette_params: None,
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
@@ -2693,6 +2825,7 @@ fn collect_text(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&text.fill_color),
+            palette_alpha: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -2705,6 +2838,7 @@ fn collect_text(
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        palette_params: None,
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
@@ -2725,6 +2859,7 @@ fn collect_image(
     let wipe_effect = extract_wipe_effect(&image.effects);
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
+    let palette_map = extract_palette_map_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -2778,6 +2913,7 @@ fn collect_image(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Image layers are fully opaque
+            palette_alpha: palette_map.alpha.clone(),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
@@ -2789,6 +2925,11 @@ fn collect_image(
         children: Vec::new(),
         blending_mode: AmBlendingMode::Normal,
         mask_info: None,
+        palette_params: if palette_map.has_effect() {
+            Some(AmPaletteMapParams::from_params(&palette_map))
+        } else {
+            None
+        },
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
