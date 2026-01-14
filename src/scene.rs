@@ -815,16 +815,46 @@ fn spawn_embed_scene(
     // Recursively spawn nested scene with accumulated time offset
     // The nested scene's layers use times relative to the embed's start_time
     //
+    // Calculate the internal time offset for the embedded scene.
+    // When the parent timeline reaches startTime, the embedded scene should be at inTime.
+    // 
+    // The formula for local_time in the animation system is:
+    //   local_time = (global_time - time_offset) * speed_multiplier
+    //
+    // When global_time = embed.start_time, we want local_time = inTime:
+    //   inTime = (embed.start_time - time_offset) * speed
+    //   time_offset = embed.start_time - inTime / speed
+    //
+    // Note: This handles the case where speed != 1.0, which affects internal time flow.
+    //
+    // Video export timing: When video is exported, AM samples at frame center time
+    // (frame + 0.5) / fps rather than frame start time. To match this behavior,
+    // we add half a frame duration to inTime when it's non-zero.
+    //
     // Nested scenes use smaller z_spacing to keep all children within
     // the parent's z-range (between parent and next sibling)
     // Using /100 instead of /1000 for better numerical precision
+    let raw_in_time = embed.in_time.unwrap_or(0) as f32;
+    let half_frame_ms = if embed.in_time.is_some() && embed.in_time != Some(0) {
+        500.0 / embed.scene.fps as f32
+    } else {
+        0.0
+    };
+    let in_time = raw_in_time + half_frame_ms;
+    let effective_speed = config.speed_multiplier * embed.speed;
+    let time_offset_with_in_time = if effective_speed > 0.0 {
+        config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
+    } else {
+        config.time_offset as f32 + embed.start_time as f32
+    };
     let nested_z_spacing = config.z_spacing / 100.0;
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
-        time_offset: config.time_offset + embed.start_time,
+        time_offset: time_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
+        speed_multiplier: effective_speed,
         ..config.clone()
     };
 
@@ -2093,12 +2123,14 @@ fn collect_layer(
         }
         AmLayer::EmbedScene(embed) => {
             let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-            bevy::log::trace!(
-                "  Collected embed '{}' (id={}, time={}..{}ms, children={})",
+            bevy::log::info!(
+                "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
                 embed.label,
                 embed.id,
                 embed.start_time,
                 embed.end_time,
+                embed.in_time,
+                embed.out_time,
                 pl.children.len()
             );
             pending.push(pl);
@@ -2410,13 +2442,43 @@ fn collect_embed_scene(
     // the parent's z-range (between parent and next sibling)
     // Using /100 instead of /1000 for better numerical precision
     let nested_z_spacing = config.z_spacing / 100.0;
+    
+    // Calculate the internal time offset for the embedded scene.
+    // When the parent timeline reaches startTime, the embedded scene should be at inTime.
+    // 
+    // The formula for local_time in the animation system is:
+    //   local_time = (global_time - time_offset) * speed_multiplier
+    //
+    // When global_time = embed.start_time, we want local_time = inTime:
+    //   inTime = (embed.start_time - time_offset) * speed
+    //   time_offset = embed.start_time - inTime / speed
+    //
+    // Note: This handles the case where speed != 1.0, which affects internal time flow.
+    // 
+    // Video export timing: When video is exported, AM samples at frame center time
+    // (frame + 0.5) / fps rather than frame start time. To match this behavior,
+    // we add half a frame duration to inTime when it's non-zero.
+    let raw_in_time = embed.in_time.unwrap_or(0) as f32;
+    let half_frame_ms = if embed.in_time.is_some() && embed.in_time != Some(0) {
+        500.0 / embed.scene.fps as f32
+    } else {
+        0.0
+    };
+    let in_time = raw_in_time + half_frame_ms;
+    let effective_speed = config.speed_multiplier * embed.speed;
+    let time_offset_with_in_time = if effective_speed > 0.0 {
+        config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
+    } else {
+        config.time_offset as f32 + embed.start_time as f32
+    };
+    
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
-        time_offset: config.time_offset + embed.start_time,
+        time_offset: time_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
-        speed_multiplier: config.speed_multiplier * embed.speed,
+        speed_multiplier: effective_speed,
         ..config.clone()
     };
 

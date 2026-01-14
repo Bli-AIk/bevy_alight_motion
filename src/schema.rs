@@ -573,7 +573,11 @@ pub struct AmEmbedScene {
     #[serde(rename = "@fillType", default)]
     pub fill_type: String,
 
-    /// Alternative out-point.
+    /// Internal in-point for nested scene playback (clip start).
+    #[serde(rename = "@inTime", default)]
+    pub in_time: Option<i32>,
+
+    /// Internal out-point for nested scene playback (clip end).
     #[serde(rename = "@outTime", default)]
     pub out_time: Option<i32>,
 
