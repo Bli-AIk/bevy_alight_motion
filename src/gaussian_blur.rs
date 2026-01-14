@@ -232,11 +232,11 @@ impl BlurRenderLayerPool {
 
     /// Release a pair of render layers.
     pub fn release_pair(&mut self, layer_h: u8, layer_v: u8) {
-        if layer_h >= Self::BLUR_LAYER_START && layer_h <= Self::BLUR_LAYER_END {
+        if (Self::BLUR_LAYER_START..=Self::BLUR_LAYER_END).contains(&layer_h) {
             let bit = layer_h - Self::BLUR_LAYER_START;
             self.used_layers &= !(1 << bit);
         }
-        if layer_v >= Self::BLUR_LAYER_START && layer_v <= Self::BLUR_LAYER_END {
+        if (Self::BLUR_LAYER_START..=Self::BLUR_LAYER_END).contains(&layer_v) {
             let bit = layer_v - Self::BLUR_LAYER_START;
             self.used_layers &= !(1 << bit);
         }
@@ -466,29 +466,31 @@ pub fn update_blur_params_system(
     for (entity, blur_effect, _rtt) in query.iter() {
         // Update horizontal material for this entity
         for (mesh_marker, material_handle) in mesh_h_query.iter() {
-            if mesh_marker.parent_entity == entity && mesh_marker.pass == 0 {
-                if let Some(material) = h_materials.get_mut(&material_handle.0) {
-                    material.set_radius(blur_effect.radius);
-                    bevy::log::debug!(
-                        "[BlurRTT] Updated H material radius to {:.1} for {:?}",
-                        blur_effect.radius,
-                        entity
-                    );
-                }
+            if mesh_marker.parent_entity == entity
+                && mesh_marker.pass == 0
+                && let Some(material) = h_materials.get_mut(&material_handle.0)
+            {
+                material.set_radius(blur_effect.radius);
+                bevy::log::debug!(
+                    "[BlurRTT] Updated H material radius to {:.1} for {:?}",
+                    blur_effect.radius,
+                    entity
+                );
             }
         }
 
         // Update vertical material for this entity
         for (mesh_marker, material_handle) in mesh_v_query.iter() {
-            if mesh_marker.parent_entity == entity && mesh_marker.pass == 1 {
-                if let Some(material) = v_materials.get_mut(&material_handle.0) {
-                    material.set_radius(blur_effect.radius);
-                    bevy::log::debug!(
-                        "[BlurRTT] Updated V material radius to {:.1} for {:?}",
-                        blur_effect.radius,
-                        entity
-                    );
-                }
+            if mesh_marker.parent_entity == entity
+                && mesh_marker.pass == 1
+                && let Some(material) = v_materials.get_mut(&material_handle.0)
+            {
+                material.set_radius(blur_effect.radius);
+                bevy::log::debug!(
+                    "[BlurRTT] Updated V material radius to {:.1} for {:?}",
+                    blur_effect.radius,
+                    entity
+                );
             }
         }
     }
@@ -565,6 +567,7 @@ fn create_rtt_texture(
     images.add(image)
 }
 
+#[allow(dead_code)]
 fn create_blur_mesh(meshes: &mut Assets<Mesh>, width: f32, height: f32) -> Handle<Mesh> {
     create_blur_mesh_with_uv_expansion(meshes, width, height, 0.0)
 }

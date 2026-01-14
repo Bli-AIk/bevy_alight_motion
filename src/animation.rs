@@ -1433,7 +1433,7 @@ fn add_visual_components(
     blur_params: Option<Vec4>,
     embed_scene_size: Option<(f32, f32)>,
     size_scale: f32,
-    max_blur_radius: f32,
+    _max_blur_radius: f32,
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
     use bevy::mesh::Mesh2d;
@@ -2204,6 +2204,7 @@ pub fn apply_mask_clipping_system(
 /// Helper function to update mesh vertices and UVs for dynamic blur expansion.
 /// This allows the blur glow/halo effect to extend beyond original image boundaries.
 /// Note: This assumes CENTER anchor since anchor info is not stored in AmAnimated.
+#[allow(dead_code)]
 fn update_mesh_for_blur(
     mesh: &mut Mesh,
     width: f32,
@@ -2288,7 +2289,7 @@ pub fn animate_unified_effect_system(
 
     let global_time = playback.current_time_ms;
 
-    for (entity, animated, material_handle, transform, mesh2d) in query.iter() {
+    for (entity, animated, material_handle, transform, _mesh2d) in query.iter() {
         // Calculate local time
         let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {

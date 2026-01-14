@@ -1442,23 +1442,23 @@ fn get_shape_size_animation(
 fn get_stroke_width_animation(
     stroke: Option<&crate::schema::AmStroke>,
 ) -> crate::schema::AmAnimatedFloat {
-    use crate::schema::{AmAnimatedFloat, AmKeyframe};
+    use crate::schema::AmAnimatedFloat;
 
-    if let Some(stroke) = stroke {
-        if let Some(ref size) = stroke.size {
-            // Check if there are keyframes
-            if !size.keyframes.is_empty() {
-                return AmAnimatedFloat {
-                    value: size.value,
-                    keyframes: size.keyframes.clone(),
-                };
-            }
-            // Static value only
+    if let Some(stroke) = stroke
+        && let Some(ref size) = stroke.size
+    {
+        // Check if there are keyframes
+        if !size.keyframes.is_empty() {
             return AmAnimatedFloat {
                 value: size.value,
-                keyframes: Vec::new(),
+                keyframes: size.keyframes.clone(),
             };
         }
+        // Static value only
+        return AmAnimatedFloat {
+            value: size.value,
+            keyframes: Vec::new(),
+        };
     }
 
     // Default: no stroke width
@@ -1919,10 +1919,10 @@ fn flatten_pending_layers_inner(
                 }
 
                 // Remap containing_embed_id if it was set to a child ID
-                if child.containing_embed_id != 0 {
-                    if let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id) {
-                        child.containing_embed_id = new_embed_id;
-                    }
+                if child.containing_embed_id != 0
+                    && let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id)
+                {
+                    child.containing_embed_id = new_embed_id;
                 }
 
                 // Also update the layer_id in animated component
