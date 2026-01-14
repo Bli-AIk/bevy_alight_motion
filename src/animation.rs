@@ -2489,26 +2489,28 @@ pub fn animate_unified_effect_system(
 
                 // Calculate mesh expansion for stretch segment effect
                 //
-                // For rotated elements, we use a weighted average of world_width and orig_width
-                // to correctly scale the stretch amount:
-                // - base_size = 0.8 * world_width + 0.2 * orig_width
+                // The base_size determines how much stretch_px translates to actual pixel stretch.
+                // Through black-box testing, we found that the formula depends on the aspect ratio:
                 //
-                // This formula was derived from black-box testing:
-                // - Non-rotated: world_width = orig_width, so base_size = orig_width (unchanged)
-                // - Rotated 90°: world_width = orig_height, gives correct stretch reduction (~0.89x)
+                // - For wide shapes (width >= height): use orig_width directly
+                // - For tall shapes (width < height): use weighted formula with rotation
                 //
                 // Special case: when size.y is negative (AM uses this for certain flip/transform
                 // operations), the stretch calculation needs to use the diagonal length instead.
-                // This was discovered through black-box testing: negative size.y elements need
-                // base_size = sqrt(orig_width^2 + orig_height^2) to match AM's stretch behavior.
                 let has_negative_size_y = sprite_size[1] < 0.0;
                 let base_size = if has_negative_size_y {
                     // For negative height, use diagonal length as base, with optional scale factor
                     (orig_width * orig_width + orig_height * orig_height).sqrt()
                         * DEBUG_NEGATIVE_HEIGHT_SCALE
+                } else if orig_width >= orig_height {
+                    // Wide shape: use original width
+                    orig_width
                 } else {
-                    // Normal case: weighted average formula
-                    0.8 * world_width + 0.2 * orig_width
+                    // Tall shape: use weighted formula with rotation
+                    let rot_cos = transform_rotation_rad.cos().abs();
+                    let rot_sin = transform_rotation_rad.sin().abs();
+                    let world_w = orig_width * rot_cos + orig_height * rot_sin;
+                    0.8 * world_w + 0.2 * orig_width
                 };
                 let base_divisor = base_size / 5.76;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;

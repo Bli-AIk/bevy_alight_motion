@@ -827,20 +827,10 @@ fn spawn_embed_scene(
     //
     // Note: This handles the case where speed != 1.0, which affects internal time flow.
     //
-    // Video export timing: When video is exported, AM samples at frame center time
-    // (frame + 0.5) / fps rather than frame start time. To match this behavior,
-    // we add half a frame duration to inTime when it's non-zero.
-    //
     // Nested scenes use smaller z_spacing to keep all children within
     // the parent's z-range (between parent and next sibling)
     // Using /100 instead of /1000 for better numerical precision
-    let raw_in_time = embed.in_time.unwrap_or(0) as f32;
-    let half_frame_ms = if embed.in_time.is_some() && embed.in_time != Some(0) {
-        500.0 / embed.scene.fps as f32
-    } else {
-        0.0
-    };
-    let in_time = raw_in_time + half_frame_ms;
+    let in_time = embed.in_time.unwrap_or(0) as f32;
     let effective_speed = config.speed_multiplier * embed.speed;
     let time_offset_with_in_time = if effective_speed > 0.0 {
         config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
@@ -2454,17 +2444,7 @@ fn collect_embed_scene(
     //   time_offset = embed.start_time - inTime / speed
     //
     // Note: This handles the case where speed != 1.0, which affects internal time flow.
-    // 
-    // Video export timing: When video is exported, AM samples at frame center time
-    // (frame + 0.5) / fps rather than frame start time. To match this behavior,
-    // we add half a frame duration to inTime when it's non-zero.
-    let raw_in_time = embed.in_time.unwrap_or(0) as f32;
-    let half_frame_ms = if embed.in_time.is_some() && embed.in_time != Some(0) {
-        500.0 / embed.scene.fps as f32
-    } else {
-        0.0
-    };
-    let in_time = raw_in_time + half_frame_ms;
+    let in_time = embed.in_time.unwrap_or(0) as f32;
     let effective_speed = config.speed_multiplier * embed.speed;
     let time_offset_with_in_time = if effective_speed > 0.0 {
         config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
