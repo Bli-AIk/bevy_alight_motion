@@ -29,6 +29,7 @@
 //! 3. **Always RTT-Ready**: All code paths assume RTT architecture. There is no "legacy mode".
 
 use bevy::camera::RenderTarget;
+use bevy::camera::ScalingMode;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
@@ -564,16 +565,19 @@ pub fn setup_embed_scene_rtt_system(
             .id();
 
         // Configure orthographic projection to match embed's internal scene size
-        // This ensures content renders at correct positions relative to scene center
+        // Use Fixed scaling mode because RTT cameras render to a texture, not the window
+        // WindowSize mode would incorrectly use the window dimensions
         commands
             .entity(camera_entity)
             .insert(Projection::Orthographic(OrthographicProjection {
-                // Scale factor to fit content - default is 1.0 which means 1 unit = 1 pixel
-                scale: 1.0,
+                // Fixed scaling mode explicitly sets the projection area to match RTT texture size
+                scaling_mode: ScalingMode::Fixed {
+                    width: needs_rtt.scene_width,
+                    height: needs_rtt.scene_height,
+                },
                 // Near/far planes
                 near: -1000.0,
                 far: 1000.0,
-                // Viewport origin at center (default for Camera2d)
                 ..OrthographicProjection::default_2d()
             }));
 
@@ -599,8 +603,8 @@ pub fn setup_embed_scene_rtt_system(
                 RenderLayers::layer(0),
             ));
 
-        bevy::log::debug!(
-            "Set up RTT for embedScene {:?}: layer={}, size={}x{}",
+        bevy::log::info!(
+            "[RTT] Set up RTT for embedScene {:?}: layer={}, size={}x{}",
             entity,
             render_layer,
             needs_rtt.scene_width,

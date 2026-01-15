@@ -121,6 +121,28 @@ pub struct AmAnimated {
     pub palette_alpha: AmAnimatedFloat,
 }
 
+impl AmAnimated {
+    /// Calculate local time considering speed_multiplier.
+    pub fn calc_local_time(&self, global_time: f32) -> f32 {
+        (global_time - self.time_offset as f32) * self.speed_multiplier
+    }
+    
+    /// Check if layer is active at the given local time.
+    pub fn is_active(&self, local_time: f32) -> bool {
+        local_time >= self.start_time as f32 && local_time <= self.end_time as f32
+    }
+    
+    /// Calculate normalized layer time (0.0 to 1.0) from local time.
+    pub fn calc_layer_time(&self, local_time: f32) -> f32 {
+        let duration = (self.end_time - self.start_time) as f32;
+        if duration > 0.0 {
+            (local_time - self.start_time as f32) / duration
+        } else {
+            0.0
+        }
+    }
+}
+
 /// Resource to control animation playback.
 #[derive(Resource, Debug, Clone)]
 pub struct AmPlayback {
@@ -224,24 +246,24 @@ pub fn animate_transform_system(
         query.iter_mut()
     {
         // Calculate local time (accounting for time offset from parent scene)
-        let mut local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local_time using helper, but preserve embed_content timing adjustment
+        let mut local_time = animated.calc_local_time(global_time);
         
         // For embed content, add 0.5 frame offset to match AM's internal timing
         // This compensates for the difference between video frame edges and centers
-        if embed_content_marker.is_some() {
-            // 0.5 frame at 30fps = 16.67ms, but we need to account for speed_multiplier
+        // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
+        if embed_content_marker.is_some() && animated.speed_multiplier != 0.0 {
             let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
             local_time += frame_duration_ms * 0.5;
         }
 
         // Check if layer is active at current local time
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             continue;
         }
 
         // Calculate normalized time within layer duration
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get current scale for pivot compensation
         // For SDF shapes and effect sprites, scale is handled separately, so use (1, 1)
@@ -371,17 +393,16 @@ pub fn animate_opacity_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut sprite) in query.iter_mut() {
-        // Calculate local time (accounting for time offset from parent scene)
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Check if layer is active
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             sprite.color.set_alpha(0.0);
             continue;
         }
 
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get opacity from animation data, default to 1.0 if not specified
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
@@ -429,11 +450,11 @@ pub fn animate_text_opacity_system(
     }
 
     for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
-        // Calculate local time (accounting for time offset from parent scene)
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Check if layer is active
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             // Hide text when outside its time range
             if *visibility != Visibility::Hidden {
                 bevy::log::trace!(
@@ -463,8 +484,7 @@ pub fn animate_text_opacity_system(
         }
         *visibility = Visibility::Inherited;
 
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
@@ -494,11 +514,11 @@ pub fn animate_sdf_opacity_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
-        // Calculate local time (accounting for time offset from parent scene)
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Check if layer is active
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             // Hide shape when outside its time range
             *visibility = Visibility::Hidden;
             smud_shape.color.set_alpha(0.0);
@@ -508,8 +528,7 @@ pub fn animate_sdf_opacity_system(
         // Show shape when within its time range
         *visibility = Visibility::Inherited;
 
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
@@ -546,17 +565,16 @@ pub fn animate_sdf_scale_system(
     let global_time = playback.current_time_ms;
 
     for (animated, children) in parent_query.iter() {
-        // Calculate local time
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Skip if outside active time range
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             continue;
         }
 
         // Calculate normalized time within layer duration
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get animation scale from keyframes
         let anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
@@ -631,17 +649,16 @@ pub fn animate_size_system(
             continue;
         }
 
-        // Calculate local time
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Skip if outside active time range
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             continue;
         }
 
         // Calculate normalized time within layer duration
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate size (already stored as full dimensions, need half for SDF)
         if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
@@ -671,17 +688,16 @@ pub fn animate_size_system(
             continue;
         }
 
-        // Calculate local time
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Skip if outside active time range
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             continue;
         }
 
         // Calculate normalized time within layer duration
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate size (full dimensions for Sprite)
         if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
@@ -2337,22 +2353,28 @@ pub fn animate_unified_effect_system(
     let global_time = playback.current_time_ms;
 
     for (entity, animated, material_handle, transform, _mesh2d) in query.iter() {
-        // Calculate local time
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
+        if !animated.is_active(local_time) {
             continue;
         }
 
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Get sprite base size and scale
         let sprite_size = interpolate_vec2(&animated.size, layer_time).unwrap_or([100.0, 100.0]);
         let scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
         // Actual rendered size = base size * scale
         // Use abs() because negative size in AM behaves same as positive (no flip)
-        let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
-        let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
+        let mut orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
+        let mut orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
+        
+        // For embed content, apply inv_fit_scale to compensate for project fit scaling
+        // This ensures the stretch effect uses the correct base dimensions
+        if animated.inv_fit_scale != 1.0 && animated.inv_fit_scale > 0.0 {
+            orig_width *= animated.inv_fit_scale;
+            orig_height *= animated.inv_fit_scale;
+        }
 
         // Get transform rotation angle for effect compensation
         // In Bevy, rotation is stored as Quat, extract Z rotation
@@ -2567,6 +2589,14 @@ pub fn animate_unified_effect_system(
                 let center_offset_x = (min_x + max_x) / 2.0;
                 let center_offset_y = (min_y + max_y) / 2.0;
 
+                // Debug: log stretch calculation details
+                if stretch_px > 0.1 {
+                    info!(
+                        "[Stretch] layer_id={} angle_rad={:.2} stretch_px={:.1} actual_stretch_px={:.1} base_size={:.1} orig=({:.1},{:.1}) new=({:.1},{:.1}) offset=({:.1},{:.1})",
+                        animated.layer_id, angle_rad, stretch_px, actual_stretch_px, base_size, orig_width, orig_height, new_width, new_height, center_offset_x, center_offset_y
+                    );
+                }
+
                 // Update material parameters
                 material.stretch_params =
                     Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
@@ -2634,20 +2664,16 @@ pub fn animate_rtt_blur_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut blur_effect) in query.iter_mut() {
-        // Calculate local time (accounting for time offset from parent scene)
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        // Calculate local time (handle retime="off" case)
+        let local_time = animated.calc_local_time(global_time);
 
         // Check if layer is active at current local time
-        if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
+        if !animated.is_active(local_time) {
             continue;
         }
 
         // Calculate normalized time within layer duration
-        let layer_duration = (animated.end_time - animated.start_time) as f32;
-        if layer_duration <= 0.0 {
-            continue;
-        }
-        let layer_time = (local_time - animated.start_time as f32) / layer_duration;
+        let layer_time = animated.calc_layer_time(local_time);
 
         // Check if this layer has blur animation
         let has_blur =

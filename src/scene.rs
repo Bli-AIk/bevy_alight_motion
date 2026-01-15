@@ -2461,14 +2461,19 @@ fn collect_embed_scene(
         config.time_offset as f32 + embed.start_time as f32
     };
     
+    // Note: retime="off" means "don't retime" - use normal animation speed
+    // It does NOT mean freeze animations. The parent's speed still applies.
+    let nested_speed = effective_speed;
+    
     bevy::log::info!(
-        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}",
+        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, nested_speed={}",
         embed.label,
         config.time_offset,
         embed.start_time,
         in_time,
         effective_speed,
-        time_offset_with_in_time
+        time_offset_with_in_time,
+        nested_speed
     );
     
     let nested_config = AmSceneConfig {
@@ -2477,7 +2482,7 @@ fn collect_embed_scene(
         time_offset: time_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
-        speed_multiplier: effective_speed,
+        speed_multiplier: nested_speed,
         ..config.clone()
     };
 
