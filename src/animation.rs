@@ -2342,6 +2342,7 @@ pub fn animate_unified_effect_system(
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &Transform,
         &bevy::mesh::Mesh2d,
+        Option<&crate::scene::AmEmbedContentMarker>,
     )>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -2352,7 +2353,7 @@ pub fn animate_unified_effect_system(
 
     let global_time = playback.current_time_ms;
 
-    for (entity, animated, material_handle, transform, _mesh2d) in query.iter() {
+    for (entity, animated, material_handle, transform, _mesh2d, embed_marker) in query.iter() {
         // Calculate local time (handle retime="off" case)
         let local_time = animated.calc_local_time(global_time);
         if !animated.is_active(local_time) {
@@ -2549,7 +2550,15 @@ pub fn animate_unified_effect_system(
                 let base_divisor = base_size / 5.12;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
 
-                let actual_stretch_px = orig_width * stretch_factor - orig_width;
+                let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
+
+                // Hack: Compensate for RTT stretch issue in groups
+                // The issue causes grouped elements to appear shorter/less stretched than expected
+                // This seems related to the ratio between RTT canvas height and the standard 960.0 height
+                if embed_marker.is_some() {
+                    let ratio = animated.canvas_height / 960.0;
+                    actual_stretch_px *= ratio;
+                }
 
                 let angle_factor = 1.0 - 0.25 * angle_rad.sin().abs();
                 let half_gap = actual_stretch_px * 0.5 * angle_factor;
@@ -2591,9 +2600,11 @@ pub fn animate_unified_effect_system(
 
                 // Debug: log stretch calculation details
                 if stretch_px > 0.1 {
+                    let is_embed_content = animated.embed_offset != Vec2::ZERO;
                     info!(
-                        "[Stretch] layer_id={} angle_rad={:.2} stretch_px={:.1} actual_stretch_px={:.1} base_size={:.1} orig=({:.1},{:.1}) new=({:.1},{:.1}) offset=({:.1},{:.1})",
-                        animated.layer_id, angle_rad, stretch_px, actual_stretch_px, base_size, orig_width, orig_height, new_width, new_height, center_offset_x, center_offset_y
+                        "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1}",
+                        animated.layer_id, is_embed_content, animated.canvas_width, animated.canvas_height,
+                        stretch_px, actual_stretch_px, new_height
                     );
                 }
 

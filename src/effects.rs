@@ -419,6 +419,7 @@ impl Plugin for EffectRenderPlugin {
                     update_effect_buffers_system,
                     mark_dirty_on_change_system,
                     setup_embed_scene_rtt_system,
+                    debug_rtt_camera_projection_system,
                     propagate_render_layers_system,
                     cleanup_embed_scene_rtt_system,
                     cleanup_embed_content_system,
@@ -503,9 +504,19 @@ pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
-    query: Query<(Entity, &NeedsEmbedSceneRtt), Without<EmbedSceneRtt>>,
+    query: Query<(Entity, &NeedsEmbedSceneRtt, &Transform), Without<EmbedSceneRtt>>,
 ) {
-    for (entity, needs_rtt) in query.iter() {
+    for (entity, needs_rtt, embed_transform) in query.iter() {
+        // Log embed transform for debugging
+        bevy::log::info!(
+            "[RTT] Embed {:?} transform: scale=({:.3},{:.3}), pos=({:.1},{:.1})",
+            entity,
+            embed_transform.scale.x,
+            embed_transform.scale.y,
+            embed_transform.translation.x,
+            embed_transform.translation.y
+        );
+        
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -541,8 +552,7 @@ pub fn setup_embed_scene_rtt_system(
         let render_texture_handle = images.add(render_texture);
         let render_layer_usize = render_layer as usize;
 
-        // Create RTT camera
-        // Camera2d automatically includes OrthographicProjection
+        // Create RTT camera with Fixed scaling mode to match embed's internal scene size
         let camera_entity = commands
             .spawn((
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
@@ -557,29 +567,22 @@ pub fn setup_embed_scene_rtt_system(
                     order: -(render_layer as isize), // Render before main camera
                     ..default()
                 },
+                // Fixed scaling mode so projection area matches RTT texture size exactly
+                Projection::Orthographic(OrthographicProjection {
+                    scaling_mode: ScalingMode::Fixed {
+                        width: needs_rtt.scene_width,
+                        height: needs_rtt.scene_height,
+                    },
+                    near: -1000.0,
+                    far: 1000.0,
+                    ..OrthographicProjection::default_2d()
+                }),
                 // Camera only renders this specific layer
                 RenderLayers::layer(render_layer_usize),
                 // Camera positioned at center of scene
                 Transform::from_xyz(0.0, 0.0, 1000.0),
             ))
             .id();
-
-        // Configure orthographic projection to match embed's internal scene size
-        // Use Fixed scaling mode because RTT cameras render to a texture, not the window
-        // WindowSize mode would incorrectly use the window dimensions
-        commands
-            .entity(camera_entity)
-            .insert(Projection::Orthographic(OrthographicProjection {
-                // Fixed scaling mode explicitly sets the projection area to match RTT texture size
-                scaling_mode: ScalingMode::Fixed {
-                    width: needs_rtt.scene_width,
-                    height: needs_rtt.scene_height,
-                },
-                // Near/far planes
-                near: -1000.0,
-                far: 1000.0,
-                ..OrthographicProjection::default_2d()
-            }));
 
         // Add EmbedSceneRtt component and remove the marker
         commands
@@ -610,6 +613,36 @@ pub fn setup_embed_scene_rtt_system(
             needs_rtt.scene_width,
             needs_rtt.scene_height
         );
+    }
+}
+
+/// Debug system to verify RTT camera projection settings
+pub fn debug_rtt_camera_projection_system(
+    camera_query: Query<(Entity, &EmbedSceneRttCamera, &Projection)>,
+) {
+    static mut FRAME_COUNT: u32 = 0;
+    unsafe {
+        FRAME_COUNT += 1;
+        if FRAME_COUNT != 5 {  // Log on frame 5 only
+            return;
+        }
+    }
+    
+    for (entity, _rtt_cam, projection) in camera_query.iter() {
+        match projection {
+            Projection::Orthographic(ortho) => {
+                bevy::log::info!(
+                    "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
+                    entity,
+                    ortho.scaling_mode,
+                    ortho.area.width(),
+                    ortho.area.height()
+                );
+            }
+            _ => {
+                bevy::log::warn!("[RTT DEBUG] Camera {:?} has non-orthographic projection!", entity);
+            }
+        }
     }
 }
 
