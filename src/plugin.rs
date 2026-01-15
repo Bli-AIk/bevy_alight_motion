@@ -67,6 +67,8 @@ pub struct AlightMotionPlugin;
 
 impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
+        use bevy::ecs::schedule::ApplyDeferred;
+        
         app.add_plugins(SmudPlugin)
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())
@@ -87,6 +89,8 @@ impl Plugin for AlightMotionPlugin {
                     spawn_loaded_projects_system,
                     advance_playback_system,
                     manage_layer_lifecycle_system, // Spawn/despawn visuals based on time
+                    // Flush commands so newly spawned entities are available for animation systems
+                    ApplyDeferred,
                     animate_transform_system,
                     animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation

@@ -2054,6 +2054,10 @@ fn flatten_pending_layers_inner(
                         // Store embed offset to identify as embed content (triggers inv_fit_scale use)
                         // The actual value is not used for coordinate adjustment anymore
                         child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
+                        bevy::log::info!(
+                            "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
+                            child.label, child.id, embed_bevy_pos.x, embed_bevy_pos.y
+                        );
                     }
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
                     child.parent = new_parent_id;
@@ -2160,6 +2164,11 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
+    
+    bevy::log::debug!(
+        "[collect_shape] '{}': has_parent={}, canvas={}x{}, time_offset={}, bevy_pos=({:.1},{:.1})",
+        shape.label, has_parent, config.canvas_width, config.canvas_height, config.time_offset, tx, ty
+    );
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
@@ -2451,6 +2460,16 @@ fn collect_embed_scene(
     } else {
         config.time_offset as f32 + embed.start_time as f32
     };
+    
+    bevy::log::info!(
+        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}",
+        embed.label,
+        config.time_offset,
+        embed.start_time,
+        in_time,
+        effective_speed,
+        time_offset_with_in_time
+    );
     
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,

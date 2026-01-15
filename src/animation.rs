@@ -210,6 +210,7 @@ pub fn animate_transform_system(
         &crate::scene::AmLayerSpec,
         Option<&AmSdfShapeParent>,
         Option<&crate::masked_sprite::UnifiedEffectMarker>,
+        Option<&crate::scene::AmEmbedContentMarker>,
     )>,
 ) {
     // Skip animation only when force stopped (for inspector editing)
@@ -219,11 +220,19 @@ pub fn animate_transform_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker) in
+    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker, embed_content_marker) in
         query.iter_mut()
     {
         // Calculate local time (accounting for time offset from parent scene)
-        let local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        let mut local_time = (global_time - animated.time_offset as f32) * animated.speed_multiplier;
+        
+        // For embed content, add 0.5 frame offset to match AM's internal timing
+        // This compensates for the difference between video frame edges and centers
+        if embed_content_marker.is_some() {
+            // 0.5 frame at 30fps = 16.67ms, but we need to account for speed_multiplier
+            let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
+            local_time += frame_duration_ms * 0.5;
+        }
 
         // Check if layer is active at current local time
         if local_time < animated.start_time as f32 || local_time > animated.end_time as f32 {
@@ -1227,8 +1236,10 @@ fn spawn_layer_entity(
         };
 
     // Clone animated component and set inv_fit_scale for embed children
+    // Use containing_embed_id to detect embed content, not embed_offset
+    // (embed_offset can be ZERO when embed is at canvas center)
     let mut animated = layer.animated.clone();
-    if animated.embed_offset != Vec2::ZERO {
+    if layer.containing_embed_id != 0 {
         animated.inv_fit_scale = inv_fit_scale;
     }
 
