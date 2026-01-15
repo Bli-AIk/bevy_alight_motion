@@ -956,7 +956,7 @@ fn process_pending_layers(
         let parent_local_time = (global_time - (parent.animated.time_offset + time_offset) as f32)
             * parent.animated.speed_multiplier;
         let parent_active = parent_local_time >= parent.start_time as f32
-            && parent_local_time <= parent.end_time as f32;
+            && parent_local_time < parent.end_time as f32;
 
         if !parent_active {
             return false; // Parent is not active
@@ -972,8 +972,9 @@ fn process_pending_layers(
             * layer.animated.speed_multiplier;
 
         // Check if layer should be active (considering both own time range and parent's time range)
+        // Note: AM uses half-open interval [start, end) for layer visibility
         let own_time_active =
-            local_time >= layer.start_time as f32 && local_time <= layer.end_time as f32;
+            local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 
         // Check if all ancestors are active
         let ancestors_active =
@@ -2523,7 +2524,7 @@ pub fn animate_unified_effect_system(
                     let world_w = orig_width * rot_cos + orig_height * rot_sin;
                     0.8 * world_w + 0.2 * orig_width
                 };
-                let base_divisor = base_size / 5.76;
+                let base_divisor = base_size / 5.12;
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
 
                 let actual_stretch_px = orig_width * stretch_factor - orig_width;
