@@ -2387,15 +2387,13 @@ pub fn animate_unified_effect_system(
         let scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
         // Actual rendered size = base size * scale
         // Use abs() because negative size in AM behaves same as positive (no flip)
-        let mut orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
-        let mut orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
+        let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
+        let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
         
-        // For embed content, apply inv_fit_scale to compensate for project fit scaling
-        // This ensures the stretch effect uses the correct base dimensions
-        if animated.inv_fit_scale != 1.0 && animated.inv_fit_scale > 0.0 {
-            orig_width *= animated.inv_fit_scale;
-            orig_height *= animated.inv_fit_scale;
-        }
+        // NOTE: inv_fit_scale is NOT applied to RTT content dimensions
+        // RTT content renders at scene's internal resolution, and the final
+        // display size is determined by embed's transform scale and main scene's fit_scale.
+        // Applying inv_fit_scale here would incorrectly enlarge the content.
 
         // Get transform rotation angle for effect compensation
         // In Bevy, rotation is stored as Quat, extract Z rotation
@@ -2553,6 +2551,15 @@ pub fn animate_unified_effect_system(
                 // Special case: when size.y is negative (AM uses this for certain flip/transform
                 // operations), the stretch calculation needs to use the diagonal length instead.
                 let has_negative_size_y = sprite_size[1] < 0.0;
+                
+                // Debug: log raw values for negative height embed content
+                if has_negative_size_y && embed_marker.is_some() {
+                    info!(
+                        "[StretchDebug] layer_id={} sprite_size=({:.2},{:.2}) scale=({:.2},{:.2}) orig=({:.2},{:.2})",
+                        animated.layer_id, sprite_size[0], sprite_size[1], scale[0], scale[1], orig_width, orig_height
+                    );
+                }
+                
                 let base_size = if has_negative_size_y {
                     // For negative height, use diagonal length as base, with optional scale factor
                     (orig_width * orig_width + orig_height * orig_height).sqrt()
@@ -2622,9 +2629,9 @@ pub fn animate_unified_effect_system(
                 if stretch_px > 0.1 {
                     let is_embed_content = animated.embed_offset != Vec2::ZERO;
                     info!(
-                        "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1}",
+                        "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1} neg_h={} base_size={:.1}",
                         animated.layer_id, is_embed_content, animated.canvas_width, animated.canvas_height,
-                        stretch_px, actual_stretch_px, new_height
+                        stretch_px, actual_stretch_px, new_height, has_negative_size_y, base_size
                     );
                 }
 
