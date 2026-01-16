@@ -131,17 +131,17 @@ impl AmAnimated {
     pub fn calc_local_time(&self, global_time: f32) -> f32 {
         (global_time - self.time_offset as f32) * self.speed_multiplier
     }
-    
+
     /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
     pub fn calc_lifecycle_time(&self, global_time: f32) -> f32 {
         global_time - self.lifecycle_offset as f32
     }
-    
+
     /// Check if layer is active at the given local time.
     pub fn is_active(&self, local_time: f32) -> bool {
         local_time >= self.start_time as f32 && local_time <= self.end_time as f32
     }
-    
+
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
         let duration = (self.end_time - self.start_time) as f32;
@@ -252,8 +252,15 @@ pub fn animate_transform_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker, embed_content_marker) in
-        query.iter_mut()
+    for (
+        animated,
+        mut transform,
+        _marker,
+        layer_spec,
+        sdf_parent,
+        effect_marker,
+        embed_content_marker,
+    ) in query.iter_mut()
     {
         // Use lifecycle time for visibility check (not affected by speed)
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
@@ -263,7 +270,7 @@ pub fn animate_transform_system(
 
         // Calculate local time for animation interpolation (accounting for speed)
         let mut local_time = animated.calc_local_time(global_time);
-        
+
         // For embed content, add 0.5 frame offset to match AM's internal timing
         // This compensates for the difference between video frame edges and centers
         // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
@@ -462,7 +469,7 @@ pub fn animate_text_opacity_system(
     for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Check if layer is active
         if !animated.is_active(lifecycle_time) {
             // Hide text when outside its time range
@@ -529,7 +536,7 @@ pub fn animate_sdf_opacity_system(
     for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Check if layer is active
         if !animated.is_active(lifecycle_time) {
             // Hide shape when outside its time range
@@ -582,7 +589,7 @@ pub fn animate_sdf_scale_system(
     for (animated, children) in parent_query.iter() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Skip if outside active time range
         if !animated.is_active(lifecycle_time) {
             continue;
@@ -667,7 +674,7 @@ pub fn animate_size_system(
 
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Skip if outside active time range
         if !animated.is_active(lifecycle_time) {
             continue;
@@ -707,7 +714,7 @@ pub fn animate_size_system(
 
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Skip if outside active time range
         if !animated.is_active(lifecycle_time) {
             continue;
@@ -863,7 +870,8 @@ fn parse_keyframe_vec2(s: &str) -> Option<[f32; 2]> {
 use crate::loader::AmProject;
 use crate::plugin::AmWhitePixel;
 use crate::scene::{
-    AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmPendingLayers, AmVisualSpawned, PendingLayer,
+    AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmPendingLayers, AmVisualSpawned,
+    PendingLayer,
 };
 use bevy::asset::Assets;
 use bevy_smud::prelude::*;
@@ -988,7 +996,8 @@ fn process_pending_layers(
         };
 
         // Use lifecycle_offset for visibility (not affected by speed)
-        let parent_lifecycle_time = global_time - (parent.animated.lifecycle_offset + time_offset) as f32;
+        let parent_lifecycle_time =
+            global_time - (parent.animated.lifecycle_offset + time_offset) as f32;
         let parent_active = parent_lifecycle_time >= parent.start_time as f32
             && parent_lifecycle_time < parent.end_time as f32;
 
@@ -1151,6 +1160,7 @@ fn process_pending_layers(
             parent_entity, // project_entity for embed content attachment
             pending.inv_fit_scale,
             &pending.spawned_entities,
+            global_time,
         );
 
         bevy::log::info!(
@@ -1214,6 +1224,27 @@ fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
     }
 }
 
+/// Get initial size from animated size property.
+/// Returns default size of 100x100 if no value is set.
+fn get_initial_size_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
+    if let Some(val) = &prop.value {
+        (val[0], val[1])
+    } else if !prop.keyframes.is_empty() {
+        // Sort keyframes by time and get the first one
+        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        parse_keyframe_vec2(&sorted[0].value)
+            .map(|v| (v[0], v[1]))
+            .unwrap_or((100.0, 100.0))
+    } else {
+        (100.0, 100.0)
+    }
+}
+
 /// Spawn a complete entity from a PendingLayer.
 ///
 /// For spatial decoupling of embed content:
@@ -1235,6 +1266,7 @@ fn spawn_layer_entity(
     _project_entity: Entity, // Unused for embed content (they exist in world space)
     inv_fit_scale: f32,
     spawned_entities: &HashMap<u64, Entity>,
+    global_time: f32,
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
 
@@ -1259,16 +1291,144 @@ fn spawn_layer_entity(
     let has_mask = layer.mask_info.is_some();
     let needs_effect = has_wipe || has_stretch || has_mask || has_blur;
 
-    // If layer has effects, bake scale into a separate variable and use identity scale for transform
-    // This is because effects need actual pixel sizes, not scaled coordinates
-    let transform_to_use =
-        if needs_effect && layer.blending_mode != crate::scene::AmBlendingMode::Mask {
-            let mut t = layer.transform;
-            t.scale = Vec3::ONE; // Reset scale - it will be baked into mesh size
-            t
+    // Calculate correct initial position at spawn time (to prevent frame jump)
+    // Use the same logic as animate_transform_system
+    let animated = &layer.animated;
+
+    // Calculate local time for animation interpolation
+    let mut local_time = animated.calc_local_time(global_time);
+
+    bevy::log::info!(
+        "[SpawnTime] '{}' global_time={:.1}, local_time={:.1}, start_time={}, end_time={}, time_offset={:.1}, speed={:.2}",
+        layer.label,
+        global_time,
+        local_time,
+        layer.start_time,
+        layer.end_time,
+        animated.time_offset,
+        animated.speed_multiplier
+    );
+
+    // For embed content, add 0.5 frame offset to match AM's internal timing
+    if layer.containing_embed_id != 0 && animated.speed_multiplier != 0.0 {
+        let frame_duration_ms = 1000.0 / 30.0;
+        local_time += frame_duration_ms * 0.5;
+    }
+
+    // Calculate normalized time within layer duration
+    let layer_time = animated.calc_layer_time(local_time);
+
+    // Get current scale for pivot compensation
+    let current_scale =
+        if matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) || needs_effect {
+            [1.0_f32, 1.0_f32]
         } else {
-            layer.transform
+            interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
         };
+
+    // Calculate initial position using animation interpolation
+    let initial_position = if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
+        let (mut bx, mut by) = if animated.has_parent {
+            // For layers with parents, use local coordinates
+            (loc[0], -loc[1])
+        } else {
+            // For root layers, convert from canvas coordinates
+            (
+                loc[0] - animated.canvas_width / 2.0,
+                animated.canvas_height / 2.0 - loc[1],
+            )
+        };
+
+        // Apply pivot compensation (simplified - full logic is in animate_transform_system)
+        if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
+            let pivot_x = pivot[0];
+            let pivot_y = pivot[1];
+
+            if matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
+                // SDF shapes: translation is at transform center
+                bx += pivot_x;
+                by -= pivot_y;
+            } else if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
+                // Embed scenes: need rotation-aware pivot compensation
+                let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                let rotation_rad = (-rotation_deg).to_radians();
+                let pivot_bevy_y = -pivot_y;
+                let scaled_offset_x = -pivot_x * current_scale[0];
+                let scaled_offset_y = -pivot_bevy_y * current_scale[1];
+                let rotated_offset_x =
+                    scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+                let rotated_offset_y =
+                    scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+                bx += pivot_x + rotated_offset_x;
+                by += pivot_bevy_y + rotated_offset_y;
+            } else {
+                // Standard shapes: simple pivot compensation for non-unit scale
+                let offset_x = pivot_x * (1.0 - current_scale[0]);
+                let offset_y = -pivot_y * (1.0 - current_scale[1]);
+                bx += offset_x;
+                by += offset_y;
+            }
+        }
+
+        // Apply effect position offsets (transform2 effect)
+        if let Some(effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+            bx += effect_x;
+        }
+        if let Some(effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+            by -= effect_y; // Y is inverted
+        }
+
+        // Apply font Y offset for text layers (to compensate for different font metrics)
+        if !animated.has_parent {
+            by -= animated.font_y_offset;
+        }
+
+        // Apply anchor offset compensation for SpriteShape with non-center pivot
+        bx += animated.anchor_offset.x;
+        by += animated.anchor_offset.y;
+
+        Vec3::new(bx, by, layer.transform.translation.z)
+    } else {
+        layer.transform.translation
+    };
+
+    // Calculate initial rotation
+    let initial_rotation = if let Some(rot_deg) = interpolate_float(&animated.rotation, layer_time)
+    {
+        Quat::from_rotation_z((-rot_deg).to_radians())
+    } else {
+        layer.transform.rotation
+    };
+
+    // Calculate initial scale
+    let initial_scale =
+        if needs_effect || matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
+            Vec3::ONE
+        } else {
+            Vec3::new(current_scale[0], current_scale[1], 1.0)
+        };
+
+    bevy::log::debug!(
+        "[SpawnInit] '{}' layer_time={:.4}, pos=({:.1},{:.1},{:.4}), rot={:.2}°, scale=({:.3},{:.3})",
+        layer.label,
+        layer_time,
+        initial_position.x,
+        initial_position.y,
+        initial_position.z,
+        initial_rotation
+            .to_euler(bevy::math::EulerRot::ZYX)
+            .0
+            .to_degrees(),
+        initial_scale.x,
+        initial_scale.y
+    );
+
+    // Create transform with calculated initial values
+    let transform_to_use = Transform {
+        translation: initial_position,
+        rotation: initial_rotation,
+        scale: initial_scale,
+    };
 
     // Clone animated component and set inv_fit_scale for embed children
     // Use containing_embed_id to detect embed content, not embed_offset
@@ -1277,6 +1437,14 @@ fn spawn_layer_entity(
     if layer.containing_embed_id != 0 {
         animated.inv_fit_scale = inv_fit_scale;
     }
+
+    // For embed content, start hidden until RenderLayers is assigned
+    // This prevents the first-frame jump where content renders to wrong camera
+    let initial_visibility = if layer.containing_embed_id != 0 {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
 
     // Create base entity with common components
     let entity = commands
@@ -1290,7 +1458,7 @@ fn spawn_layer_entity(
             layer.spec.clone(),
             transform_to_use,
             GlobalTransform::default(),
-            Visibility::Inherited,
+            initial_visibility,
             InheritedVisibility::default(),
             ViewVisibility::default(),
         ))
@@ -1390,6 +1558,105 @@ fn spawn_layer_entity(
         // The final display size will be affected by embed's inherited fit_scale
         let size_scale = 1.0;
 
+        // Calculate initial stretch mesh bounds and mesh_offset to prevent first frame jump
+        // This replicates the logic from animate_unified_effect_system
+        let (initial_mesh_offset, initial_stretch_mesh_bounds) = if has_stretch {
+            // Use interpolation at layer_time to match animate_unified_effect_system
+            let sprite_size =
+                interpolate_vec2(&layer.animated.size, layer_time).unwrap_or([100.0, 100.0]);
+            let scale = interpolate_vec2(&layer.animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+            let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
+            let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
+
+            // Get stretch parameters using interpolation
+            let angle_deg =
+                interpolate_float(&layer.animated.stretch_angle, layer_time).unwrap_or(0.0);
+            let transform_rotation_rad = initial_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
+            let angle_rad = angle_deg.to_radians() + transform_rotation_rad;
+            let stretch_px =
+                interpolate_float(&layer.animated.stretch_amount, layer_time).unwrap_or(0.0);
+            let offset_px =
+                interpolate_float(&layer.animated.stretch_offset, layer_time).unwrap_or(0.0);
+
+            // Calculate base_size (same logic as animate_unified_effect_system)
+            let has_negative_size_y = sprite_size[1] < 0.0;
+            let base_size = if has_negative_size_y {
+                (orig_width * orig_width + orig_height * orig_height).sqrt()
+                    * DEBUG_NEGATIVE_HEIGHT_SCALE
+            } else if orig_width >= orig_height {
+                orig_width
+            } else {
+                let rot_cos = transform_rotation_rad.cos().abs();
+                let rot_sin = transform_rotation_rad.sin().abs();
+                let world_w = orig_width * rot_cos + orig_height * rot_sin;
+                0.8 * world_w + 0.2 * orig_width
+            };
+            let base_divisor = base_size / 5.12;
+            let stretch_factor = 1.0 + stretch_px / base_divisor;
+
+            let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
+
+            // Apply embed RTT compensation if this is embed content
+            if layer.containing_embed_id != 0 {
+                let ratio = layer.animated.canvas_height / 960.0;
+                actual_stretch_px *= ratio;
+            }
+
+            let angle_factor = 1.0 - 0.25 * angle_rad.sin().abs();
+            let half_gap = actual_stretch_px * 0.5 * angle_factor;
+
+            let rotate = |x: f32, y: f32, angle: f32| -> (f32, f32) {
+                let c = angle.cos();
+                let s = angle.sin();
+                (x * c - y * s, x * s + y * c)
+            };
+
+            let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
+                let (rx, ry) = rotate(vx, vy, angle_rad);
+                let shifted_x = rx + offset_px;
+                let pushed_x = rx + shifted_x.signum() * half_gap;
+                rotate(pushed_x, ry, -angle_rad)
+            };
+
+            let hw = orig_width / 2.0;
+            let hh = orig_height / 2.0;
+            let corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
+
+            let mut min_x = f32::MAX;
+            let mut max_x = f32::MIN;
+            let mut min_y = f32::MAX;
+            let mut max_y = f32::MIN;
+
+            for (cx, cy) in corners {
+                let (tx, ty) = transform_vertex(cx, cy);
+                min_x = min_x.min(tx);
+                max_x = max_x.max(tx);
+                min_y = min_y.min(ty);
+                max_y = max_y.max(ty);
+            }
+
+            let center_offset_x = (min_x + max_x) / 2.0;
+            let center_offset_y = (min_y + max_y) / 2.0;
+
+            bevy::log::info!(
+                "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) stretch_px={:.1} actual={:.1} offset=({:.2},{:.2})",
+                layer.label,
+                orig_width,
+                orig_height,
+                stretch_px,
+                actual_stretch_px,
+                center_offset_x,
+                center_offset_y
+            );
+
+            (
+                Some(Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0)),
+                Some((min_x, max_x, min_y, max_y)),
+            )
+        } else {
+            (None, None)
+        };
+
         add_visual_components(
             commands,
             shaders,
@@ -1412,6 +1679,8 @@ fn spawn_layer_entity(
             layer.embed_scene_size,
             size_scale,
             max_blur_radius,
+            initial_mesh_offset,
+            initial_stretch_mesh_bounds,
         );
     } else {
         bevy::log::info!(
@@ -1484,6 +1753,8 @@ fn add_visual_components(
     embed_scene_size: Option<(f32, f32)>,
     size_scale: f32,
     _max_blur_radius: f32,
+    initial_mesh_offset: Option<Vec4>,
+    initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
     use bevy::mesh::Mesh2d;
@@ -1594,6 +1865,7 @@ fn add_visual_components(
         stretch_params: Option<Vec4>,
         blur_params: Option<Vec4>,
         palette_params: Option<&AmPaletteMapParams>,
+        mesh_offset: Option<Vec4>,
     ) -> Handle<UnifiedEffectMaterial> {
         let mut material = UnifiedEffectMaterial {
             color,
@@ -1602,7 +1874,7 @@ fn add_visual_components(
             wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
             stretch_params: Vec4::ZERO,
             original_size: Vec4::new(width, height, width, height),
-            mesh_offset: Vec4::ZERO,
+            mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
             texture: Some(texture),
             blur_params: Vec4::ZERO,
             palette_flags: Vec4::ZERO,
@@ -1728,13 +2000,45 @@ fn add_visual_components(
                         // which is complex. For now, blur fades naturally at edges.
                         let blur_expansion = 0.0;
 
-                        let mesh = create_anchored_rectangle_with_blur(
-                            meshes,
-                            scaled_width,
-                            scaled_height,
-                            anchor,
-                            blur_expansion,
-                        );
+                        // Use initial stretch mesh bounds if provided (to prevent first frame jump)
+                        let mesh = if let Some((min_x, max_x, min_y, max_y)) =
+                            initial_stretch_mesh_bounds
+                        {
+                            // Create mesh with stretch-expanded bounds
+                            let vertices = vec![
+                                [min_x, min_y, 0.0],
+                                [max_x, min_y, 0.0],
+                                [max_x, max_y, 0.0],
+                                [min_x, max_y, 0.0],
+                            ];
+                            let normals = vec![
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                            ];
+                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+                            let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+                            let mut new_mesh = Mesh::new(
+                                bevy::mesh::PrimitiveTopology::TriangleList,
+                                bevy::asset::RenderAssetUsages::RENDER_WORLD
+                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                            );
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+                            meshes.add(new_mesh)
+                        } else {
+                            create_anchored_rectangle_with_blur(
+                                meshes,
+                                scaled_width,
+                                scaled_height,
+                                anchor,
+                                blur_expansion,
+                            )
+                        };
 
                         // Pass blur expansion info to material via blur_params.w
                         // This allows shader to correctly map UVs for the expanded mesh
@@ -1756,6 +2060,7 @@ fn add_visual_components(
                             stretch_params,
                             blur_params_with_expansion,
                             palette_params,
+                            initial_mesh_offset,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -1767,7 +2072,7 @@ fn add_visual_components(
                         ));
 
                         bevy::log::info!(
-                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}",
+                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}, has_stretch_bounds={}",
                             label,
                             scaled_width,
                             scaled_height,
@@ -1776,7 +2081,8 @@ fn add_visual_components(
                             needs_wipe,
                             needs_stretch,
                             needs_blur,
-                            needs_palette
+                            needs_palette,
+                            initial_stretch_mesh_bounds.is_some()
                         );
                     } else {
                         // No effects - use normal sprite
@@ -1795,7 +2101,38 @@ fn add_visual_components(
             } else if let Some(wp) = white_pixel {
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
-                    let mesh = create_anchored_rectangle(meshes, base_width, base_height, anchor);
+                    // Use initial stretch mesh bounds if provided (to prevent first frame jump)
+                    let mesh =
+                        if let Some((min_x, max_x, min_y, max_y)) = initial_stretch_mesh_bounds {
+                            let vertices = vec![
+                                [min_x, min_y, 0.0],
+                                [max_x, min_y, 0.0],
+                                [max_x, max_y, 0.0],
+                                [min_x, max_y, 0.0],
+                            ];
+                            let normals = vec![
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                            ];
+                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+                            let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+                            let mut new_mesh = Mesh::new(
+                                bevy::mesh::PrimitiveTopology::TriangleList,
+                                bevy::asset::RenderAssetUsages::RENDER_WORLD
+                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                            );
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+                            meshes.add(new_mesh)
+                        } else {
+                            create_anchored_rectangle(meshes, base_width, base_height, anchor)
+                        };
+
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
@@ -1807,6 +2144,7 @@ fn add_visual_components(
                         stretch_params,
                         blur_params,
                         palette_params,
+                        initial_mesh_offset,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -1818,10 +2156,11 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1})",
+                        "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
                         label,
                         base_width,
-                        base_height
+                        base_height,
+                        initial_stretch_mesh_bounds.is_some()
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -1881,9 +2220,41 @@ fn add_visual_components(
 
             if let Some(handle) = images.get(image_uri) {
                 if needs_any_effect {
-                    // Create mesh with BASE dimensions (not scaled)
-                    // Transform.scale will handle the actual scaling
-                    let mesh = create_anchored_rectangle(meshes, base_width, base_height, anchor);
+                    // Use initial stretch mesh bounds if provided (to prevent first frame jump)
+                    let mesh =
+                        if let Some((min_x, max_x, min_y, max_y)) = initial_stretch_mesh_bounds {
+                            // Create mesh with stretch-expanded bounds
+                            let vertices = vec![
+                                [min_x, min_y, 0.0],
+                                [max_x, min_y, 0.0],
+                                [max_x, max_y, 0.0],
+                                [min_x, max_y, 0.0],
+                            ];
+                            let normals = vec![
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, 0.0, 1.0],
+                            ];
+                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+                            let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+                            let mut new_mesh = Mesh::new(
+                                bevy::mesh::PrimitiveTopology::TriangleList,
+                                bevy::asset::RenderAssetUsages::RENDER_WORLD
+                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                            );
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+                            meshes.add(new_mesh)
+                        } else {
+                            // Create mesh with BASE dimensions (not scaled)
+                            // Transform.scale will handle the actual scaling
+                            create_anchored_rectangle(meshes, base_width, base_height, anchor)
+                        };
+
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
@@ -1895,6 +2266,7 @@ fn add_visual_components(
                         stretch_params,
                         blur_params,
                         palette_params,
+                        initial_mesh_offset,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -1906,10 +2278,11 @@ fn add_visual_components(
                     ));
 
                     bevy::log::info!(
-                        "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1})",
+                        "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
                         label,
                         base_width,
-                        base_height
+                        base_height,
+                        initial_stretch_mesh_bounds.is_some()
                     );
                 } else {
                     commands.entity(entity).insert((
@@ -2389,7 +2762,7 @@ pub fn animate_unified_effect_system(
         // Use abs() because negative size in AM behaves same as positive (no flip)
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
         let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
-        
+
         // NOTE: inv_fit_scale is NOT applied to RTT content dimensions
         // RTT content renders at scene's internal resolution, and the final
         // display size is determined by embed's transform scale and main scene's fit_scale.
@@ -2551,15 +2924,21 @@ pub fn animate_unified_effect_system(
                 // Special case: when size.y is negative (AM uses this for certain flip/transform
                 // operations), the stretch calculation needs to use the diagonal length instead.
                 let has_negative_size_y = sprite_size[1] < 0.0;
-                
+
                 // Debug: log raw values for negative height embed content
                 if has_negative_size_y && embed_marker.is_some() {
                     info!(
                         "[StretchDebug] layer_id={} sprite_size=({:.2},{:.2}) scale=({:.2},{:.2}) orig=({:.2},{:.2})",
-                        animated.layer_id, sprite_size[0], sprite_size[1], scale[0], scale[1], orig_width, orig_height
+                        animated.layer_id,
+                        sprite_size[0],
+                        sprite_size[1],
+                        scale[0],
+                        scale[1],
+                        orig_width,
+                        orig_height
                     );
                 }
-                
+
                 let base_size = if has_negative_size_y {
                     // For negative height, use diagonal length as base, with optional scale factor
                     (orig_width * orig_width + orig_height * orig_height).sqrt()
@@ -2630,8 +3009,15 @@ pub fn animate_unified_effect_system(
                     let is_embed_content = animated.embed_offset != Vec2::ZERO;
                     info!(
                         "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1} neg_h={} base_size={:.1}",
-                        animated.layer_id, is_embed_content, animated.canvas_width, animated.canvas_height,
-                        stretch_px, actual_stretch_px, new_height, has_negative_size_y, base_size
+                        animated.layer_id,
+                        is_embed_content,
+                        animated.canvas_width,
+                        animated.canvas_height,
+                        stretch_px,
+                        actual_stretch_px,
+                        new_height,
+                        has_negative_size_y,
+                        base_size
                     );
                 }
 
@@ -2704,7 +3090,7 @@ pub fn animate_rtt_blur_system(
     for (animated, mut blur_effect) in query.iter_mut() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
-        
+
         // Check if layer is active at current local time
         if !animated.is_active(lifecycle_time) {
             continue;

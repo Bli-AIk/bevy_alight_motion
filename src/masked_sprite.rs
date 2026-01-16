@@ -179,10 +179,10 @@ impl UnifiedEffectMaterial {
         colors: &[Vec4; 8],
     ) -> Self {
         self.palette_flags = Vec4::new(
-            1.0,                             // enabled
-            count as f32,                    // count (1-8)
-            if shades { 1.0 } else { 0.0 },  // shades
-            alpha,                           // alpha (effect strength)
+            1.0,                            // enabled
+            count as f32,                   // count (1-8)
+            if shades { 1.0 } else { 0.0 }, // shades
+            alpha,                          // alpha (effect strength)
         );
         self.palette_color1 = colors[0];
         self.palette_color2 = colors[1];

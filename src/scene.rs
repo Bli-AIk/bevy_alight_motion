@@ -618,7 +618,9 @@ fn spawn_shape(
 
     // Add palette map params if effect is present
     if palette_map.has_effect() {
-        commands.entity(entity).insert(AmPaletteMapParams::from_params(&palette_map));
+        commands
+            .entity(entity)
+            .insert(AmPaletteMapParams::from_params(&palette_map));
     }
 
     entity
@@ -825,7 +827,7 @@ fn spawn_embed_scene(
     //
     // Calculate the internal time offset for the embedded scene.
     // When the parent timeline reaches startTime, the embedded scene should be at inTime.
-    // 
+    //
     // The formula for local_time in the animation system is:
     //   local_time = (global_time - time_offset) * speed_multiplier
     //
@@ -981,7 +983,9 @@ fn spawn_image(
 
     // Add palette map params if effect is present
     if palette_map.has_effect() {
-        commands.entity(entity).insert(AmPaletteMapParams::from_params(&palette_map));
+        commands
+            .entity(entity)
+            .insert(AmPaletteMapParams::from_params(&palette_map));
     }
 
     entity
@@ -1151,7 +1155,7 @@ fn spawn_text(
             start_time: text.start_time,
             end_time: text.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: modified_location,
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
@@ -1852,7 +1856,8 @@ fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapParams {
                             if let Ok(index) = index_char.parse::<usize>() {
                                 if index >= 1 && index <= 8 {
                                     if let Ok(color) = crate::schema::parse_color(&prop.value) {
-                                        params.colors[index - 1] = Vec4::new(color[0], color[1], color[2], color[3]);
+                                        params.colors[index - 1] =
+                                            Vec4::new(color[0], color[1], color[2], color[3]);
                                     }
                                 }
                             }
@@ -1890,7 +1895,7 @@ impl AmPaletteMapParams {
         } else {
             params.alpha.value.unwrap_or(1.0)
         };
-        
+
         Self {
             count: params.count,
             shades: params.shades,
@@ -2066,7 +2071,10 @@ fn flatten_pending_layers_inner(
                         child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
                         bevy::log::info!(
                             "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
-                            child.label, child.id, embed_bevy_pos.x, embed_bevy_pos.y
+                            child.label,
+                            child.id,
+                            embed_bevy_pos.x,
+                            embed_bevy_pos.y
                         );
                     }
                 } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
@@ -2174,10 +2182,16 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
-    
+
     bevy::log::debug!(
         "[collect_shape] '{}': has_parent={}, canvas={}x{}, time_offset={}, bevy_pos=({:.1},{:.1})",
-        shape.label, has_parent, config.canvas_width, config.canvas_height, config.time_offset, tx, ty
+        shape.label,
+        has_parent,
+        config.canvas_width,
+        config.canvas_height,
+        config.time_offset,
+        tx,
+        ty
     );
     let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
     let wipe_effect = extract_wipe_effect(&shape.effects);
@@ -2295,7 +2309,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             start_time: shape.start_time,
             end_time: shape.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: shape.transform.location.clone(),
             pivot: shape.transform.pivot.clone(),
             rotation: shape.transform.rotation.clone(),
@@ -2378,7 +2392,7 @@ fn collect_null(
             start_time: null.start_time,
             end_time: null.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: null.transform.location.clone(),
             pivot: null.transform.pivot.clone(),
             rotation: null.transform.rotation.clone(),
@@ -2453,10 +2467,10 @@ fn collect_embed_scene(
     // the parent's z-range (between parent and next sibling)
     // Using /100 instead of /1000 for better numerical precision
     let nested_z_spacing = config.z_spacing / 100.0;
-    
+
     // Calculate the internal time offset for the embedded scene.
     // When the parent timeline reaches startTime, the embedded scene should be at inTime.
-    // 
+    //
     // The formula for local_time in the animation system is:
     //   local_time = (global_time - time_offset) * speed_multiplier
     //
@@ -2472,15 +2486,16 @@ fn collect_embed_scene(
     } else {
         config.time_offset as f32 + embed.start_time as f32
     };
-    
+
     // Lifecycle offset doesn't use speed - it's for visibility calculation
     // lifecycle_offset = embed_start - in_time (raw, no speed adjustment)
-    let lifecycle_offset_with_in_time = config.lifecycle_offset as f32 + embed.start_time as f32 - in_time;
-    
+    let lifecycle_offset_with_in_time =
+        config.lifecycle_offset as f32 + embed.start_time as f32 - in_time;
+
     // Note: retime="off" means "don't retime" - use normal animation speed
     // It does NOT mean freeze animations. The parent's speed still applies.
     let nested_speed = effective_speed;
-    
+
     bevy::log::info!(
         "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
@@ -2492,7 +2507,7 @@ fn collect_embed_scene(
         lifecycle_offset_with_in_time,
         nested_speed
     );
-    
+
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
@@ -2521,7 +2536,7 @@ fn collect_embed_scene(
             start_time: embed.start_time,
             end_time: embed.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: embed.transform.location.clone(),
             pivot: embed.transform.pivot.clone(),
             rotation: embed.transform.rotation.clone(),
@@ -2880,7 +2895,7 @@ fn collect_text(
             start_time: text.start_time,
             end_time: text.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: modified_location, // Use modified location with wrap offset
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
@@ -2972,7 +2987,7 @@ fn collect_image(
             start_time: image.start_time,
             end_time: image.end_time,
             time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
+            lifecycle_offset: config.lifecycle_offset,
             location: image.transform.location.clone(),
             pivot: image.transform.pivot.clone(),
             rotation: image.transform.rotation.clone(),

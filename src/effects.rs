@@ -516,7 +516,7 @@ pub fn setup_embed_scene_rtt_system(
             embed_transform.translation.x,
             embed_transform.translation.y
         );
-        
+
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -623,11 +623,12 @@ pub fn debug_rtt_camera_projection_system(
     static mut FRAME_COUNT: u32 = 0;
     unsafe {
         FRAME_COUNT += 1;
-        if FRAME_COUNT != 5 {  // Log on frame 5 only
+        if FRAME_COUNT != 5 {
+            // Log on frame 5 only
             return;
         }
     }
-    
+
     for (entity, _rtt_cam, projection) in camera_query.iter() {
         match projection {
             Projection::Orthographic(ortho) => {
@@ -640,7 +641,10 @@ pub fn debug_rtt_camera_projection_system(
                 );
             }
             _ => {
-                bevy::log::warn!("[RTT DEBUG] Camera {:?} has non-orthographic projection!", entity);
+                bevy::log::warn!(
+                    "[RTT DEBUG] Camera {:?} has non-orthographic projection!",
+                    entity
+                );
             }
         }
     }
@@ -688,9 +692,13 @@ pub fn propagate_render_layers_system(
             };
 
             if needs_update {
-                commands.entity(content_entity).insert(target_layer);
+                // Insert RenderLayers and make visible (content starts Hidden until RTT is ready)
+                commands.entity(content_entity).insert((
+                    target_layer,
+                    Visibility::Inherited, // Now safe to show - will render to RTT camera
+                ));
                 bevy::log::info!(
-                    "[RenderLayers] Assigned layer {} to embed content {:?} (embed {:?})",
+                    "[RenderLayers] Assigned layer {} to embed content {:?} (embed {:?}), now visible",
                     render_layer,
                     content_entity,
                     marker.embed_entity

@@ -68,7 +68,7 @@ pub struct AlightMotionPlugin;
 impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         use bevy::ecs::schedule::ApplyDeferred;
-        
+
         app.add_plugins(SmudPlugin)
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())

@@ -39,7 +39,7 @@
 //! - **Space**: Play/Pause toggle
 //! - **R**: Reset to beginning (keeps current play state)
 //! - **P**: Replay from beginning (resets and plays)
-//! - **Left/Right**: Seek backward/forward by 50ms
+//! - **Left/Right**: Step backward/forward by one frame (pauses playback)
 //! - **Up/Down**: Speed up/slow down playback
 //! - **L**: Toggle loop mode
 //! - **F1**: Toggle inspector window (requires `--features debug`)
@@ -49,6 +49,7 @@
 #[path = "video_utils.rs"]
 mod video_utils;
 
+use bevy::prelude::MeshMaterial2d;
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
 
@@ -119,6 +120,8 @@ fn main() {
             handle_input,
             update_ui,
             debug_sprites,
+            debug_unified_effects,
+            debug_position_changes,
             debug_sdf_shapes,
             toggle_debug_overlay,
             toggle_mask_debug,
@@ -193,7 +196,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 
         // Instructions
         commands.spawn((
-            Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [F5] Force Stop | [Left/Right] Seek | [Up/Down] Speed | [L] Loop"),
+            Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [F5] Force Stop | [LEFT/RIGHT] Frame Step | [UP/DOWN] Speed | [L] Loop"),
             TextFont {
                 font_size: 16.0,
                 ..default()
@@ -213,20 +216,90 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 fn debug_sprites(
     query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
 ) {
-    #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, sprite) in query.iter() {
         let global_z = global_transform.translation().z;
         println!(
-            "Sprite added: '{}' at ({:.1},{:.1}) local_z={:.2} global_z={:.2} scale=({:.2},{:.2}) alpha={:.2}",
+            "[SpawnDebug] Sprite added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2})",
             marker.label,
             transform.translation.x,
             transform.translation.y,
             transform.translation.z,
+            global_transform.translation().x,
+            global_transform.translation().y,
             global_z,
             transform.scale.x,
             transform.scale.y,
-            sprite.color.alpha(),
         );
+    }
+}
+
+/// Debug system to print UnifiedEffect sprite info once
+fn debug_unified_effects(
+    query: Query<
+        (
+            &AmLayerMarker,
+            &Transform,
+            &GlobalTransform,
+            &MeshMaterial2d<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>,
+        ),
+        Added<bevy_alight_motion::masked_sprite::UnifiedEffectMarker>,
+    >,
+    materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
+) {
+    for (marker, transform, global_transform, material_handle) in query.iter() {
+        let mesh_offset = if let Some(material) = materials.get(&material_handle.0) {
+            (material.mesh_offset.x, material.mesh_offset.y)
+        } else {
+            (0.0, 0.0)
+        };
+        println!(
+            "[SpawnDebug] UnifiedEffect added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2}) mesh_offset=({:.2},{:.2})",
+            marker.label,
+            transform.translation.x,
+            transform.translation.y,
+            transform.translation.z,
+            global_transform.translation().x,
+            global_transform.translation().y,
+            global_transform.translation().z,
+            transform.scale.x,
+            transform.scale.y,
+            mesh_offset.0,
+            mesh_offset.1,
+        );
+    }
+}
+
+/// Debug system to track position changes per frame
+fn debug_position_changes(
+    playback: Res<AmPlayback>,
+    query: Query<
+        (
+            &AmLayerMarker,
+            &Transform,
+            &GlobalTransform,
+            &MeshMaterial2d<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>,
+        ),
+        With<bevy_alight_motion::masked_sprite::UnifiedEffectMarker>,
+    >,
+    materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
+) {
+    for (marker, transform, global_transform, material_handle) in query.iter() {
+        if marker.label.contains("骨头") {
+            let gt = global_transform.translation();
+            if let Some(material) = materials.get(&material_handle.0) {
+                println!(
+                    "[PosDebug] frame_time={:.1}ms '{}' local=({:.1},{:.1}) global=({:.1},{:.1}) mesh_offset=({:.1},{:.1})",
+                    playback.current_time_ms,
+                    marker.label,
+                    transform.translation.x,
+                    transform.translation.y,
+                    gt.x,
+                    gt.y,
+                    material.mesh_offset.x,
+                    material.mesh_offset.y,
+                );
+            }
+        }
     }
 }
 
@@ -275,21 +348,29 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlay
             );
         }
 
-        // Seek backward/forward by 50ms
-        if keyboard.pressed(KeyCode::ArrowLeft) {
-            playback.current_time_ms = (playback.current_time_ms - 50.0).max(0.0);
+        // Frame-by-frame stepping (Left/Right arrows)
+        // Pauses playback and moves one frame at a time
+        let frame_duration_ms = 1000.0 / 30.0; // 30 fps
+        if keyboard.just_pressed(KeyCode::ArrowLeft) {
+            playback.playing = false;
+            playback.current_time_ms = (playback.current_time_ms - frame_duration_ms).max(0.0);
+            println!("[FrameStep] time={:.1}ms", playback.current_time_ms);
         }
-        if keyboard.pressed(KeyCode::ArrowRight) {
+        if keyboard.just_pressed(KeyCode::ArrowRight) {
+            playback.playing = false;
             playback.current_time_ms =
-                (playback.current_time_ms + 50.0).min(playback.total_time_ms);
+                (playback.current_time_ms + frame_duration_ms).min(playback.total_time_ms);
+            println!("[FrameStep] time={:.1}ms", playback.current_time_ms);
         }
 
         // Speed control (up = faster, down = slower)
         if keyboard.just_pressed(KeyCode::ArrowUp) {
             playback.speed = (playback.speed + 0.1).min(4.0);
+            println!("[Speed] {:.1}x", playback.speed);
         }
         if keyboard.just_pressed(KeyCode::ArrowDown) {
             playback.speed = (playback.speed - 0.1).max(0.1);
+            println!("[Speed] {:.1}x", playback.speed);
         }
 
         // Loop mode toggle
@@ -1020,8 +1101,10 @@ mod video_comparison_systems {
         match state.stage {
             TestStage::Initializing | TestStage::WaitingForProjectLoad => {
                 if playback.current_time_ms != 0.0 || playback.playing {
-                    println!("[COMPARISON] Resetting playback: was time={:.1}ms playing={}", 
-                        playback.current_time_ms, playback.playing);
+                    println!(
+                        "[COMPARISON] Resetting playback: was time={:.1}ms playing={}",
+                        playback.current_time_ms, playback.playing
+                    );
                 }
                 playback.playing = false;
                 playback.current_time_ms = 0.0;
@@ -1054,7 +1137,7 @@ mod video_comparison_systems {
 
             TestStage::WaitingForProjectLoad => {
                 // Pause is handled by ensure_paused_during_load in First schedule
-                
+
                 // Check if project is loaded by looking for a spawned AmProjectRoot
                 let project_loaded = project_query.iter().any(|root| root.spawned);
 
