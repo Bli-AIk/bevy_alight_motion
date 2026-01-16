@@ -71,6 +71,12 @@ pub struct AmPendingLayers {
     /// When the project is scaled to fit window, embed children need their coordinates
     /// scaled by 1/fit_scale to compensate for the root scaling.
     pub inv_fit_scale: f32,
+    /// Entity of the layers container (parent for all top-level layers).
+    /// None if container hasn't been created yet.
+    pub layers_container: Option<Entity>,
+    /// Entity of the embed contents container (parent for spatially decoupled embed content).
+    /// None if container hasn't been created yet.
+    pub embed_contents_container: Option<Entity>,
 }
 
 /// Component marking an AM layer entity.
@@ -86,6 +92,20 @@ pub struct AmLayerMarker {
 /// When present, the layer has active visual children that need to be despawned when out of time range.
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmVisualSpawned;
+
+/// Marker component for the layers container entity.
+/// This entity is created under AmProjectRoot and serves as the parent for all AM visual layers.
+/// Embed content (spatially decoupled) is NOT a Bevy child of this container, but is logically associated.
+/// Users can query for this entity to manipulate all AM layers as a group.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmLayersContainer;
+
+/// Marker component for the embed contents container entity.
+/// This entity holds all embed content (spatially decoupled elements).
+/// It has an identity Transform so embed content coordinates remain unchanged.
+/// Embed content is added as Bevy children of this container for organization.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmEmbedContentsContainer;
 
 /// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
 #[derive(Component, Debug, Clone)]

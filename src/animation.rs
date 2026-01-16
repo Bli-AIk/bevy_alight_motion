@@ -913,6 +913,9 @@ pub fn manage_layer_lifecycle_system(
 
         let white_pixel_handle = white_pixel.as_ref().map(|wp| wp.0.clone());
 
+        // Use layers_container as parent for top-level layers, fall back to project_entity
+        let parent_for_layers = pending.layers_container.unwrap_or(project_entity);
+
         // Process all pending layers (including nested ones)
         process_pending_layers(
             &mut commands,
@@ -925,7 +928,7 @@ pub fn manage_layer_lifecycle_system(
             &project.fonts,
             white_pixel_handle.as_ref(),
             global_time,
-            project_entity,
+            parent_for_layers,
             0, // root time offset
         );
 
@@ -1157,14 +1160,14 @@ fn process_pending_layers(
             fonts,
             white_pixel,
             actual_parent,
-            parent_entity, // project_entity for embed content attachment
+            pending.embed_contents_container,
             pending.inv_fit_scale,
             &pending.spawned_entities,
             global_time,
         );
 
-        bevy::log::info!(
-            "[Lifecycle] Spawning '{}' (id={}, parent={}, embed={}, z={:.6}, time={}..{}ms)",
+        bevy::log::debug!(
+            "[Lifecycle] Spawned '{}' (id={}, parent={}, embed={}, z={:.6}, time={}..{}ms)",
             layer.label,
             layer.id,
             layer.parent,
@@ -1248,9 +1251,10 @@ fn get_initial_size_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
 /// Spawn a complete entity from a PendingLayer.
 ///
 /// For spatial decoupling of embed content:
-/// - If `containing_embed_id != 0`, the entity is NOT made a Bevy child of its parent
-/// - Instead, it's attached to the project root with `AmEmbedContentMarker`
-/// - This prevents Transform inheritance from embed entity (no double rotation)
+/// - If `containing_embed_id != 0`, the entity is made a child of embed_contents_container
+/// - But its coordinates remain in world space (relative to RTT camera at origin)
+/// - The container has identity Transform so GlobalTransform equals Transform
+/// - This provides organization while maintaining correct rendering
 #[allow(clippy::too_many_arguments)]
 fn spawn_layer_entity(
     commands: &mut Commands,
@@ -1263,7 +1267,7 @@ fn spawn_layer_entity(
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
     parent_entity: Entity,
-    _project_entity: Entity, // Unused for embed content (they exist in world space)
+    embed_contents_container: Option<Entity>,
     inv_fit_scale: f32,
     spawned_entities: &HashMap<u64, Entity>,
     global_time: f32,
@@ -1690,13 +1694,15 @@ fn spawn_layer_entity(
         );
     }
 
-    // Spatial decoupling: embed content is NOT made a Bevy child of the embed entity
-    // This prevents Transform inheritance (no double rotation/scale)
+    // Spatial decoupling: embed content is made a child of embed_contents_container
+    // but NOT a child of the embed entity itself (to prevent Transform inheritance)
     if layer.containing_embed_id != 0 {
-        // This is embed content - DO NOT attach to any parent entity
-        // The content exists in world space and renders to the embed's RTT camera
-        // NOTE: We explicitly do NOT call add_child() here - this is spatial decoupling!
-        // The entity remains a root-level entity in world space.
+        // This is embed content - add to embed_contents_container for organization
+        // The container has identity Transform, so content coordinates remain unchanged
+        if let Some(container) = embed_contents_container {
+            commands.entity(container).add_child(entity);
+        }
+        // If no container, entity remains at root level (backward compatibility)
 
         // Look up the embed entity and add marker for lifecycle management
         if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
@@ -1706,10 +1712,9 @@ fn spawn_layer_entity(
                     embed_entity,
                     embed_id: layer.containing_embed_id,
                 });
-            bevy::log::info!(
-                "[Lifecycle] Embed content '{}' (entity {:?}) exists in world space, belongs to embed {} ({:?})",
+            bevy::log::debug!(
+                "[Lifecycle] Embed content '{}' added to container, belongs to embed {} ({:?})",
                 layer.label,
-                entity,
                 layer.containing_embed_id,
                 embed_entity
             );

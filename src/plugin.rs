@@ -239,14 +239,48 @@ fn spawn_loaded_projects_system(
                 pending_layers.len()
             );
 
+            // Create layers container as child of project root
+            let layers_container = commands
+                .spawn((
+                    Name::new("AmLayersContainer"),
+                    crate::scene::AmLayersContainer,
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::Inherited,
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ))
+                .id();
+            
+            commands.entity(entity).add_child(layers_container);
+
+            // Create embed contents container as SIBLING of project root (not child!)
+            // This container has identity Transform, so embed content coordinates remain unchanged
+            // Embed content uses internal canvas coordinates and renders to RTT camera
+            // It must NOT inherit the project's fit_scale Transform
+            let embed_contents_container = commands
+                .spawn((
+                    Name::new("AmEmbedContentsContainer"),
+                    crate::scene::AmEmbedContentsContainer,
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::Inherited,
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ))
+                .id();
+
             // Add the pending layers component to the project root
             // Store inverse fit scale for embed children coordinate adjustment
+            // Include layers_container entity for spawning layers as its children
             commands
                 .entity(entity)
                 .insert(crate::scene::AmPendingLayers {
                     layers: pending_layers,
                     spawned_entities: std::collections::HashMap::new(),
                     inv_fit_scale: 1.0 / fit_scale,
+                    layers_container: Some(layers_container),
+                    embed_contents_container: Some(embed_contents_container),
                 });
 
             root.spawned = true;
