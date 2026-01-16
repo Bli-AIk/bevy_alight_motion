@@ -55,7 +55,12 @@ pub struct AmAnimated {
     /// End time in milliseconds (relative to time_offset).
     pub end_time: i32,
     /// Time offset from parent scene (for embedded scenes).
+    /// Used for animation interpolation: local_time = (global - time_offset) * speed
     pub time_offset: i32,
+    /// Lifecycle offset for visibility calculation (not affected by speed).
+    /// Used for spawn/despawn: lifecycle_time = global - lifecycle_offset
+    /// For embeds: lifecycle_offset = embed_start - in_time
+    pub lifecycle_offset: i32,
     /// Location animation data.
     pub location: AmAnimatedVec3,
     /// Pivot/anchor point animation data.
@@ -122,9 +127,14 @@ pub struct AmAnimated {
 }
 
 impl AmAnimated {
-    /// Calculate local time considering speed_multiplier.
+    /// Calculate local time considering speed_multiplier (for animation interpolation).
     pub fn calc_local_time(&self, global_time: f32) -> f32 {
         (global_time - self.time_offset as f32) * self.speed_multiplier
+    }
+    
+    /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
+    pub fn calc_lifecycle_time(&self, global_time: f32) -> f32 {
+        global_time - self.lifecycle_offset as f32
     }
     
     /// Check if layer is active at the given local time.
@@ -245,8 +255,13 @@ pub fn animate_transform_system(
     for (animated, mut transform, _marker, layer_spec, sdf_parent, effect_marker, embed_content_marker) in
         query.iter_mut()
     {
-        // Calculate local time (accounting for time offset from parent scene)
-        // Calculate local_time using helper, but preserve embed_content timing adjustment
+        // Use lifecycle time for visibility check (not affected by speed)
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        if !animated.is_active(lifecycle_time) {
+            continue;
+        }
+
+        // Calculate local time for animation interpolation (accounting for speed)
         let mut local_time = animated.calc_local_time(global_time);
         
         // For embed content, add 0.5 frame offset to match AM's internal timing
@@ -255,11 +270,6 @@ pub fn animate_transform_system(
         if embed_content_marker.is_some() && animated.speed_multiplier != 0.0 {
             let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
             local_time += frame_duration_ms * 0.5;
-        }
-
-        // Check if layer is active at current local time
-        if !animated.is_active(local_time) {
-            continue;
         }
 
         // Calculate normalized time within layer duration
@@ -393,15 +403,15 @@ pub fn animate_opacity_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut sprite) in query.iter_mut() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
-        // Check if layer is active
-        if !animated.is_active(local_time) {
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        if !animated.is_active(lifecycle_time) {
             sprite.color.set_alpha(0.0);
             continue;
         }
 
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Get opacity from animation data, default to 1.0 if not specified
@@ -450,18 +460,18 @@ pub fn animate_text_opacity_system(
     }
 
     for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Check if layer is active
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             // Hide text when outside its time range
             if *visibility != Visibility::Hidden {
                 bevy::log::trace!(
                     "[TEXT] Hiding '{}' (id={}): time={:.0}, range=[{}, {}]",
                     marker.label,
                     marker.id,
-                    local_time,
+                    lifecycle_time,
                     animated.start_time,
                     animated.end_time
                 );
@@ -470,6 +480,9 @@ pub fn animate_text_opacity_system(
             text_color.0.set_alpha(0.0);
             continue;
         }
+
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
 
         // Show text when within its time range
         if *visibility == Visibility::Hidden {
@@ -514,11 +527,11 @@ pub fn animate_sdf_opacity_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Check if layer is active
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             // Hide shape when outside its time range
             *visibility = Visibility::Hidden;
             smud_shape.color.set_alpha(0.0);
@@ -528,6 +541,8 @@ pub fn animate_sdf_opacity_system(
         // Show shape when within its time range
         *visibility = Visibility::Inherited;
 
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
@@ -565,15 +580,16 @@ pub fn animate_sdf_scale_system(
     let global_time = playback.current_time_ms;
 
     for (animated, children) in parent_query.iter() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Skip if outside active time range
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             continue;
         }
 
-        // Calculate normalized time within layer duration
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Get animation scale from keyframes
@@ -649,15 +665,16 @@ pub fn animate_size_system(
             continue;
         }
 
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Skip if outside active time range
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             continue;
         }
 
-        // Calculate normalized time within layer duration
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate size (already stored as full dimensions, need half for SDF)
@@ -688,15 +705,16 @@ pub fn animate_size_system(
             continue;
         }
 
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Skip if outside active time range
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             continue;
         }
 
-        // Calculate normalized time within layer duration
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate size (full dimensions for Sprite)
@@ -969,10 +987,10 @@ fn process_pending_layers(
             None => return true, // Parent not in our list, assume active
         };
 
-        let parent_local_time = (global_time - (parent.animated.time_offset + time_offset) as f32)
-            * parent.animated.speed_multiplier;
-        let parent_active = parent_local_time >= parent.start_time as f32
-            && parent_local_time < parent.end_time as f32;
+        // Use lifecycle_offset for visibility (not affected by speed)
+        let parent_lifecycle_time = global_time - (parent.animated.lifecycle_offset + time_offset) as f32;
+        let parent_active = parent_lifecycle_time >= parent.start_time as f32
+            && parent_lifecycle_time < parent.end_time as f32;
 
         if !parent_active {
             return false; // Parent is not active
@@ -983,14 +1001,14 @@ fn process_pending_layers(
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
-        // Calculate local time with speed multiplier
-        let local_time = (global_time - (layer.animated.time_offset + time_offset) as f32)
-            * layer.animated.speed_multiplier;
+        // Calculate lifecycle time (not affected by speed) for visibility decisions
+        // lifecycle_time = global_time - lifecycle_offset
+        let lifecycle_time = global_time - (layer.animated.lifecycle_offset + time_offset) as f32;
 
         // Check if layer should be active (considering both own time range and parent's time range)
         // Note: AM uses half-open interval [start, end) for layer visibility
         let own_time_active =
-            local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
+            lifecycle_time >= layer.start_time as f32 && lifecycle_time < layer.end_time as f32;
 
         // Check if all ancestors are active
         let ancestors_active =
@@ -2354,12 +2372,14 @@ pub fn animate_unified_effect_system(
     let global_time = playback.current_time_ms;
 
     for (entity, animated, material_handle, transform, _mesh2d, embed_marker) in query.iter() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-        if !animated.is_active(local_time) {
+        // Use lifecycle time for visibility check (consistent with spawn/despawn logic)
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        if !animated.is_active(lifecycle_time) {
             continue;
         }
 
+        // Use animation local time for interpolation (affected by speed)
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Get sprite base size and scale
@@ -2675,15 +2695,16 @@ pub fn animate_rtt_blur_system(
     let global_time = playback.current_time_ms;
 
     for (animated, mut blur_effect) in query.iter_mut() {
-        // Calculate local time (handle retime="off" case)
-        let local_time = animated.calc_local_time(global_time);
-
+        // Use lifecycle time for visibility check
+        let lifecycle_time = animated.calc_lifecycle_time(global_time);
+        
         // Check if layer is active at current local time
-        if !animated.is_active(local_time) {
+        if !animated.is_active(lifecycle_time) {
             continue;
         }
 
-        // Calculate normalized time within layer duration
+        // Use animation local time for interpolation
+        let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
 
         // Check if this layer has blur animation

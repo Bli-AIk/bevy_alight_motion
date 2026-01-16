@@ -139,6 +139,8 @@ fn main() {
     {
         app.init_resource::<video_comparison_systems::ComparisonState>()
             .add_systems(Startup, video_comparison_systems::setup_comparison)
+            // Pause playback at the very beginning of each frame to prevent time advancing
+            .add_systems(First, video_comparison_systems::ensure_paused_during_load)
             .add_systems(Update, video_comparison_systems::comparison_loop);
         println!("Video comparison mode enabled: Running automated test...");
     }
@@ -1007,6 +1009,27 @@ mod video_comparison_systems {
         state.wait_frames = 0;
     }
 
+    /// Runs at the very beginning of each frame (First schedule) to prevent
+    /// playback from advancing during load. This ensures animation doesn't
+    /// "run through" the first few frames before comparison starts.
+    pub fn ensure_paused_during_load(
+        state: Res<ComparisonState>,
+        mut playback: ResMut<AmPlayback>,
+    ) {
+        // Keep playback paused and at time 0 until we're in SettingTime stage
+        match state.stage {
+            TestStage::Initializing | TestStage::WaitingForProjectLoad => {
+                if playback.current_time_ms != 0.0 || playback.playing {
+                    println!("[COMPARISON] Resetting playback: was time={:.1}ms playing={}", 
+                        playback.current_time_ms, playback.playing);
+                }
+                playback.playing = false;
+                playback.current_time_ms = 0.0;
+            }
+            _ => {}
+        }
+    }
+
     pub fn comparison_loop(
         mut state: ResMut<ComparisonState>,
         mut playback: ResMut<AmPlayback>,
@@ -1030,6 +1053,8 @@ mod video_comparison_systems {
             TestStage::Initializing => {} // Handled in setup
 
             TestStage::WaitingForProjectLoad => {
+                // Pause is handled by ensure_paused_during_load in First schedule
+                
                 // Check if project is loaded by looking for a spawned AmProjectRoot
                 let project_loaded = project_query.iter().any(|root| root.spawned);
 

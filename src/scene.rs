@@ -208,7 +208,11 @@ pub struct AmSceneConfig {
     /// Z-spacing between layers at this nesting level.
     pub z_spacing: f32,
     /// Time offset from parent scene (for embedded scenes).
+    /// Used for animation interpolation: local_time = (global - time_offset) * speed
     pub time_offset: i32,
+    /// Lifecycle offset for visibility (not affected by speed).
+    /// Used for spawn/despawn: lifecycle_time = global - lifecycle_offset
+    pub lifecycle_offset: i32,
     /// Cumulative speed multiplier from parent scenes.
     /// Local time = (global_time - time_offset) * speed_multiplier
     pub speed_multiplier: f32,
@@ -224,6 +228,7 @@ impl Default for AmSceneConfig {
             flip_y: true,
             z_spacing: 0.1, // Base spacing for root scene
             time_offset: 0,
+            lifecycle_offset: 0,
             speed_multiplier: 1.0,
             nesting_depth: 0,
         }
@@ -572,6 +577,7 @@ fn spawn_shape(
                 start_time: shape.start_time,
                 end_time: shape.end_time,
                 time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
                 location: shape.transform.location.clone(),
                 pivot: shape.transform.pivot.clone(),
                 rotation: shape.transform.rotation.clone(),
@@ -666,6 +672,7 @@ fn spawn_null(
                 start_time: null.start_time,
                 end_time: null.end_time,
                 time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
                 location: null.transform.location.clone(),
                 pivot: null.transform.pivot.clone(),
                 rotation: null.transform.rotation.clone(),
@@ -766,6 +773,7 @@ fn spawn_embed_scene(
                 start_time: embed.start_time,
                 end_time: embed.end_time,
                 time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
                 location: embed.transform.location.clone(),
                 pivot: embed.transform.pivot.clone(),
                 rotation: embed.transform.rotation.clone(),
@@ -927,6 +935,7 @@ fn spawn_image(
                 start_time: image.start_time,
                 end_time: image.end_time,
                 time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
                 location: image.transform.location.clone(),
                 pivot: image.transform.pivot.clone(),
                 rotation: image.transform.rotation.clone(),
@@ -1142,6 +1151,7 @@ fn spawn_text(
             start_time: text.start_time,
             end_time: text.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: modified_location,
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
@@ -2285,6 +2295,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             start_time: shape.start_time,
             end_time: shape.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: shape.transform.location.clone(),
             pivot: shape.transform.pivot.clone(),
             rotation: shape.transform.rotation.clone(),
@@ -2367,6 +2378,7 @@ fn collect_null(
             start_time: null.start_time,
             end_time: null.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: null.transform.location.clone(),
             pivot: null.transform.pivot.clone(),
             rotation: null.transform.rotation.clone(),
@@ -2461,18 +2473,23 @@ fn collect_embed_scene(
         config.time_offset as f32 + embed.start_time as f32
     };
     
+    // Lifecycle offset doesn't use speed - it's for visibility calculation
+    // lifecycle_offset = embed_start - in_time (raw, no speed adjustment)
+    let lifecycle_offset_with_in_time = config.lifecycle_offset as f32 + embed.start_time as f32 - in_time;
+    
     // Note: retime="off" means "don't retime" - use normal animation speed
     // It does NOT mean freeze animations. The parent's speed still applies.
     let nested_speed = effective_speed;
     
     bevy::log::info!(
-        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, nested_speed={}",
+        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
         config.time_offset,
         embed.start_time,
         in_time,
         effective_speed,
         time_offset_with_in_time,
+        lifecycle_offset_with_in_time,
         nested_speed
     );
     
@@ -2480,6 +2497,7 @@ fn collect_embed_scene(
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
         time_offset: time_offset_with_in_time as i32,
+        lifecycle_offset: lifecycle_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: nested_speed,
@@ -2503,6 +2521,7 @@ fn collect_embed_scene(
             start_time: embed.start_time,
             end_time: embed.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: embed.transform.location.clone(),
             pivot: embed.transform.pivot.clone(),
             rotation: embed.transform.rotation.clone(),
@@ -2861,6 +2880,7 @@ fn collect_text(
             start_time: text.start_time,
             end_time: text.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: modified_location, // Use modified location with wrap offset
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
@@ -2952,6 +2972,7 @@ fn collect_image(
             start_time: image.start_time,
             end_time: image.end_time,
             time_offset: config.time_offset,
+                lifecycle_offset: config.lifecycle_offset,
             location: image.transform.location.clone(),
             pivot: image.transform.pivot.clone(),
             rotation: image.transform.rotation.clone(),
