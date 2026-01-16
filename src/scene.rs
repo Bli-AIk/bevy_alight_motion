@@ -77,6 +77,9 @@ pub struct AmPendingLayers {
     /// Entity of the embed contents container (parent for spatially decoupled embed content).
     /// None if container hasn't been created yet.
     pub embed_contents_container: Option<Entity>,
+    /// Entity of the RTT cameras container (parent for EmbedSceneRttCamera entities).
+    /// None if container hasn't been created yet.
+    pub rtt_cameras_container: Option<Entity>,
 }
 
 /// Component marking an AM layer entity.
@@ -106,6 +109,12 @@ pub struct AmLayersContainer;
 /// Embed content is added as Bevy children of this container for organization.
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmEmbedContentsContainer;
+
+/// Marker component for the RTT cameras container entity.
+/// This entity holds all EmbedSceneRttCamera entities.
+/// Organized for user convenience when inspecting the scene hierarchy.
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmRttCamerasContainer;
 
 /// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
 #[derive(Component, Debug, Clone)]

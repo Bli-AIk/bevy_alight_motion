@@ -270,6 +270,20 @@ fn spawn_loaded_projects_system(
                 ))
                 .id();
 
+            // Create RTT cameras container as SIBLING of project root
+            // This container organizes all EmbedSceneRttCamera entities
+            let rtt_cameras_container = commands
+                .spawn((
+                    Name::new("AmRttCamerasContainer"),
+                    crate::scene::AmRttCamerasContainer,
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::Inherited,
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ))
+                .id();
+
             // Add the pending layers component to the project root
             // Store inverse fit scale for embed children coordinate adjustment
             // Include layers_container entity for spawning layers as its children
@@ -281,6 +295,7 @@ fn spawn_loaded_projects_system(
                     inv_fit_scale: 1.0 / fit_scale,
                     layers_container: Some(layers_container),
                     embed_contents_container: Some(embed_contents_container),
+                    rtt_cameras_container: Some(rtt_cameras_container),
                 });
 
             root.spawned = true;

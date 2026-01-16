@@ -505,7 +505,11 @@ pub fn setup_embed_scene_rtt_system(
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
     query: Query<(Entity, &NeedsEmbedSceneRtt, &Transform), Without<EmbedSceneRtt>>,
+    pending_query: Query<&crate::scene::AmPendingLayers>,
 ) {
+    // Get the RTT cameras container from AmPendingLayers
+    let rtt_cameras_container = pending_query.iter().next().and_then(|p| p.rtt_cameras_container);
+
     for (entity, needs_rtt, embed_transform) in query.iter() {
         // Log embed transform for debugging
         bevy::log::info!(
@@ -583,6 +587,11 @@ pub fn setup_embed_scene_rtt_system(
                 Transform::from_xyz(0.0, 0.0, 1000.0),
             ))
             .id();
+
+        // Add RTT camera to the container if available
+        if let Some(container) = rtt_cameras_container {
+            commands.entity(container).add_child(camera_entity);
+        }
 
         // Add EmbedSceneRtt component and remove the marker
         commands
