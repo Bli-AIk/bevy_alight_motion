@@ -307,6 +307,12 @@ pub fn animate_transform_system(
                 )
             };
 
+            // Apply RTT alignment correction for embed content at animation start
+            // This corrects a small positioning offset that appears in early animation frames
+            if embed_content_marker.is_some() && layer_time < 0.02 {
+                bx -= 5.0;
+            }
+
             // Debug: log position calculation for specific layers (trace level)
             if animated.layer_id == 347000343 {
                 trace!(
