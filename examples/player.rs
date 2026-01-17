@@ -271,8 +271,8 @@ fn debug_unified_effects(
 
 /// Debug system to track position changes per frame
 fn debug_position_changes(
-    playback: Res<AmPlayback>,
-    query: Query<
+    _playback: Res<AmPlayback>,
+    _query: Query<
         (
             &AmLayerMarker,
             &Transform,
@@ -281,8 +281,11 @@ fn debug_position_changes(
         ),
         With<bevy_alight_motion::masked_sprite::UnifiedEffectMarker>,
     >,
-    materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
+    _materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
 ) {
+    // Debug output disabled to reduce log spam
+    // Enable by uncommenting the following:
+    /*
     for (marker, transform, global_transform, material_handle) in query.iter() {
         if marker.label.contains("骨头") {
             let gt = global_transform.translation();
@@ -301,6 +304,7 @@ fn debug_position_changes(
             }
         }
     }
+    */
 }
 
 /// Debug system to print SDF shape info once

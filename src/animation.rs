@@ -276,7 +276,7 @@ pub fn animate_transform_system(
         // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
         if embed_content_marker.is_some() && animated.speed_multiplier != 0.0 {
             let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
-            local_time += frame_duration_ms * 0.5;
+            local_time += frame_duration_ms * 0.35;  // Adjusted based on testing
         }
 
         // Calculate normalized time within layer duration
@@ -291,7 +291,8 @@ pub fn animate_transform_system(
         };
 
         // Interpolate location and convert from AM to Bevy coordinates
-        if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
+        // Use extrapolation for location to improve accuracy before first keyframe
+        if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
             let (mut bx, mut by) = if animated.has_parent {
                 // For layers with parents, use local coordinates
                 // Only flip Y axis (AM Y-down -> Bevy Y-up)
@@ -305,6 +306,24 @@ pub fn animate_transform_system(
                     animated.canvas_height / 2.0 - loc[1],
                 )
             };
+
+            // Debug: log position calculation for specific layers (trace level)
+            if animated.layer_id == 347000343 {
+                trace!(
+                    "[PosCalc] layer={} is_embed_content={} speed_mul={:.2} time_offset={} | global_time={:.1} local_time={:.1} layer_time={:.4} | AM_loc=({:.2},{:.2}) canvas=({:.0},{:.0}) has_parent={} | bevy=({:.2},{:.2})",
+                    animated.layer_id,
+                    embed_content_marker.is_some(),
+                    animated.speed_multiplier,
+                    animated.time_offset,
+                    global_time,
+                    local_time,
+                    layer_time,
+                    loc[0], loc[1],
+                    animated.canvas_width, animated.canvas_height,
+                    animated.has_parent,
+                    bx, by
+                );
+            }
 
             // Apply pivot offset and compensation
             // AM transforms around (location + pivot), Bevy transforms around entity origin
@@ -735,22 +754,37 @@ pub fn animate_size_system(
 
 /// Interpolate a Vec3 property at normalized time t.
 pub fn interpolate_vec3(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
+    interpolate_vec3_internal(prop, t, false)
+}
+
+/// Interpolate a Vec3 property at normalized time t with optional extrapolation.
+/// When extrapolate is true, linearly extrapolates before the first keyframe.
+pub fn interpolate_vec3_with_extrapolation(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
+    interpolate_vec3_internal(prop, t, true)
+}
+
+fn interpolate_vec3_internal(prop: &AmAnimatedVec3, t: f32, extrapolate: bool) -> Option<[f32; 3]> {
     if prop.keyframes.is_empty() {
         return prop.value;
     }
 
-    let (kf_prev, kf_next, local_t) = find_keyframes(&prop.keyframes, t);
+    let (kf_prev, kf_next, local_t) = find_keyframes_internal(&prop.keyframes, t, extrapolate);
 
     let v_prev = parse_keyframe_vec3(&kf_prev.value).unwrap_or([0.0, 0.0, 0.0]);
     let v_next = parse_keyframe_vec3(&kf_next.value).unwrap_or(v_prev);
 
     // Easing is defined on the "target" keyframe (describes how to arrive at it)
-    let easing = kf_next
-        .easing
-        .as_ref()
-        .map(|e| Easing::parse(e))
-        .unwrap_or_default();
-    let eased_t = easing.evaluate(local_t);
+    // For extrapolation (local_t < 0), use linear interpolation
+    let eased_t = if local_t < 0.0 {
+        local_t
+    } else {
+        let easing = kf_next
+            .easing
+            .as_ref()
+            .map(|e| Easing::parse(e))
+            .unwrap_or_default();
+        easing.evaluate(local_t)
+    };
 
     Some([
         lerp(v_prev[0], v_next[0], eased_t),
@@ -771,12 +805,17 @@ pub fn interpolate_vec2(prop: &AmAnimatedVec2, t: f32) -> Option<[f32; 2]> {
     let v_next = parse_keyframe_vec2(&kf_next.value).unwrap_or(v_prev);
 
     // Easing is defined on the "target" keyframe (describes how to arrive at it)
-    let easing = kf_next
-        .easing
-        .as_ref()
-        .map(|e| Easing::parse(e))
-        .unwrap_or_default();
-    let eased_t = easing.evaluate(local_t);
+    // For extrapolation (local_t < 0), use linear interpolation
+    let eased_t = if local_t < 0.0 {
+        local_t
+    } else {
+        let easing = kf_next
+            .easing
+            .as_ref()
+            .map(|e| Easing::parse(e))
+            .unwrap_or_default();
+        easing.evaluate(local_t)
+    };
 
     Some([
         lerp(v_prev[0], v_next[0], eased_t),
@@ -796,18 +835,28 @@ pub fn interpolate_float(prop: &AmAnimatedFloat, t: f32) -> Option<f32> {
     let v_next: f32 = kf_next.value.parse().unwrap_or(v_prev);
 
     // Easing is defined on the "target" keyframe (describes how to arrive at it)
-    let easing = kf_next
-        .easing
-        .as_ref()
-        .map(|e| Easing::parse(e))
-        .unwrap_or_default();
-    let eased_t = easing.evaluate(local_t);
+    // For extrapolation (local_t < 0), use linear interpolation
+    let eased_t = if local_t < 0.0 {
+        local_t
+    } else {
+        let easing = kf_next
+            .easing
+            .as_ref()
+            .map(|e| Easing::parse(e))
+            .unwrap_or_default();
+        easing.evaluate(local_t)
+    };
 
     Some(lerp(v_prev, v_next, eased_t))
 }
 
 /// Find the surrounding keyframes for a given time.
 fn find_keyframes(keyframes: &[AmKeyframe], t: f32) -> (&AmKeyframe, &AmKeyframe, f32) {
+    find_keyframes_internal(keyframes, t, false)
+}
+
+/// Find the surrounding keyframes for a given time with optional extrapolation.
+fn find_keyframes_internal(keyframes: &[AmKeyframe], t: f32, extrapolate: bool) -> (&AmKeyframe, &AmKeyframe, f32) {
     // Sort keyframes by time (in case they're not sorted)
     let mut sorted: Vec<_> = keyframes.iter().collect();
     sorted.sort_by(|a, b| {
@@ -839,6 +888,18 @@ fn find_keyframes(keyframes: &[AmKeyframe], t: f32) -> (&AmKeyframe, &AmKeyframe
 
     // Before first keyframe
     if t < sorted[0].time {
+        if extrapolate && sorted.len() >= 2 {
+            // Extrapolate backwards using first two keyframes
+            let kf_first = sorted[0];
+            let kf_second = sorted[1];
+            let span = kf_second.time - kf_first.time;
+            let local_t = if span > 0.0 {
+                (t - kf_first.time) / span  // Will be negative
+            } else {
+                0.0
+            };
+            return (kf_first, kf_second, local_t);
+        }
         return (sorted[0], sorted[0], 0.0);
     }
 
@@ -1331,7 +1392,8 @@ fn spawn_layer_entity(
         };
 
     // Calculate initial position using animation interpolation
-    let initial_position = if let Some(loc) = interpolate_vec3(&animated.location, layer_time) {
+    // Use extrapolation for location to improve accuracy before first keyframe
+    let initial_position = if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
         let (mut bx, mut by) = if animated.has_parent {
             // For layers with parents, use local coordinates
             (loc[0], -loc[1])
@@ -3009,10 +3071,10 @@ pub fn animate_unified_effect_system(
                 let center_offset_x = (min_x + max_x) / 2.0;
                 let center_offset_y = (min_y + max_y) / 2.0;
 
-                // Debug: log stretch calculation details
+                // Debug: log stretch calculation details (trace level)
                 if stretch_px > 0.1 {
                     let is_embed_content = animated.embed_offset != Vec2::ZERO;
-                    info!(
+                    trace!(
                         "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1} neg_h={} base_size={:.1}",
                         animated.layer_id,
                         is_embed_content,
