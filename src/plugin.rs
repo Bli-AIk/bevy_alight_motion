@@ -91,6 +91,11 @@ impl Plugin for AlightMotionPlugin {
                     manage_layer_lifecycle_system, // Spawn/despawn visuals based on time
                     // Flush commands so newly spawned entities are available for animation systems
                     ApplyDeferred,
+                    // RTT setup must happen before animation systems to ensure proper rendering
+                    crate::effects::setup_embed_scene_rtt_system,
+                    ApplyDeferred,
+                    // Propagate RenderLayers immediately after RTT setup
+                    crate::effects::propagate_render_layers_system,
                     animate_transform_system,
                     animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation

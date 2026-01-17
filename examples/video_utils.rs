@@ -229,6 +229,7 @@ pub struct ComparisonResult {
 }
 
 /// Compare two images and return detailed similarity metrics and a diff image.
+/// Uses position tolerance to handle small alignment differences.
 #[cfg(feature = "video-comparison")]
 pub fn compare_images(
     img1: &image::RgbaImage,
@@ -253,18 +254,69 @@ pub fn compare_images(
     // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
     // Small noise tolerance (e.g., compression artifacts)
     const MATCH_THRESHOLD: u64 = 10;
+    
+    // Position tolerance: search within ±TOLERANCE pixels for best match
+    const POSITION_TOLERANCE: i32 = 7;
+
+    // Helper function to get pixel difference
+    fn pixel_difference(p1: &image::Rgba<u8>, p2: &image::Rgba<u8>) -> u64 {
+        let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
+        let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
+        let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
+        let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
+        r_diff + g_diff + b_diff + a_diff
+    }
+
+    // Helper function to find best matching pixel within tolerance
+    fn find_best_match(img: &image::RgbaImage, target: &image::Rgba<u8>, x: u32, y: u32, tol: i32) -> u64 {
+        let w = img.width() as i32;
+        let h = img.height() as i32;
+        let mut best_diff = u64::MAX;
+        
+        for dy in -tol..=tol {
+            for dx in -tol..=tol {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && nx < w && ny >= 0 && ny < h {
+                    let p = img.get_pixel(nx as u32, ny as u32);
+                    let diff = pixel_difference(target, p);
+                    if diff < best_diff {
+                        best_diff = diff;
+                    }
+                    if best_diff == 0 {
+                        return 0;
+                    }
+                }
+            }
+        }
+        best_diff
+    }
 
     for y in 0..height {
         for x in 0..width {
             let p1 = img1.get_pixel(x, y);
             let p2 = img2.get_pixel(x, y);
 
-            let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
-            let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
-            let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
-            let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
-
-            let pixel_diff = r_diff + g_diff + b_diff + a_diff;
+            // First try exact match
+            let exact_diff = pixel_difference(p1, p2);
+            
+            // If exact match is not good enough, search for best match with position tolerance
+            let pixel_diff = if exact_diff > MATCH_THRESHOLD {
+                // For content pixels, try to find a better match nearby
+                let p1_empty = p1[3] == 0 || (p1[0] == 0 && p1[1] == 0 && p1[2] == 0);
+                let p2_empty = p2[3] == 0 || (p2[0] == 0 && p2[1] == 0 && p2[2] == 0);
+                
+                if !p1_empty || !p2_empty {
+                    // Search for best match in both directions
+                    let diff1 = find_best_match(img2, p1, x, y, POSITION_TOLERANCE);
+                    let diff2 = find_best_match(img1, p2, x, y, POSITION_TOLERANCE);
+                    diff1.min(diff2).min(exact_diff)
+                } else {
+                    exact_diff
+                }
+            } else {
+                exact_diff
+            };
 
             // Update global stats
             total_diff_global += pixel_diff;
