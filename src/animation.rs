@@ -757,10 +757,11 @@ pub fn interpolate_vec3(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
     interpolate_vec3_internal(prop, t, false)
 }
 
-/// Interpolate a Vec3 property at normalized time t with optional extrapolation.
-/// When extrapolate is true, linearly extrapolates before the first keyframe.
+/// Interpolate a Vec3 property at normalized time t.
+/// Before the first keyframe, holds the first keyframe value (AM behavior).
 pub fn interpolate_vec3_with_extrapolation(prop: &AmAnimatedVec3, t: f32) -> Option<[f32; 3]> {
-    interpolate_vec3_internal(prop, t, true)
+    // AM behavior: hold first keyframe value before first keyframe, don't extrapolate
+    interpolate_vec3_internal(prop, t, false)
 }
 
 fn interpolate_vec3_internal(prop: &AmAnimatedVec3, t: f32, extrapolate: bool) -> Option<[f32; 3]> {
