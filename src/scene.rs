@@ -502,10 +502,10 @@ fn spawn_shape(
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
             || shape.stroke.as_ref().is_some_and(|s| {
+                // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
                 s.size.as_ref().is_some_and(|sz| {
-                    // Check if stroke has a value > 0 or has keyframes
                     sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
-                })
+                }) || s.end_size > 0.0
             }));
 
     // Calculate anchor and position compensation for non-SDF shapes
@@ -532,7 +532,7 @@ fn spawn_shape(
     let layer_spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
         let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
-        // Get initial stroke width (use static value or first keyframe value)
+        // Get initial stroke width: first check <size> element, then fall back to @end-size attribute
         let stroke_width = stroke
             .size
             .as_ref()
@@ -541,7 +541,14 @@ fn spawn_shape(
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or(0.0);
+            .unwrap_or_else(|| {
+                // Fall back to @end-size attribute if no <size> element
+                if stroke.end_size > 0.0 {
+                    stroke.end_size
+                } else {
+                    0.0
+                }
+            });
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -1530,21 +1537,30 @@ fn get_stroke_width_animation(
 ) -> crate::schema::AmAnimatedFloat {
     use crate::schema::AmAnimatedFloat;
 
-    if let Some(stroke) = stroke
-        && let Some(ref size) = stroke.size
-    {
-        // Check if there are keyframes
-        if !size.keyframes.is_empty() {
+    if let Some(stroke) = stroke {
+        // First check for <size> element (animated or static)
+        if let Some(ref size) = stroke.size {
+            // Check if there are keyframes
+            if !size.keyframes.is_empty() {
+                return AmAnimatedFloat {
+                    value: size.value,
+                    keyframes: size.keyframes.clone(),
+                };
+            }
+            // Static value only
             return AmAnimatedFloat {
                 value: size.value,
-                keyframes: size.keyframes.clone(),
+                keyframes: Vec::new(),
             };
         }
-        // Static value only
-        return AmAnimatedFloat {
-            value: size.value,
-            keyframes: Vec::new(),
-        };
+
+        // Fall back to @end-size attribute if no <size> element
+        if stroke.end_size > 0.0 {
+            return AmAnimatedFloat {
+                value: Some(stroke.end_size),
+                keyframes: Vec::new(),
+            };
+        }
     }
 
     // Default: no stroke width
@@ -2234,10 +2250,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let needs_sdf = shape.fill_type == "color"
         && (shape.shape_type == ".circle"
             || shape.stroke.as_ref().is_some_and(|s| {
+                // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
                 s.size.as_ref().is_some_and(|sz| {
-                    // Check if stroke has a value > 0 or has keyframes
                     sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
-                })
+                }) || s.end_size > 0.0
             }));
 
     // Calculate anchor and position compensation for non-SDF shapes
@@ -2269,7 +2285,7 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
     let spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
         let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
-        // Get initial stroke width (use static value or first keyframe value)
+        // Get initial stroke width: first check <size> element, then fall back to @end-size attribute
         let stroke_width = stroke
             .size
             .as_ref()
@@ -2278,7 +2294,14 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or(0.0);
+            .unwrap_or_else(|| {
+                // Fall back to @end-size attribute if no <size> element
+                if stroke.end_size > 0.0 {
+                    stroke.end_size
+                } else {
+                    0.0
+                }
+            });
         let stroke_color_value = stroke
             .color
             .as_ref()

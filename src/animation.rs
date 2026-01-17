@@ -538,13 +538,11 @@ pub fn animate_text_opacity_system(
 /// Only skips updates when force_stopped is true (for inspector editing).
 pub fn animate_sdf_opacity_system(
     playback: Res<AmPlayback>,
-    mut query: Query<(
-        &AmAnimated,
-        &mut bevy_smud::SmudShape,
-        &mut Visibility,
-        &AmLayerMarker,
-    )>,
+    parent_query: Query<(&AmAnimated, &Children, &AmLayerMarker), With<AmSdfShapeParent>>,
+    mut sdf_query: Query<(&mut bevy_smud::SmudShape, &AmSdfParams, &mut Visibility)>,
 ) {
+    use crate::sdf::repack_with_alpha;
+
     // Skip animation only when force stopped (for inspector editing)
     if playback.force_stopped {
         return;
@@ -552,30 +550,39 @@ pub fn animate_sdf_opacity_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, mut smud_shape, mut visibility, _marker) in query.iter_mut() {
+    for (animated, children, _marker) in parent_query.iter() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
 
-        // Check if layer is active
-        if !animated.is_active(lifecycle_time) {
-            // Hide shape when outside its time range
-            *visibility = Visibility::Hidden;
-            smud_shape.color.set_alpha(0.0);
-            continue;
-        }
-
-        // Show shape when within its time range
-        *visibility = Visibility::Inherited;
-
-        // Use animation local time for interpolation
+        // Get opacity value for this parent
         let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
-
-        // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-        // Multiply by base_alpha to preserve original fill color transparency
-        let final_alpha = opacity * animated.base_alpha;
-        smud_shape.color.set_alpha(final_alpha.clamp(0.0, 1.0));
+
+        // Update all SDF children
+        for child in children.iter() {
+            if let Ok((mut smud_shape, sdf_params, mut visibility)) = sdf_query.get_mut(child) {
+                // Check if layer is active
+                if !animated.is_active(lifecycle_time) {
+                    // Hide shape when outside its time range
+                    *visibility = Visibility::Hidden;
+                    smud_shape.color.set_alpha(0.0);
+                    smud_shape.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                    continue;
+                }
+
+                // Show shape when within its time range
+                *visibility = Visibility::Inherited;
+
+                // Multiply by base_alpha to preserve original fill color transparency
+                let final_alpha = opacity * animated.base_alpha;
+                smud_shape.color.set_alpha(final_alpha.clamp(0.0, 1.0));
+
+                // Also update stroke alpha: base_stroke_alpha * opacity
+                let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
+                smud_shape.params.w = repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+            }
+        }
     }
 }
 
@@ -2541,6 +2548,8 @@ fn spawn_sdf_visual(
 
     bevy::log::trace!("[SDF] Spawning {} with join='{}'", shape_type, stroke_join);
 
+    // Get base stroke alpha for animation
+    let base_stroke_alpha = stroke.to_srgba().alpha;
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);
 
@@ -2590,6 +2599,7 @@ fn spawn_sdf_visual(
                 base_half_height: target_half_height,
                 stroke_width,
                 packed_stroke,
+                base_stroke_alpha,
                 base_pivot_x: pivot_x,
                 base_pivot_y: pivot_y,
             },
@@ -2631,6 +2641,8 @@ pub struct AmSdfParams {
     pub stroke_width: f32,
     /// Packed stroke color (stored to preserve during updates)
     pub packed_stroke: f32,
+    /// Base stroke alpha (0.0-1.0) from original stroke color
+    pub base_stroke_alpha: f32,
     /// Base pivot X in pixels
     pub base_pivot_x: f32,
     /// Base pivot Y in pixels

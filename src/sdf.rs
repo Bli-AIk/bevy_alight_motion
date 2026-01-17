@@ -172,6 +172,17 @@ pub fn pack_color(color: Color) -> f32 {
     f32::from_bits(packed)
 }
 
+/// Repack a color with a new alpha value.
+/// Takes a packed color (f32 bits representing 0xRRGGBBAA) and returns new packed color with modified alpha.
+pub fn repack_with_alpha(packed: f32, new_alpha: f32) -> f32 {
+    let bits = packed.to_bits();
+    // Extract RGB (upper 24 bits)
+    let rgb = bits & 0xFFFFFF00;
+    // New alpha as u8
+    let a = ((new_alpha.clamp(0.0, 1.0) * 255.0) as u32) & 0xFF;
+    f32::from_bits(rgb | a)
+}
+
 /// Create a parametric box SDF that uses params for dimensions.
 /// The shader reads params.x as half_width and params.y as half_height.
 /// This allows dynamic resizing without recreating the shader.
