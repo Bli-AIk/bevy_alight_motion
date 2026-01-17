@@ -512,7 +512,7 @@ pub fn setup_embed_scene_rtt_system(
 
     for (entity, needs_rtt, embed_transform) in query.iter() {
         // Log embed transform for debugging
-        bevy::log::info!(
+        bevy::log::trace!(
             "[RTT] Embed {:?} transform: scale=({:.3},{:.3}), pos=({:.1},{:.1})",
             entity,
             embed_transform.scale.x,
@@ -615,7 +615,7 @@ pub fn setup_embed_scene_rtt_system(
                 RenderLayers::layer(0),
             ));
 
-        bevy::log::info!(
+        bevy::log::trace!(
             "[RTT] Set up RTT for embedScene {:?}: layer={}, size={}x{}",
             entity,
             render_layer,
@@ -641,7 +641,7 @@ pub fn debug_rtt_camera_projection_system(
     for (entity, _rtt_cam, projection) in camera_query.iter() {
         match projection {
             Projection::Orthographic(ortho) => {
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
                     entity,
                     ortho.scaling_mode,
@@ -681,7 +681,7 @@ pub fn propagate_render_layers_system(
     unsafe {
         FRAME_COUNT += 1;
         if FRAME_COUNT % 300 == 1 {
-            bevy::log::info!(
+            bevy::log::trace!(
                 "[RenderLayers] embeds with RTT: {}, content entities: {}",
                 embed_layers.len(),
                 content_query.iter().count()
@@ -706,7 +706,7 @@ pub fn propagate_render_layers_system(
                     target_layer,
                     Visibility::Inherited, // Now safe to show - will render to RTT camera
                 ));
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[RenderLayers] Assigned layer {} to embed content {:?} (embed {:?}), now visible",
                     render_layer,
                     content_entity,
