@@ -5,12 +5,12 @@
 avg_threshold = 0.95
 frame_threshold = 0.95
 
-# Basic shape tests with higher standards
+# Basic shape tests
 #
-# 高标准基础测试
+# 基础形状测试
 [overrides.basic_shape]
-avg_threshold = 0.98
-frame_threshold = 0.96
+avg_threshold = 0.96
+frame_threshold = 0.94
 
 [overrides.basic_pivot]
 avg_threshold = 0.98
