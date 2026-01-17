@@ -35,12 +35,17 @@ let fill_col = vec4<f32>(input.color.rgb, input.color.a * fill_alpha);
 
 // Only process stroke if stroke_width > 0
 if (stroke_width > 0.0) {
-    // Unpack stroke color from params.w
+    // Unpack stroke color from params.w (stored as sRGB, need to convert to linear)
     let stroke_bits = bitcast<u32>(input.params.w);
-    let stroke_r = f32((stroke_bits >> 24u) & 0xFFu) / 255.0;
-    let stroke_g = f32((stroke_bits >> 16u) & 0xFFu) / 255.0;
-    let stroke_b = f32((stroke_bits >> 8u) & 0xFFu) / 255.0;
+    let stroke_r_srgb = f32((stroke_bits >> 24u) & 0xFFu) / 255.0;
+    let stroke_g_srgb = f32((stroke_bits >> 16u) & 0xFFu) / 255.0;
+    let stroke_b_srgb = f32((stroke_bits >> 8u) & 0xFFu) / 255.0;
     let stroke_a = f32(stroke_bits & 0xFFu) / 255.0;
+    
+    // Convert sRGB to linear (using gamma 2.2 approximation)
+    let stroke_r = pow(stroke_r_srgb, 2.2);
+    let stroke_g = pow(stroke_g_srgb, 2.2);
+    let stroke_b = pow(stroke_b_srgb, 2.2);
     let stroke_color = vec4<f32>(stroke_r, stroke_g, stroke_b, stroke_a);
 
     // Stroke logic (Centered) with adaptive AA

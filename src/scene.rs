@@ -543,8 +543,11 @@ fn spawn_shape(
             })
             .unwrap_or_else(|| {
                 // Fall back to @end-size attribute if no <size> element
+                // Note: end-size appears to use a different scale than <size> element
+                // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
+                // Scale by ~20x to match <size> element behavior
                 if stroke.end_size > 0.0 {
-                    stroke.end_size
+                    stroke.end_size * 1.5
                 } else {
                     0.0
                 }
@@ -2296,8 +2299,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
             })
             .unwrap_or_else(|| {
                 // Fall back to @end-size attribute if no <size> element
+                // Note: end-size appears to use a different scale than <size> element
+                // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
                 if stroke.end_size > 0.0 {
-                    stroke.end_size
+                    stroke.end_size * 1.5
                 } else {
                     0.0
                 }
