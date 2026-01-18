@@ -282,12 +282,13 @@ pub fn animate_transform_system(
         // Calculate normalized time within layer duration
         let layer_time = animated.calc_layer_time(local_time);
 
-        // Get current scale for pivot compensation
-        // For SDF shapes and effect sprites, scale is handled separately, so use (1, 1)
+        // Get current scale for pivot compensation and flip detection
+        // For SDF shapes and effect sprites, magnitude is handled separately, but we need sign for flipping
+        let actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
         let current_scale = if sdf_parent.is_some() || effect_marker.is_some() {
             [1.0_f32, 1.0_f32]
         } else {
-            interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
+            actual_scale
         };
 
         // Interpolate location and convert from AM to Bevy coordinates
@@ -345,6 +346,17 @@ pub fn animate_transform_system(
                     // Simply add pivot offset (Y flip for Bevy coordinates)
                     bx += pivot_x;
                     by -= pivot_y;
+                    
+                    // Debug: log SDF parent position
+                    if animated.layer_id == 340 && pivot_y != 0.0 {
+                        bevy::log::info!(
+                            "[SdfParent] layer_id={} loc=({:.1},{:.1}) pivot=({:.1},{:.1}) -> bevy=({:.1},{:.1})",
+                            animated.layer_id,
+                            loc[0], loc[1],
+                            pivot_x, pivot_y,
+                            bx, by
+                        );
+                    }
                 } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
                     // Embed scenes: need rotation-aware pivot compensation
                     // In AM, objects rotate/scale around (location + pivot)
@@ -397,8 +409,11 @@ pub fn animate_transform_system(
 
             // Apply anchor offset compensation for SpriteShape with non-center pivot.
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
-            bx += animated.anchor_offset.x;
-            by += animated.anchor_offset.y;
+            // NOTE: Skip for SDF shapes - their pivot is already handled above via `by -= pivot_y`
+            if sdf_parent.is_none() {
+                bx += animated.anchor_offset.x;
+                by += animated.anchor_offset.y;
+            }
 
             // For embed content: coordinates are already in embed's internal canvas space
             // They render to RTT camera at origin - no scaling needed for position
@@ -414,9 +429,15 @@ pub fn animate_transform_system(
 
         // Interpolate scale
         // Skip for SDF shapes (handled by animate_sdf_scale)
-        // Skip for effect sprites (scale is baked into mesh, handled by animate_unified_effect)
+        // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
         if sdf_parent.is_none() && effect_marker.is_none() {
             transform.scale = Vec3::new(current_scale[0], current_scale[1], 1.0);
+        } else if effect_marker.is_some() {
+            // Effect sprites: apply only the sign of scale for flipping
+            // The magnitude is already baked into the mesh by animate_unified_effect_system
+            let sign_x = actual_scale[0].signum();
+            let sign_y = actual_scale[1].signum();
+            transform.scale = Vec3::new(sign_x, sign_y, 1.0);
         }
     }
 }
@@ -651,8 +672,8 @@ pub fn animate_sdf_opacity_system(
 /// to simulate scaling around the pivot.
 pub fn animate_sdf_scale_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
-    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform)>,
+    parent_query: Query<(&AmAnimated, &Children, &Transform, &GlobalTransform), (With<AmSdfShapeParent>, Without<AmSdfParams>)>,
+    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform, &GlobalTransform)>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
     if playback.force_stopped {
@@ -661,7 +682,7 @@ pub fn animate_sdf_scale_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, children) in parent_query.iter() {
+    for (animated, children, parent_local, parent_global) in parent_query.iter() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
 
@@ -687,7 +708,7 @@ pub fn animate_sdf_scale_system(
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            if let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) {
+            if let Ok((material_handle, sdf_params, mut transform, child_global)) = sdf_query.get_mut(child) {
                 // Calculate scaled dimensions
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
@@ -713,8 +734,32 @@ pub fn animate_sdf_scale_system(
                 // Center position = -Pivot * Scale
                 // Account for Y-flip: AM pivot_y is down (+), Bevy Y is up
                 // So translation.y = pivot_y * scale_y (positive pivot_y moves center UP relative to pivot)
-                transform.translation.x = -sdf_params.base_pivot_x * anim_scale[0];
-                transform.translation.y = sdf_params.base_pivot_y * anim_scale[1];
+                let new_x = -sdf_params.base_pivot_x * anim_scale[0];
+                let new_y = sdf_params.base_pivot_y * anim_scale[1];
+                
+                // Debug: log SDF GlobalTransform and local
+                if sdf_params.base_pivot_y != 0.0 && animated.layer_id == 340 {
+                    let parent_local_pos = parent_local.translation;
+                    let parent_global_pos = parent_global.translation();
+                    let child_global_pos = child_global.translation();
+                    let expected_global_y = parent_global_pos.y + new_y;
+                    let screen_y = 480.0 - child_global_pos.y;
+                    // Calculate the "ancestor offset" = parent_global - parent_local
+                    let ancestor_offset_y = parent_global_pos.y - parent_local_pos.y;
+                    bevy::log::info!(
+                        "[SdfGlobal] layer_id={} parent_local=({:.1},{:.1}) parent_global=({:.1},{:.1}) ancestor_offset_y={:.1} child_local=({:.1},{:.1}) child_global=({:.1},{:.1}) screen_y={:.1}",
+                        animated.layer_id,
+                        parent_local_pos.x, parent_local_pos.y,
+                        parent_global_pos.x, parent_global_pos.y,
+                        ancestor_offset_y,
+                        transform.translation.x, transform.translation.y,
+                        child_global_pos.x, child_global_pos.y,
+                        screen_y
+                    );
+                }
+                
+                transform.translation.x = new_x;
+                transform.translation.y = new_y;
             }
         }
     }
@@ -1328,18 +1373,26 @@ fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) ->
 
 /// Get initial scale from animated scale property.
 /// For SDF shapes, the initial scale is stored in the animated data, not the transform.
+/// When keyframes exist but all are before t=0 (negative time), use the last keyframe value.
 fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
     if let Some(val) = &prop.value {
         (val[0], val[1])
     } else if !prop.keyframes.is_empty() {
-        // Sort keyframes by time and get the first one
+        // Sort keyframes by time
         let mut sorted: Vec<_> = prop.keyframes.iter().collect();
         sorted.sort_by(|a, b| {
             a.time
                 .partial_cmp(&b.time)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        parse_keyframe_vec2(&sorted[0].value)
+        // If all keyframes are before t=0, use the last keyframe (closest to t=0)
+        // Otherwise, use the first keyframe (traditional behavior for t=0 being at or after first kf)
+        let target_kf = if sorted.last().map_or(false, |kf| kf.time <= 0.0) {
+            sorted.last().unwrap()
+        } else {
+            sorted.first().unwrap()
+        };
+        parse_keyframe_vec2(&target_kf.value)
             .map(|v| (v[0], v[1]))
             .unwrap_or((1.0, 1.0))
     } else {
@@ -1442,11 +1495,13 @@ fn spawn_layer_entity(
     let layer_time = animated.calc_layer_time(local_time);
 
     // Get current scale for pivot compensation
+    // For effect layers and SDF shapes, magnitude is baked into mesh, but we need the sign for flipping
+    let actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
     let current_scale =
         if matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) || needs_effect {
             [1.0_f32, 1.0_f32]
         } else {
-            interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0])
+            actual_scale
         };
 
     // Calculate initial position using animation interpolation
@@ -1508,8 +1563,11 @@ fn spawn_layer_entity(
         }
 
         // Apply anchor offset compensation for SpriteShape with non-center pivot
-        bx += animated.anchor_offset.x;
-        by += animated.anchor_offset.y;
+        // NOTE: Skip for SDF shapes - their pivot is already handled above via `by -= pivot_y`
+        if !matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
+            bx += animated.anchor_offset.x;
+            by += animated.anchor_offset.y;
+        }
 
         Vec3::new(bx, by, layer.transform.translation.z)
     } else {
@@ -1527,7 +1585,9 @@ fn spawn_layer_entity(
     // Calculate initial scale
     let initial_scale =
         if needs_effect || matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
-            Vec3::ONE
+            // For effect layers and SDF shapes, keep only the sign of scale for flipping
+            // The magnitude is baked into the mesh
+            Vec3::new(actual_scale[0].signum(), actual_scale[1].signum(), 1.0)
         } else {
             Vec3::new(current_scale[0], current_scale[1], 1.0)
         };
