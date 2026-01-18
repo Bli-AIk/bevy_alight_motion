@@ -1741,7 +1741,7 @@ fn spawn_layer_entity(
                 let world_w = orig_width * rot_cos + orig_height * rot_sin;
                 0.8 * world_w + 0.2 * orig_width
             };
-            let base_divisor = base_size / 5.12;
+            let base_divisor = base_size / 4.2;  // Testing different multiplier
             let stretch_factor = 1.0 + stretch_px / base_divisor;
 
             let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
@@ -1784,6 +1784,9 @@ fn spawn_layer_entity(
                 min_y = min_y.min(ty);
                 max_y = max_y.max(ty);
             }
+
+            // No padding - the calculated bounds should be exact for stretch effect
+            // Padding would cause sample_uv to go outside [0,1] range
 
             let center_offset_x = (min_x + max_x) / 2.0;
             let center_offset_y = (min_y + max_y) / 2.0;
@@ -2014,14 +2017,17 @@ fn add_visual_components(
         blur_params: Option<Vec4>,
         palette_params: Option<&AmPaletteMapParams>,
         mesh_offset: Option<Vec4>,
+        mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
     ) -> Handle<UnifiedEffectMaterial> {
+        // Use mesh_size if provided (for stretch bounds), otherwise use original size
+        let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
         let mut material = UnifiedEffectMaterial {
             color,
             effect_flags: Vec4::ZERO,
             mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
             wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
             stretch_params: Vec4::ZERO,
-            original_size: Vec4::new(width, height, width, height),
+            original_size: Vec4::new(width, height, mesh_width, mesh_height),
             mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
             texture: Some(texture),
             blur_params: Vec4::ZERO,
@@ -2200,6 +2206,11 @@ fn add_visual_components(
                             bp
                         });
 
+                        // Calculate mesh size for stretch bounds
+                        let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                            (max_x - min_x, max_y - min_y)
+                        });
+
                         let material = create_unified_material(
                             unified_materials,
                             handle.clone(),
@@ -2212,6 +2223,7 @@ fn add_visual_components(
                             blur_params_with_expansion,
                             palette_params,
                             initial_mesh_offset,
+                            mesh_size,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -2284,6 +2296,11 @@ fn add_visual_components(
                             create_anchored_rectangle(meshes, base_width, base_height, anchor)
                         };
 
+                    // Calculate mesh size for stretch bounds
+                    let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                        (max_x - min_x, max_y - min_y)
+                    });
+
                     let material = create_unified_material(
                         unified_materials,
                         wp.clone(),
@@ -2296,6 +2313,7 @@ fn add_visual_components(
                         blur_params,
                         palette_params,
                         initial_mesh_offset,
+                        mesh_size,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -2407,6 +2425,11 @@ fn add_visual_components(
                             create_anchored_rectangle(meshes, base_width, base_height, anchor)
                         };
 
+                    // Calculate mesh size for stretch bounds
+                    let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                        (max_x - min_x, max_y - min_y)
+                    });
+
                     let material = create_unified_material(
                         unified_materials,
                         handle.clone(),
@@ -2419,6 +2442,7 @@ fn add_visual_components(
                         blur_params,
                         palette_params,
                         initial_mesh_offset,
+                        mesh_size,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -3143,7 +3167,7 @@ pub fn animate_unified_effect_system(
                     let world_w = orig_width * rot_cos + orig_height * rot_sin;
                     0.8 * world_w + 0.2 * orig_width
                 };
-                let base_divisor = base_size / 5.12;
+                let base_divisor = base_size / 4.2;  // Testing different multiplier
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
 
                 let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
@@ -3188,6 +3212,9 @@ pub fn animate_unified_effect_system(
                     min_y = min_y.min(ty);
                     max_y = max_y.max(ty);
                 }
+
+                // No padding - the calculated bounds should be exact for stretch effect
+                // Padding would cause sample_uv to go outside [0,1] range
 
                 let new_width = max_x - min_x;
                 let new_height = max_y - min_y;

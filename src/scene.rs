@@ -1503,6 +1503,7 @@ fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) ->
     for prop in properties {
         if prop.name == "size" && prop.prop_type == "vec2" {
             // Check static value first
+            // AM's size property represents half-extents, multiply by 2 for full dimensions
             if !prop.value.is_empty()
                 && let Ok(size) = crate::schema::parse_vec2(&prop.value)
             {

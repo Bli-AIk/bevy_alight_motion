@@ -308,9 +308,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if stretch_enabled {
         sample_uv = apply_stretch_segment(mesh.uv);
         
-        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+        // Add small tolerance to prevent edge clipping due to floating point precision
+        let eps = 0.002;
+        if sample_uv.x < -eps || sample_uv.x > 1.0 + eps || sample_uv.y < -eps || sample_uv.y > 1.0 + eps {
             discard;
         }
+        // Clamp to valid range for texture sampling
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
     // Sample texture - with or without blur
