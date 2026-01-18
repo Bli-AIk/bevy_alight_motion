@@ -346,17 +346,6 @@ pub fn animate_transform_system(
                     // Simply add pivot offset (Y flip for Bevy coordinates)
                     bx += pivot_x;
                     by -= pivot_y;
-                    
-                    // Debug: log SDF parent position
-                    if animated.layer_id == 340 && pivot_y != 0.0 {
-                        bevy::log::info!(
-                            "[SdfParent] layer_id={} loc=({:.1},{:.1}) pivot=({:.1},{:.1}) -> bevy=({:.1},{:.1})",
-                            animated.layer_id,
-                            loc[0], loc[1],
-                            pivot_x, pivot_y,
-                            bx, by
-                        );
-                    }
                 } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
                     // Embed scenes: need rotation-aware pivot compensation
                     // In AM, objects rotate/scale around (location + pivot)
@@ -672,8 +661,8 @@ pub fn animate_sdf_opacity_system(
 /// to simulate scaling around the pivot.
 pub fn animate_sdf_scale_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children, &Transform, &GlobalTransform), (With<AmSdfShapeParent>, Without<AmSdfParams>)>,
-    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform, &GlobalTransform)>,
+    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
+    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform)>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
     if playback.force_stopped {
@@ -682,7 +671,7 @@ pub fn animate_sdf_scale_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, children, parent_local, parent_global) in parent_query.iter() {
+    for (animated, children) in parent_query.iter() {
         // Use lifecycle time for visibility check
         let lifecycle_time = animated.calc_lifecycle_time(global_time);
 
@@ -708,7 +697,7 @@ pub fn animate_sdf_scale_system(
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            if let Ok((material_handle, sdf_params, mut transform, child_global)) = sdf_query.get_mut(child) {
+            if let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) {
                 // Calculate scaled dimensions
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
@@ -736,27 +725,6 @@ pub fn animate_sdf_scale_system(
                 // So translation.y = pivot_y * scale_y (positive pivot_y moves center UP relative to pivot)
                 let new_x = -sdf_params.base_pivot_x * anim_scale[0];
                 let new_y = sdf_params.base_pivot_y * anim_scale[1];
-                
-                // Debug: log SDF GlobalTransform and local
-                if sdf_params.base_pivot_y != 0.0 && animated.layer_id == 340 {
-                    let parent_local_pos = parent_local.translation;
-                    let parent_global_pos = parent_global.translation();
-                    let child_global_pos = child_global.translation();
-                    let expected_global_y = parent_global_pos.y + new_y;
-                    let screen_y = 480.0 - child_global_pos.y;
-                    // Calculate the "ancestor offset" = parent_global - parent_local
-                    let ancestor_offset_y = parent_global_pos.y - parent_local_pos.y;
-                    bevy::log::info!(
-                        "[SdfGlobal] layer_id={} parent_local=({:.1},{:.1}) parent_global=({:.1},{:.1}) ancestor_offset_y={:.1} child_local=({:.1},{:.1}) child_global=({:.1},{:.1}) screen_y={:.1}",
-                        animated.layer_id,
-                        parent_local_pos.x, parent_local_pos.y,
-                        parent_global_pos.x, parent_global_pos.y,
-                        ancestor_offset_y,
-                        transform.translation.x, transform.translation.y,
-                        child_global_pos.x, child_global_pos.y,
-                        screen_y
-                    );
-                }
                 
                 transform.translation.x = new_x;
                 transform.translation.y = new_y;
