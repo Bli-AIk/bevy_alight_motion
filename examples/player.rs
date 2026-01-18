@@ -1174,7 +1174,12 @@ mod video_comparison_systems {
                 }
 
                 // Set precise time for this frame
-                let time_sec = state.current_frame as f32 / state.fps;
+                // Add half-frame offset to match AM video export timing
+                let frame_offset: f32 = std::env::var("FRAME_OFFSET")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0);
+                let time_sec = (state.current_frame as f32 + frame_offset) / state.fps;
                 playback.playing = false; // Ensure paused
                 playback.current_time_ms = time_sec * 1000.0;
                 playback.force_stopped = false; // Allow update

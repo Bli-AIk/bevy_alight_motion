@@ -67,7 +67,7 @@ fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let center_off_x = mesh_offset.x;
     let center_off_y = mesh_offset.y;
     
-    let angle_factor = mix(1.0, 0.75, abs(sin(angle)));
+    let angle_factor = mix(1.0, 0.9, abs(sin(angle)));
     let half_gap = stretch_px * 0.5 * angle_factor;
     
     let pixel_x = (uv.x - 0.5) * mesh_width + center_off_x;

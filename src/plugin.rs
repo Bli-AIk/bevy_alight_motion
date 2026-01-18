@@ -99,8 +99,14 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::fix_nested_embed_render_layers_system,
                     // Propagate RenderLayers immediately after RTT setup
                     crate::effects::propagate_render_layers_system,
-                    // TODO: Re-enable after fixing the approach
+                    // TODO: propagate_render_layers_to_children_system disabled - causes transform issues
                     // crate::effects::propagate_render_layers_to_children_system,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                Update,
+                (
                     animate_transform_system,
                     animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation
@@ -113,8 +119,11 @@ impl Plugin for AlightMotionPlugin {
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers
                     hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
+                    // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
+                    // crate::effects::sync_rtt_camera_position_system,
                 )
-                    .chain(),
+                    .chain()
+                    .after(crate::effects::fix_nested_embed_render_layers_system),
             );
     }
 }

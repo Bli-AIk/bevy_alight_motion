@@ -907,16 +907,28 @@ fn spawn_embed_scene(
     // Using /100 instead of /1000 for better numerical precision
     let in_time = embed.in_time.unwrap_or(0) as f32;
     let effective_speed = config.speed_multiplier * embed.speed;
-    let time_offset_with_in_time = if effective_speed > 0.0 {
-        config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
+    // embed.start_time is relative to PARENT's internal time, not global time.
+    // When parent's internal time = embed.start_time, child should start.
+    // Parent internal time = (global_time - parent_time_offset) * parent_speed
+    // global_start = parent_time_offset + embed.start_time / parent_speed
+    let global_start = if config.speed_multiplier > 0.0 {
+        config.time_offset as f32 + embed.start_time as f32 / config.speed_multiplier
     } else {
         config.time_offset as f32 + embed.start_time as f32
     };
+    let time_offset_with_in_time = if effective_speed > 0.0 {
+        global_start - in_time / effective_speed
+    } else {
+        global_start
+    };
+    // Lifecycle offset also needs to account for parent speed
+    let lifecycle_offset_with_in_time = global_start - in_time;
     let nested_z_spacing = config.z_spacing / 100.0;
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
         time_offset: time_offset_with_in_time as i32,
+        lifecycle_offset: lifecycle_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: effective_speed,
@@ -2112,20 +2124,44 @@ fn flatten_pending_layers_inner(
             );
 
             // Build a map of old ID -> new ID for this embed's children
+            // IMPORTANT: Use enumerated index to ensure uniqueness when multiple children
+            // have the same ID (which can happen with deeply nested embeds that share
+            // the same internal structure, e.g., "编组 3" and "编组 3 Copy" both containing
+            // "编组 2" with id=358, leading to duplicate intermediate IDs like 358000353).
             let mut id_remap: std::collections::HashMap<u64, u64> =
                 std::collections::HashMap::new();
-            for child in &flattened_children {
-                // Create unique ID by combining layer_id and child_id
-                // Use wrapping operations to handle large IDs
-                let unique_id = layer_id.wrapping_mul(1_000_000).wrapping_add(child.id);
+            for (idx, child) in flattened_children.iter().enumerate() {
+                // Create unique ID by combining layer_id, child_id, and index
+                // The index ensures uniqueness even when child.id is duplicated
+                // Format: layer_id * 1_000_000 + child.id + idx * 1_000_000_000_000
+                // This gives each duplicate a distinct ID while preserving the base structure
+                let base_id = layer_id.wrapping_mul(1_000_000).wrapping_add(child.id);
+                let unique_id = if id_remap.contains_key(&child.id) {
+                    // This ID already exists, add index offset to make it unique
+                    base_id.wrapping_add((idx as u64).wrapping_mul(1_000_000_000))
+                } else {
+                    base_id
+                };
                 id_remap.insert(child.id, unique_id);
             }
 
-            for mut child in flattened_children {
+            // Now remap IDs, but we need to handle duplicates specially
+            // Build a fresh remap that tracks which IDs we've seen
+            let mut seen_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
+            
+            for (idx, mut child) in flattened_children.into_iter().enumerate() {
                 let old_id = child.id;
 
-                // Remap the child's ID
-                child.id = *id_remap.get(&old_id).unwrap_or(&old_id);
+                // Calculate the new ID with index offset if needed
+                let base_id = layer_id.wrapping_mul(1_000_000).wrapping_add(old_id);
+                let new_id = if seen_ids.contains(&base_id) {
+                    // Base ID already used, add index offset
+                    base_id.wrapping_add((idx as u64).wrapping_mul(1_000_000_000))
+                } else {
+                    base_id
+                };
+                seen_ids.insert(new_id);
+                child.id = new_id;
 
                 // Remap the parent reference and adjust coordinates
                 if child.parent == 0 {
@@ -2560,23 +2596,28 @@ fn collect_embed_scene(
     // The formula for local_time in the animation system is:
     //   local_time = (global_time - time_offset) * speed_multiplier
     //
-    // When global_time = embed.start_time, we want local_time = inTime:
-    //   inTime = (embed.start_time - time_offset) * speed
-    //   time_offset = embed.start_time - inTime / speed
-    //
-    // Note: This handles the case where speed != 1.0, which affects internal time flow.
+    // embed.start_time is relative to PARENT's internal time, not global time.
+    // When parent's internal time = embed.start_time, child should start.
+    // Parent internal time = (global_time - parent_time_offset) * parent_speed
+    // global_start = parent_time_offset + embed.start_time / parent_speed
     let in_time = embed.in_time.unwrap_or(0) as f32;
     let effective_speed = config.speed_multiplier * embed.speed;
-    let time_offset_with_in_time = if effective_speed > 0.0 {
-        config.time_offset as f32 + embed.start_time as f32 - in_time / effective_speed
+    let global_start = if config.speed_multiplier > 0.0 {
+        config.time_offset as f32 + embed.start_time as f32 / config.speed_multiplier
     } else {
         config.time_offset as f32 + embed.start_time as f32
     };
+    let time_offset_with_in_time = if effective_speed > 0.0 {
+        global_start - in_time / effective_speed
+    } else {
+        global_start
+    };
 
-    // Lifecycle offset doesn't use speed - it's for visibility calculation
-    // lifecycle_offset = embed_start - in_time (raw, no speed adjustment)
-    let lifecycle_offset_with_in_time =
-        config.lifecycle_offset as f32 + embed.start_time as f32 - in_time;
+    // Lifecycle offset also needs to account for parent speed, since spawn/despawn
+    // uses lifecycle_time = global_time - lifecycle_offset and compares with start_time/end_time.
+    // When global_time = global_start, lifecycle_time should be 0 (or in_time if specified).
+    // lifecycle_offset = global_start - in_time
+    let lifecycle_offset_with_in_time = global_start - in_time;
 
     // Note: retime="off" means "don't retime" - use normal animation speed
     // It does NOT mean freeze animations. The parent's speed still applies.

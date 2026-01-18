@@ -512,6 +512,8 @@ pub fn setup_embed_scene_rtt_system(
     // Get the RTT cameras container from AmPendingLayers
     let rtt_cameras_container = pending_query.iter().next().and_then(|p| p.rtt_cameras_container);
 
+    bevy::log::trace!("[RTT] setup_embed_scene_rtt_system: {} embeds need RTT setup", query.iter().count());
+
     for (entity, needs_rtt, embed_transform) in query.iter() {
         // Log embed transform for debugging
         bevy::log::trace!(
@@ -559,6 +561,9 @@ pub fn setup_embed_scene_rtt_system(
         let render_layer_usize = render_layer as usize;
 
         // Create RTT camera with Fixed scaling mode to match embed's internal scene size
+        // The camera is NOT added as a child of the embed to avoid inheriting scale/rotation.
+        // Instead, sync_rtt_camera_position_system updates the camera's world position to follow
+        // the embed's GlobalTransform translation.
         let camera_entity = commands
             .spawn((
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
@@ -585,7 +590,7 @@ pub fn setup_embed_scene_rtt_system(
                 }),
                 // Camera only renders this specific layer
                 RenderLayers::layer(render_layer_usize),
-                // Camera positioned at center of scene
+                // Camera positioned at center of scene - will be updated by sync_rtt_camera_position_system
                 Transform::from_xyz(0.0, 0.0, 1000.0),
             ))
             .id();
@@ -806,7 +811,7 @@ pub fn propagate_render_layers_system(
 /// 4. Embed B's children need RenderLayers Y to render into Embed B's RTT
 pub fn propagate_render_layers_to_children_system(
     mut commands: Commands,
-    embed_query: Query<(Entity, &EmbedSceneRtt, &Children)>,
+    embed_query: Query<(Entity, &EmbedSceneRtt)>,
     children_query: Query<&Children>,
     render_layers_query: Query<&RenderLayers>,
     // Query for entities that are NOT embeds (don't have EmbedSceneRtt)
@@ -818,7 +823,19 @@ pub fn propagate_render_layers_to_children_system(
     // 2. Nested embeds - their Sprite (displaying their RTT output) needs to render to this embed's RTT
     //
     // We do NOT recurse into nested embeds' children because nested embeds handle their own content.
-    for (embed_entity, rtt, children) in embed_query.iter() {
+    //
+    // Note: We query EmbedSceneRtt separately from Children because Children may not exist
+    // if the embed has no Bevy children yet.
+    
+    bevy::log::trace!("[RenderLayers] propagate_render_layers_to_children_system: found {} embeds with RTT", embed_query.iter().count());
+    
+    for (embed_entity, rtt) in embed_query.iter() {
+        // Check if this embed has children
+        let Ok(children) = children_query.get(embed_entity) else {
+            bevy::log::trace!("[RenderLayers] Embed {:?} has RTT layer {} but no Children", embed_entity, rtt.render_layer);
+            continue;
+        };
+        
         let target_layer = RenderLayers::layer(rtt.render_layer as usize);
 
         bevy::log::trace!(
@@ -881,6 +898,28 @@ pub fn propagate_render_layers_to_children_system(
                     // but we don't recurse into its children (it handles those itself)
                 }
             }
+        }
+    }
+}
+
+/// System to sync RTT camera positions with their embed's GlobalTransform.
+/// This ensures that RTT cameras follow their embed's world position, allowing them to
+/// "see" the embed's Bevy children (which have world positions relative to the embed).
+/// The camera only follows translation, not rotation or scale, to avoid distorting the RTT output.
+pub fn sync_rtt_camera_position_system(
+    embed_query: Query<(&EmbedSceneRtt, &GlobalTransform)>,
+    mut camera_query: Query<(&EmbedSceneRttCamera, &mut Transform)>,
+) {
+    for (camera_marker, mut camera_transform) in camera_query.iter_mut() {
+        if let Ok((_, embed_global)) = embed_query.get(camera_marker.embed_entity) {
+            // Set camera position to follow embed's world position
+            // Only copy translation, not rotation or scale
+            let embed_translation = embed_global.translation();
+            camera_transform.translation = Vec3::new(
+                embed_translation.x,
+                embed_translation.y,
+                1000.0, // Keep camera at z=1000 for proper depth
+            );
         }
     }
 }
