@@ -171,9 +171,9 @@ pub enum AmBlendingMode {
     Mask,
 }
 
-/// Information about an active mask that clips this layer.
-#[derive(Debug, Clone, Default, Component)]
-pub struct AmMaskInfo {
+/// Information about a single mask that can clip this layer.
+#[derive(Debug, Clone, Default)]
+pub struct AmMaskEntry {
     /// Center position of the mask in local coordinates
     pub center: Vec2,
     /// Half-size of the mask rectangle
@@ -182,6 +182,32 @@ pub struct AmMaskInfo {
     pub rotation: f32,
     /// Scale of the mask
     pub scale: Vec2,
+    /// Whether this is a circle/ellipse mask (false = rectangle)
+    pub is_circle: bool,
+    /// Start time of the mask layer (ms)
+    pub start_time: i32,
+    /// End time of the mask layer (ms)
+    pub end_time: i32,
+    /// The ID of the mask layer
+    pub mask_layer_id: u64,
+}
+
+/// Information about active masks that can clip this layer.
+/// A layer can be affected by multiple masks at different times.
+#[derive(Debug, Clone, Default, Component)]
+pub struct AmMaskInfo {
+    /// List of all masks that can affect this layer
+    pub masks: Vec<AmMaskEntry>,
+}
+
+impl AmMaskInfo {
+    /// Get the active mask for the given time (ms).
+    /// Returns None if no mask is active at this time.
+    pub fn get_active_mask(&self, time_ms: u64) -> Option<&AmMaskEntry> {
+        self.masks.iter().find(|m| {
+            time_ms >= m.start_time as u64 && time_ms < m.end_time as u64
+        })
+    }
 }
 
 /// Complete layer definition for deferred spawning.
@@ -2006,7 +2032,10 @@ pub fn collect_pending_layers(
 
     // Flatten all nested children into a single list
     // Pass nesting_depth so that nested embeds know their absolute depth in the hierarchy
-    let flattened = flatten_pending_layers(pending_layers, config.nesting_depth);
+    let mut flattened = flatten_pending_layers(pending_layers, config.nesting_depth);
+
+    // Apply mask relationships - mask layers affect layers below them
+    apply_mask_to_children(&mut flattened);
 
     bevy::log::trace!(
         "Collected {} pending layers (after flatten)",
@@ -2649,24 +2678,26 @@ fn collect_embed_scene(
 fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // Find all mask layers and their info
     // Masks are root-level layers (parent=0) with blending_mode=Mask
-    let mut mask_layers: Vec<(u64, f32, AmMaskInfo)> = Vec::new(); // (mask_id, z_index, mask_info)
+    let mut mask_layers: Vec<(u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, z_index, mask_entry)
 
     for layer in layers.iter() {
         if layer.blending_mode == AmBlendingMode::Mask && layer.parent == 0 {
             // Extract mask geometry from the layer's transform and spec
-            let mask_info = extract_mask_info_from_layer(layer);
-            if let Some(info) = mask_info {
+            let mask_entry = extract_mask_info_from_layer(layer);
+            if let Some(entry) = mask_entry {
                 bevy::log::info!(
-                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
                     layer.label,
                     layer.id,
                     layer.z_index,
-                    info.center.x,
-                    info.center.y,
-                    info.half_size.x,
-                    info.half_size.y
+                    entry.center.x,
+                    entry.center.y,
+                    entry.half_size.x,
+                    entry.half_size.y,
+                    entry.start_time,
+                    entry.end_time
                 );
-                mask_layers.push((layer.id, layer.z_index, info));
+                mask_layers.push((layer.id, layer.z_index, entry));
             }
         }
     }
@@ -2675,11 +2706,9 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         return;
     }
 
-    // Build a set of layer IDs that should receive the mask
-    // Start with root-level layers (parent=0) that are below the mask
-    let mut masked_layer_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
-
-    for layer in layers.iter() {
+    // For each non-mask root layer, collect ALL masks that are above it (higher z-index)
+    // This allows the runtime system to choose the correct mask based on current time
+    for layer in layers.iter_mut() {
         if layer.blending_mode == AmBlendingMode::Mask {
             continue; // Don't apply mask to mask layer itself
         }
@@ -2688,79 +2717,93 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             continue; // Only consider root-level layers for initial mask assignment
         }
 
-        // Find the closest mask that is above this layer (higher z-index)
-        for (mask_id, mask_z, _mask_info) in &mask_layers {
+        // Collect all masks that are above this layer (higher z-index)
+        let mut applicable_masks: Vec<AmMaskEntry> = Vec::new();
+        for (mask_id, mask_z, mask_entry) in &mask_layers {
             if *mask_z > layer.z_index && *mask_id != layer.id {
-                // This layer should be masked
-                masked_layer_ids.insert(layer.id);
-                bevy::log::info!(
-                    "[MASK] Root layer '{}' (id={}, z={:.4}) will be clipped by mask at z={:.4}",
-                    layer.label,
-                    layer.id,
-                    layer.z_index,
-                    mask_z
-                );
-                break; // Use the first (closest) mask above
+                applicable_masks.push(mask_entry.clone());
+            }
+        }
+
+        if !applicable_masks.is_empty() {
+            bevy::log::info!(
+                "[MASK] Root layer '{}' (id={}, z={:.4}) will be clipped by {} mask(s)",
+                layer.label,
+                layer.id,
+                layer.z_index,
+                applicable_masks.len()
+            );
+            
+            // Create or update mask_info with all applicable masks
+            if layer.mask_info.is_none() {
+                layer.mask_info = Some(AmMaskInfo { masks: applicable_masks });
+            } else if let Some(ref mut info) = layer.mask_info {
+                info.masks.extend(applicable_masks);
             }
         }
     }
 
-    // Now propagate: find all layers whose parent (directly or indirectly) is in masked_layer_ids
-    // We iterate until no new layers are added (transitive closure)
+    // Now propagate masks to children
+    // Build map of layer_id -> masks
+    let mut layer_masks: std::collections::HashMap<u64, Vec<AmMaskEntry>> = std::collections::HashMap::new();
+    for layer in layers.iter() {
+        if let Some(ref info) = layer.mask_info {
+            layer_masks.insert(layer.id, info.masks.clone());
+        }
+    }
+
+    // Propagate to children
     loop {
-        let mut new_ids: Vec<u64> = Vec::new();
-        for layer in layers.iter() {
+        let mut changes = false;
+        for layer in layers.iter_mut() {
             if layer.blending_mode == AmBlendingMode::Mask {
                 continue;
             }
-            if masked_layer_ids.contains(&layer.id) {
-                continue; // Already marked
+            if layer.mask_info.is_some() {
+                continue; // Already has masks
             }
-            // Check if this layer's parent is masked
-            if layer.parent != 0 && masked_layer_ids.contains(&layer.parent) {
-                new_ids.push(layer.id);
+            // Check if this layer's parent has masks
+            if layer.parent != 0 {
+                if let Some(parent_masks) = layer_masks.get(&layer.parent) {
+                    layer.mask_info = Some(AmMaskInfo { masks: parent_masks.clone() });
+                    bevy::log::debug!(
+                        "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
+                        parent_masks.len(),
+                        layer.label,
+                        layer.id
+                    );
+                    changes = true;
+                }
             }
         }
-        if new_ids.is_empty() {
+        if !changes {
             break;
         }
-        for id in new_ids {
-            bevy::log::debug!(
-                "[MASK] Adding descendant layer id={} to masked set (parent is masked)",
-                id
-            );
-            masked_layer_ids.insert(id);
-        }
-    }
-
-    // Now apply the mask_info to all masked layers
-    // Use the first mask (there's typically only one mask per scope)
-    let (_mask_id, _mask_z, mask_info) = &mask_layers[0];
-
-    for layer in layers.iter_mut() {
-        if masked_layer_ids.contains(&layer.id) && layer.mask_info.is_none() {
-            layer.mask_info = Some(mask_info.clone());
-            bevy::log::debug!(
-                "[MASK] Applied mask to layer '{}' (id={})",
-                layer.label,
-                layer.id
-            );
+        // Update the map for next iteration
+        for layer in layers.iter() {
+            if let Some(ref info) = layer.mask_info {
+                layer_masks.insert(layer.id, info.masks.clone());
+            }
         }
     }
 }
 
 /// Extract mask geometry info from a layer's transform and spec.
 /// For animated scales (like SDF shapes), we need to get the scale at t=0 from the animation data.
-fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
-    let (width, height, pivot_x, pivot_y) = match &layer.spec {
+fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskEntry> {
+    let (width, height, pivot_x, pivot_y, is_circle) = match &layer.spec {
         AmLayerSpec::SdfShape {
             width,
             height,
             pivot_x,
             pivot_y,
+            shape_type,
             ..
-        } => (*width, *height, *pivot_x, *pivot_y),
-        AmLayerSpec::SpriteShape { width, height, .. } => (*width, *height, 0.0, 0.0),
+        } => {
+            let is_circle = shape_type == ".circle";
+            (*width, *height, *pivot_x, *pivot_y, is_circle)
+        }
+        AmLayerSpec::SpriteShape { width, height, .. } => (*width, *height, 0.0, 0.0, false),
         _ => return None,
     };
 
@@ -2779,7 +2822,7 @@ fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
     let center_y = layer.transform.translation.y + pivot_y * scale_y;
 
     bevy::log::debug!(
-        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1}), is_circle={}, time={}..{}",
         width,
         height,
         pivot_x,
@@ -2791,10 +2834,13 @@ fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
         center_x,
         center_y,
         width / 2.0 * scale_x,
-        height / 2.0 * scale_y
+        height / 2.0 * scale_y,
+        is_circle,
+        layer.start_time,
+        layer.end_time
     );
 
-    Some(AmMaskInfo {
+    Some(AmMaskEntry {
         center: Vec2::new(center_x, center_y),
         half_size: Vec2::new(width / 2.0 * scale_x, height / 2.0 * scale_y),
         rotation: layer
@@ -2803,6 +2849,10 @@ fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskInfo> {
             .to_euler(bevy::math::EulerRot::ZYX)
             .0,
         scale: Vec2::new(scale_x, scale_y),
+        is_circle,
+        start_time: layer.start_time,
+        end_time: layer.end_time,
+        mask_layer_id: layer.id,
     })
 }
 

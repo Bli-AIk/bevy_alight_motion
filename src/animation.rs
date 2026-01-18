@@ -539,16 +539,55 @@ pub fn animate_text_opacity_system(
     }
 }
 
-/// System to animate SDF shape opacity (handles SmudShape entities).
-/// Uses Visibility component for proper show/hide behavior and SmudShape color alpha for opacity animation.
+/// System to dynamically update mask state on SDF shapes based on mask layer timing.
+/// This system enables/disables mask clipping based on whether the mask layer is currently active.
+pub fn update_sdf_mask_system(
+    playback: Res<AmPlayback>,
+    parent_query: Query<(&AmAnimated, &Children, &AmMaskInfo), With<AmSdfShapeParent>>,
+    mut sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, children, mask_info) in parent_query.iter() {
+        // Get the active mask for current time
+        let active_mask = mask_info.get_active_mask(global_time as u64);
+
+        for child in children.iter() {
+            if let Ok(material_handle) = sdf_query.get_mut(child) {
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    if let Some(mask) = active_mask {
+                        // Update mask parameters for the active mask
+                        material.uniform_data.mask_params = bevy::math::Vec4::new(
+                            mask.center.x,
+                            mask.center.y,
+                            mask.half_size.x,
+                            mask.half_size.y,
+                        );
+                        material.uniform_data.mask_type = if mask.is_circle { 2.0 } else { 1.0 };
+                    } else {
+                        // No active mask at this time
+                        material.uniform_data.mask_type = 0.0;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// System to animate SDF shape opacity (handles SdfMaterial entities).
+/// Uses Visibility component for proper show/hide behavior and material alpha for opacity animation.
 /// Only skips updates when force_stopped is true (for inspector editing).
 pub fn animate_sdf_opacity_system(
     playback: Res<AmPlayback>,
     parent_query: Query<(&AmAnimated, &Children, &AmLayerMarker), With<AmSdfShapeParent>>,
-    mut sdf_query: Query<(&mut bevy_smud::SmudShape, &AmSdfParams, &mut Visibility)>,
+    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Visibility)>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
-    use crate::sdf::repack_with_alpha;
-
     // Skip animation only when force stopped (for inspector editing)
     if playback.force_stopped {
         return;
@@ -567,26 +606,30 @@ pub fn animate_sdf_opacity_system(
 
         // Update all SDF children
         for child in children.iter() {
-            if let Ok((mut smud_shape, sdf_params, mut visibility)) = sdf_query.get_mut(child) {
+            if let Ok((material_handle, sdf_params, mut visibility)) = sdf_query.get_mut(child) {
                 // Check if layer is active
                 if !animated.is_active(lifecycle_time) {
                     // Hide shape when outside its time range
                     *visibility = Visibility::Hidden;
-                    smud_shape.color.set_alpha(0.0);
-                    smud_shape.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                    if let Some(material) = materials.get_mut(&material_handle.0) {
+                        material.uniform_data.color.w = 0.0;
+                        material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                    }
                     continue;
                 }
 
                 // Show shape when within its time range
                 *visibility = Visibility::Inherited;
 
-                // Multiply by base_alpha to preserve original fill color transparency
-                let final_alpha = opacity * animated.base_alpha;
-                smud_shape.color.set_alpha(final_alpha.clamp(0.0, 1.0));
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    // Multiply by base_alpha to preserve original fill color transparency
+                    let final_alpha = opacity * animated.base_alpha;
+                    material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
 
-                // Also update stroke alpha: base_stroke_alpha * opacity
-                let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
-                smud_shape.params.w = repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+                    // Also update stroke alpha: base_stroke_alpha * opacity
+                    let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
+                    material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+                }
             }
         }
     }
@@ -595,8 +638,7 @@ pub fn animate_sdf_opacity_system(
 /// System to update SDF shape dimensions based on parent scale animation.
 ///
 /// ## New Approach (parametric SDF)
-/// Instead of using Transform.scale (which bevy_smud only supports uniformly),
-/// we update SmudShape.params to change the SDF dimensions:
+/// Instead of using Transform.scale, we update SdfMaterial.params to change the SDF dimensions:
 /// - params.x = base_half_width * animation_scale_x
 /// - params.y = base_half_height * animation_scale_y
 /// - params.z = stroke_width (constant)
@@ -610,7 +652,8 @@ pub fn animate_sdf_opacity_system(
 pub fn animate_sdf_scale_system(
     playback: Res<AmPlayback>,
     parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
-    mut sdf_query: Query<(&mut SmudShape, &AmSdfParams, &mut Transform)>,
+    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform)>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
     if playback.force_stopped {
         return;
@@ -644,7 +687,7 @@ pub fn animate_sdf_scale_system(
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            if let Ok((mut smud_shape, sdf_params, mut transform)) = sdf_query.get_mut(child) {
+            if let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) {
                 // Calculate scaled dimensions
                 let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
@@ -656,13 +699,15 @@ pub fn animate_sdf_scale_system(
                     sdf_params.stroke_width
                 };
 
-                // Update params: (half_width, half_height, stroke_width, packed_stroke)
-                smud_shape.params = Vec4::new(
-                    scaled_half_width,
-                    scaled_half_height,
-                    final_stroke_width,
-                    sdf_params.packed_stroke,
-                );
+                // Update material params: (half_width, half_height, stroke_width, packed_stroke)
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    material.uniform_data.params = Vec4::new(
+                        scaled_half_width,
+                        scaled_half_height,
+                        final_stroke_width,
+                        sdf_params.packed_stroke,
+                    );
+                }
 
                 // Update translation to simulate scaling around pivot
                 // Center position = -Pivot * Scale
@@ -681,13 +726,14 @@ pub fn animate_sdf_scale_system(
 /// This is separate from scale animation - size changes the base dimensions
 /// while scale is applied on top.
 ///
-/// For SDF shapes: Updates SmudShape.params with new half-width/half-height.
+/// For SDF shapes: Updates SdfMaterial.params with new half-width/half-height.
 /// For Sprite shapes: Updates Sprite.custom_size.
 pub fn animate_size_system(
     playback: Res<AmPlayback>,
-    // SDF shapes: parent entity has AmSdfShapeParent marker, child has SmudShape
+    // SDF shapes: parent entity has AmSdfShapeParent marker, child has SdfMaterial
     parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
-    mut sdf_query: Query<(&mut SmudShape, &mut AmSdfParams)>,
+    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &mut AmSdfParams)>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
     // Sprite shapes: entity has Sprite component directly
     mut sprite_query: Query<(&AmAnimated, &mut Sprite), Without<AmSdfShapeParent>>,
 ) {
@@ -697,7 +743,7 @@ pub fn animate_size_system(
 
     let global_time = playback.current_time_ms;
 
-    // Handle SDF shapes (size is on parent, SmudShape is on child)
+    // Handle SDF shapes (size is on parent, SdfMaterial is on child)
     for (animated, children) in parent_query.iter() {
         // Skip if no size animation
         if animated.size.keyframes.is_empty() && animated.size.value.is_none() {
@@ -723,15 +769,17 @@ pub fn animate_size_system(
 
             // Update SDF children
             for child in children.iter() {
-                if let Ok((mut smud_shape, mut sdf_params)) = sdf_query.get_mut(child) {
+                if let Ok((material_handle, mut sdf_params)) = sdf_query.get_mut(child) {
                     // Update base params (these will be further modified by scale in animate_sdf_scale)
                     sdf_params.base_half_width = half_width;
                     sdf_params.base_half_height = half_height;
 
-                    // Also update the actual SmudShape params directly
+                    // Also update the actual material params directly
                     // (animate_sdf_scale will run after and apply scale on top if needed)
-                    smud_shape.params.x = half_width;
-                    smud_shape.params.y = half_height;
+                    if let Some(material) = materials.get_mut(&material_handle.0) {
+                        material.uniform_data.params.x = half_width;
+                        material.uniform_data.params.y = half_height;
+                    }
                 }
             }
         }
@@ -948,8 +996,9 @@ use crate::scene::{
     AmBlendingMode, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmPendingLayers, AmVisualSpawned,
     PendingLayer,
 };
+use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with_alpha};
 use bevy::asset::Assets;
-use bevy_smud::prelude::*;
+use bevy::prelude::{Mesh2d, MeshMaterial2d};
 use std::collections::HashMap;
 
 /// System to manage layer lifecycle based on playback time.
@@ -960,10 +1009,9 @@ use std::collections::HashMap;
 pub fn manage_layer_lifecycle_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,
-    mut shaders: ResMut<Assets<Shader>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
-    sdf_shaders: Res<crate::sdf::AmSdfShaders>,
+    mut sdf_materials: ResMut<Assets<SdfMaterial>>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
     mut project_query: Query<(Entity, &crate::scene::AmProjectRoot, &mut AmPendingLayers)>,
@@ -994,10 +1042,9 @@ pub fn manage_layer_lifecycle_system(
         // Process all pending layers (including nested ones)
         process_pending_layers(
             &mut commands,
-            &mut shaders,
             &mut meshes,
             &mut unified_materials,
-            &sdf_shaders,
+            &mut sdf_materials,
             &mut pending,
             &project.images,
             &project.fonts,
@@ -1035,10 +1082,9 @@ fn count_total_layers(layers: &[PendingLayer]) -> usize {
 #[allow(clippy::too_many_arguments)]
 fn process_pending_layers(
     commands: &mut Commands,
-    shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
-    sdf_shaders: &crate::sdf::AmSdfShaders,
+    sdf_materials: &mut Assets<SdfMaterial>,
     pending: &mut AmPendingLayers,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
@@ -1226,10 +1272,9 @@ fn process_pending_layers(
 
         let entity = spawn_layer_entity(
             commands,
-            shaders,
             meshes,
             unified_materials,
-            sdf_shaders,
+            sdf_materials,
             layer,
             images,
             fonts,
@@ -1333,10 +1378,9 @@ fn get_initial_size_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
 #[allow(clippy::too_many_arguments)]
 fn spawn_layer_entity(
     commands: &mut Commands,
-    shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
-    sdf_shaders: &crate::sdf::AmSdfShaders,
+    sdf_materials: &mut Assets<SdfMaterial>,
     layer: &PendingLayer,
     images: &HashMap<String, Handle<Image>>,
     fonts: &HashMap<String, Handle<Font>>,
@@ -1548,12 +1592,9 @@ fn spawn_layer_entity(
     if let Some(mask_info) = &layer.mask_info {
         commands.entity(entity).insert(mask_info.clone());
         bevy::log::debug!(
-            "[Lifecycle] Layer '{}' has mask: center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+            "[Lifecycle] Layer '{}' has {} mask(s)",
             layer.label,
-            mask_info.center.x,
-            mask_info.center.y,
-            mask_info.half_size.x,
-            mask_info.half_size.y
+            mask_info.masks.len()
         );
     }
 
@@ -1739,10 +1780,9 @@ fn spawn_layer_entity(
 
         add_visual_components(
             commands,
-            shaders,
             meshes,
             unified_materials,
-            sdf_shaders,
+            sdf_materials,
             entity,
             &layer.spec,
             &layer.mask_info,
@@ -1814,10 +1854,9 @@ fn spawn_layer_entity(
 #[allow(clippy::too_many_arguments)]
 fn add_visual_components(
     commands: &mut Commands,
-    shaders: &mut Assets<Shader>,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
-    sdf_shaders: &crate::sdf::AmSdfShaders,
+    sdf_materials: &mut Assets<SdfMaterial>,
     entity: Entity,
     spec: &AmLayerSpec,
     mask_info: &Option<AmMaskInfo>,
@@ -1838,7 +1877,6 @@ fn add_visual_components(
     initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
-    use bevy::mesh::Mesh2d;
 
     // Determine which effects are needed
     let needs_stretch = stretch_params.is_some();
@@ -1969,15 +2007,18 @@ fn add_visual_components(
             palette_color8: Vec4::ZERO,
         };
 
-        // Enable mask if present
-        if let Some(mask) = mask_info {
-            material.effect_flags.x = 1.0;
-            material.mask_params = Vec4::new(
-                mask.center.x,
-                mask.center.y,
-                mask.half_size.x,
-                mask.half_size.y,
-            );
+        // Enable mask if present - use first mask at time 0
+        // effect_flags.x: 1.0 = rectangle mask, 2.0 = circle/ellipse mask
+        if let Some(mask_info) = mask_info {
+            if let Some(mask) = mask_info.get_active_mask(0) {
+                material.effect_flags.x = if mask.is_circle { 2.0 } else { 1.0 };
+                material.mask_params = Vec4::new(
+                    mask.center.x,
+                    mask.center.y,
+                    mask.half_size.x,
+                    mask.half_size.y,
+                );
+            }
         }
 
         // Enable wipe if present
@@ -2270,8 +2311,8 @@ fn add_visual_components(
         } => {
             spawn_sdf_visual(
                 commands,
-                shaders,
-                sdf_shaders,
+                meshes,
+                sdf_materials,
                 entity,
                 fill_color,
                 stroke_color_value,
@@ -2287,6 +2328,7 @@ fn add_visual_components(
                     label: label.to_string(),
                 },
                 initial_scale,
+                mask_info,
             );
         }
         AmLayerSpec::Image {
@@ -2464,25 +2506,21 @@ fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color 
 /// 3. Stroke width remains constant (not scaled)
 ///
 /// ## Our Implementation
-/// 1. Use a fixed 50x50 half-extent SDF box as the base
-/// 2. Calculate the scale to stretch it to target dimensions
-/// 3. Apply scale as a child transform (SDF entity)
-/// 4. Use stroked_fill shader with constant stroke_width parameter
+/// 1. Use SdfMaterial with Material2d trait for rendering
+/// 2. Create a quad mesh sized to the target dimensions + stroke margin
+/// 3. Material params store half-width, half-height, stroke width, packed stroke color
+/// 4. Animation systems update material params to animate scale/size/opacity
 ///
-/// ## bevy_smud Non-Uniform Scale Limitation
-/// bevy_smud only supports uniform scaling (single f32 scale value extracted from Transform).
-/// To achieve non-uniform scaling, we use a **parametric SDF** that reads dimensions from params:
+/// ## SdfMaterial Params Layout
 /// - params.x = half_width
 /// - params.y = half_height  
 /// - params.z = stroke_width
 /// - params.w = packed_stroke_color
-///
-/// The frame size is calculated to encompass the shape + stroke at maximum expected scale.
 #[allow(clippy::too_many_arguments)]
 fn spawn_sdf_visual(
     commands: &mut Commands,
-    shaders: &mut Assets<Shader>,
-    sdf_shaders: &crate::sdf::AmSdfShaders,
+    meshes: &mut Assets<Mesh>,
+    sdf_materials: &mut Assets<SdfMaterial>,
     parent_entity: Entity,
     fill_color: &Option<crate::schema::AmFillColor>,
     stroke_color_value: &str,
@@ -2495,9 +2533,8 @@ fn spawn_sdf_visual(
     shape_type: &str,
     marker: &AmLayerMarker,
     initial_scale: (f32, f32),
+    mask_info: &Option<AmMaskInfo>,
 ) {
-    use crate::sdf::pack_color;
-
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
         crate::schema::parse_color(stroke_color_value)
@@ -2511,44 +2548,17 @@ fn spawn_sdf_visual(
     let target_half_width = width / 2.0;
     let target_half_height = height / 2.0;
 
-    // Use a dummy SDF expression because our custom fill shader handles distance calculation explicitly.
-    // We pass 0.0 to satisfy the parser, but it won't be used for distance.
-    // However, we must ensure 'params' is available in the shader context.
-    // bevy_smud generates: fn sdf(p, params) -> f32 { <EXPR> }
-    // We can just use a simple expression like "0.0" as we don't use the result 'd' in our fill shader.
-    let parametric_sdf = shaders.add_sdf_expr("0.0");
-
-    // Select the correct fill shader based on shape type and stroke join
-    // Current mapping:
-    // .circle -> stroked_fill_circle (ignores join type as circles naturally have round joins)
-    // .rect ->
-    //   - join="miter" -> stroked_fill_box_miter (Square corners)
-    //   - join="round" -> stroked_fill_box (Round corners)
-    //   - join="bevel" -> stroked_fill_box_bevel (Bevel corners)
-    //   - join="" (default) -> stroked_fill_box_bevel (Assume bevel if unspecified, per user request)
-    let stroked_fill = if shape_type == ".circle" {
-        sdf_shaders
-            .stroked_fill_circle
-            .clone()
-            .expect("Circle fill shader not initialized")
+    // Select shape type based on AM shape type and stroke join
+    // .circle -> Circle/Ellipse
+    // .rect -> Box variants based on join type
+    let sdf_shape_type = if shape_type == ".circle" {
+        SdfShapeType::Circle // or Ellipse if w != h
     } else {
         match stroke_join {
-            "miter" => sdf_shaders
-                .stroked_fill_box_miter
-                .clone()
-                .expect("Box miter shader not initialized"),
-            "round" => sdf_shaders
-                .stroked_fill_box
-                .clone()
-                .expect("Box round shader not initialized"),
-            "bevel" | "" => sdf_shaders
-                .stroked_fill_box_bevel
-                .clone()
-                .expect("Box bevel shader not initialized"),
-            _ => sdf_shaders
-                .stroked_fill_box
-                .clone()
-                .expect("Box default shader not initialized"),
+            "miter" => SdfShapeType::BoxMiter,
+            "round" => SdfShapeType::BoxRound,
+            "bevel" | "" => SdfShapeType::BoxBevel,
+            _ => SdfShapeType::BoxRound,
         }
     };
 
@@ -2574,9 +2584,49 @@ fn spawn_sdf_visual(
     // Apply initial scale to the pivot offset so the child is correctly positioned from the start.
     let initial_translation = Vec3::new(-pivot_x * initial_scale.0, pivot_y * initial_scale.1, 0.0);
 
-    // Spawn single SDF entity with both fill and stroke
-    // Note: Transform.scale is set to 1.0 because we handle sizing via params
-    // SDF child uses default transform (z=0 relative to parent) - z-ordering is handled by parent's z value
+    // Create quad mesh for SDF rendering
+    let mesh = meshes.add(Rectangle::new(frame_size, frame_size));
+
+    // Convert fill color to LinearRgba for the material
+    let fill_linear = fill.to_linear();
+    
+    // Convert shape type to f32 for the shader
+    let shape_type_f32 = match sdf_shape_type {
+        SdfShapeType::BoxRound => 0.0,
+        SdfShapeType::BoxMiter => 1.0,
+        SdfShapeType::BoxBevel => 2.0,
+        SdfShapeType::Circle => 3.0,
+    };
+    
+    // Create SDF material - with or without mask
+    // Use first active mask at time 0
+    let active_mask_at_zero = mask_info.as_ref().and_then(|m| m.get_active_mask(0));
+    let material = if let Some(mask) = active_mask_at_zero {
+        sdf_materials.add(SdfMaterial::new_with_mask(
+            sdf_shape_type,
+            target_half_width,
+            target_half_height,
+            fill,
+            stroke_width,
+            stroke,
+            mask.center,
+            mask.half_size,
+            mask.is_circle,
+        ))
+    } else {
+        sdf_materials.add(SdfMaterial::from_linear(
+            fill_linear,
+            Vec4::new(
+                target_half_width,
+                target_half_height,
+                stroke_width,
+                packed_stroke,
+            ),
+            shape_type_f32,
+        ))
+    };
+
+    // Spawn SDF entity with Material2d components
     let sdf_entity = commands
         .spawn((
             Name::new(format!("SdfShape[{}]: {}", marker.id, marker.label)),
@@ -2585,20 +2635,8 @@ fn spawn_sdf_visual(
             Visibility::default(),
             InheritedVisibility::default(),
             ViewVisibility::default(),
-            SmudShape {
-                color: fill,
-                sdf: parametric_sdf,
-                frame: Frame::Quad(frame_size),
-                fill: stroked_fill,
-                // params: half_width, half_height, stroke_width, packed_stroke_color
-                params: Vec4::new(
-                    target_half_width,
-                    target_half_height,
-                    stroke_width,
-                    packed_stroke,
-                ),
-                ..default()
-            },
+            Mesh2d(mesh),
+            MeshMaterial2d(material),
             // Store base params for animation
             AmSdfParams {
                 base_half_width: target_half_width,
@@ -2636,7 +2674,7 @@ fn spawn_sdf_visual(
 }
 
 /// Component to store SDF shape parameters for animation.
-/// Used by animate_sdf_scale to update SmudShape.params based on animation scale.
+/// Used by animate_sdf_scale to update SdfMaterial.params based on animation scale.
 #[derive(Component, Debug, Clone)]
 pub struct AmSdfParams {
     /// Base half width of the shape (before animation scale)
@@ -2690,6 +2728,7 @@ pub struct AmSdfShapeParent;
 /// Note: This is a simplified implementation that only checks the sprite center against the mask.
 /// For precise pixel-level masking, a custom shader would be needed.
 pub fn apply_mask_clipping_system(
+    playback: Res<AmPlayback>,
     mut query: Query<(
         &GlobalTransform,
         &ChildOf,
@@ -2699,7 +2738,18 @@ pub fn apply_mask_clipping_system(
     )>,
     parent_query: Query<&GlobalTransform>,
 ) {
+    let global_time = playback.current_time_ms as u64;
+    
     for (global_transform, parent, mask_info, mut visibility, marker) in query.iter_mut() {
+        // Get active mask for current time
+        let Some(mask) = mask_info.get_active_mask(global_time) else {
+            // No active mask - ensure visible
+            if *visibility == Visibility::Hidden {
+                *visibility = Visibility::Inherited;
+            }
+            continue;
+        };
+        
         let world_pos: Vec3 = global_transform.translation();
 
         // Calculate position relative to parent (mask coordinate space)
@@ -2715,9 +2765,9 @@ pub fn apply_mask_clipping_system(
 
         // Check if sprite center is inside the mask rectangle
         // Note: This doesn't account for mask rotation, treating it as axis-aligned
-        let rel_pos = local_pos - mask_info.center;
+        let rel_pos = local_pos - mask.center;
         let inside_mask =
-            rel_pos.x.abs() <= mask_info.half_size.x && rel_pos.y.abs() <= mask_info.half_size.y;
+            rel_pos.x.abs() <= mask.half_size.x && rel_pos.y.abs() <= mask.half_size.y;
 
         // Update visibility based on mask check
         if inside_mask {
@@ -2805,6 +2855,43 @@ fn update_mesh_for_blur(
     // Update mesh attributes
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+}
+
+/// System to dynamically update mask state on entities with UnifiedEffectMaterial.
+/// This system enables/disables mask clipping based on whether the mask layer is currently active.
+pub fn update_unified_mask_system(
+    playback: Res<AmPlayback>,
+    query: Query<(
+        &AmMaskInfo,
+        &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
+    )>,
+    mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms as u64;
+
+    for (mask_info, material_handle) in query.iter() {
+        // Get active mask for current time
+        let active_mask = mask_info.get_active_mask(global_time);
+
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            // Update effect_flags.x: 0 = disabled, 1 = rect, 2 = ellipse
+            if let Some(mask) = active_mask {
+                material.effect_flags.x = if mask.is_circle { 2.0 } else { 1.0 };
+                material.mask_params = bevy::math::Vec4::new(
+                    mask.center.x,
+                    mask.center.y,
+                    mask.half_size.x,
+                    mask.half_size.y,
+                );
+            } else {
+                material.effect_flags.x = 0.0;
+            }
+        }
+    }
 }
 
 /// System to animate effects on sprites using UnifiedEffectMaterial.

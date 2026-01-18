@@ -119,7 +119,8 @@ fn apply_wipe(uv: vec2<f32>) -> f32 {
 }
 
 // Apply mask clipping - returns true if inside mask
-fn apply_mask(world_pos: vec2<f32>) -> bool {
+// mask_type: 1.0 = rectangle, 2.0 = ellipse
+fn apply_mask(world_pos: vec2<f32>, mask_type: f32) -> bool {
     let mask_center = mask_params.xy;
     let mask_half_size = mask_params.zw;
     
@@ -128,6 +129,15 @@ fn apply_mask(world_pos: vec2<f32>) -> bool {
     }
     
     let rel_pos = world_pos - mask_center;
+    
+    // Ellipse mask (mask_type >= 1.5)
+    if mask_type > 1.5 {
+        // Ellipse equation: (x/a)^2 + (y/b)^2 <= 1
+        let normalized = rel_pos / mask_half_size;
+        return dot(normalized, normalized) <= 1.0;
+    }
+    
+    // Rectangle mask
     return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
 }
 
@@ -326,9 +336,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     
     // Apply mask clipping if enabled
+    // effect_flags.x: 1.0 = rectangle mask, 2.0 = ellipse mask
     if mask_enabled {
         let world_pos = mesh.world_position.xy;
-        if !apply_mask(world_pos) {
+        if !apply_mask(world_pos, effect_flags.x) {
             discard;
         }
     }

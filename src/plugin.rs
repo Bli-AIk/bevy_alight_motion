@@ -23,20 +23,21 @@ use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
-use bevy_smud::SmudPlugin;
 
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_rtt_blur_system,
     animate_sdf_opacity_system, animate_sdf_scale_system, animate_size_system,
     animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
-    apply_mask_clipping_system, manage_layer_lifecycle_system,
+    apply_mask_clipping_system, manage_layer_lifecycle_system, update_sdf_mask_system,
+    update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
-use crate::sdf::{hot_reload_shader_system, setup_sdf_shaders_system};
+use crate::sdf::hot_reload_shader_system;
+use crate::sdf_material::SdfMaterial;
 
 /// Resource to configure how the AM project is scaled relative to the window.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
@@ -69,7 +70,7 @@ impl Plugin for AlightMotionPlugin {
     fn build(&self, app: &mut App) {
         use bevy::ecs::schedule::ApplyDeferred;
 
-        app.add_plugins(SmudPlugin)
+        app.add_plugins(Material2dPlugin::<SdfMaterial>::default())
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurVMaterial>::default())
@@ -81,7 +82,7 @@ impl Plugin for AlightMotionPlugin {
             .init_resource::<AmProjectResolution>()
             .add_systems(
                 Startup,
-                (setup_white_pixel_system, setup_sdf_shaders_system),
+                setup_white_pixel_system,
             )
             .add_systems(
                 Update,
@@ -102,6 +103,8 @@ impl Plugin for AlightMotionPlugin {
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
+                    update_sdf_mask_system,       // Update SDF mask state based on timing
+                    update_unified_mask_system,   // Update unified effect mask state based on timing
                     animate_unified_effect_system, // Unified effect system (RTT-ready)
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers

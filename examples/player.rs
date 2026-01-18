@@ -309,7 +309,7 @@ fn debug_position_changes(
 
 /// Debug system to print SDF shape info once
 fn debug_sdf_shapes(
-    query: Query<(&Name, &Transform, &GlobalTransform), Added<bevy_smud::SmudShape>>,
+    query: Query<(&Name, &Transform, &GlobalTransform), Added<bevy::prelude::MeshMaterial2d<bevy_alight_motion::sdf_material::SdfMaterial>>>,
 ) {
     #[cfg(not(feature = "video-comparison"))]
     for (name, transform, global_transform) in query.iter() {

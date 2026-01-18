@@ -6,9 +6,9 @@
 //!
 //! ## 模块概述
 //!
-//! SDF (Signed Distance Field) shape rendering module using bevy_smud.
+//! SDF (Signed Distance Field) shape rendering module.
 //!
-//! 使用 bevy_smud 的 SDF（有向距离场）形状渲染模块。
+//! SDF（有向距离场）形状渲染模块。
 //!
 //! ## Source File Overview
 //!
@@ -32,126 +32,40 @@
 //! 2. 应用缩放来改变尺寸（描边宽度保持不变）
 //!
 //! We achieve this by:
-//! 1. Using a parametric SDF box that reads dimensions from params
-//! 2. Using Chebyshev distance for sharp corners (cap="square", join="miter")
-//! 3. Passing stroke_width as a parameter to keep it constant
+//! 1. Using custom SdfMaterial that passes dimensions as uniform parameters
+//! 2. Using different SDF formulas for different corner styles (round/miter/bevel)
+//! 3. Passing stroke_width as a parameter to keep it constant during scaling
 //!
 //! 我们通过以下方式实现：
-//! 1. 使用从 params 读取尺寸的参数化 SDF 盒子
-//! 2. 使用切比雪夫距离实现锐角（cap="square", join="miter"）
-//! 3. 将 stroke_width 作为参数传递以保持其不变
+//! 1. 使用自定义 SdfMaterial 将尺寸作为 uniform 参数传递
+//! 2. 对不同的角落样式（圆角/尖角/斜角）使用不同的 SDF 公式
+//! 3. 将 stroke_width 作为参数传递以在缩放期间保持不变
 
-use bevy::asset::Assets;
 use bevy::prelude::*;
-use bevy_smud::prelude::*;
-use std::path::PathBuf;
+
+// Re-export commonly used items from sdf_material
+pub use crate::sdf_material::{pack_color, repack_with_alpha, SdfMaterial, SdfShapeType};
 
 /// Base half-extent for SDF shapes (AM uses 100x100 base square -> 50x50 half-extent)
 ///
 /// SDF 形状的基础半尺寸（AM 使用 100x100 基础正方形 -> 50x50 半尺寸）
 pub const BASE_HALF_EXTENT: f32 = 50.0;
 
-/// SDF expression for a parametric box that reads dimensions from params.x and params.y.
-/// This allows non-uniform scaling without Transform, which bevy_smud doesn't support.
-///
-/// 从 params.x 和 params.y 读取尺寸的参数化盒子 SDF 表达式。
-/// 这允许不使用 Transform 的非均匀缩放，而 bevy_smud 不支持这一点。
-pub const PARAMETRIC_BOX_SDF: &str = "smud::sd_box(p, vec2<f32>(params.x, params.y))";
-
-/// SDF expression for a parametric circle that reads radius from params.x.
-///
-/// 从 params.x 读取半径的参数化圆形 SDF 表达式。
-pub const PARAMETRIC_CIRCLE_SDF: &str = "smud::sd_circle(p, params.x)";
-
-/// Relative path to the stroked fill shader file (from assets folder)
-///
-/// 描边填充着色器文件的相对路径（从 assets 文件夹）
-pub const STROKED_FILL_BOX_FILENAME: &str = "shaders/stroked_fill_box.wgsl";
-pub const STROKED_FILL_BOX_MITER_FILENAME: &str = "shaders/stroked_fill_box_miter.wgsl";
-pub const STROKED_FILL_BOX_BEVEL_FILENAME: &str = "shaders/stroked_fill_box_bevel.wgsl";
-pub const STROKED_FILL_CIRCLE_FILENAME: &str = "shaders/stroked_fill_circle.wgsl";
-
-/// Resource to hold SDF shader handles.
-///
-/// 保存 SDF 着色器句柄的资源。
+/// Legacy resource placeholder for shader handles.
+/// This is now deprecated as we use SdfMaterial instead of bevy_smud.
+/// Kept for compatibility with scene.rs during transition.
 #[derive(Resource, Default)]
 pub struct AmSdfShaders {
-    /// Handle to the base box SDF shader (fixed 50x50 half-extent).
-    ///
-    /// 基础盒子 SDF 着色器句柄（固定 50x50 半尺寸）。
-    pub base_box_sdf: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader for Box (Round join).
-    pub stroked_fill_box: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader for Box (Miter/Square join).
-    pub stroked_fill_box_miter: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader for Box (Bevel join).
-    pub stroked_fill_box_bevel: Option<Handle<Shader>>,
-    /// Handle to the stroked fill shader for Circle.
-    pub stroked_fill_circle: Option<Handle<Shader>>,
-    /// Path to the shader file for hot-reload
-    pub shader_file_path: Option<PathBuf>,
+    pub stroked_fill_box: Option<()>,
+    pub stroked_fill_box_miter: Option<()>,
+    pub stroked_fill_box_bevel: Option<()>,
+    pub stroked_fill_circle: Option<()>,
 }
 
-/// Stroked fill shader source, loaded from file at compile time (fallback).
-pub const STROKED_FILL_BOX_DEFAULT: &str = include_str!("../assets/shaders/stroked_fill_box.wgsl");
-pub const STROKED_FILL_BOX_MITER_DEFAULT: &str =
-    include_str!("../assets/shaders/stroked_fill_box_miter.wgsl");
-pub const STROKED_FILL_BOX_BEVEL_DEFAULT: &str =
-    include_str!("../assets/shaders/stroked_fill_box_bevel.wgsl");
-pub const STROKED_FILL_CIRCLE_DEFAULT: &str =
-    include_str!("../assets/shaders/stroked_fill_circle.wgsl");
-
-/// Initialize SDF shaders resource on startup.
-pub fn setup_sdf_shaders_system(mut commands: Commands, mut shaders: ResMut<Assets<Shader>>) {
-    // Create a fixed-size box SDF (50x50 half-extent, 100x100 total)
-    let base_box_sdf = shaders.add_sdf_expr(format!(
-        "smud::sd_box(p, vec2<f32>({0}, {0}))",
-        BASE_HALF_EXTENT
-    ));
-
-    // Try to find the shader file path for hot-reload (debug feature only)
-    #[cfg(feature = "debug")]
-    let shader_file_path = find_shader_file_path();
-    #[cfg(not(feature = "debug"))]
-    let shader_file_path: Option<PathBuf> = None;
-
-    // Load shader content
-    let box_content = STROKED_FILL_BOX_DEFAULT.to_string();
-    let box_miter_content = STROKED_FILL_BOX_MITER_DEFAULT.to_string();
-    let box_bevel_content = STROKED_FILL_BOX_BEVEL_DEFAULT.to_string();
-    let circle_content = STROKED_FILL_CIRCLE_DEFAULT.to_string();
-
-    let stroked_fill_box = shaders.add_fill_body(box_content);
-    let stroked_fill_box_miter = shaders.add_fill_body(box_miter_content);
-    let stroked_fill_box_bevel = shaders.add_fill_body(box_bevel_content);
-    let stroked_fill_circle = shaders.add_fill_body(circle_content);
-
-    commands.insert_resource(AmSdfShaders {
-        base_box_sdf: Some(base_box_sdf),
-        stroked_fill_box: Some(stroked_fill_box),
-        stroked_fill_box_miter: Some(stroked_fill_box_miter),
-        stroked_fill_box_bevel: Some(stroked_fill_box_bevel),
-        stroked_fill_circle: Some(stroked_fill_circle),
-        shader_file_path,
-    });
-}
-
-/// Find the shader file path by searching common locations (debug feature only).
+/// System to handle shader hot-reload (placeholder for future implementation).
 #[cfg(feature = "debug")]
-fn find_shader_file_path() -> Option<PathBuf> {
-    // Legacy logic, effectively unused now but kept for compilation
-    None
-}
-
-/// System to handle shader hot-reload when 'F5' key is pressed (debug feature only).
-#[cfg(feature = "debug")]
-pub fn hot_reload_shader_system(
-    _keyboard: Res<ButtonInput<KeyCode>>,
-    _shaders: ResMut<Assets<Shader>>,
-    _sdf_shaders: ResMut<AmSdfShaders>,
-    _smud_shapes: Query<&mut SmudShape>,
-) {
-    // Hot reload temporarily disabled due to shader split
+pub fn hot_reload_shader_system(_keyboard: Res<ButtonInput<KeyCode>>) {
+    // Hot reload not implemented for custom SDF material yet
 }
 
 /// No-op hot-reload system when debug feature is disabled.
@@ -160,37 +74,8 @@ pub fn hot_reload_shader_system() {
     // Intentionally empty - hot-reload only available in debug builds
 }
 
-/// Pack RGBA color into a u32 stored as f32 bits.
-/// Format: 0xRRGGBBAA
-pub fn pack_color(color: Color) -> f32 {
-    let rgba = color.to_srgba();
-    let r = (rgba.red * 255.0) as u32;
-    let g = (rgba.green * 255.0) as u32;
-    let b = (rgba.blue * 255.0) as u32;
-    let a = (rgba.alpha * 255.0) as u32;
-    let packed = (r << 24) | (g << 16) | (b << 8) | a;
-    f32::from_bits(packed)
-}
-
-/// Repack a color with a new alpha value.
-/// Takes a packed color (f32 bits representing 0xRRGGBBAA) and returns new packed color with modified alpha.
-pub fn repack_with_alpha(packed: f32, new_alpha: f32) -> f32 {
-    let bits = packed.to_bits();
-    // Extract RGB (upper 24 bits)
-    let rgb = bits & 0xFFFFFF00;
-    // New alpha as u8
-    let a = ((new_alpha.clamp(0.0, 1.0) * 255.0) as u32) & 0xFF;
-    f32::from_bits(rgb | a)
-}
-
-/// Create a parametric box SDF that uses params for dimensions.
-/// The shader reads params.x as half_width and params.y as half_height.
-/// This allows dynamic resizing without recreating the shader.
-pub fn create_parametric_box_sdf(shaders: &mut Assets<Shader>) -> Handle<Shader> {
-    shaders.add_sdf_expr("smud::sd_box(p, vec2<f32>(params.x, params.y))")
-}
-
 /// Component for AM SDF shapes that need special animation handling.
+/// Deprecated: Use sdf_material::AmSdfShapeComponent instead.
 #[derive(Component, Debug, Clone)]
 pub struct AmSdfShape {
     /// Fill color of the shape.
@@ -210,15 +95,6 @@ pub struct AmSdfShape {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_sdf_shaders_resource() {
-        // Just verify the resource struct can be created
-        let shaders = AmSdfShaders::default();
-        // Resource now holds optional shader handles
-        assert!(shaders.base_box_sdf.is_none());
-        assert!(shaders.stroked_fill_box.is_none());
-    }
 
     #[test]
     fn test_pack_color() {
