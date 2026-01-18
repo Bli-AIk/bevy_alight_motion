@@ -19,7 +19,7 @@ struct SdfMaterialUniform {
     mask_params: vec4<f32>,
     shape_type: f32,
     mask_type: f32,
-    _padding2: f32,
+    frame_half: f32,
     _padding3: f32,
 };
 
@@ -109,16 +109,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let stroke_width = material.params.z;
     let packed_stroke = material.params.w;
     
-    // The mesh is created with size = frame_size x frame_size
-    // where frame_size = max(half_width, half_height) * 2.0 * max_scale_factor + stroke_width * 2.0
+    // The mesh is created with size = frame_half * 2 x frame_half * 2
     // UV (0,0) is bottom-left, (1,1) is top-right
     // We need position relative to center
     
-    // Calculate the actual frame size that was used to create the mesh
-    // Note: max_scale_factor is 10.0 in spawn_sdf_visual
-    let max_scale_factor = 10.0;
-    let frame_half = max(half_width, half_height) * max_scale_factor + stroke_width * 2.0;
-    let frame_size = frame_half * 2.0;
+    // Use the frame_half stored in the material (computed at spawn time)
+    let frame_size = material.frame_half * 2.0;
     
     // Convert UV to local coordinates centered at origin
     let pos = (in.uv - 0.5) * frame_size;

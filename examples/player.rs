@@ -591,46 +591,48 @@ fn toggle_mask_debug(
                     std::collections::HashSet::new();
 
                 for mask_info in mask_query.iter() {
-                    // Create a key based on mask position and size (rounded to int for comparison)
-                    let key = (
-                        (mask_info.center.x * 10.0) as i32,
-                        (mask_info.center.y * 10.0) as i32,
-                        (mask_info.half_size.x * 10.0) as i32,
-                        (mask_info.half_size.y * 10.0) as i32,
-                    );
+                    for mask in &mask_info.masks {
+                        // Create a key based on mask position and size (rounded to int for comparison)
+                        let key = (
+                            (mask.center.x * 10.0) as i32,
+                            (mask.center.y * 10.0) as i32,
+                            (mask.half_size.x * 10.0) as i32,
+                            (mask.half_size.y * 10.0) as i32,
+                        );
 
-                    if seen_masks.contains(&key) {
-                        continue;
-                    }
-                    seen_masks.insert(key);
+                        if seen_masks.contains(&key) {
+                            continue;
+                        }
+                        seen_masks.insert(key);
 
-                    // Spawn a semi-transparent rectangle to visualize the mask
-                    println!(
-                        "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
-                        mask_info.center.x,
-                        mask_info.center.y,
-                        mask_info.half_size.x * 2.0,
-                        mask_info.half_size.y * 2.0
-                    );
+                        // Spawn a semi-transparent rectangle to visualize the mask
+                        println!(
+                            "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
+                            mask.center.x,
+                            mask.center.y,
+                            mask.half_size.x * 2.0,
+                            mask.half_size.y * 2.0
+                        );
 
-                    // Create a sprite to show the mask region
-                    commands.spawn((
-                        Name::new("MaskDebugVisual"),
-                        MaskDebugVisual,
-                        Sprite {
-                            color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
-                            custom_size: Some(Vec2::new(
-                                mask_info.half_size.x * 2.0,
-                                mask_info.half_size.y * 2.0,
+                        // Create a sprite to show the mask region
+                        commands.spawn((
+                            Name::new("MaskDebugVisual"),
+                            MaskDebugVisual,
+                            Sprite {
+                                color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
+                                custom_size: Some(Vec2::new(
+                                    mask.half_size.x * 2.0,
+                                    mask.half_size.y * 2.0,
+                                )),
+                                ..default()
+                            },
+                            Transform::from_translation(Vec3::new(
+                                mask.center.x,
+                                mask.center.y,
+                                100.0, // High z to render on top
                             )),
-                            ..default()
-                        },
-                        Transform::from_translation(Vec3::new(
-                            mask_info.center.x,
-                            mask_info.center.y,
-                            100.0, // High z to render on top
-                        )),
-                    ));
+                        ));
+                    }
                 }
 
                 if seen_masks.is_empty() {

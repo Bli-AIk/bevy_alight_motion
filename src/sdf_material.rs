@@ -40,8 +40,10 @@ pub struct SdfMaterialUniform {
     pub shape_type: f32,
     /// Mask type: 0 = disabled, 1 = rectangle, 2 = ellipse
     pub mask_type: f32,
+    /// Frame half size - the mesh quad is (frame_half * 2) x (frame_half * 2).
+    /// Used by shader to convert UV to local coordinates correctly.
+    pub frame_half: f32,
     /// Padding to align struct to 16 bytes
-    pub _padding2: f32,
     pub _padding3: f32,
 }
 
@@ -122,6 +124,8 @@ impl SdfMaterial {
 
 impl Default for SdfMaterial {
     fn default() -> Self {
+        // Default frame_half based on default half sizes (50, 50) with max_scale_factor=10
+        let default_frame_half = 50.0 * 10.0;
         Self {
             uniform_data: SdfMaterialUniform {
                 color: Vec4::new(1.0, 1.0, 1.0, 1.0),
@@ -129,7 +133,7 @@ impl Default for SdfMaterial {
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type: 0.0,
                 mask_type: 0.0,
-                _padding2: 0.0,
+                frame_half: default_frame_half,
                 _padding3: 0.0,
             },
         }
@@ -138,6 +142,7 @@ impl Default for SdfMaterial {
 
 impl SdfMaterial {
     /// Create a new SDF material with the specified shape type.
+    /// Note: frame_half should be provided by the caller based on mesh size.
     pub fn new(
         shape_type: SdfShapeType,
         half_width: f32,
@@ -145,6 +150,20 @@ impl SdfMaterial {
         fill_color: Color,
         stroke_width: f32,
         stroke_color: Color,
+    ) -> Self {
+        Self::new_with_frame_half(shape_type, half_width, half_height, fill_color, stroke_width, stroke_color, 
+            half_width.max(half_height) * 10.0 + stroke_width * 2.0)
+    }
+    
+    /// Create a new SDF material with explicit frame_half.
+    pub fn new_with_frame_half(
+        shape_type: SdfShapeType,
+        half_width: f32,
+        half_height: f32,
+        fill_color: Color,
+        stroke_width: f32,
+        stroke_color: Color,
+        frame_half: f32,
     ) -> Self {
         let packed_stroke = pack_color(stroke_color);
         let linear = fill_color.to_linear();
@@ -160,7 +179,7 @@ impl SdfMaterial {
                     SdfShapeType::Circle => 3.0,
                 },
                 mask_type: 0.0,
-                _padding2: 0.0,
+                frame_half,
                 _padding3: 0.0,
             },
         }
@@ -177,6 +196,24 @@ impl SdfMaterial {
         mask_center: Vec2,
         mask_half_size: Vec2,
         mask_is_circle: bool,
+    ) -> Self {
+        Self::new_with_mask_and_frame_half(shape_type, half_width, half_height, fill_color, stroke_width, stroke_color,
+            mask_center, mask_half_size, mask_is_circle,
+            half_width.max(half_height) * 10.0 + stroke_width * 2.0)
+    }
+    
+    /// Create a new SDF material with mask support and explicit frame_half.
+    pub fn new_with_mask_and_frame_half(
+        shape_type: SdfShapeType,
+        half_width: f32,
+        half_height: f32,
+        fill_color: Color,
+        stroke_width: f32,
+        stroke_color: Color,
+        mask_center: Vec2,
+        mask_half_size: Vec2,
+        mask_is_circle: bool,
+        frame_half: f32,
     ) -> Self {
         let packed_stroke = pack_color(stroke_color);
         let linear = fill_color.to_linear();
@@ -197,14 +234,14 @@ impl SdfMaterial {
                     SdfShapeType::Circle => 3.0,
                 },
                 mask_type: if mask_is_circle { 2.0 } else { 1.0 },
-                _padding2: 0.0,
+                frame_half,
                 _padding3: 0.0,
             },
         }
     }
     
-    /// Create from LinearRgba, params, and shape_type directly
-    pub fn from_linear(color: LinearRgba, params: Vec4, shape_type: f32) -> Self {
+    /// Create from LinearRgba, params, shape_type, and frame_half directly
+    pub fn from_linear(color: LinearRgba, params: Vec4, shape_type: f32, frame_half: f32) -> Self {
         Self {
             uniform_data: SdfMaterialUniform {
                 color: Vec4::new(color.red, color.green, color.blue, color.alpha),
@@ -212,7 +249,7 @@ impl SdfMaterial {
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type,
                 mask_type: 0.0,
-                _padding2: 0.0,
+                frame_half,
                 _padding3: 0.0,
             },
         }

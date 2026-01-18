@@ -2602,7 +2602,7 @@ fn spawn_sdf_visual(
     // Use first active mask at time 0
     let active_mask_at_zero = mask_info.as_ref().and_then(|m| m.get_active_mask(0));
     let material = if let Some(mask) = active_mask_at_zero {
-        sdf_materials.add(SdfMaterial::new_with_mask(
+        sdf_materials.add(SdfMaterial::new_with_mask_and_frame_half(
             sdf_shape_type,
             target_half_width,
             target_half_height,
@@ -2612,6 +2612,7 @@ fn spawn_sdf_visual(
             mask.center,
             mask.half_size,
             mask.is_circle,
+            frame_half,
         ))
     } else {
         sdf_materials.add(SdfMaterial::from_linear(
@@ -2623,6 +2624,7 @@ fn spawn_sdf_visual(
                 packed_stroke,
             ),
             shape_type_f32,
+            frame_half,
         ))
     };
 
