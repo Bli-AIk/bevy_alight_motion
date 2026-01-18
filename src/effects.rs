@@ -506,6 +506,8 @@ pub fn setup_embed_scene_rtt_system(
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
     query: Query<(Entity, &NeedsEmbedSceneRtt, &Transform), Without<EmbedSceneRtt>>,
     pending_query: Query<&crate::scene::AmPendingLayers>,
+    parent_query: Query<&ChildOf>,
+    embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
     // Get the RTT cameras container from AmPendingLayers
     let rtt_cameras_container = pending_query.iter().next().and_then(|p| p.rtt_cameras_container);
@@ -593,6 +595,39 @@ pub fn setup_embed_scene_rtt_system(
             commands.entity(container).add_child(camera_entity);
         }
 
+        // Determine which RenderLayers to use for the embed's Sprite.
+        // If this embed is a child of another embed (nested), it should render
+        // to the parent embed's RTT layer so the parent embed can see it.
+        // If it's a top-level embed, it renders to layer 0 (main camera).
+        let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
+            let parent = child_of.parent();
+            // Check if parent has EmbedSceneRtt
+            if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
+                bevy::log::trace!(
+                    "[RTT] Embed {:?} is child of embed {:?} with RTT layer {}, using that layer for sprite",
+                    entity,
+                    parent,
+                    parent_rtt.render_layer
+                );
+                RenderLayers::layer(parent_rtt.render_layer as usize)
+            } else {
+                // Parent is not an embed with RTT, use layer 0
+                bevy::log::trace!(
+                    "[RTT] Embed {:?} has parent {:?} but no RTT, using layer 0",
+                    entity,
+                    parent
+                );
+                RenderLayers::layer(0)
+            }
+        } else {
+            // No parent, use layer 0
+            bevy::log::trace!(
+                "[RTT] Embed {:?} has no parent, using layer 0",
+                entity
+            );
+            RenderLayers::layer(0)
+        };
+
         // Add EmbedSceneRtt component and remove the marker
         commands
             .entity(entity)
@@ -611,8 +646,8 @@ pub fn setup_embed_scene_rtt_system(
                     custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
                     ..default()
                 },
-                // EmbedScene entity should be on layer 0 (main camera) so parent sees it
-                RenderLayers::layer(0),
+                // Use appropriate RenderLayers based on nesting
+                sprite_render_layer,
             ));
 
         bevy::log::trace!(
@@ -622,6 +657,36 @@ pub fn setup_embed_scene_rtt_system(
             needs_rtt.scene_width,
             needs_rtt.scene_height
         );
+    }
+}
+
+/// System to fix RenderLayers for nested embeds.
+/// Runs after setup_embed_scene_rtt_system and ApplyDeferred so all embeds have their RTT components.
+pub fn fix_nested_embed_render_layers_system(
+    mut commands: Commands,
+    // Query embeds that have RTT but might need their RenderLayers fixed
+    embed_query: Query<(Entity, &EmbedSceneRtt, &RenderLayers)>,
+    parent_query: Query<&ChildOf>,
+    embed_rtt_query: Query<&EmbedSceneRtt>,
+) {
+    for (entity, _rtt, current_layers) in embed_query.iter() {
+        // Check if this embed is a child of another embed
+        if let Ok(child_of) = parent_query.get(entity) {
+            let parent = child_of.parent();
+            if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
+                // This embed is nested inside another embed
+                let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
+                if *current_layers != expected_layer {
+                    bevy::log::trace!(
+                        "[RTT] Fixing nested embed {:?} RenderLayers: was {:?}, now layer {}",
+                        entity,
+                        current_layers,
+                        parent_rtt.render_layer
+                    );
+                    commands.entity(entity).insert(expected_layer);
+                }
+            }
+        }
     }
 }
 
@@ -722,6 +787,98 @@ pub fn propagate_render_layers_system(
                         content_entity,
                         marker.embed_entity
                     );
+                }
+            }
+        }
+    }
+}
+
+/// System to propagate RenderLayers to Bevy children of embeds (nested embed content).
+///
+/// When embeds are nested, their content becomes Bevy children (not spatially decoupled).
+/// This system ensures all descendants of an embed get the correct RenderLayers so they
+/// render to the embed's RTT camera.
+///
+/// This handles the case where:
+/// 1. Embed A (with RTT layer X) contains Embed B (with RTT layer Y)
+/// 2. Embed B's content is Bevy children of Embed B
+/// 3. Embed B itself needs RenderLayers X to render into Embed A's RTT
+/// 4. Embed B's children need RenderLayers Y to render into Embed B's RTT
+pub fn propagate_render_layers_to_children_system(
+    mut commands: Commands,
+    embed_query: Query<(Entity, &EmbedSceneRtt, &Children)>,
+    children_query: Query<&Children>,
+    render_layers_query: Query<&RenderLayers>,
+    // Query for entities that are NOT embeds (don't have EmbedSceneRtt)
+    non_embed_query: Query<Entity, Without<EmbedSceneRtt>>,
+) {
+    // For each embed with RTT, propagate its render layer to DIRECT children.
+    // This includes:
+    // 1. Non-embed content - they render to this embed's RTT
+    // 2. Nested embeds - their Sprite (displaying their RTT output) needs to render to this embed's RTT
+    //
+    // We do NOT recurse into nested embeds' children because nested embeds handle their own content.
+    for (embed_entity, rtt, children) in embed_query.iter() {
+        let target_layer = RenderLayers::layer(rtt.render_layer as usize);
+
+        bevy::log::trace!(
+            "[RenderLayers] Processing embed {:?} with {} children, layer={}",
+            embed_entity,
+            children.len(),
+            rtt.render_layer
+        );
+
+        // Process all direct children - both embeds and non-embeds need the parent's RenderLayers
+        for child_entity in children.iter() {
+            // Assign this parent embed's RenderLayers to the child
+            let needs_update = match render_layers_query.get(child_entity) {
+                Ok(current) => *current != target_layer,
+                Err(_) => true,
+            };
+
+            if needs_update {
+                commands.entity(child_entity).insert(target_layer.clone());
+                bevy::log::trace!(
+                    "[RenderLayers] Propagated layer {} to child {:?} of embed {:?}",
+                    rtt.render_layer,
+                    child_entity,
+                    embed_entity
+                );
+            }
+
+            // For non-embed children, also process their descendants (but stop at nested embeds)
+            if non_embed_query.get(child_entity).is_ok() {
+                // Recurse into non-embed children
+                let mut to_process: Vec<Entity> = Vec::new();
+                if let Ok(grandchildren) = children_query.get(child_entity) {
+                    to_process.extend(grandchildren.to_vec());
+                }
+
+                while let Some(entity) = to_process.pop() {
+                    // Only process non-embed descendants
+                    if non_embed_query.get(entity).is_ok() {
+                        let needs_update = match render_layers_query.get(entity) {
+                            Ok(current) => *current != target_layer,
+                            Err(_) => true,
+                        };
+
+                        if needs_update {
+                            commands.entity(entity).insert(target_layer.clone());
+                            bevy::log::trace!(
+                                "[RenderLayers] Propagated layer {} to descendant {:?} of embed {:?}",
+                                rtt.render_layer,
+                                entity,
+                                embed_entity
+                            );
+                        }
+
+                        // Continue to grandchildren
+                        if let Ok(grandchildren) = children_query.get(entity) {
+                            to_process.extend(grandchildren.to_vec());
+                        }
+                    }
+                    // If it's an embed, we still assigned it the parent's layer above,
+                    // but we don't recurse into its children (it handles those itself)
                 }
             }
         }

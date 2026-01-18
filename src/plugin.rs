@@ -95,8 +95,12 @@ impl Plugin for AlightMotionPlugin {
                     // RTT setup must happen before animation systems to ensure proper rendering
                     crate::effects::setup_embed_scene_rtt_system,
                     ApplyDeferred,
+                    // Fix RenderLayers for nested embeds (must run after RTT setup and ApplyDeferred)
+                    crate::effects::fix_nested_embed_render_layers_system,
                     // Propagate RenderLayers immediately after RTT setup
                     crate::effects::propagate_render_layers_system,
+                    // TODO: Re-enable after fixing the approach
+                    // crate::effects::propagate_render_layers_to_children_system,
                     animate_transform_system,
                     animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation

@@ -2489,6 +2489,10 @@ fn add_visual_components(
         AmLayerSpec::EmbedScene => {
             // Add RTT setup marker if scene size is available
             if let Some((width, height)) = embed_scene_size {
+                bevy::log::info!(
+                    "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsEmbedSceneRtt: {}x{}",
+                    label, id, width, height
+                );
                 commands.entity(entity).insert((
                     crate::effects::NeedsEmbedSceneRtt {
                         scene_width: width,
@@ -2497,6 +2501,10 @@ fn add_visual_components(
                     AmVisualSpawned,
                 ));
             } else {
+                bevy::log::warn!(
+                    "[SpawnVisuals] EmbedScene '{}' (id={}) has NO embed_scene_size!",
+                    label, id
+                );
                 commands.entity(entity).insert(AmVisualSpawned);
             }
         }
