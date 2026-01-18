@@ -204,9 +204,9 @@ impl AmMaskInfo {
     /// Get the active mask for the given time (ms).
     /// Returns None if no mask is active at this time.
     pub fn get_active_mask(&self, time_ms: u64) -> Option<&AmMaskEntry> {
-        self.masks.iter().find(|m| {
-            time_ms >= m.start_time as u64 && time_ms < m.end_time as u64
-        })
+        self.masks
+            .iter()
+            .find(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
     }
 }
 
@@ -529,9 +529,10 @@ fn spawn_shape(
         && (shape.shape_type == ".circle"
             || shape.stroke.as_ref().is_some_and(|s| {
                 // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
-                s.size.as_ref().is_some_and(|sz| {
-                    sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
-                }) || s.end_size > 0.0
+                s.size
+                    .as_ref()
+                    .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+                    || s.end_size > 0.0
             }));
 
     // Calculate anchor and position compensation for non-SDF shapes
@@ -2148,7 +2149,7 @@ fn flatten_pending_layers_inner(
             // Now remap IDs, but we need to handle duplicates specially
             // Build a fresh remap that tracks which IDs we've seen
             let mut seen_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
-            
+
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
                 let old_id = child.id;
 
@@ -2319,9 +2320,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         && (shape.shape_type == ".circle"
             || shape.stroke.as_ref().is_some_and(|s| {
                 // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
-                s.size.as_ref().is_some_and(|sz| {
-                    sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty()
-                }) || s.end_size > 0.0
+                s.size
+                    .as_ref()
+                    .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+                    || s.end_size > 0.0
             }));
 
     // Calculate anchor and position compensation for non-SDF shapes
@@ -2774,10 +2776,12 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                 layer.z_index,
                 applicable_masks.len()
             );
-            
+
             // Create or update mask_info with all applicable masks
             if layer.mask_info.is_none() {
-                layer.mask_info = Some(AmMaskInfo { masks: applicable_masks });
+                layer.mask_info = Some(AmMaskInfo {
+                    masks: applicable_masks,
+                });
             } else if let Some(ref mut info) = layer.mask_info {
                 info.masks.extend(applicable_masks);
             }
@@ -2786,7 +2790,8 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
 
     // Now propagate masks to children
     // Build map of layer_id -> masks
-    let mut layer_masks: std::collections::HashMap<u64, Vec<AmMaskEntry>> = std::collections::HashMap::new();
+    let mut layer_masks: std::collections::HashMap<u64, Vec<AmMaskEntry>> =
+        std::collections::HashMap::new();
     for layer in layers.iter() {
         if let Some(ref info) = layer.mask_info {
             layer_masks.insert(layer.id, info.masks.clone());
@@ -2806,7 +2811,9 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             // Check if this layer's parent has masks
             if layer.parent != 0 {
                 if let Some(parent_masks) = layer_masks.get(&layer.parent) {
-                    layer.mask_info = Some(AmMaskInfo { masks: parent_masks.clone() });
+                    layer.mask_info = Some(AmMaskInfo {
+                        masks: parent_masks.clone(),
+                    });
                     bevy::log::debug!(
                         "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
                         parent_masks.len(),

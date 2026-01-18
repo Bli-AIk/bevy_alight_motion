@@ -80,10 +80,7 @@ impl Plugin for AlightMotionPlugin {
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
             .init_resource::<AmProjectResolution>()
-            .add_systems(
-                Startup,
-                setup_white_pixel_system,
-            )
+            .add_systems(Startup, setup_white_pixel_system)
             .add_systems(
                 Update,
                 (
@@ -113,14 +110,14 @@ impl Plugin for AlightMotionPlugin {
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
-                    update_sdf_mask_system,       // Update SDF mask state based on timing
-                    update_unified_mask_system,   // Update unified effect mask state based on timing
+                    update_sdf_mask_system, // Update SDF mask state based on timing
+                    update_unified_mask_system, // Update unified effect mask state based on timing
                     animate_unified_effect_system, // Unified effect system (RTT-ready)
-                    animate_rtt_blur_system,       // RTT Gaussian blur animation
-                    apply_mask_clipping_system,    // Apply mask clipping to masked layers
-                    hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
-                    // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
-                    // crate::effects::sync_rtt_camera_position_system,
+                    animate_rtt_blur_system, // RTT Gaussian blur animation
+                    apply_mask_clipping_system, // Apply mask clipping to masked layers
+                    hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
+                                            // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
+                                            // crate::effects::sync_rtt_camera_position_system,
                 )
                     .chain()
                     .after(crate::effects::fix_nested_embed_render_layers_system),
@@ -272,7 +269,7 @@ fn spawn_loaded_projects_system(
                     ViewVisibility::default(),
                 ))
                 .id();
-            
+
             commands.entity(entity).add_child(layers_container);
 
             // Create embed contents container as SIBLING of project root (not child!)

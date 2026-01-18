@@ -510,9 +510,15 @@ pub fn setup_embed_scene_rtt_system(
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
     // Get the RTT cameras container from AmPendingLayers
-    let rtt_cameras_container = pending_query.iter().next().and_then(|p| p.rtt_cameras_container);
+    let rtt_cameras_container = pending_query
+        .iter()
+        .next()
+        .and_then(|p| p.rtt_cameras_container);
 
-    bevy::log::trace!("[RTT] setup_embed_scene_rtt_system: {} embeds need RTT setup", query.iter().count());
+    bevy::log::trace!(
+        "[RTT] setup_embed_scene_rtt_system: {} embeds need RTT setup",
+        query.iter().count()
+    );
 
     for (entity, needs_rtt, embed_transform) in query.iter() {
         // Log embed transform for debugging
@@ -626,10 +632,7 @@ pub fn setup_embed_scene_rtt_system(
             }
         } else {
             // No parent, use layer 0
-            bevy::log::trace!(
-                "[RTT] Embed {:?} has no parent, using layer 0",
-                entity
-            );
+            bevy::log::trace!("[RTT] Embed {:?} has no parent, using layer 0", entity);
             RenderLayers::layer(0)
         };
 
@@ -826,16 +829,23 @@ pub fn propagate_render_layers_to_children_system(
     //
     // Note: We query EmbedSceneRtt separately from Children because Children may not exist
     // if the embed has no Bevy children yet.
-    
-    bevy::log::trace!("[RenderLayers] propagate_render_layers_to_children_system: found {} embeds with RTT", embed_query.iter().count());
-    
+
+    bevy::log::trace!(
+        "[RenderLayers] propagate_render_layers_to_children_system: found {} embeds with RTT",
+        embed_query.iter().count()
+    );
+
     for (embed_entity, rtt) in embed_query.iter() {
         // Check if this embed has children
         let Ok(children) = children_query.get(embed_entity) else {
-            bevy::log::trace!("[RenderLayers] Embed {:?} has RTT layer {} but no Children", embed_entity, rtt.render_layer);
+            bevy::log::trace!(
+                "[RenderLayers] Embed {:?} has RTT layer {} but no Children",
+                embed_entity,
+                rtt.render_layer
+            );
             continue;
         };
-        
+
         let target_layer = RenderLayers::layer(rtt.render_layer as usize);
 
         bevy::log::trace!(

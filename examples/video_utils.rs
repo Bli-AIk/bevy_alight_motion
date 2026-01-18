@@ -254,6 +254,33 @@ pub fn compare_images(
     // Small noise tolerance (e.g., compression artifacts)
     const MATCH_THRESHOLD: u64 = 10;
 
+    // Helper function to check if a pixel is "empty" (transparent or black)
+    let is_empty =
+        |p: &image::Rgba<u8>| -> bool { p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0) };
+
+    // Helper function to check if a pixel is on the edge of content
+    // (has at least one empty neighbor)
+    let is_edge_pixel = |img: &image::RgbaImage, x: u32, y: u32| -> bool {
+        let p = img.get_pixel(x, y);
+        if is_empty(p) {
+            return false; // Empty pixels are not edges
+        }
+        // Check 4-connected neighbors
+        if x > 0 && is_empty(img.get_pixel(x - 1, y)) {
+            return true;
+        }
+        if x + 1 < img.width() && is_empty(img.get_pixel(x + 1, y)) {
+            return true;
+        }
+        if y > 0 && is_empty(img.get_pixel(x, y - 1)) {
+            return true;
+        }
+        if y + 1 < img.height() && is_empty(img.get_pixel(x, y + 1)) {
+            return true;
+        }
+        false
+    };
+
     for y in 0..height {
         for x in 0..width {
             let p1 = img1.get_pixel(x, y);
@@ -270,23 +297,24 @@ pub fn compare_images(
             total_diff_global += pixel_diff;
             total_max_global += 255 * 4;
 
-            // Check if pixel is "empty" (transparent or black with no alpha)
-            // We consider a pixel content if it has alpha > 0 or color > 0
-            // Assuming black transparent is empty.
-            // Actually, let's just check if it's NOT (0,0,0,0) or black background.
-            // For AM, background is usually black.
-            // Let's define "empty" as alpha=0 OR (r=0,g=0,b=0).
-            let p1_empty = p1[3] == 0 || (p1[0] == 0 && p1[1] == 0 && p1[2] == 0);
-            let p2_empty = p2[3] == 0 || (p2[0] == 0 && p2[1] == 0 && p2[2] == 0);
+            // Check if pixel is on edge in either image (ignore edge pixels for content comparison)
+            let p1_edge = is_edge_pixel(img1, x, y);
+            let p2_edge = is_edge_pixel(img2, x, y);
+            let is_edge = p1_edge || p2_edge;
+
+            // Check if pixel is "empty"
+            let p1_empty = is_empty(p1);
+            let p2_empty = is_empty(p2);
 
             let is_content = !p1_empty || !p2_empty;
 
-            if is_content {
+            // Only count non-edge content pixels for content similarity
+            if is_content && !is_edge {
                 total_diff_content += pixel_diff;
                 total_max_content += 255 * 4;
             }
 
-            // Match rate
+            // Match rate (still count all pixels)
             if pixel_diff <= MATCH_THRESHOLD {
                 matching_pixels += 1;
             } else {
@@ -295,9 +323,14 @@ pub fn compare_images(
 
             // Generate diff pixel (emphasize difference)
             if pixel_diff > MATCH_THRESHOLD {
-                // Red scale based on diff
+                // Red scale based on diff (lighter for edge pixels)
                 let intensity = (pixel_diff.min(255) as u8).max(50);
-                diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
+                if is_edge {
+                    // Lighter red for edge pixels
+                    diff_image.put_pixel(x, y, image::Rgba([intensity / 2, 0, 0, 128]));
+                } else {
+                    diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
+                }
             } else {
                 // Transparent
                 diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));

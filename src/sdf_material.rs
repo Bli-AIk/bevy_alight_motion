@@ -8,7 +8,7 @@ use bevy::{
     reflect::TypePath,
     render::render_resource::{AsBindGroup, ShaderType},
     shader::ShaderRef,
-    sprite_render::{Material2d, AlphaMode2d},
+    sprite_render::{AlphaMode2d, Material2d},
 };
 
 /// SDF shape types supported by the material.
@@ -74,22 +74,22 @@ impl SdfMaterial {
             self.uniform_data.color.w,
         )
     }
-    
+
     /// Set the fill color
     pub fn set_color(&mut self, color: LinearRgba) {
         self.uniform_data.color = Vec4::new(color.red, color.green, color.blue, color.alpha);
     }
-    
+
     /// Get params
     pub fn params(&self) -> Vec4 {
         self.uniform_data.params
     }
-    
+
     /// Set params
     pub fn set_params(&mut self, params: Vec4) {
         self.uniform_data.params = params;
     }
-    
+
     /// Get shape type
     pub fn shape_type(&self) -> f32 {
         self.uniform_data.shape_type
@@ -102,7 +102,7 @@ impl SdfMaterial {
     pub fn color_ref(&self) -> &Vec4 {
         &self.uniform_data.color
     }
-    
+
     /// Direct access to params (read)  
     pub fn params_ref(&self) -> &Vec4 {
         &self.uniform_data.params
@@ -115,7 +115,7 @@ impl SdfMaterial {
     pub fn alpha(&self) -> f32 {
         self.uniform_data.color.w
     }
-    
+
     /// Set fill alpha
     pub fn set_alpha(&mut self, alpha: f32) {
         self.uniform_data.color.w = alpha;
@@ -151,10 +151,17 @@ impl SdfMaterial {
         stroke_width: f32,
         stroke_color: Color,
     ) -> Self {
-        Self::new_with_frame_half(shape_type, half_width, half_height, fill_color, stroke_width, stroke_color, 
-            half_width.max(half_height) * 10.0 + stroke_width * 2.0)
+        Self::new_with_frame_half(
+            shape_type,
+            half_width,
+            half_height,
+            fill_color,
+            stroke_width,
+            stroke_color,
+            half_width.max(half_height) * 10.0 + stroke_width * 2.0,
+        )
     }
-    
+
     /// Create a new SDF material with explicit frame_half.
     pub fn new_with_frame_half(
         shape_type: SdfShapeType,
@@ -184,7 +191,7 @@ impl SdfMaterial {
             },
         }
     }
-    
+
     /// Create a new SDF material with mask support.
     pub fn new_with_mask(
         shape_type: SdfShapeType,
@@ -197,11 +204,20 @@ impl SdfMaterial {
         mask_half_size: Vec2,
         mask_is_circle: bool,
     ) -> Self {
-        Self::new_with_mask_and_frame_half(shape_type, half_width, half_height, fill_color, stroke_width, stroke_color,
-            mask_center, mask_half_size, mask_is_circle,
-            half_width.max(half_height) * 10.0 + stroke_width * 2.0)
+        Self::new_with_mask_and_frame_half(
+            shape_type,
+            half_width,
+            half_height,
+            fill_color,
+            stroke_width,
+            stroke_color,
+            mask_center,
+            mask_half_size,
+            mask_is_circle,
+            half_width.max(half_height) * 10.0 + stroke_width * 2.0,
+        )
     }
-    
+
     /// Create a new SDF material with mask support and explicit frame_half.
     pub fn new_with_mask_and_frame_half(
         shape_type: SdfShapeType,
@@ -239,7 +255,7 @@ impl SdfMaterial {
             },
         }
     }
-    
+
     /// Create from LinearRgba, params, shape_type, and frame_half directly
     pub fn from_linear(color: LinearRgba, params: Vec4, shape_type: f32, frame_half: f32) -> Self {
         Self {
@@ -365,7 +381,7 @@ impl SdfMaterial {
     pub fn params_mut(&mut self) -> &mut Vec4 {
         &mut self.uniform_data.params
     }
-    
+
     /// Get mutable access to color
     pub fn color_mut(&mut self) -> &mut Vec4 {
         &mut self.uniform_data.color

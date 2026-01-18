@@ -270,7 +270,7 @@ pub fn animate_transform_system(
         // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
         if embed_content_marker.is_some() && animated.speed_multiplier != 0.0 {
             let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
-            local_time += frame_duration_ms * 0.35;  // Adjusted based on testing
+            local_time += frame_duration_ms * 0.35; // Adjusted based on testing
         }
 
         // Use local time for visibility check (affected by speed)
@@ -325,10 +325,13 @@ pub fn animate_transform_system(
                     global_time,
                     local_time,
                     layer_time,
-                    loc[0], loc[1],
-                    animated.canvas_width, animated.canvas_height,
+                    loc[0],
+                    loc[1],
+                    animated.canvas_width,
+                    animated.canvas_height,
                     animated.has_parent,
-                    bx, by
+                    bx,
+                    by
                 );
             }
 
@@ -616,7 +619,8 @@ pub fn animate_sdf_opacity_system(
                     *visibility = Visibility::Hidden;
                     if let Some(material) = materials.get_mut(&material_handle.0) {
                         material.uniform_data.color.w = 0.0;
-                        material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                        material.uniform_data.params.w =
+                            repack_with_alpha(sdf_params.packed_stroke, 0.0);
                     }
                     continue;
                 }
@@ -631,7 +635,8 @@ pub fn animate_sdf_opacity_system(
 
                     // Also update stroke alpha: base_stroke_alpha * opacity
                     let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
-                    material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+                    material.uniform_data.params.w =
+                        repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
                 }
             }
         }
@@ -717,7 +722,7 @@ pub fn animate_sdf_scale_system(
                 // So translation.y = pivot_y * scale_y (positive pivot_y moves center UP relative to pivot)
                 let new_x = -sdf_params.base_pivot_x * anim_scale[0];
                 let new_y = sdf_params.base_pivot_y * anim_scale[1];
-                
+
                 transform.translation.x = new_x;
                 transform.translation.y = new_y;
             }
@@ -921,7 +926,11 @@ fn find_keyframes(keyframes: &[AmKeyframe], t: f32) -> (&AmKeyframe, &AmKeyframe
 }
 
 /// Find the surrounding keyframes for a given time with optional extrapolation.
-fn find_keyframes_internal(keyframes: &[AmKeyframe], t: f32, extrapolate: bool) -> (&AmKeyframe, &AmKeyframe, f32) {
+fn find_keyframes_internal(
+    keyframes: &[AmKeyframe],
+    t: f32,
+    extrapolate: bool,
+) -> (&AmKeyframe, &AmKeyframe, f32) {
     // Sort keyframes by time (in case they're not sorted)
     let mut sorted: Vec<_> = keyframes.iter().collect();
     sorted.sort_by(|a, b| {
@@ -959,7 +968,7 @@ fn find_keyframes_internal(keyframes: &[AmKeyframe], t: f32, extrapolate: bool) 
             let kf_second = sorted[1];
             let span = kf_second.time - kf_first.time;
             let local_t = if span > 0.0 {
-                (t - kf_first.time) / span  // Will be negative
+                (t - kf_first.time) / span // Will be negative
             } else {
                 0.0
             };
@@ -1464,7 +1473,9 @@ fn spawn_layer_entity(
 
     // Calculate initial position using animation interpolation
     // Use extrapolation for location to improve accuracy before first keyframe
-    let initial_position = if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
+    let initial_position = if let Some(loc) =
+        interpolate_vec3_with_extrapolation(&animated.location, layer_time)
+    {
         let (mut bx, mut by) = if animated.has_parent {
             // For layers with parents, use local coordinates
             (loc[0], -loc[1])
@@ -2481,7 +2492,10 @@ fn add_visual_components(
             if let Some((width, height)) = embed_scene_size {
                 bevy::log::info!(
                     "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsEmbedSceneRtt: {}x{}",
-                    label, id, width, height
+                    label,
+                    id,
+                    width,
+                    height
                 );
                 commands.entity(entity).insert((
                     crate::effects::NeedsEmbedSceneRtt {
@@ -2493,7 +2507,8 @@ fn add_visual_components(
             } else {
                 bevy::log::warn!(
                     "[SpawnVisuals] EmbedScene '{}' (id={}) has NO embed_scene_size!",
-                    label, id
+                    label,
+                    id
                 );
                 commands.entity(entity).insert(AmVisualSpawned);
             }
@@ -2615,7 +2630,7 @@ fn spawn_sdf_visual(
 
     // Convert fill color to LinearRgba for the material
     let fill_linear = fill.to_linear();
-    
+
     // Convert shape type to f32 for the shader
     let shape_type_f32 = match sdf_shape_type {
         SdfShapeType::BoxRound => 0.0,
@@ -2623,7 +2638,7 @@ fn spawn_sdf_visual(
         SdfShapeType::BoxBevel => 2.0,
         SdfShapeType::Circle => 3.0,
     };
-    
+
     // Create SDF material - with or without mask
     // Use first active mask at time 0
     let active_mask_at_zero = mask_info.as_ref().and_then(|m| m.get_active_mask(0));
@@ -2767,7 +2782,7 @@ pub fn apply_mask_clipping_system(
     parent_query: Query<&GlobalTransform>,
 ) {
     let global_time = playback.current_time_ms as u64;
-    
+
     for (global_transform, parent, mask_info, mut visibility, marker) in query.iter_mut() {
         // Get active mask for current time
         let Some(mask) = mask_info.get_active_mask(global_time) else {
@@ -2777,7 +2792,7 @@ pub fn apply_mask_clipping_system(
             }
             continue;
         };
-        
+
         let world_pos: Vec3 = global_transform.translation();
 
         // Calculate position relative to parent (mask coordinate space)
@@ -2948,7 +2963,7 @@ pub fn animate_unified_effect_system(
     for (entity, animated, material_handle, transform, _mesh2d, embed_marker) in query.iter() {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
-        
+
         // Get material to update alpha
         if let Some(material) = materials.get_mut(&material_handle.0) {
             if !animated.is_active(local_time) {
@@ -2956,7 +2971,7 @@ pub fn animate_unified_effect_system(
                 material.color.alpha = 0.0;
                 continue;
             }
-            
+
             // Layer is active - restore alpha (will be updated by opacity below)
             let layer_time = animated.calc_layer_time(local_time);
             let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);

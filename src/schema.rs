@@ -898,7 +898,7 @@ fn ease_in_bounce(x: f32) -> f32 {
 }
 
 /// AM-style bounce with configurable parameters.
-/// 
+///
 /// The bounce curve shows multiple bounces with slow amplitude decay.
 /// p1 controls the first touch timing, p2 controls amplitude retention.
 fn am_bounce(t: f32, p1: f32, p2: f32) -> f32 {
@@ -908,37 +908,37 @@ fn am_bounce(t: f32, p1: f32, p2: f32) -> f32 {
     if t >= 1.0 {
         return 1.0;
     }
-    
+
     // From analysis: first_touch ≈ p1/2, period ≈ p1
     // p2 is amplitude retention per bounce (~0.96 = slow decay)
-    let first_touch = p1 * 0.47;  // Calibrated from video data
-    let period = p1 * 0.93;       // Calibrated from video data
+    let first_touch = p1 * 0.47; // Calibrated from video data
+    let period = p1 * 0.93; // Calibrated from video data
     let n_bounces = 5;
     let amplitude_retention = p2;
-    
+
     // First descent
     if t < first_touch {
         let progress = t / first_touch;
         return progress * progress;
     }
-    
+
     // After first touch: bouncing
     let time_after = t - first_touch;
-    
+
     // Which bounce cycle?
     let cycle = (time_after / period) as i32;
     if cycle >= n_bounces {
         return 1.0;
     }
-    
+
     let local_t = (time_after - cycle as f32 * period) / period;
-    
+
     // Amplitude with slow decay
     let amplitude = amplitude_retention.powi(cycle);
-    
+
     // Parabola: at local_t=0 and 1, we're at bottom; at 0.5, we're at peak
     let bounce_height = 4.0 * local_t * (1.0 - local_t) * amplitude;
-    
+
     1.0 - bounce_height
 }
 

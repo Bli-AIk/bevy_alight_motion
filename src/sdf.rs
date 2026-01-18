@@ -44,7 +44,7 @@
 use bevy::prelude::*;
 
 // Re-export commonly used items from sdf_material
-pub use crate::sdf_material::{pack_color, repack_with_alpha, SdfMaterial, SdfShapeType};
+pub use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with_alpha};
 
 /// Base half-extent for SDF shapes (AM uses 100x100 base square -> 50x50 half-extent)
 ///
