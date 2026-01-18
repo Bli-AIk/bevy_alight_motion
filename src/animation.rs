@@ -2767,67 +2767,27 @@ pub struct AmSdfStrokeParams {
 pub struct AmSdfShapeParent;
 
 /// System to apply mask clipping to layers that have an AmMaskInfo component.
-/// This system checks if the sprite/layer is within the mask bounds and hides it if outside.
-/// Note: This is a simplified implementation that only checks the sprite center against the mask.
-/// For precise pixel-level masking, a custom shader would be needed.
+/// 
+/// NOTE: This system is DISABLED because it uses center-based visibility control,
+/// which doesn't treat groups as a whole. Instead, we use shader-based pixel clipping
+/// via update_effect_mask_system, which properly clips at the pixel level.
+/// 
+/// The original implementation checked if the sprite center is within the mask bounds
+/// and hid the entire sprite if outside. This caused issues with long sprites that
+/// extend beyond the mask - they would be completely hidden even if partially inside.
 pub fn apply_mask_clipping_system(
-    playback: Res<AmPlayback>,
-    mut query: Query<(
+    _playback: Res<AmPlayback>,
+    _query: Query<(
         &GlobalTransform,
         &ChildOf,
         &AmMaskInfo,
         &mut Visibility,
         &AmLayerMarker,
     )>,
-    parent_query: Query<&GlobalTransform>,
+    _parent_query: Query<&GlobalTransform>,
 ) {
-    let global_time = playback.current_time_ms as u64;
-
-    for (global_transform, parent, mask_info, mut visibility, marker) in query.iter_mut() {
-        // Get active mask for current time
-        let Some(mask) = mask_info.get_active_mask(global_time) else {
-            // No active mask - ensure visible
-            if *visibility == Visibility::Hidden {
-                *visibility = Visibility::Inherited;
-            }
-            continue;
-        };
-
-        let world_pos: Vec3 = global_transform.translation();
-
-        // Calculate position relative to parent (mask coordinate space)
-        let local_pos = if let Ok(parent_transform) = parent_query.get(parent.get()) {
-            parent_transform
-                .to_matrix()
-                .inverse()
-                .transform_point3(world_pos)
-                .truncate()
-        } else {
-            world_pos.truncate()
-        };
-
-        // Check if sprite center is inside the mask rectangle
-        // Note: This doesn't account for mask rotation, treating it as axis-aligned
-        let rel_pos = local_pos - mask.center;
-        let inside_mask =
-            rel_pos.x.abs() <= mask.half_size.x && rel_pos.y.abs() <= mask.half_size.y;
-
-        // Update visibility based on mask check
-        if inside_mask {
-            if *visibility == Visibility::Hidden {
-                *visibility = Visibility::Inherited;
-                bevy::log::trace!("[MASK] Layer '{}' now visible (inside mask)", marker.label);
-            }
-        } else if *visibility != Visibility::Hidden {
-            *visibility = Visibility::Hidden;
-            bevy::log::trace!(
-                "[MASK] Layer '{}' hidden (outside mask at {:.1},{:.1})",
-                marker.label,
-                world_pos.x,
-                world_pos.y
-            );
-        }
-    }
+    // Disabled: using shader-based mask clipping instead
+    // Masks should clip at pixel level, not hide entire sprites based on center position
 }
 
 // ============================================================================

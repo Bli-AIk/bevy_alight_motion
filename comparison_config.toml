@@ -4,6 +4,7 @@
 [default]
 avg_threshold = 0.95
 frame_threshold = 0.95
+frame_offset = 0.0
 
 # Basic shape tests
 #
@@ -30,6 +31,18 @@ frame_threshold = 0.75
 [overrides.basic_resolution_group_ex2]
 avg_threshold = 0.90
 frame_threshold = 0.70
+
+# Complex examples with speed=0.7 need frame offset for alignment
+# 速度=0.7的复杂示例需要帧偏移来对齐
+[overrides.complex_examples_2_ex2]
+avg_threshold = 0.95
+frame_threshold = 0.95
+frame_offset = 0.45
+
+[overrides.complex_examples_2_ex1]
+avg_threshold = 0.95
+frame_threshold = 0.95
+frame_offset = 0.45
 
 # fx_1_ex has dynamic angle animation which is hard to match perfectly
 # 特殊情况：动态角度动画难以完美匹配

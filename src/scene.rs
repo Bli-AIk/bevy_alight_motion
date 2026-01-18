@@ -2788,7 +2788,13 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         }
     }
 
-    // Now propagate masks to children
+    // NOTE: We propagate masks to ALL children for shader-based clipping.
+    // According to user feedback, masks should treat the entire group as a whole,
+    // clipping pixels at the shader level rather than hiding entire elements.
+    // This means all child elements will have mask info for the shader to use,
+    // but we do NOT use visibility-based hiding (apply_mask_clipping_system is disabled
+    // for child layers).
+
     // Build map of layer_id -> masks
     let mut layer_masks: std::collections::HashMap<u64, Vec<AmMaskEntry>> =
         std::collections::HashMap::new();

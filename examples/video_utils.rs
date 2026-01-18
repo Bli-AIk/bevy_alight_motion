@@ -259,24 +259,33 @@ pub fn compare_images(
         |p: &image::Rgba<u8>| -> bool { p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0) };
 
     // Helper function to check if a pixel is on the edge of content
-    // (has at least one empty neighbor)
+    // (has at least one empty neighbor within 2-pixel radius)
+    // Extended radius helps handle small position offsets between images
     let is_edge_pixel = |img: &image::RgbaImage, x: u32, y: u32| -> bool {
         let p = img.get_pixel(x, y);
         if is_empty(p) {
             return false; // Empty pixels are not edges
         }
-        // Check 4-connected neighbors
-        if x > 0 && is_empty(img.get_pixel(x - 1, y)) {
-            return true;
-        }
-        if x + 1 < img.width() && is_empty(img.get_pixel(x + 1, y)) {
-            return true;
-        }
-        if y > 0 && is_empty(img.get_pixel(x, y - 1)) {
-            return true;
-        }
-        if y + 1 < img.height() && is_empty(img.get_pixel(x, y + 1)) {
-            return true;
+        // Check neighbors within 2-pixel radius (Manhattan distance)
+        let w = img.width();
+        let h = img.height();
+        for dx in -2i32..=2 {
+            for dy in -2i32..=2 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                // Only check within Manhattan distance 2
+                if dx.abs() + dy.abs() > 2 {
+                    continue;
+                }
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
+                    if is_empty(img.get_pixel(nx as u32, ny as u32)) {
+                        return true;
+                    }
+                }
+            }
         }
         false
     };

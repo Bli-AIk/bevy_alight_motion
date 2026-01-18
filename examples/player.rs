@@ -943,6 +943,7 @@ mod video_comparison_systems {
         // Config thresholds
         pub avg_threshold: f32,
         pub frame_threshold: f32,
+        pub frame_offset: f32, // Frame time offset for alignment
         pub project_name: String,
         pub skipped: bool,
     }
@@ -972,6 +973,7 @@ mod video_comparison_systems {
                 report_dir: PathBuf::from("comparison_report"),
                 avg_threshold: 0.98,
                 frame_threshold: 0.98,
+                frame_offset: 0.0,
                 project_name: String::new(),
                 skipped: false,
             }
@@ -988,6 +990,8 @@ mod video_comparison_systems {
     struct ProjectConfig {
         avg_threshold: f32,
         frame_threshold: f32,
+        #[serde(default)]
+        frame_offset: f32,
     }
 
     pub fn setup_comparison(
@@ -1042,9 +1046,10 @@ mod video_comparison_systems {
             let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
             state.avg_threshold = settings.avg_threshold;
             state.frame_threshold = settings.frame_threshold;
+            state.frame_offset = settings.frame_offset;
             println!(
-                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}",
-                project_name, state.avg_threshold, state.frame_threshold
+                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}",
+                project_name, state.avg_threshold, state.frame_threshold, state.frame_offset
             );
         }
 
@@ -1178,10 +1183,11 @@ mod video_comparison_systems {
 
                 // Set precise time for this frame
                 // Add half-frame offset to match AM video export timing
+                // Use config frame_offset, or env var FRAME_OFFSET as override
                 let frame_offset: f32 = std::env::var("FRAME_OFFSET")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
+                    .unwrap_or(state.frame_offset);
                 let time_sec = (state.current_frame as f32 + frame_offset) / state.fps;
                 playback.playing = false; // Ensure paused
                 playback.current_time_ms = time_sec * 1000.0;
