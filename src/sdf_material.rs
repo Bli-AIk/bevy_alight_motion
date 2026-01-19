@@ -203,6 +203,7 @@ impl SdfMaterial {
         mask_center: Vec2,
         mask_half_size: Vec2,
         mask_is_circle: bool,
+        mask_is_exclude: bool,
     ) -> Self {
         Self::new_with_mask_and_frame_half(
             shape_type,
@@ -214,6 +215,7 @@ impl SdfMaterial {
             mask_center,
             mask_half_size,
             mask_is_circle,
+            mask_is_exclude,
             half_width.max(half_height) * 10.0 + stroke_width * 2.0,
         )
     }
@@ -229,10 +231,14 @@ impl SdfMaterial {
         mask_center: Vec2,
         mask_half_size: Vec2,
         mask_is_circle: bool,
+        mask_is_exclude: bool,
         frame_half: f32,
     ) -> Self {
         let packed_stroke = pack_color(stroke_color);
         let linear = fill_color.to_linear();
+        // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+        let base_type = if mask_is_circle { 2.0 } else { 1.0 };
+        let mask_type = if mask_is_exclude { base_type + 2.0 } else { base_type };
         Self {
             uniform_data: SdfMaterialUniform {
                 color: Vec4::new(linear.red, linear.green, linear.blue, linear.alpha),
@@ -249,7 +255,7 @@ impl SdfMaterial {
                     SdfShapeType::BoxBevel => 2.0,
                     SdfShapeType::Circle => 3.0,
                 },
-                mask_type: if mask_is_circle { 2.0 } else { 1.0 },
+                mask_type,
                 frame_half,
                 _padding3: 0.0,
             },

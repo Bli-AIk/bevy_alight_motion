@@ -167,8 +167,10 @@ pub enum AmBlendingMode {
     /// Normal rendering
     #[default]
     Normal,
-    /// Mask layer - clips content below it (not rendered itself)
+    /// Mask layer - clips content below it to show only inside the mask (not rendered itself)
     Mask,
+    /// Exclude layer - clips content below it to hide inside the mask (not rendered itself)
+    Exclude,
 }
 
 /// Information about a single mask that can clip this layer.
@@ -190,6 +192,8 @@ pub struct AmMaskEntry {
     pub end_time: i32,
     /// The ID of the mask layer
     pub mask_layer_id: u64,
+    /// Whether this is an exclude mask (inverted - hide inside, show outside)
+    pub is_exclude: bool,
 }
 
 /// Information about active masks that can clip this layer.
@@ -2467,10 +2471,10 @@ fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<Pend
         spec,
         z_index: z,
         children: Vec::new(),
-        blending_mode: if shape.blending == "mask" {
-            AmBlendingMode::Mask
-        } else {
-            AmBlendingMode::Normal
+        blending_mode: match shape.blending.as_str() {
+            "mask" => AmBlendingMode::Mask,
+            "exclude" => AmBlendingMode::Exclude,
+            _ => AmBlendingMode::Normal,
         },
         mask_info: None,
         palette_params: if palette_map.has_effect() {
@@ -2721,16 +2725,20 @@ fn collect_embed_scene(
 /// 3. Propagate mask to all descendants by following the parent chain
 fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // Find all mask layers and their info
-    // Masks are root-level layers (parent=0) with blending_mode=Mask
+    // Masks are root-level layers (parent=0) with blending_mode=Mask or Exclude
     let mut mask_layers: Vec<(u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, z_index, mask_entry)
 
     for layer in layers.iter() {
-        if layer.blending_mode == AmBlendingMode::Mask && layer.parent == 0 {
+        let is_mask = layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude;
+        if is_mask && layer.parent == 0 {
             // Extract mask geometry from the layer's transform and spec
             let mask_entry = extract_mask_info_from_layer(layer);
-            if let Some(entry) = mask_entry {
+            if let Some(mut entry) = mask_entry {
+                // Set is_exclude based on blending mode
+                entry.is_exclude = layer.blending_mode == AmBlendingMode::Exclude;
                 bevy::log::info!(
-                    "[MASK] Found mask layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
+                    "[MASK] Found {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
+                    if entry.is_exclude { "exclude" } else { "mask" },
                     layer.label,
                     layer.id,
                     layer.z_index,
@@ -2753,7 +2761,7 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // For each non-mask root layer, collect ALL masks that are above it (higher z-index)
     // This allows the runtime system to choose the correct mask based on current time
     for layer in layers.iter_mut() {
-        if layer.blending_mode == AmBlendingMode::Mask {
+        if layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude {
             continue; // Don't apply mask to mask layer itself
         }
 
@@ -2809,7 +2817,7 @@ fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     loop {
         let mut changes = false;
         for layer in layers.iter_mut() {
-            if layer.blending_mode == AmBlendingMode::Mask {
+            if layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude {
                 continue;
             }
             if layer.mask_info.is_some() {
@@ -2908,6 +2916,7 @@ fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskEntry> {
         start_time: layer.start_time,
         end_time: layer.end_time,
         mask_layer_id: layer.id,
+        is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
     })
 }
 

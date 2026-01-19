@@ -118,8 +118,8 @@ fn apply_wipe(uv: vec2<f32>) -> f32 {
     }
 }
 
-// Apply mask clipping - returns true if inside mask
-// mask_type: 1.0 = rectangle, 2.0 = ellipse
+// Apply mask clipping - returns true if pixel should be kept
+// mask_type: 1.0 = rectangle mask, 2.0 = ellipse mask, 3.0 = rectangle exclude, 4.0 = ellipse exclude
 fn apply_mask(world_pos: vec2<f32>, mask_type: f32) -> bool {
     let mask_center = mask_params.xy;
     let mask_half_size = mask_params.zw;
@@ -130,15 +130,26 @@ fn apply_mask(world_pos: vec2<f32>, mask_type: f32) -> bool {
     
     let rel_pos = world_pos - mask_center;
     
-    // Ellipse mask (mask_type >= 1.5)
-    if mask_type > 1.5 {
+    // Determine if this is an exclude mask (mask_type >= 2.5)
+    let is_exclude = mask_type > 2.5;
+    // Determine if this is an ellipse (mask_type ~= 2 or 4, i.e. mod 2 is small)
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    
+    var inside: bool;
+    if is_ellipse {
         // Ellipse equation: (x/a)^2 + (y/b)^2 <= 1
         let normalized = rel_pos / mask_half_size;
-        return dot(normalized, normalized) <= 1.0;
+        inside = dot(normalized, normalized) <= 1.0;
+    } else {
+        // Rectangle mask
+        inside = abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
     }
     
-    // Rectangle mask
-    return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
+    // For exclude masks, we want to keep pixels OUTSIDE the mask
+    if is_exclude {
+        return !inside;
+    }
+    return inside;
 }
 
 // Gaussian weight function

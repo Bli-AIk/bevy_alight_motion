@@ -577,7 +577,9 @@ pub fn update_sdf_mask_system(
                             mask.half_size.x,
                             mask.half_size.y,
                         );
-                        material.uniform_data.mask_type = if mask.is_circle { 2.0 } else { 1.0 };
+                        // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+                        let base_type = if mask.is_circle { 2.0 } else { 1.0 };
+                        material.uniform_data.mask_type = if mask.is_exclude { base_type + 2.0 } else { base_type };
                     } else {
                         // No active mask at this time
                         material.uniform_data.mask_type = 0.0;
@@ -1628,7 +1630,7 @@ fn spawn_layer_entity(
     }
 
     // Add visual components based on spec (skip for mask layers)
-    if layer.blending_mode != AmBlendingMode::Mask {
+    if layer.blending_mode != AmBlendingMode::Mask && layer.blending_mode != AmBlendingMode::Exclude {
         // Extract initial scale from animated data for SDF shapes
         // (transform.scale is set to 1.0 for SDF shapes, actual scale is in animated)
         let initial_scale = get_initial_scale_from_animated(&layer.animated.scale);
@@ -2043,10 +2045,12 @@ fn add_visual_components(
         };
 
         // Enable mask if present - use first mask at time 0
-        // effect_flags.x: 1.0 = rectangle mask, 2.0 = circle/ellipse mask
+        // effect_flags.x: 1.0 = rectangle mask, 2.0 = circle/ellipse mask, 3.0 = rectangle exclude, 4.0 = circle/ellipse exclude
         if let Some(mask_info) = mask_info {
             if let Some(mask) = mask_info.get_active_mask(0) {
-                material.effect_flags.x = if mask.is_circle { 2.0 } else { 1.0 };
+                // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+                let base_type = if mask.is_circle { 2.0 } else { 1.0 };
+                material.effect_flags.x = if mask.is_exclude { base_type + 2.0 } else { base_type };
                 material.mask_params = Vec4::new(
                     mask.center.x,
                     mask.center.y,
@@ -2677,6 +2681,7 @@ fn spawn_sdf_visual(
             mask.center,
             mask.half_size,
             mask.is_circle,
+            mask.is_exclude,
             frame_half,
         ))
     } else {
@@ -2905,9 +2910,10 @@ pub fn update_unified_mask_system(
         let active_mask = mask_info.get_active_mask(global_time);
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
-            // Update effect_flags.x: 0 = disabled, 1 = rect, 2 = ellipse
+            // Update effect_flags.x: 0 = disabled, 1 = rect, 2 = ellipse, 3 = rect exclude, 4 = ellipse exclude
             if let Some(mask) = active_mask {
-                material.effect_flags.x = if mask.is_circle { 2.0 } else { 1.0 };
+                let base_type = if mask.is_circle { 2.0 } else { 1.0 };
+                material.effect_flags.x = if mask.is_exclude { base_type + 2.0 } else { base_type };
                 material.mask_params = bevy::math::Vec4::new(
                     mask.center.x,
                     mask.center.y,

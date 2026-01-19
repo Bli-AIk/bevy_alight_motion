@@ -81,6 +81,10 @@ frame_threshold = 0.90
 [overrides.basic_gradient]
 skip = true
 
+
+[overrides.fx_2_gaussian_blur]
+skip = true
+
 [overrides.fx_3_grid]
 skip = true
 
