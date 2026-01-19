@@ -1188,7 +1188,7 @@ mod video_comparison_systems {
         // 4. Material GPU buffers are updated (critical for first frame)
         const WAIT_FRAMES: u32 = 5;
         // Wait more frames for initial load to ensure textures are uploaded to GPU
-        const INITIAL_WAIT_FRAMES: u32 = 10;
+        const INITIAL_WAIT_FRAMES: u32 = 15;
 
         match state.stage {
             TestStage::Initializing => {} // Handled in setup
