@@ -42,6 +42,8 @@
 @group(2) @binding(16) var<uniform> palette_color6: vec4<f32>;
 @group(2) @binding(17) var<uniform> palette_color7: vec4<f32>;
 @group(2) @binding(18) var<uniform> palette_color8: vec4<f32>;
+@group(2) @binding(19) var<uniform> mask2_params: vec4<f32>;
+@group(2) @binding(20) var<uniform> mask2_flags: vec4<f32>;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -118,38 +120,102 @@ fn apply_wipe(uv: vec2<f32>) -> f32 {
     }
 }
 
-// Apply mask clipping - returns true if pixel should be kept
-// mask_type: 1.0 = rectangle mask, 2.0 = ellipse mask, 3.0 = rectangle exclude, 4.0 = ellipse exclude
-fn apply_mask(world_pos: vec2<f32>, mask_type: f32) -> bool {
-    let mask_center = mask_params.xy;
-    let mask_half_size = mask_params.zw;
-    
-    if mask_half_size.x > 5000.0 {
-        return true;
-    }
-    
+// Check if a point is inside a single mask shape
+// Returns true if inside the shape, false if outside
+fn check_mask_shape(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool) -> bool {
     let rel_pos = world_pos - mask_center;
     
-    // Determine if this is an exclude mask (mask_type >= 2.5)
-    let is_exclude = mask_type > 2.5;
-    // Determine if this is an ellipse (mask_type ~= 2 or 4, i.e. mod 2 is small)
-    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
-    
-    var inside: bool;
     if is_ellipse {
         // Ellipse equation: (x/a)^2 + (y/b)^2 <= 1
         let normalized = rel_pos / mask_half_size;
-        inside = dot(normalized, normalized) <= 1.0;
+        return dot(normalized, normalized) <= 1.0;
     } else {
         // Rectangle mask
-        inside = abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
+        return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
+    }
+}
+
+// Apply single mask - returns true if pixel should be kept
+// mask_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+fn apply_single_mask(world_pos: vec2<f32>, mask_type: f32, mask_center: vec2<f32>, mask_half_size: vec2<f32>) -> bool {
+    // Disabled mask or invalid half_size - keep all pixels
+    if mask_type < 0.5 || mask_half_size.x > 5000.0 {
+        return true;
     }
     
-    // For exclude masks, we want to keep pixels OUTSIDE the mask
+    // Determine if this is an exclude mask (type >= 2.5)
+    let is_exclude = mask_type > 2.5;
+    // Determine if this is an ellipse (type ~= 2 or 4)
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    
+    let inside = check_mask_shape(world_pos, mask_center, mask_half_size, is_ellipse);
+    
+    // For exclude masks, keep pixels OUTSIDE the shape
     if is_exclude {
         return !inside;
     }
+    // For include masks, keep pixels INSIDE the shape
     return inside;
+}
+
+// Apply combined masks with correct AM logic:
+// - Multiple include masks: INTERSECTION (show only where ALL include masks overlap)
+// - Multiple exclude masks: UNION (hide if inside ANY exclude mask)
+// - Mixed: (inside include intersection) AND (outside exclude union)
+fn apply_masks(world_pos: vec2<f32>) -> bool {
+    let mask1_type = effect_flags.x;
+    let mask2_type = mask2_flags.x;
+    
+    // Disabled masks
+    let mask1_enabled = mask1_type > 0.5;
+    let mask2_enabled = mask2_type > 0.5;
+    
+    if !mask1_enabled && !mask2_enabled {
+        return true; // No masks - keep all pixels
+    }
+    
+    // Check if each mask is exclude type (type >= 2.5 means type 3 or 4)
+    let mask1_is_exclude = mask1_type > 2.5;
+    let mask2_is_exclude = mask2_type > 2.5;
+    
+    // Check if pixel is inside each mask shape
+    let mask1_is_ellipse = (mask1_type > 1.5 && mask1_type < 2.5) || mask1_type > 3.5;
+    let mask2_is_ellipse = (mask2_type > 1.5 && mask2_type < 2.5) || mask2_type > 3.5;
+    
+    let mask1_inside = mask1_enabled && mask_params.z < 5000.0 && 
+        check_mask_shape(world_pos, mask_params.xy, mask_params.zw, mask1_is_ellipse);
+    let mask2_inside = mask2_enabled && mask2_params.z < 5000.0 && 
+        check_mask_shape(world_pos, mask2_params.xy, mask2_params.zw, mask2_is_ellipse);
+    
+    // Separate into include and exclude groups
+    let include1 = mask1_enabled && !mask1_is_exclude;
+    let include2 = mask2_enabled && !mask2_is_exclude;
+    let exclude1 = mask1_enabled && mask1_is_exclude;
+    let exclude2 = mask2_enabled && mask2_is_exclude;
+    
+    // Calculate include result: pixel must be inside ALL include masks (intersection)
+    var include_pass = true;
+    if include1 || include2 {
+        if include1 && include2 {
+            // Both include masks: must be inside both (intersection)
+            include_pass = mask1_inside && mask2_inside;
+        } else if include1 {
+            include_pass = mask1_inside;
+        } else {
+            include_pass = mask2_inside;
+        }
+    }
+    
+    // Calculate exclude result: pixel must be outside ALL exclude masks
+    var exclude_pass = true;
+    if exclude1 || exclude2 {
+        let in_exclude1 = exclude1 && mask1_inside;
+        let in_exclude2 = exclude2 && mask2_inside;
+        // If inside any exclude mask, fail
+        exclude_pass = !(in_exclude1 || in_exclude2);
+    }
+    
+    return include_pass && exclude_pass;
 }
 
 // Gaussian weight function
@@ -329,7 +395,8 @@ fn apply_palette_map(input_color: vec4<f32>) -> vec4<f32> {
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
-    let mask_enabled = effect_flags.x > 0.5;
+    // Mask is enabled if either mask1 or mask2 is enabled
+    let mask_enabled = effect_flags.x > 0.5 || mask2_flags.x > 0.5;
     let wipe_enabled = effect_flags.y > 0.5;
     let stretch_enabled = effect_flags.z > 0.5;
     let blur_enabled = effect_flags.w > 0.5;
@@ -372,11 +439,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = mix(tex_color, quantized_color, palette_alpha);
     }
     
-    // Apply mask clipping if enabled
-    // effect_flags.x: 1.0 = rectangle mask, 2.0 = ellipse mask
+    // Apply mask clipping if any mask is enabled
+    // Uses combined mask logic for dual masks and mixed include/exclude
     if mask_enabled {
         let world_pos = mesh.world_position.xy;
-        if !apply_mask(world_pos, effect_flags.x) {
+        if !apply_masks(world_pos) {
             discard;
         }
     }

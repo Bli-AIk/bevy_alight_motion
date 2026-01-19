@@ -1185,7 +1185,8 @@ mod video_comparison_systems {
         // 1. Animation system processes new time
         // 2. Transform updates propagate
         // 3. Render pipeline is flushed
-        const WAIT_FRAMES: u32 = 3;
+        // 4. Material GPU buffers are updated (critical for first frame)
+        const WAIT_FRAMES: u32 = 5;
         // Wait more frames for initial load to ensure textures are uploaded to GPU
         const INITIAL_WAIT_FRAMES: u32 = 10;
 

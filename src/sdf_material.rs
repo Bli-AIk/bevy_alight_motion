@@ -32,19 +32,21 @@ pub struct SdfMaterialUniform {
     pub color: Vec4,
     /// Shape parameters: (half_width, half_height, stroke_width, packed_stroke_color)
     pub params: Vec4,
-    /// Mask parameters: (center_x, center_y, half_width, half_height)
+    /// Mask 1 parameters: (center_x, center_y, half_width, half_height)
     /// If half_width > 5000.0, mask is disabled
     pub mask_params: Vec4,
+    /// Mask 2 parameters: (center_x, center_y, half_width, half_height)
+    pub mask2_params: Vec4,
     /// Shape type encoded as float (needs padding to 16 bytes for proper alignment)
     /// Also includes mask_type: 0 = no mask, 1 = rect mask, 2 = ellipse mask
     pub shape_type: f32,
-    /// Mask type: 0 = disabled, 1 = rectangle, 2 = ellipse
+    /// Mask 1 type: 0 = disabled, 1 = rectangle, 2 = ellipse, 3 = rect exclude, 4 = ellipse exclude
     pub mask_type: f32,
+    /// Mask 2 type: 0 = disabled, 1 = rectangle, 2 = ellipse, 3 = rect exclude, 4 = ellipse exclude
+    pub mask2_type: f32,
     /// Frame half size - the mesh quad is (frame_half * 2) x (frame_half * 2).
     /// Used by shader to convert UV to local coordinates correctly.
     pub frame_half: f32,
-    /// Padding to align struct to 16 bytes
-    pub _padding3: f32,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -131,10 +133,11 @@ impl Default for SdfMaterial {
                 color: Vec4::new(1.0, 1.0, 1.0, 1.0),
                 params: Vec4::new(50.0, 50.0, 0.0, 0.0),
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
+                mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type: 0.0,
                 mask_type: 0.0,
+                mask2_type: 0.0,
                 frame_half: default_frame_half,
-                _padding3: 0.0,
             },
         }
     }
@@ -179,6 +182,7 @@ impl SdfMaterial {
                 color: Vec4::new(linear.red, linear.green, linear.blue, linear.alpha),
                 params: Vec4::new(half_width, half_height, stroke_width, packed_stroke),
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
+                mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type: match shape_type {
                     SdfShapeType::BoxRound => 0.0,
                     SdfShapeType::BoxMiter => 1.0,
@@ -186,8 +190,8 @@ impl SdfMaterial {
                     SdfShapeType::Circle => 3.0,
                 },
                 mask_type: 0.0,
+                mask2_type: 0.0,
                 frame_half,
-                _padding3: 0.0,
             },
         }
     }
@@ -249,6 +253,7 @@ impl SdfMaterial {
                     mask_half_size.x,
                     mask_half_size.y,
                 ),
+                mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type: match shape_type {
                     SdfShapeType::BoxRound => 0.0,
                     SdfShapeType::BoxMiter => 1.0,
@@ -256,8 +261,8 @@ impl SdfMaterial {
                     SdfShapeType::Circle => 3.0,
                 },
                 mask_type,
+                mask2_type: 0.0,
                 frame_half,
-                _padding3: 0.0,
             },
         }
     }
@@ -269,10 +274,11 @@ impl SdfMaterial {
                 color: Vec4::new(color.red, color.green, color.blue, color.alpha),
                 params,
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
+                mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 shape_type,
                 mask_type: 0.0,
+                mask2_type: 0.0,
                 frame_half,
-                _padding3: 0.0,
             },
         }
     }

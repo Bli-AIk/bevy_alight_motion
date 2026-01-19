@@ -552,7 +552,8 @@ pub fn animate_text_opacity_system(
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
 pub fn update_sdf_mask_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children, &AmMaskInfo), With<AmSdfShapeParent>>,
+    parent_query: Query<(&AmAnimated, &Children, &AmMaskInfo, &AmLayerMarker), With<AmSdfShapeParent>>,
+    pending_query: Query<&crate::scene::AmPendingLayers>,
     mut sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
@@ -560,29 +561,65 @@ pub fn update_sdf_mask_system(
         return;
     }
 
+    // Get fit_scale from AmPendingLayers (stored as inverse)
+    let fit_scale = pending_query
+        .iter()
+        .next()
+        .map(|p| 1.0 / p.inv_fit_scale)
+        .unwrap_or(1.0);
+
     let global_time = playback.current_time_ms;
 
-    for (animated, children, mask_info) in parent_query.iter() {
-        // Get the active mask for current time
-        let active_mask = mask_info.get_active_mask(global_time as u64);
+    for (_animated, children, mask_info, marker) in parent_query.iter() {
+        // Get all active masks for current time (supports up to 2)
+        let active_masks = mask_info.get_active_masks(global_time as u64);
 
         for child in children.iter() {
             if let Ok(material_handle) = sdf_query.get_mut(child) {
                 if let Some(material) = materials.get_mut(&material_handle.0) {
-                    if let Some(mask) = active_mask {
-                        // Update mask parameters for the active mask
-                        material.uniform_data.mask_params = bevy::math::Vec4::new(
-                            mask.center.x,
-                            mask.center.y,
-                            mask.half_size.x,
-                            mask.half_size.y,
-                        );
-                        // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
-                        let base_type = if mask.is_circle { 2.0 } else { 1.0 };
-                        material.uniform_data.mask_type = if mask.is_exclude { base_type + 2.0 } else { base_type };
-                    } else {
-                        // No active mask at this time
+                    if active_masks.is_empty() {
+                        // No active masks
                         material.uniform_data.mask_type = 0.0;
+                        material.uniform_data.mask2_type = 0.0;
+                    } else {
+                        // First mask
+                        let mask1 = active_masks[0];
+                        material.uniform_data.mask_params = bevy::math::Vec4::new(
+                            mask1.center.x * fit_scale,
+                            mask1.center.y * fit_scale,
+                            mask1.half_size.x * fit_scale,
+                            mask1.half_size.y * fit_scale,
+                        );
+                        let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+                        material.uniform_data.mask_type = if mask1.is_exclude { base_type1 + 2.0 } else { base_type1 };
+                        
+                        // Second mask (if present)
+                        if active_masks.len() >= 2 {
+                            let mask2 = active_masks[1];
+                            material.uniform_data.mask2_params = bevy::math::Vec4::new(
+                                mask2.center.x * fit_scale,
+                                mask2.center.y * fit_scale,
+                                mask2.half_size.x * fit_scale,
+                                mask2.half_size.y * fit_scale,
+                            );
+                            let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+                            material.uniform_data.mask2_type = if mask2.is_exclude { base_type2 + 2.0 } else { base_type2 };
+                            
+                            bevy::log::debug!(
+                                "[SdfMask] '{}' time={}, DUAL mask: mask1_type={:.0}, mask2_type={:.0}",
+                                marker.label, global_time, material.uniform_data.mask_type, material.uniform_data.mask2_type
+                            );
+                        } else {
+                            // Only one mask
+                            material.uniform_data.mask2_type = 0.0;
+                            
+                            bevy::log::debug!(
+                                "[SdfMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                                marker.label, global_time, material.uniform_data.mask_type,
+                                mask1.center.x * fit_scale, mask1.center.y * fit_scale,
+                                mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale
+                            );
+                        }
                     }
                 }
             }
@@ -1835,6 +1872,7 @@ fn spawn_layer_entity(
             max_blur_radius,
             initial_mesh_offset,
             initial_stretch_mesh_bounds,
+            1.0 / inv_fit_scale, // fit_scale for mask coordinates
         );
     } else {
         bevy::log::info!(
@@ -1909,6 +1947,7 @@ fn add_visual_components(
     _max_blur_radius: f32,
     initial_mesh_offset: Option<Vec4>,
     initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
+    fit_scale: f32, // Scale factor for mask coordinates
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -2020,13 +2059,67 @@ fn add_visual_components(
         palette_params: Option<&AmPaletteMapParams>,
         mesh_offset: Option<Vec4>,
         mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
+        fit_scale: f32, // Scale factor for mask coordinates
     ) -> Handle<UnifiedEffectMaterial> {
         // Use mesh_size if provided (for stretch bounds), otherwise use original size
         let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
+        
+        // Pre-calculate mask params if mask is present, to ensure first frame renders correctly
+        // Support up to 2 masks for dual-mask effects
+        let (initial_effect_flags_x, initial_mask_params, initial_mask2_flags_x, initial_mask2_params) = 
+            if let Some(mask_info) = mask_info {
+                let active_masks = mask_info.get_active_masks(0);
+                
+                if active_masks.is_empty() {
+                    bevy::log::info!("[MaterialInit] No active mask at time 0, mask_info has {} masks", mask_info.masks.len());
+                    (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0), 0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+                } else {
+                    // First mask
+                    let mask1 = active_masks[0];
+                    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+                    let mask1_type = if mask1.is_exclude { base_type1 + 2.0 } else { base_type1 };
+                    let mask1_params = Vec4::new(
+                        mask1.center.x * fit_scale,
+                        mask1.center.y * fit_scale,
+                        mask1.half_size.x * fit_scale,
+                        mask1.half_size.y * fit_scale,
+                    );
+                    
+                    // Second mask (if present)
+                    let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
+                        let mask2 = active_masks[1];
+                        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+                        let m2_type = if mask2.is_exclude { base_type2 + 2.0 } else { base_type2 };
+                        let m2_params = Vec4::new(
+                            mask2.center.x * fit_scale,
+                            mask2.center.y * fit_scale,
+                            mask2.half_size.x * fit_scale,
+                            mask2.half_size.y * fit_scale,
+                        );
+                        bevy::log::info!(
+                            "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
+                            mask1_type, m2_type, fit_scale
+                        );
+                        (m2_type, m2_params)
+                    } else {
+                        bevy::log::info!(
+                            "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
+                            mask1_type, mask1.center.x * fit_scale, mask1.center.y * fit_scale,
+                            mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale, fit_scale
+                        );
+                        (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+                    };
+                    
+                    (mask1_type, mask1_params, mask2_type, mask2_params)
+                }
+            } else {
+                (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0), 0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+            };
+        
         let mut material = UnifiedEffectMaterial {
             color,
-            effect_flags: Vec4::ZERO,
-            mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
+            mask_params: initial_mask_params,
             wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
             stretch_params: Vec4::ZERO,
             original_size: Vec4::new(width, height, mesh_width, mesh_height),
@@ -2042,23 +2135,9 @@ fn add_visual_components(
             palette_color6: Vec4::ZERO,
             palette_color7: Vec4::ZERO,
             palette_color8: Vec4::ZERO,
+            mask2_params: initial_mask2_params,
+            mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
         };
-
-        // Enable mask if present - use first mask at time 0
-        // effect_flags.x: 1.0 = rectangle mask, 2.0 = circle/ellipse mask, 3.0 = rectangle exclude, 4.0 = circle/ellipse exclude
-        if let Some(mask_info) = mask_info {
-            if let Some(mask) = mask_info.get_active_mask(0) {
-                // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
-                let base_type = if mask.is_circle { 2.0 } else { 1.0 };
-                material.effect_flags.x = if mask.is_exclude { base_type + 2.0 } else { base_type };
-                material.mask_params = Vec4::new(
-                    mask.center.x,
-                    mask.center.y,
-                    mask.half_size.x,
-                    mask.half_size.y,
-                );
-            }
-        }
 
         // Enable wipe if present
         if let Some(wp) = wipe_params {
@@ -2228,6 +2307,7 @@ fn add_visual_components(
                             palette_params,
                             initial_mesh_offset,
                             mesh_size,
+                            fit_scale,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -2318,6 +2398,7 @@ fn add_visual_components(
                         palette_params,
                         initial_mesh_offset,
                         mesh_size,
+                        fit_scale,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -2447,6 +2528,7 @@ fn add_visual_components(
                         palette_params,
                         initial_mesh_offset,
                         mesh_size,
+                        fit_scale,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -2891,37 +2973,81 @@ fn update_mesh_for_blur(
 
 /// System to dynamically update mask state on entities with UnifiedEffectMaterial.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
+/// Supports up to 2 simultaneous masks for dual-mask, dual-exclude, and mixed effects.
 pub fn update_unified_mask_system(
     playback: Res<AmPlayback>,
     query: Query<(
         &AmMaskInfo,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
+        &AmLayerMarker,
     )>,
+    pending_query: Query<&crate::scene::AmPendingLayers>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
 ) {
     if playback.force_stopped {
         return;
     }
 
+    // Get fit_scale from AmPendingLayers (stored as inverse)
+    let fit_scale = pending_query
+        .iter()
+        .next()
+        .map(|p| 1.0 / p.inv_fit_scale)
+        .unwrap_or(1.0);
+
     let global_time = playback.current_time_ms as u64;
 
-    for (mask_info, material_handle) in query.iter() {
-        // Get active mask for current time
-        let active_mask = mask_info.get_active_mask(global_time);
+    for (mask_info, material_handle, marker) in query.iter() {
+        // Get all active masks for current time (supports up to 2)
+        let active_masks = mask_info.get_active_masks(global_time);
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
-            // Update effect_flags.x: 0 = disabled, 1 = rect, 2 = ellipse, 3 = rect exclude, 4 = ellipse exclude
-            if let Some(mask) = active_mask {
-                let base_type = if mask.is_circle { 2.0 } else { 1.0 };
-                material.effect_flags.x = if mask.is_exclude { base_type + 2.0 } else { base_type };
-                material.mask_params = bevy::math::Vec4::new(
-                    mask.center.x,
-                    mask.center.y,
-                    mask.half_size.x,
-                    mask.half_size.y,
-                );
-            } else {
+            if active_masks.is_empty() {
+                // No active masks - disable masking
                 material.effect_flags.x = 0.0;
+                material.mask2_flags.x = 0.0;
+            } else {
+                // Set up to 2 masks
+                // First mask
+                let mask1 = active_masks[0];
+                let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+                material.effect_flags.x = if mask1.is_exclude { base_type1 + 2.0 } else { base_type1 };
+                material.mask_params = bevy::math::Vec4::new(
+                    mask1.center.x * fit_scale,
+                    mask1.center.y * fit_scale,
+                    mask1.half_size.x * fit_scale,
+                    mask1.half_size.y * fit_scale,
+                );
+                
+                // Second mask (if present)
+                if active_masks.len() >= 2 {
+                    let mask2 = active_masks[1];
+                    let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+                    material.mask2_flags.x = if mask2.is_exclude { base_type2 + 2.0 } else { base_type2 };
+                    material.mask2_params = bevy::math::Vec4::new(
+                        mask2.center.x * fit_scale,
+                        mask2.center.y * fit_scale,
+                        mask2.half_size.x * fit_scale,
+                        mask2.half_size.y * fit_scale,
+                    );
+                    
+                    bevy::log::debug!(
+                        "[UnifiedMask] '{}' time={}, DUAL mask: mask1_type={:.0} center=({:.1},{:.1}), mask2_type={:.0} center=({:.1},{:.1})",
+                        marker.label, global_time,
+                        material.effect_flags.x, mask1.center.x * fit_scale, mask1.center.y * fit_scale,
+                        material.mask2_flags.x, mask2.center.x * fit_scale, mask2.center.y * fit_scale
+                    );
+                } else {
+                    // Only one mask - disable second mask
+                    material.mask2_flags.x = 0.0;
+                    
+                    bevy::log::debug!(
+                        "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                        marker.label, global_time, material.effect_flags.x,
+                        mask1.center.x * fit_scale, mask1.center.y * fit_scale,
+                        mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale
+                    );
+                }
             }
         }
     }

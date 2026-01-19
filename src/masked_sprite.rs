@@ -26,11 +26,12 @@ pub struct UnifiedEffectMaterial {
     #[uniform(0)]
     pub color: LinearRgba,
 
-    /// Effect flags: (mask, wipe, stretch, blur)
+    /// Effect flags: (mask1_type, wipe, stretch, blur)
+    /// mask1_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
     #[uniform(1)]
     pub effect_flags: Vec4,
 
-    /// Mask: (center_x, center_y, half_width, half_height)
+    /// Mask 1: (center_x, center_y, half_width, half_height)
     #[uniform(2)]
     pub mask_params: Vec4,
 
@@ -75,6 +76,16 @@ pub struct UnifiedEffectMaterial {
     pub palette_color7: Vec4,
     #[uniform(18)]
     pub palette_color8: Vec4,
+    
+    /// Mask 2: (center_x, center_y, half_width, half_height)
+    /// mask2_type is stored in mask2_flags.x
+    #[uniform(19)]
+    pub mask2_params: Vec4,
+    
+    /// Mask 2 flags: (mask2_type, 0, 0, 0)
+    /// mask2_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+    #[uniform(20)]
+    pub mask2_flags: Vec4,
 
     #[texture(7)]
     #[sampler(8)]
@@ -101,6 +112,8 @@ impl Default for UnifiedEffectMaterial {
             palette_color6: Vec4::ZERO,
             palette_color7: Vec4::ZERO,
             palette_color8: Vec4::ZERO,
+            mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // No clip
+            mask2_flags: Vec4::ZERO,
             texture: None,
         }
     }

@@ -7,9 +7,11 @@
 // - color: Fill color (vec4<f32>)
 // - params: (half_width, half_height, stroke_width, packed_stroke_color)
 // - mask_params: (mask_center_x, mask_center_y, mask_half_width, mask_half_height)
+// - mask2_params: (mask2_center_x, mask2_center_y, mask2_half_width, mask2_half_height)
 // - shape_type: 0=BoxRound, 1=BoxMiter, 2=BoxBevel, 3=Circle
-// - mask_type: 0=disabled, 1=rectangle, 2=ellipse
-// - _padding: alignment padding
+// - mask_type: 0=disabled, 1=rectangle, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+// - mask2_type: 0=disabled, 1=rectangle, 2=ellipse, 3=rect exclude, 4=ellipse exclude
+// - frame_half: half of mesh quad size
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -17,10 +19,11 @@ struct SdfMaterialUniform {
     color: vec4<f32>,
     params: vec4<f32>,
     mask_params: vec4<f32>,
+    mask2_params: vec4<f32>,
     shape_type: f32,
     mask_type: f32,
+    mask2_type: f32,
     frame_half: f32,
-    _padding3: f32,
 };
 
 @group(2) @binding(0) var<uniform> material: SdfMaterialUniform;
@@ -78,42 +81,91 @@ fn unpack_color(packed: f32) -> vec4<f32> {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Check mask first - use world position for mask testing
-    // mask_type: 1.0 = rectangle, 2.0 = ellipse, 3.0 = rectangle exclude, 4.0 = ellipse exclude
-    let mask_type = material.mask_type;
-    if mask_type > 0.5 {
-        let mask_center = material.mask_params.xy;
-        let mask_half_size = material.mask_params.zw;
+    // Check dual-mask system - use world position for mask testing
+    // mask_type: 1.0 = rectangle include, 2.0 = ellipse include, 
+    //            3.0 = rectangle exclude, 4.0 = ellipse exclude
+    let mask1_type = material.mask_type;
+    let mask2_type = material.mask2_type;
+    
+    let mask1_enabled = mask1_type > 0.5 && material.mask_params.z < 5000.0;
+    let mask2_enabled = mask2_type > 0.5 && material.mask2_params.z < 5000.0;
+    
+    if mask1_enabled || mask2_enabled {
+        let world_pos = in.world_position.xy;
         
-        // Only apply mask if half_size is reasonable (< 5000)
-        if mask_half_size.x < 5000.0 {
-            let world_pos = in.world_position.xy;
-            let rel_pos = world_pos - mask_center;
+        // Helper: check if point is inside a mask
+        // Returns true if inside, false if outside
+        var mask1_inside = true;  // Default: all pixels pass
+        var mask1_is_exclude = false;
+        if mask1_enabled {
+            let center1 = material.mask_params.xy;
+            let half_size1 = material.mask_params.zw;
+            let rel_pos1 = world_pos - center1;
+            mask1_is_exclude = mask1_type > 2.5;
+            let is_ellipse1 = (mask1_type > 1.5 && mask1_type < 2.5) || mask1_type > 3.5;
             
-            // Determine if this is an exclude mask (mask_type >= 2.5)
-            let is_exclude = mask_type > 2.5;
-            // Determine if this is an ellipse (mask_type ~= 2 or 4)
-            let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
-            
-            var inside: bool;
-            if is_ellipse {
-                let normalized = rel_pos / mask_half_size;
-                inside = dot(normalized, normalized) <= 1.0;
+            if is_ellipse1 {
+                let normalized1 = rel_pos1 / half_size1;
+                mask1_inside = dot(normalized1, normalized1) <= 1.0;
             } else {
-                // Rectangle mask
-                inside = abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
+                mask1_inside = abs(rel_pos1.x) <= half_size1.x && abs(rel_pos1.y) <= half_size1.y;
             }
+        }
+        
+        var mask2_inside = true;  // Default: all pixels pass  
+        var mask2_is_exclude = false;
+        if mask2_enabled {
+            let center2 = material.mask2_params.xy;
+            let half_size2 = material.mask2_params.zw;
+            let rel_pos2 = world_pos - center2;
+            mask2_is_exclude = mask2_type > 2.5;
+            let is_ellipse2 = (mask2_type > 1.5 && mask2_type < 2.5) || mask2_type > 3.5;
             
-            // For exclude masks, we want to keep pixels OUTSIDE the mask
-            if is_exclude {
-                if inside {
-                    discard;
-                }
+            if is_ellipse2 {
+                let normalized2 = rel_pos2 / half_size2;
+                mask2_inside = dot(normalized2, normalized2) <= 1.0;
             } else {
-                if !inside {
-                    discard;
-                }
+                mask2_inside = abs(rel_pos2.x) <= half_size2.x && abs(rel_pos2.y) <= half_size2.y;
             }
+        }
+        
+        // Apply dual-mask logic:
+        // - Include masks: intersection (AND) - pixel must be inside ALL includes
+        // - Exclude masks: union (OR) - pixel must be outside ALL excludes  
+        // - Mixed: (inside all includes) AND (outside all excludes)
+        
+        var should_discard = false;
+        
+        // Count include and exclude masks
+        let mask1_is_include = mask1_enabled && !mask1_is_exclude;
+        let mask2_is_include = mask2_enabled && !mask2_is_exclude;
+        let has_includes = mask1_is_include || mask2_is_include;
+        let has_excludes = (mask1_enabled && mask1_is_exclude) || (mask2_enabled && mask2_is_exclude);
+        
+        if has_includes {
+            // For includes: use intersection (AND) - must be inside ALL include masks
+            var include_result = true;
+            if mask1_is_include {
+                include_result = include_result && mask1_inside;
+            }
+            if mask2_is_include {
+                include_result = include_result && mask2_inside;
+            }
+            if !include_result {
+                should_discard = true;
+            }
+        }
+        
+        if has_excludes && !should_discard {
+            // For excludes: use union (OR) - must be outside ANY exclude mask (discard if inside any)
+            if (mask1_enabled && mask1_is_exclude && mask1_inside) || 
+               (mask2_enabled && mask2_is_exclude && mask2_inside) {
+                should_discard = true;
+            }
+        }
+        
+        if should_discard {
+            discard;
         }
     }
 
