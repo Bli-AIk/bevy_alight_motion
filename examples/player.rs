@@ -944,6 +944,8 @@ mod video_comparison_systems {
         pub avg_threshold: f32,
         pub frame_threshold: f32,
         pub frame_offset: f32, // Frame time offset for alignment
+        pub min_frame_similarity: f32, // Minimum similarity for any frame
+        pub max_failed_rate: f32,      // Maximum ratio of failed frames allowed
         pub project_name: String,
         pub skipped: bool,
     }
@@ -957,6 +959,7 @@ mod video_comparison_systems {
         Capturing,
         Comparing,
         Finished,
+        Cancelled, // User closed the window
     }
 
     impl Default for ComparisonState {
@@ -974,6 +977,8 @@ mod video_comparison_systems {
                 avg_threshold: 0.98,
                 frame_threshold: 0.98,
                 frame_offset: 0.0,
+                min_frame_similarity: 0.8,
+                max_failed_rate: 0.05,
                 project_name: String::new(),
                 skipped: false,
             }
@@ -986,12 +991,34 @@ mod video_comparison_systems {
         overrides: HashMap<String, ProjectConfig>,
     }
 
+    fn default_avg_threshold() -> f32 {
+        0.95
+    }
+    fn default_frame_threshold() -> f32 {
+        0.95
+    }
     #[derive(Deserialize, Debug, Clone, Copy)]
     struct ProjectConfig {
+        #[serde(default)]
+        skip: bool,
+        #[serde(default = "default_avg_threshold")]
         avg_threshold: f32,
+        #[serde(default = "default_frame_threshold")]
         frame_threshold: f32,
         #[serde(default)]
         frame_offset: f32,
+        #[serde(default = "default_min_frame_similarity")]
+        min_frame_similarity: f32,
+        #[serde(default = "default_max_failed_rate")]
+        max_failed_rate: f32,
+    }
+
+    fn default_min_frame_similarity() -> f32 {
+        0.8
+    }
+
+    fn default_max_failed_rate() -> f32 {
+        0.05
     }
 
     pub fn setup_comparison(
@@ -1044,12 +1071,28 @@ mod video_comparison_systems {
         // Apply configuration
         if let Some(cfg) = config {
             let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
+            
+            // Check if this test should be skipped
+            if settings.skip {
+                println!(
+                    "{} {} (configured to skip)",
+                    "[COMPARISON] SKIP:".yellow().bold(),
+                    project_name.yellow()
+                );
+                state.skipped = true;
+                state.stage = TestStage::Finished;
+                return;
+            }
+            
             state.avg_threshold = settings.avg_threshold;
             state.frame_threshold = settings.frame_threshold;
             state.frame_offset = settings.frame_offset;
+            state.min_frame_similarity = settings.min_frame_similarity;
+            state.max_failed_rate = settings.max_failed_rate;
             println!(
-                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}",
-                project_name, state.avg_threshold, state.frame_threshold, state.frame_offset
+                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%",
+                project_name, state.avg_threshold, state.frame_threshold, state.frame_offset,
+                state.min_frame_similarity, state.max_failed_rate * 100.0
             );
         }
 
@@ -1281,28 +1324,93 @@ mod video_comparison_systems {
                 state.stage = TestStage::SettingTime;
             }
 
-            TestStage::Finished => {
+            TestStage::Finished | TestStage::Cancelled => {
+                // Check if this was cancelled (not all frames captured)
+                let total_expected_frames = state.frame_paths.len();
+                let total_captured = state.frame_scores.len();
+                let was_cancelled = total_captured < total_expected_frames && !state.skipped;
+                
                 // Generate Report
-                let avg_score: f32 = if state.frame_scores.is_empty() {
+                let total_frames = state.frame_scores.len();
+                let avg_score: f32 = if total_frames == 0 {
                     0.0
                 } else {
-                    state.frame_scores.iter().sum::<f32>() / state.frame_scores.len() as f32
+                    state.frame_scores.iter().sum::<f32>() / total_frames as f32
                 };
+
+                // Calculate per-frame pass rate
+                let failed_frames: Vec<(usize, f32)> = state
+                    .frame_scores
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, score)| **score < state.frame_threshold)
+                    .map(|(i, score)| (i, *score))
+                    .collect();
+
+                let critical_failed_frames: Vec<(usize, f32)> = failed_frames
+                    .iter()
+                    .filter(|(_, score)| *score < state.min_frame_similarity)
+                    .cloned()
+                    .collect();
+
+                let failed_count = failed_frames.len();
+                let critical_failed_count = critical_failed_frames.len();
+                let max_allowed_failed = (total_frames as f32 * state.max_failed_rate).ceil() as usize;
 
                 println!("========================================");
                 println!("COMPARISON FINISHED: {}", state.project_name);
 
-                if state.skipped {
+                if was_cancelled {
+                    println!(
+                        "Captured {} of {} frames before cancellation",
+                        total_captured, total_expected_frames
+                    );
+                    println!("{}", "RESULT: CANCELLED ⛔".yellow().bold());
+                } else if state.skipped {
                     println!("{}", "RESULT: SKIP ⚠️".yellow().bold());
                 } else {
-                    println!("Total Frames: {}", state.frame_paths.len());
+                    println!("Total Frames: {}", total_frames);
+                    
+                    // Average pass rate check
+                    let avg_passed = avg_score >= state.avg_threshold;
+                    let avg_status = if avg_passed { "✓".green().to_string() } else { "✗".red().to_string() };
                     println!(
-                        "Average Similarity: {:.4} (Threshold: {:.2})",
-                        avg_score, state.avg_threshold
+                        "Average Similarity: {:.4} (Threshold: {:.2}) {}",
+                        avg_score,
+                        state.avg_threshold,
+                        avg_status
                     );
 
-                    let passed = avg_score >= state.avg_threshold;
-                    if passed {
+                    // Per-frame pass rate check
+                    let frame_rate_passed = critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let frame_status = if frame_rate_passed { "✓".green().to_string() } else { "✗".red().to_string() };
+                    println!(
+                        "Per-Frame Pass Rate: {} failed/{} total (max allowed: {}, min similarity: {:.2}) {}",
+                        failed_count,
+                        total_frames,
+                        max_allowed_failed,
+                        state.min_frame_similarity,
+                        frame_status
+                    );
+
+                    // List critical failures if any
+                    if !critical_failed_frames.is_empty() {
+                        println!(
+                            "  {} frames below min threshold ({:.2}):",
+                            "Critical:".red().bold(),
+                            state.min_frame_similarity
+                        );
+                        for (idx, score) in critical_failed_frames.iter().take(5) {
+                            println!("    Frame {}: {:.4}", idx, score);
+                        }
+                        if critical_failed_frames.len() > 5 {
+                            println!("    ... and {} more", critical_failed_frames.len() - 5);
+                        }
+                    }
+
+                    // Final result
+                    let overall_passed = avg_passed && frame_rate_passed;
+                    if overall_passed {
                         println!("{}", "RESULT: PASS ✅".green().bold());
                     } else {
                         println!("{}", "RESULT: FAIL ❌".red().bold());
@@ -1321,8 +1429,10 @@ mod video_comparison_systems {
                 if state.skipped {
                     exit.write(AppExit::Success); // Or maybe a specific code for skip?
                 } else {
-                    let passed = avg_score >= state.avg_threshold;
-                    if passed {
+                    let avg_passed = avg_score >= state.avg_threshold;
+                    let frame_rate_passed = critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let overall_passed = avg_passed && frame_rate_passed;
+                    if overall_passed {
                         exit.write(AppExit::Success);
                     } else {
                         exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));

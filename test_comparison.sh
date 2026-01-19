@@ -206,10 +206,14 @@ run_single_test() {
     elif grep -q "RESULT: SKIP" "$log_file"; then
         echo "SKIP|$example|" > "$result_file"
         echo "⚠️  $example (SKIP)"
+    elif grep -q "RESULT: CANCELLED" "$log_file"; then
+        echo "CANCELLED|$example|" > "$result_file"
+        echo "⛔ $example (CANCELLED by user)"
     else
-        # Extract failure details
+        # Extract failure details (both Average Similarity and Per-Frame Pass Rate)
         avg_sim=$(grep "Average Similarity" "$log_file" | head -1)
-        echo "FAIL|$example|$avg_sim" > "$result_file"
+        frame_rate=$(grep "Per-Frame Pass Rate" "$log_file" | head -1)
+        echo "FAIL|$example|$avg_sim|$frame_rate" > "$result_file"
         echo "❌ $example (FAIL)"
     fi
 }
@@ -233,17 +237,23 @@ FAILED_EXAMPLES=""
 
 for result_file in "$RESULTS_DIR"/*.result; do
     if [ -f "$result_file" ]; then
-        IFS='|' read -r status name details < "$result_file"
+        IFS='|' read -r status name avg_details frame_details < "$result_file"
         if [ "$status" == "PASS" ]; then
             printf "%-40s | \033[0;32m✅ PASS\033[0m\n" "$name"
             PASSED_COUNT=$((PASSED_COUNT + 1))
         elif [ "$status" == "SKIP" ]; then
             printf "%-40s | \033[0;33m⚠️ SKIP\033[0m\n" "$name"
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        elif [ "$status" == "CANCELLED" ]; then
+            printf "%-40s | \033[0;33m⛔ CANCELLED\033[0m\n" "$name"
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
         else
             printf "%-40s | \033[0;31m❌ FAIL\033[0m\n" "$name"
-            if [ -n "$details" ]; then
-                printf "%-40s   %s\n" "" "$details"
+            if [ -n "$avg_details" ]; then
+                printf "%-40s   %s\n" "" "$avg_details"
+            fi
+            if [ -n "$frame_details" ]; then
+                printf "%-40s   %s\n" "" "$frame_details"
             fi
             FAILED_COUNT=$((FAILED_COUNT + 1))
             FAILED_EXAMPLES="${FAILED_EXAMPLES}\n  - ${name}"

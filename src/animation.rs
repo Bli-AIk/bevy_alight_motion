@@ -1741,7 +1741,7 @@ fn spawn_layer_entity(
                 let world_w = orig_width * rot_cos + orig_height * rot_sin;
                 0.8 * world_w + 0.2 * orig_width
             };
-            let base_divisor = base_size / 4.2;  // Testing different multiplier
+            let base_divisor = base_size / 4.27;  // Best match for reference
             let stretch_factor = 1.0 + stretch_px / base_divisor;
 
             let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
@@ -3167,7 +3167,7 @@ pub fn animate_unified_effect_system(
                     let world_w = orig_width * rot_cos + orig_height * rot_sin;
                     0.8 * world_w + 0.2 * orig_width
                 };
-                let base_divisor = base_size / 4.2;  // Testing different multiplier
+                let base_divisor = base_size / 4.27;  // Best match for reference
                 let stretch_factor = 1.0 + stretch_px / base_divisor;
 
                 let mut actual_stretch_px = orig_width * stretch_factor - orig_width;

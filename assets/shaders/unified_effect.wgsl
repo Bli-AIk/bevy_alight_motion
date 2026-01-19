@@ -218,19 +218,41 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
     }
 }
 
-// Get palette color by index (0-7)
-fn get_palette_color(index: i32) -> vec4<f32> {
-    switch(index) {
-        case 0: { return palette_color1; }
-        case 1: { return palette_color2; }
-        case 2: { return palette_color3; }
-        case 3: { return palette_color4; }
-        case 4: { return palette_color5; }
-        case 5: { return palette_color6; }
-        case 6: { return palette_color7; }
-        case 7: { return palette_color8; }
-        default: { return palette_color1; }
+// Convert sRGB to linear color space (per channel)
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        return c / 12.92;
+    } else {
+        return pow((c + 0.055) / 1.055, 2.4);
     }
+}
+
+// Convert vec3 from sRGB to linear
+fn srgb_to_linear_rgb(c: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        srgb_to_linear(c.r),
+        srgb_to_linear(c.g),
+        srgb_to_linear(c.b)
+    );
+}
+
+// Get palette color by index (0-7)
+// Palette colors are stored as sRGB values, so convert to linear for correct comparison
+fn get_palette_color(index: i32) -> vec4<f32> {
+    var color: vec4<f32>;
+    switch(index) {
+        case 0: { color = palette_color1; }
+        case 1: { color = palette_color2; }
+        case 2: { color = palette_color3; }
+        case 3: { color = palette_color4; }
+        case 4: { color = palette_color5; }
+        case 5: { color = palette_color6; }
+        case 6: { color = palette_color7; }
+        case 7: { color = palette_color8; }
+        default: { color = palette_color1; }
+    }
+    // Convert from sRGB to linear color space
+    return vec4<f32>(srgb_to_linear_rgb(color.rgb), color.a);
 }
 
 // Calculate color distance with bias toward brighter palette colors
