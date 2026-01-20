@@ -768,6 +768,8 @@ fn spawn_layer_entity(
             initial_mesh_offset,
             initial_stretch_mesh_bounds,
             1.0 / inv_fit_scale, // fit_scale for mask coordinates
+            layer.containing_embed_id != 0, // is_embed_content - force effect material for bounds clipping
+            !layer.animated.scale.keyframes.is_empty(), // has_scale_animation - needs bounds clipping
         );
     } else {
         bevy::log::trace!(

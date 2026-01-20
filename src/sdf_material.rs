@@ -47,6 +47,13 @@ pub struct SdfMaterialUniform {
     /// Frame half size - the mesh quad is (frame_half * 2) x (frame_half * 2).
     /// Used by shader to convert UV to local coordinates correctly.
     pub frame_half: f32,
+    /// Mask 1 rotation in radians
+    pub mask_rotation: f32,
+    /// Mask 2 rotation in radians
+    pub mask2_rotation: f32,
+    /// Padding to ensure 16-byte alignment (4 floats = 16 bytes)
+    pub _padding1: f32,
+    pub _padding2: f32,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -138,6 +145,9 @@ impl Default for SdfMaterial {
                 mask_type: 0.0,
                 mask2_type: 0.0,
                 frame_half: default_frame_half,
+                mask_rotation: 0.0,
+                mask2_rotation: 0.0,
+                _padding1: 0.0, _padding2: 0.0,
             },
         }
     }
@@ -192,6 +202,9 @@ impl SdfMaterial {
                 mask_type: 0.0,
                 mask2_type: 0.0,
                 frame_half,
+                mask_rotation: 0.0,
+                mask2_rotation: 0.0,
+                _padding1: 0.0, _padding2: 0.0,
             },
         }
     }
@@ -269,6 +282,9 @@ impl SdfMaterial {
                 mask_type,
                 mask2_type: 0.0,
                 frame_half,
+                mask_rotation: 0.0,
+                mask2_rotation: 0.0,
+                _padding1: 0.0, _padding2: 0.0,
             },
         }
     }
@@ -285,6 +301,9 @@ impl SdfMaterial {
                 mask_type: 0.0,
                 mask2_type: 0.0,
                 frame_half,
+                mask_rotation: 0.0,
+                mask2_rotation: 0.0,
+                _padding1: 0.0, _padding2: 0.0,
             },
         }
     }

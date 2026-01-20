@@ -47,6 +47,8 @@ impl Plugin for EffectRenderPlugin {
                     debug_rtt_camera_projection_system,
                     propagate_render_layers_system,
                     propagate_render_layers_to_children_system, // NEW: for Bevy children of embeds
+                    // Embed boundary clipping for Direct strategy
+                    apply_embed_bounds_clipping_system,
                     cleanup_embed_scene_rtt_system,
                     cleanup_embed_content_system,
                 ),
@@ -147,6 +149,17 @@ pub struct EmbedSceneRttCamera {
     pub render_layer: u8,
 }
 
+/// Component storing embed scene bounds for content clipping.
+/// Added to all embed entities regardless of render strategy.
+/// Used by child content to clip rendering to the embed's bounds.
+#[derive(Component, Debug, Clone)]
+pub struct EmbedSceneBounds {
+    /// Scene width in project coordinates
+    pub width: f32,
+    /// Scene height in project coordinates
+    pub height: f32,
+}
+
 /// Marker component indicating an entity needs RTT setup (for Composite strategy only).
 /// 
 /// In the Hybrid Pipeline, this component is only added to embeds that have been
@@ -166,6 +179,8 @@ pub struct NeedsEmbedSceneRtt {
 pub struct NeedsStrategyEvaluation {
     pub scene_width: f32,
     pub scene_height: f32,
+    /// Whether this embed has scale animation (requires bounds clipping)
+    pub has_scale_animation: bool,
 }
 
 // ============================================================================
@@ -208,23 +223,28 @@ pub fn evaluate_render_strategy_system(
     for (entity, needs_eval) in query.iter() {
         // Determine render strategy based on embed properties
         //
-        // Currently, we use Direct for ALL embeds by default.
-        // This enables unlimited nesting without RenderLayer exhaustion.
+        // - Direct: No RTT, content renders to parent's layer (most embeds)
+        // - Stencil: For embeds that need bounds clipping (e.g., scale animation)
+        // - Composite: For embeds with shader effects (TODO)
         //
-        // Future: Check for:
-        // - Blur effects -> Composite
-        // - Complex blend modes -> Composite
-        // - Rectangular clipping -> Stencil
-        // - Non-rectangular masks -> Composite
+        // Key insight: Embeds with scale animation need bounds clipping because
+        // content that was within bounds at scale=1.0 may exceed bounds when scaled.
         
-        let strategy = RenderStrategy::Direct;
+        let strategy = if needs_eval.has_scale_animation {
+            // Embeds with scale animation need bounds clipping
+            RenderStrategy::Stencil
+        } else {
+            // Default to Direct for most embeds
+            RenderStrategy::Direct
+        };
         
         bevy::log::trace!(
-            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{})",
+            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{}, has_scale_anim={})",
             entity,
             strategy,
             needs_eval.scene_width,
-            needs_eval.scene_height
+            needs_eval.scene_height,
+            needs_eval.has_scale_animation
         );
         
         // Remove evaluation marker and assign strategy
@@ -239,6 +259,11 @@ pub fn evaluate_render_strategy_system(
                 RenderLayers::layer(0),
                 // Make embed visible (it starts as Hidden)
                 Visibility::Inherited,
+                // Store embed bounds for content clipping
+                EmbedSceneBounds {
+                    width: needs_eval.scene_width,
+                    height: needs_eval.scene_height,
+                },
             ));
         
         // For Composite strategy, we would add NeedsEmbedSceneRtt here.
@@ -828,5 +853,98 @@ pub fn cleanup_embed_scene_rtt_system(
             );
             commands.entity(camera_entity).despawn();
         }
+    }
+}
+
+/// System to apply embed boundary clipping to embed content using shader masks.
+/// 
+/// For Direct render strategy, content is rendered directly to Layer 0 without RTT.
+/// To achieve proper clipping, we set mask_params on content materials to clip
+/// pixels outside the embed's bounds.
+/// 
+/// Note: This only applies to embeds with Stencil or Composite strategy.
+/// Direct strategy embeds don't need bounds clipping as content renders
+/// directly to the main canvas without any composition.
+/// 
+/// Note: This only works correctly for non-rotated embeds. Rotated embeds would
+/// need a more complex solution (e.g., rotated rectangle SDF in shader).
+pub fn apply_embed_bounds_clipping_system(
+    embed_query: Query<(&EmbedSceneBounds, &GlobalTransform, Option<&RenderStrategy>)>,
+    content_query: Query<(
+        Entity,
+        &crate::scene::AmEmbedContentMarker,
+        &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
+        Option<&crate::scene::AmMaskInfo>,
+    )>,
+    playback: Res<crate::animation::AmPlayback>,
+    mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
+) {
+    // Get current playback time for mask layer checks
+    let global_time = playback.current_time_ms as u64;
+    
+    for (_entity, marker, material_handle, mask_info) in content_query.iter() {
+        // Get the embed's bounds, transform, and render strategy
+        let Ok((bounds, embed_gt, strategy)) = embed_query.get(marker.embed_entity) else {
+            continue;
+        };
+        
+        // Skip clipping for Direct strategy embeds
+        // Direct embeds render content directly to main canvas without composition.
+        // For embeds that need bounds clipping (e.g., those with scale animation),
+        // Stencil or Composite strategy should be used instead.
+        if strategy.map_or(false, |s| *s == RenderStrategy::Direct) {
+            continue;
+        }
+        
+        // Skip if material doesn't exist
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        
+        // Check if this content has active masks from mask layers
+        // If it does, mask layers take priority over embed bounds
+        let has_active_mask = mask_info
+            .map(|info| !info.get_active_masks(global_time).is_empty())
+            .unwrap_or(false);
+        
+        if has_active_mask {
+            // Let the mask layer system handle this content
+            continue;
+        }
+        
+        // Extract embed's world position and scale from GlobalTransform
+        // Note: GlobalTransform already includes fit_scale from parent chain,
+        // so we DON'T need to multiply by fit_scale again!
+        let embed_pos = embed_gt.translation();
+        let embed_scale = embed_gt.to_scale_rotation_translation().0;
+        
+        // Calculate embed bounds in world coordinates
+        // bounds.width/height are in project coordinates (e.g., 1440x1080)
+        // embed_scale already includes fit_scale (e.g., 0.8889)
+        let half_width = bounds.width * 0.5 * embed_scale.x.abs();
+        let half_height = bounds.height * 0.5 * embed_scale.y.abs();
+        let center_x = embed_pos.x;
+        let center_y = embed_pos.y;
+        
+        // Set mask params for rectangular clipping
+        // mask_type 1.0 = rectangle include (only show pixels inside)
+        material.effect_flags.x = 1.0; // Rectangle mask
+        material.mask_params = bevy::math::Vec4::new(
+            center_x,
+            center_y,
+            half_width,
+            half_height,
+        );
+        
+        bevy::log::trace!(
+            "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), embed_scale=({:.3},{:.3})",
+            _entity,
+            center_x,
+            center_y,
+            half_width,
+            half_height,
+            embed_scale.x,
+            embed_scale.y
+        );
     }
 }

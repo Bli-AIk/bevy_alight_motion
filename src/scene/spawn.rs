@@ -598,6 +598,7 @@ pub(crate) fn spawn_embed_scene(
             NeedsStrategyEvaluation {
                 scene_width: embed.scene.width as f32,
                 scene_height: embed.scene.height as f32,
+                has_scale_animation: !embed.transform.scale.keyframes.is_empty(),
             },
             transform,
             GlobalTransform::default(),

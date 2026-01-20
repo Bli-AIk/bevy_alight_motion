@@ -44,23 +44,27 @@ pub(crate) fn add_visual_components(
     initial_mesh_offset: Option<Vec4>,
     initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
     fit_scale: f32,                                            // Scale factor for mask coordinates
+    is_embed_content: bool,                                    // True if this is content inside an embed
+    has_scale_animation: bool,                                 // True if embed has scale animation (needs bounds clipping)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}",
         label,
         id,
-        std::mem::discriminant(spec)
+        std::mem::discriminant(spec),
+        is_embed_content
     );
 
     // Determine which effects are needed
+    // Embed content always needs effect material to support bounds clipping later
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
     let needs_mask = mask_info.is_some();
     let needs_blur = blur_params.is_some();
     let needs_palette = palette_params.is_some();
-    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur || needs_palette;
+    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur || needs_palette || is_embed_content;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -745,16 +749,18 @@ pub(crate) fn add_visual_components(
             // The evaluate_render_strategy_system will determine the appropriate strategy
             if let Some((width, height)) = embed_scene_size {
                 bevy::log::trace!(
-                    "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsStrategyEvaluation: {}x{}",
+                    "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsStrategyEvaluation: {}x{}, has_scale_anim={}",
                     label,
                     id,
                     width,
-                    height
+                    height,
+                    has_scale_animation
                 );
                 commands.entity(entity).insert((
                     crate::effects::NeedsStrategyEvaluation {
                         scene_width: width,
                         scene_height: height,
+                        has_scale_animation,
                     },
                     AmVisualSpawned,
                 ));

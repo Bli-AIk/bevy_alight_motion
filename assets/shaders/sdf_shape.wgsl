@@ -12,6 +12,8 @@
 // - mask_type: 0=disabled, 1=rectangle, 2=ellipse, 3=rect exclude, 4=ellipse exclude
 // - mask2_type: 0=disabled, 1=rectangle, 2=ellipse, 3=rect exclude, 4=ellipse exclude
 // - frame_half: half of mesh quad size
+// - mask_rotation: rotation of mask 1 in radians
+// - mask2_rotation: rotation of mask 2 in radians
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -24,6 +26,10 @@ struct SdfMaterialUniform {
     mask_type: f32,
     mask2_type: f32,
     frame_half: f32,
+    mask_rotation: f32,
+    mask2_rotation: f32,
+    _padding1: f32,
+    _padding2: f32,
 };
 
 @group(2) @binding(0) var<uniform> material: SdfMaterialUniform;
@@ -93,14 +99,24 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     if mask1_enabled || mask2_enabled {
         let world_pos = in.world_position.xy;
         
-        // Helper: check if point is inside a mask
+        // Helper: check if point is inside a mask (with rotation support)
         // Returns true if inside, false if outside
         var mask1_inside = true;  // Default: all pixels pass
         var mask1_is_exclude = false;
         if mask1_enabled {
             let center1 = material.mask_params.xy;
             let half_size1 = material.mask_params.zw;
-            let rel_pos1 = world_pos - center1;
+            var rel_pos1 = world_pos - center1;
+            
+            // Apply rotation (rotate point by -rotation to transform to mask's local space)
+            let rot1 = -material.mask_rotation;
+            let cos1 = cos(rot1);
+            let sin1 = sin(rot1);
+            rel_pos1 = vec2<f32>(
+                rel_pos1.x * cos1 - rel_pos1.y * sin1,
+                rel_pos1.x * sin1 + rel_pos1.y * cos1
+            );
+            
             mask1_is_exclude = mask1_type > 2.5;
             let is_ellipse1 = (mask1_type > 1.5 && mask1_type < 2.5) || mask1_type > 3.5;
             
@@ -117,7 +133,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         if mask2_enabled {
             let center2 = material.mask2_params.xy;
             let half_size2 = material.mask2_params.zw;
-            let rel_pos2 = world_pos - center2;
+            var rel_pos2 = world_pos - center2;
+            
+            // Apply rotation (rotate point by -rotation to transform to mask's local space)
+            let rot2 = -material.mask2_rotation;
+            let cos2 = cos(rot2);
+            let sin2 = sin(rot2);
+            rel_pos2 = vec2<f32>(
+                rel_pos2.x * cos2 - rel_pos2.y * sin2,
+                rel_pos2.x * sin2 + rel_pos2.y * cos2
+            );
+            
             mask2_is_exclude = mask2_type > 2.5;
             let is_ellipse2 = (mask2_type > 1.5 && mask2_type < 2.5) || mask2_type > 3.5;
             

@@ -120,19 +120,37 @@ fn apply_wipe(uv: vec2<f32>) -> f32 {
     }
 }
 
-// Check if a point is inside a single mask shape
+// Check if a point is inside a single mask shape (with rotation support)
+// rotation: rotation angle in radians
 // Returns true if inside the shape, false if outside
-fn check_mask_shape(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool) -> bool {
-    let rel_pos = world_pos - mask_center;
+fn check_mask_shape_rotated(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool, rotation: f32) -> bool {
+    // Transform world position to mask-local coordinates
+    var rel_pos = world_pos - mask_center;
+    
+    // Apply inverse rotation to transform to axis-aligned space
+    // rotation is the mask's rotation, so we rotate the point by -rotation
+    if abs(rotation) > 0.001 {
+        let cos_r = cos(-rotation);
+        let sin_r = sin(-rotation);
+        rel_pos = vec2<f32>(
+            rel_pos.x * cos_r - rel_pos.y * sin_r,
+            rel_pos.x * sin_r + rel_pos.y * cos_r
+        );
+    }
     
     if is_ellipse {
         // Ellipse equation: (x/a)^2 + (y/b)^2 <= 1
         let normalized = rel_pos / mask_half_size;
         return dot(normalized, normalized) <= 1.0;
     } else {
-        // Rectangle mask
+        // Rectangle mask (now axis-aligned after inverse rotation)
         return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
     }
+}
+
+// Backward compatibility: check without rotation
+fn check_mask_shape(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool) -> bool {
+    return check_mask_shape_rotated(world_pos, mask_center, mask_half_size, is_ellipse, 0.0);
 }
 
 // Apply single mask - returns true if pixel should be kept
@@ -165,6 +183,9 @@ fn apply_single_mask(world_pos: vec2<f32>, mask_type: f32, mask_center: vec2<f32
 fn apply_masks(world_pos: vec2<f32>) -> bool {
     let mask1_type = effect_flags.x;
     let mask2_type = mask2_flags.x;
+    // Rotation angles are stored in mask2_flags.y (mask1) and mask2_flags.z (mask2)
+    let mask1_rotation = mask2_flags.y;
+    let mask2_rotation = mask2_flags.z;
     
     // Disabled masks
     let mask1_enabled = mask1_type > 0.5;
@@ -178,14 +199,14 @@ fn apply_masks(world_pos: vec2<f32>) -> bool {
     let mask1_is_exclude = mask1_type > 2.5;
     let mask2_is_exclude = mask2_type > 2.5;
     
-    // Check if pixel is inside each mask shape
+    // Check if pixel is inside each mask shape (with rotation)
     let mask1_is_ellipse = (mask1_type > 1.5 && mask1_type < 2.5) || mask1_type > 3.5;
     let mask2_is_ellipse = (mask2_type > 1.5 && mask2_type < 2.5) || mask2_type > 3.5;
     
     let mask1_inside = mask1_enabled && mask_params.z < 5000.0 && 
-        check_mask_shape(world_pos, mask_params.xy, mask_params.zw, mask1_is_ellipse);
+        check_mask_shape_rotated(world_pos, mask_params.xy, mask_params.zw, mask1_is_ellipse, mask1_rotation);
     let mask2_inside = mask2_enabled && mask2_params.z < 5000.0 && 
-        check_mask_shape(world_pos, mask2_params.xy, mask2_params.zw, mask2_is_ellipse);
+        check_mask_shape_rotated(world_pos, mask2_params.xy, mask2_params.zw, mask2_is_ellipse, mask2_rotation);
     
     // Separate into include and exclude groups
     let include1 = mask1_enabled && !mask1_is_exclude;
