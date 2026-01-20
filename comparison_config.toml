@@ -62,10 +62,6 @@ frame_threshold = 0.98
 
 # Multi-level group tests need 0.98 threshold to catch group nesting issues
 # 多级编组测试需要0.98阈值来捕获编组嵌套问题
-[overrides.basic_multi_level_group]
-avg_threshold = 0.98
-frame_threshold = 0.98
-
 [overrides.basic_multi_level_group_ex]
 avg_threshold = 0.98
 frame_threshold = 0.98

@@ -160,7 +160,7 @@ pub fn spawn_sdf_visual(
         .add_child(sdf_entity)
         .insert((AmVisualSpawned, AmSdfShapeParent));
 
-    bevy::log::info!(
+    bevy::log::trace!(
         "[SDF] Created shape for '{}': size={}x{}, stroke_width={}, frame={}, pivot=({:.1},{:.1}), initial_scale=({:.2},{:.2}), initial_translation=({:.1},{:.1},{:.1})",
         marker.label,
         width,

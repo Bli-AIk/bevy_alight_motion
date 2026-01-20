@@ -74,7 +74,7 @@ pub fn spawn_scene(
             AmLayer::Camera(c) => &c.label,
             AmLayer::Video(v) => &v.label,
         };
-        bevy::log::info!(
+        bevy::log::trace!(
             "[Z-ORDER] depth={}, idx={}, z={:.4}, label='{}'",
             config.nesting_depth,
             idx,

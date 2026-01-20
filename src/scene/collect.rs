@@ -194,7 +194,7 @@ pub(crate) fn flatten_pending_layers_inner(
 
                     if is_embed {
                         child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
-                        bevy::log::info!(
+                        bevy::log::trace!(
                             "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
                             child.label,
                             child.id,
@@ -306,7 +306,7 @@ pub(crate) fn collect_layer(
         }
         AmLayer::EmbedScene(embed) => {
             let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-            bevy::log::info!(
+            bevy::log::trace!(
                 "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
                 embed.label,
                 embed.id,
@@ -360,7 +360,7 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             if let Some(mut entry) = mask_entry {
                 // Set is_exclude based on blending mode
                 entry.is_exclude = layer.blending_mode == AmBlendingMode::Exclude;
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[MASK] Found {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
                     if entry.is_exclude { "exclude" } else { "mask" },
                     layer.label,
@@ -404,7 +404,7 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         }
 
         if !applicable_masks.is_empty() {
-            bevy::log::info!(
+            bevy::log::trace!(
                 "[MASK] Root layer '{}' (id={}, z={:.4}) will be clipped by {} mask(s)",
                 layer.label,
                 layer.id,

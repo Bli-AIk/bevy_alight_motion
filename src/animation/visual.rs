@@ -179,7 +179,7 @@ pub(crate) fn add_visual_components(
             let active_masks = mask_info.get_active_masks(0);
 
             if active_masks.is_empty() {
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[MaterialInit] No active mask at time 0, mask_info has {} masks",
                     mask_info.masks.len()
                 );
@@ -220,7 +220,7 @@ pub(crate) fn add_visual_components(
                         mask2.half_size.x * fit_scale,
                         mask2.half_size.y * fit_scale,
                     );
-                    bevy::log::info!(
+                    bevy::log::trace!(
                         "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
                         mask1_type,
                         m2_type,
@@ -228,7 +228,7 @@ pub(crate) fn add_visual_components(
                     );
                     (m2_type, m2_params)
                 } else {
-                    bevy::log::info!(
+                    bevy::log::trace!(
                         "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
                         mask1_type,
                         mask1.center.x * fit_scale,
@@ -356,7 +356,7 @@ pub(crate) fn add_visual_components(
                             AmVisualSpawned,
                         ));
 
-                        bevy::log::info!(
+                        bevy::log::trace!(
                             "[Visual] Spawned sprite '{}' with RTT Gaussian blur: size=({:.1},{:.1}), radius={:.1}",
                             label,
                             scaled_width,
@@ -452,7 +452,7 @@ pub(crate) fn add_visual_components(
                             AmVisualSpawned,
                         ));
 
-                        bevy::log::info!(
+                        bevy::log::trace!(
                             "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}, has_stretch_bounds={}",
                             label,
                             scaled_width,
@@ -480,7 +480,7 @@ pub(crate) fn add_visual_components(
                     }
                 }
             } else if let Some(wp) = white_pixel {
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[Visual] Spawning fill sprite '{}' with white_pixel, color fill",
                     label
                 );
@@ -546,7 +546,7 @@ pub(crate) fn add_visual_components(
                         AmVisualSpawned,
                     ));
 
-                    bevy::log::info!(
+                    bevy::log::trace!(
                         "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
                         label,
                         base_width,
@@ -682,7 +682,7 @@ pub(crate) fn add_visual_components(
                         AmVisualSpawned,
                     ));
 
-                    bevy::log::info!(
+                    bevy::log::trace!(
                         "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
                         label,
                         base_width,
@@ -744,7 +744,7 @@ pub(crate) fn add_visual_components(
             // Add render strategy evaluation marker if scene size is available
             // The evaluate_render_strategy_system will determine the appropriate strategy
             if let Some((width, height)) = embed_scene_size {
-                bevy::log::info!(
+                bevy::log::trace!(
                     "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsStrategyEvaluation: {}x{}",
                     label,
                     id,

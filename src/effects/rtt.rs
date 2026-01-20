@@ -202,7 +202,7 @@ pub fn evaluate_render_strategy_system(
     let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
     if frame <= 10 || frame % 60 == 0 {
         let count = query.iter().count();
-        bevy::log::info!("[Strategy] Frame {}: query count = {}", frame, count);
+        bevy::log::trace!("[Strategy] Frame {}: query count = {}", frame, count);
     }
     
     for (entity, needs_eval) in query.iter() {
@@ -219,7 +219,7 @@ pub fn evaluate_render_strategy_system(
         
         let strategy = RenderStrategy::Direct;
         
-        bevy::log::info!(
+        bevy::log::trace!(
             "[Strategy] Embed {:?} evaluated as {:?} (size={}x{})",
             entity,
             strategy,
@@ -521,7 +521,7 @@ pub fn propagate_render_layers_system(
 
     // Debug logging
     if frame <= 10 || frame % 60 == 0 {
-        bevy::log::info!(
+        bevy::log::trace!(
             "[RenderLayers] Frame {}: Composite={}, Direct={}, content={}",
             frame,
             composite_layers.len(),
@@ -579,7 +579,7 @@ pub fn propagate_render_layers_system(
     
     // Log total updates made
     if updates > 0 {
-        bevy::log::info!("[RenderLayers] Made {} visibility updates this frame", updates);
+        bevy::log::trace!("[RenderLayers] Made {} visibility updates this frame", updates);
     }
 }
 
@@ -657,7 +657,7 @@ pub fn propagate_render_layers_to_children_system(
     }
     
     if frame <= 10 || frame % 60 == 0 || total_updates > 0 || direct_with_children > 0 {
-        bevy::log::info!(
+        bevy::log::trace!(
             "[PropagateChildren] Frame {}: {} updates, Direct embeds with children: {} (total {} children)",
             frame,
             total_updates,

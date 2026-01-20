@@ -366,7 +366,7 @@ fn spawn_layer_entity(
     // Calculate local time for animation interpolation
     let mut local_time = animated.calc_local_time(global_time);
 
-    bevy::log::info!(
+    bevy::log::trace!(
         "[SpawnTime] '{}' global_time={:.1}, local_time={:.1}, start_time={}, end_time={}, time_offset={:.1}, speed={:.2}",
         layer.label,
         global_time,
@@ -725,7 +725,7 @@ fn spawn_layer_entity(
             let center_offset_x = (min_x + max_x) / 2.0;
             let center_offset_y = (min_y + max_y) / 2.0;
 
-            bevy::log::info!(
+            bevy::log::trace!(
                 "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) stretch_px={:.1} actual={:.1} offset=({:.2},{:.2})",
                 layer.label,
                 orig_width,
@@ -770,7 +770,7 @@ fn spawn_layer_entity(
             1.0 / inv_fit_scale, // fit_scale for mask coordinates
         );
     } else {
-        bevy::log::info!(
+        bevy::log::trace!(
             "[Lifecycle] Skipping visual for mask layer '{}' (id={})",
             layer.label,
             layer.id

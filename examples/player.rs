@@ -216,6 +216,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 fn debug_sprites(
     query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
 ) {
+    #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, _sprite) in query.iter() {
         let global_z = global_transform.translation().z;
         println!(
@@ -246,6 +247,7 @@ fn debug_unified_effects(
     >,
     materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
 ) {
+    #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, material_handle) in query.iter() {
         let mesh_offset = if let Some(material) = materials.get(&material_handle.0) {
             (material.mesh_offset.x, material.mesh_offset.y)
@@ -1141,6 +1143,16 @@ mod video_comparison_systems {
             }
         }
         frame_paths.sort();
+
+        // Skip the first frame of reference video
+        // AM video export's frame 1 is actually at t≈29ms, not t=0ms
+        // Our shot_000000 at t=0ms doesn't match ref frame_000001
+        // So we skip frame_000001 and start from frame_000002
+        if !frame_paths.is_empty() {
+            frame_paths.remove(0);
+            println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
+        }
+
         state.frame_paths = frame_paths;
 
         println!(
@@ -1192,7 +1204,8 @@ mod video_comparison_systems {
         // 4. Material GPU buffers are updated (critical for first frame)
         const WAIT_FRAMES: u32 = 5;
         // Wait more frames for initial load to ensure textures are uploaded to GPU
-        const INITIAL_WAIT_FRAMES: u32 = 15;
+        // Increased to 30 to ensure all GPU resources are fully uploaded before first comparison
+        const INITIAL_WAIT_FRAMES: u32 = 30;
 
         match state.stage {
             TestStage::Initializing => {} // Handled in setup
@@ -1232,11 +1245,13 @@ mod video_comparison_systems {
                 // Set precise time for this frame
                 // Add half-frame offset to match AM video export timing
                 // Use config frame_offset, or env var FRAME_OFFSET as override
+                // Note: We add 1 to current_frame because we skipped the first reference frame
+                // So current_frame=0 now corresponds to frame_000002.png which is at t = 1/fps
                 let frame_offset: f32 = std::env::var("FRAME_OFFSET")
                     .ok()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(state.frame_offset);
-                let time_sec = (state.current_frame as f32 + frame_offset) / state.fps;
+                let time_sec = (state.current_frame as f32 + 1.0 + frame_offset) / state.fps;
                 playback.playing = false; // Ensure paused
                 playback.current_time_ms = time_sec * 1000.0;
                 playback.force_stopped = false; // Allow update

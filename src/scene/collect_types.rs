@@ -357,7 +357,7 @@ pub(crate) fn collect_embed_scene(
     // It does NOT mean freeze animations. The parent's speed still applies.
     let nested_speed = effective_speed;
 
-    bevy::log::info!(
+    bevy::log::trace!(
         "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
         config.time_offset,
