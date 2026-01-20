@@ -9,7 +9,9 @@ use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedFloat, AmEffect};
 
-pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> (AmAnimatedFloat, AmAnimatedFloat) {
+pub(crate) fn extract_effect_animations(
+    effects: &[AmEffect],
+) -> (AmAnimatedFloat, AmAnimatedFloat) {
     let mut pos_x = AmAnimatedFloat::default();
     let mut pos_y = AmAnimatedFloat::default();
 

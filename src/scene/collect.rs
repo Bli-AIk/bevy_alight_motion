@@ -12,10 +12,10 @@ use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
 use crate::schema::{AmLayer, AmScene};
 
-use super::components::*;
-use super::helpers::*;
-use super::effects::*;
 use super::collect_types::*;
+use super::components::*;
+use super::effects::*;
+use super::helpers::*;
 
 pub fn collect_pending_layers(
     scene: &AmScene,
@@ -66,7 +66,10 @@ pub fn collect_pending_layers(
 /// For spatial decoupling, only DIRECT children of top-level embeds have their `containing_embed_id` set.
 /// Nested embeds become normal Bevy children so transforms propagate correctly.
 /// `nesting_depth` is the absolute depth in the scene hierarchy (0 = top-level, 1 = inside one embed, etc.)
-pub(crate) fn flatten_pending_layers(layers: Vec<PendingLayer>, nesting_depth: u32) -> Vec<PendingLayer> {
+pub(crate) fn flatten_pending_layers(
+    layers: Vec<PendingLayer>,
+    nesting_depth: u32,
+) -> Vec<PendingLayer> {
     flatten_pending_layers_inner(layers, 0, 0, nesting_depth)
 }
 
@@ -297,7 +300,8 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     let mut mask_layers: Vec<(u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, z_index, mask_entry)
 
     for layer in layers.iter() {
-        let is_mask = layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude;
+        let is_mask = layer.blending_mode == AmBlendingMode::Mask
+            || layer.blending_mode == AmBlendingMode::Exclude;
         if is_mask && layer.parent == 0 {
             // Extract mask geometry from the layer's transform and spec
             let mask_entry = extract_mask_info_from_layer(layer);
@@ -329,7 +333,9 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // For each non-mask root layer, collect ALL masks that are above it (higher z-index)
     // This allows the runtime system to choose the correct mask based on current time
     for layer in layers.iter_mut() {
-        if layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude {
+        if layer.blending_mode == AmBlendingMode::Mask
+            || layer.blending_mode == AmBlendingMode::Exclude
+        {
             continue; // Don't apply mask to mask layer itself
         }
 
@@ -385,7 +391,9 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     loop {
         let mut changes = false;
         for layer in layers.iter_mut() {
-            if layer.blending_mode == AmBlendingMode::Mask || layer.blending_mode == AmBlendingMode::Exclude {
+            if layer.blending_mode == AmBlendingMode::Mask
+                || layer.blending_mode == AmBlendingMode::Exclude
+            {
                 continue;
             }
             if layer.mask_info.is_some() {
@@ -487,4 +495,3 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
         is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
     })
 }
-

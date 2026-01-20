@@ -7,8 +7,8 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe};
 use super::components::AmSceneConfig;
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe};
 
 pub fn am_to_bevy_coords(x: f32, y: f32, config: &AmSceneConfig) -> (f32, f32) {
     let bx = x - config.canvas_width / 2.0;
@@ -194,7 +194,10 @@ pub(crate) fn get_initial_opacity(prop: &AmAnimatedFloat) -> f32 {
         1.0
     }
 }
-pub(crate) fn get_shape_size(properties: &[crate::schema::AmProperty], _fill_type: &str) -> (f32, f32) {
+pub(crate) fn get_shape_size(
+    properties: &[crate::schema::AmProperty],
+    _fill_type: &str,
+) -> (f32, f32) {
     for prop in properties {
         if prop.name == "size" && prop.prop_type == "vec2" {
             // Check static value first
@@ -368,7 +371,10 @@ pub(crate) fn truncate_string(s: &str, max_len: usize) -> String {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     }
 }
-pub(crate) fn get_scale_at_normalized_time(prop: &crate::schema::AmAnimatedVec2, t: f32) -> (f32, f32) {
+pub(crate) fn get_scale_at_normalized_time(
+    prop: &crate::schema::AmAnimatedVec2,
+    t: f32,
+) -> (f32, f32) {
     // If there's a static value, use it
     if let Some(val) = &prop.value {
         return (val[0], val[1]);
@@ -428,4 +434,3 @@ pub(crate) fn get_scale_at_normalized_time(prop: &crate::schema::AmAnimatedVec2,
     // Fallback
     (1.0, 1.0)
 }
-

@@ -3,7 +3,7 @@
 //! # 辅助函数模块
 //!
 //! Helper functions for animation initialization and value extraction.
-//! Contains get_initial_scale_from_animated, get_initial_size_from_animated, 
+//! Contains get_initial_scale_from_animated, get_initial_size_from_animated,
 //! is_descendant_of, and other utility functions.
 //!
 //! 动画初始化和值提取的辅助函数。

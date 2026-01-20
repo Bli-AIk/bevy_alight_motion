@@ -13,7 +13,9 @@ use bevy::prelude::*;
 use crate::scene::AmLayerMarker;
 
 use super::components::{AmAnimated, AmPlayback, AmSdfShapeParent};
-use super::interpolation::{interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation};
+use super::interpolation::{
+    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
+};
 
 /// System to advance playback time.
 pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>) {

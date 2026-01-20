@@ -151,9 +151,14 @@ pub fn update_unified_mask_system(
 
                     bevy::log::debug!(
                         "[UnifiedMask] '{}' time={}, DUAL mask: mask1_type={:.0} center=({:.1},{:.1}), mask2_type={:.0} center=({:.1},{:.1})",
-                        marker.label, global_time,
-                        material.effect_flags.x, mask1.center.x * fit_scale, mask1.center.y * fit_scale,
-                        material.mask2_flags.x, mask2.center.x * fit_scale, mask2.center.y * fit_scale
+                        marker.label,
+                        global_time,
+                        material.effect_flags.x,
+                        mask1.center.x * fit_scale,
+                        mask1.center.y * fit_scale,
+                        material.mask2_flags.x,
+                        mask2.center.x * fit_scale,
+                        mask2.center.y * fit_scale
                     );
                 } else {
                     // Only one mask - disable second mask
@@ -161,9 +166,13 @@ pub fn update_unified_mask_system(
 
                     bevy::log::debug!(
                         "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                        marker.label, global_time, material.effect_flags.x,
-                        mask1.center.x * fit_scale, mask1.center.y * fit_scale,
-                        mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale
+                        marker.label,
+                        global_time,
+                        material.effect_flags.x,
+                        mask1.center.x * fit_scale,
+                        mask1.center.y * fit_scale,
+                        mask1.half_size.x * fit_scale,
+                        mask1.half_size.y * fit_scale
                     );
                 }
             }

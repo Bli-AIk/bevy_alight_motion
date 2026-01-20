@@ -11,7 +11,7 @@
 use bevy::prelude::*;
 
 use crate::scene::{AmLayerMarker, AmMaskInfo};
-use crate::sdf_material::{repack_with_alpha, SdfMaterial};
+use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
 use super::interpolation::{interpolate_float, interpolate_vec2};
@@ -62,8 +62,11 @@ pub fn update_sdf_mask_system(
                             mask1.half_size.y * fit_scale,
                         );
                         let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                        material.uniform_data.mask_type =
-                            if mask1.is_exclude { base_type1 + 2.0 } else { base_type1 };
+                        material.uniform_data.mask_type = if mask1.is_exclude {
+                            base_type1 + 2.0
+                        } else {
+                            base_type1
+                        };
 
                         // Second mask (if present)
                         if active_masks.len() >= 2 {
@@ -75,12 +78,18 @@ pub fn update_sdf_mask_system(
                                 mask2.half_size.y * fit_scale,
                             );
                             let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                            material.uniform_data.mask2_type =
-                                if mask2.is_exclude { base_type2 + 2.0 } else { base_type2 };
+                            material.uniform_data.mask2_type = if mask2.is_exclude {
+                                base_type2 + 2.0
+                            } else {
+                                base_type2
+                            };
 
                             bevy::log::debug!(
                                 "[SdfMask] '{}' time={}, DUAL mask: mask1_type={:.0}, mask2_type={:.0}",
-                                marker.label, global_time, material.uniform_data.mask_type, material.uniform_data.mask2_type
+                                marker.label,
+                                global_time,
+                                material.uniform_data.mask_type,
+                                material.uniform_data.mask2_type
                             );
                         } else {
                             // Only one mask
@@ -88,9 +97,13 @@ pub fn update_sdf_mask_system(
 
                             bevy::log::debug!(
                                 "[SdfMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                                marker.label, global_time, material.uniform_data.mask_type,
-                                mask1.center.x * fit_scale, mask1.center.y * fit_scale,
-                                mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale
+                                marker.label,
+                                global_time,
+                                material.uniform_data.mask_type,
+                                mask1.center.x * fit_scale,
+                                mask1.center.y * fit_scale,
+                                mask1.half_size.x * fit_scale,
+                                mask1.half_size.y * fit_scale
                             );
                         }
                     }

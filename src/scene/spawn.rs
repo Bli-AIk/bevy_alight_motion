@@ -12,12 +12,14 @@ use std::collections::HashMap;
 use crate::animation::AmAnimated;
 use crate::effects::NeedsEmbedSceneRtt;
 use crate::loader::{AmProject, FontMetrics};
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape};
+use crate::schema::{
+    AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape,
+};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;
-use super::helpers::*;
 use super::effects::*;
+use super::helpers::*;
 use super::spawn_visual::{spawn_image, spawn_text};
 
 pub fn spawn_scene(

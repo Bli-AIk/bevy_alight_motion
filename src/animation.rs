@@ -28,22 +28,29 @@ pub use components::{
 };
 
 // Re-export systems
-pub use effects::{animate_rtt_blur_system, animate_unified_effect_system, update_unified_mask_system};
+pub use effects::{
+    animate_rtt_blur_system, animate_unified_effect_system, update_unified_mask_system,
+};
 pub use lifecycle::manage_layer_lifecycle_system;
-pub use sdf::{animate_sdf_opacity_system, animate_sdf_scale_system, apply_mask_clipping_system, update_sdf_mask_system};
+pub use sdf::{
+    animate_sdf_opacity_system, animate_sdf_scale_system, apply_mask_clipping_system,
+    update_sdf_mask_system,
+};
 pub use systems::{
     advance_playback_system, animate_opacity_system, animate_size_system,
     animate_text_opacity_system, animate_transform_system,
 };
 
 // Re-export interpolation functions
-pub use interpolation::{interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation};
+pub use interpolation::{
+    interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
+};
 
 // Internal re-exports for other modules in this crate
 pub(crate) use helpers::{get_initial_scale_from_animated, is_descendant_of};
+pub(crate) use sdf_spawn::spawn_sdf_visual;
 pub(crate) use spawn::{count_total_layers, process_pending_layers};
 pub(crate) use visual::{add_visual_components, extract_fill_color};
-pub(crate) use sdf_spawn::spawn_sdf_visual;
 
 #[cfg(test)]
 mod tests {
@@ -103,6 +110,10 @@ mod tests {
         assert!((v - 1.0).abs() < 0.001, "At t=0.0, expected 1.0, got {}", v);
 
         let v = interpolate_float(&prop, 0.5).unwrap();
-        assert!((v - 1.0).abs() < 0.001, "At t=0.5, expected 1.0 (step), got {}", v);
+        assert!(
+            (v - 1.0).abs() < 0.001,
+            "At t=0.5, expected 1.0 (step), got {}",
+            v
+        );
     }
 }

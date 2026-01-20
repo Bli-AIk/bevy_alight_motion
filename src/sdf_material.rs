@@ -242,7 +242,11 @@ impl SdfMaterial {
         let linear = fill_color.to_linear();
         // mask_type: 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
         let base_type = if mask_is_circle { 2.0 } else { 1.0 };
-        let mask_type = if mask_is_exclude { base_type + 2.0 } else { base_type };
+        let mask_type = if mask_is_exclude {
+            base_type + 2.0
+        } else {
+            base_type
+        };
         Self {
             uniform_data: SdfMaterialUniform {
                 color: Vec4::new(linear.red, linear.green, linear.blue, linear.alpha),
@@ -491,6 +495,10 @@ mod tests {
         assert!((bits >> 24) >= 254, "R should be ~255"); // R unchanged
         assert!(((bits >> 16) & 0xFF) >= 254, "G should be ~255"); // G unchanged
         assert!(((bits >> 8) & 0xFF) >= 254, "B should be ~255"); // B unchanged
-        assert!((bits & 0xFF) >= 126 && (bits & 0xFF) <= 129, "A should be ~127, got {}", bits & 0xFF); // A ≈ 0.5 * 255
+        assert!(
+            (bits & 0xFF) >= 126 && (bits & 0xFF) <= 129,
+            "A should be ~127, got {}",
+            bits & 0xFF
+        ); // A ≈ 0.5 * 255
     }
 }

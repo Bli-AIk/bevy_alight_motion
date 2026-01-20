@@ -76,12 +76,12 @@ pub struct UnifiedEffectMaterial {
     pub palette_color7: Vec4,
     #[uniform(18)]
     pub palette_color8: Vec4,
-    
+
     /// Mask 2: (center_x, center_y, half_width, half_height)
     /// mask2_type is stored in mask2_flags.x
     #[uniform(19)]
     pub mask2_params: Vec4,
-    
+
     /// Mask 2 flags: (mask2_type, 0, 0, 0)
     /// mask2_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
     #[uniform(20)]

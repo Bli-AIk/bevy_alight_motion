@@ -17,8 +17,8 @@ use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmText};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;
-use super::helpers::*;
 use super::effects::*;
+use super::helpers::*;
 
 pub(crate) fn spawn_image(
     commands: &mut Commands,
@@ -385,4 +385,3 @@ pub(crate) fn spawn_text(
 
     entity.id()
 }
-

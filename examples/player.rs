@@ -943,7 +943,7 @@ mod video_comparison_systems {
         // Config thresholds
         pub avg_threshold: f32,
         pub frame_threshold: f32,
-        pub frame_offset: f32, // Frame time offset for alignment
+        pub frame_offset: f32,         // Frame time offset for alignment
         pub min_frame_similarity: f32, // Minimum similarity for any frame
         pub max_failed_rate: f32,      // Maximum ratio of failed frames allowed
         pub project_name: String,
@@ -1071,7 +1071,7 @@ mod video_comparison_systems {
         // Apply configuration
         if let Some(cfg) = config {
             let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
-            
+
             // Check if this test should be skipped
             if settings.skip {
                 println!(
@@ -1083,7 +1083,7 @@ mod video_comparison_systems {
                 state.stage = TestStage::Finished;
                 return;
             }
-            
+
             state.avg_threshold = settings.avg_threshold;
             state.frame_threshold = settings.frame_threshold;
             state.frame_offset = settings.frame_offset;
@@ -1091,8 +1091,12 @@ mod video_comparison_systems {
             state.max_failed_rate = settings.max_failed_rate;
             println!(
                 "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%",
-                project_name, state.avg_threshold, state.frame_threshold, state.frame_offset,
-                state.min_frame_similarity, state.max_failed_rate * 100.0
+                project_name,
+                state.avg_threshold,
+                state.frame_threshold,
+                state.frame_offset,
+                state.min_frame_similarity,
+                state.max_failed_rate * 100.0
             );
         }
 
@@ -1330,7 +1334,7 @@ mod video_comparison_systems {
                 let total_expected_frames = state.frame_paths.len();
                 let total_captured = state.frame_scores.len();
                 let was_cancelled = total_captured < total_expected_frames && !state.skipped;
-                
+
                 // Generate Report
                 let total_frames = state.frame_scores.len();
                 let avg_score: f32 = if total_frames == 0 {
@@ -1356,7 +1360,8 @@ mod video_comparison_systems {
 
                 let failed_count = failed_frames.len();
                 let critical_failed_count = critical_failed_frames.len();
-                let max_allowed_failed = (total_frames as f32 * state.max_failed_rate).ceil() as usize;
+                let max_allowed_failed =
+                    (total_frames as f32 * state.max_failed_rate).ceil() as usize;
 
                 println!("========================================");
                 println!("COMPARISON FINISHED: {}", state.project_name);
@@ -1371,20 +1376,27 @@ mod video_comparison_systems {
                     println!("{}", "RESULT: SKIP ⚠️".yellow().bold());
                 } else {
                     println!("Total Frames: {}", total_frames);
-                    
+
                     // Average pass rate check
                     let avg_passed = avg_score >= state.avg_threshold;
-                    let avg_status = if avg_passed { "✓".green().to_string() } else { "✗".red().to_string() };
+                    let avg_status = if avg_passed {
+                        "✓".green().to_string()
+                    } else {
+                        "✗".red().to_string()
+                    };
                     println!(
                         "Average Similarity: {:.4} (Threshold: {:.2}) {}",
-                        avg_score,
-                        state.avg_threshold,
-                        avg_status
+                        avg_score, state.avg_threshold, avg_status
                     );
 
                     // Per-frame pass rate check
-                    let frame_rate_passed = critical_failed_count == 0 && failed_count <= max_allowed_failed;
-                    let frame_status = if frame_rate_passed { "✓".green().to_string() } else { "✗".red().to_string() };
+                    let frame_rate_passed =
+                        critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let frame_status = if frame_rate_passed {
+                        "✓".green().to_string()
+                    } else {
+                        "✗".red().to_string()
+                    };
                     println!(
                         "Per-Frame Pass Rate: {} failed/{} total (max allowed: {}, min similarity: {:.2}) {}",
                         failed_count,
@@ -1431,7 +1443,8 @@ mod video_comparison_systems {
                     exit.write(AppExit::Success); // Or maybe a specific code for skip?
                 } else {
                     let avg_passed = avg_score >= state.avg_threshold;
-                    let frame_rate_passed = critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let frame_rate_passed =
+                        critical_failed_count == 0 && failed_count <= max_allowed_failed;
                     let overall_passed = avg_passed && frame_rate_passed;
                     if overall_passed {
                         exit.write(AppExit::Success);

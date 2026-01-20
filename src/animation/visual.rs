@@ -46,7 +46,7 @@ pub(crate) fn add_visual_components(
     _max_blur_radius: f32,
     initial_mesh_offset: Option<Vec4>,
     initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
-    fit_scale: f32, // Scale factor for mask coordinates
+    fit_scale: f32,                                            // Scale factor for mask coordinates
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -158,63 +158,94 @@ pub(crate) fn add_visual_components(
         palette_params: Option<&AmPaletteMapParams>,
         mesh_offset: Option<Vec4>,
         mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
-        fit_scale: f32, // Scale factor for mask coordinates
+        fit_scale: f32,                // Scale factor for mask coordinates
     ) -> Handle<UnifiedEffectMaterial> {
         // Use mesh_size if provided (for stretch bounds), otherwise use original size
         let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
-        
+
         // Pre-calculate mask params if mask is present, to ensure first frame renders correctly
         // Support up to 2 masks for dual-mask effects
-        let (initial_effect_flags_x, initial_mask_params, initial_mask2_flags_x, initial_mask2_params) = 
-            if let Some(mask_info) = mask_info {
-                let active_masks = mask_info.get_active_masks(0);
-                
-                if active_masks.is_empty() {
-                    bevy::log::info!("[MaterialInit] No active mask at time 0, mask_info has {} masks", mask_info.masks.len());
-                    (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0), 0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+        let (
+            initial_effect_flags_x,
+            initial_mask_params,
+            initial_mask2_flags_x,
+            initial_mask2_params,
+        ) = if let Some(mask_info) = mask_info {
+            let active_masks = mask_info.get_active_masks(0);
+
+            if active_masks.is_empty() {
+                bevy::log::info!(
+                    "[MaterialInit] No active mask at time 0, mask_info has {} masks",
+                    mask_info.masks.len()
+                );
+                (
+                    0.0,
+                    Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                    0.0,
+                    Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                )
+            } else {
+                // First mask
+                let mask1 = active_masks[0];
+                let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+                let mask1_type = if mask1.is_exclude {
+                    base_type1 + 2.0
                 } else {
-                    // First mask
-                    let mask1 = active_masks[0];
-                    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                    let mask1_type = if mask1.is_exclude { base_type1 + 2.0 } else { base_type1 };
-                    let mask1_params = Vec4::new(
+                    base_type1
+                };
+                let mask1_params = Vec4::new(
+                    mask1.center.x * fit_scale,
+                    mask1.center.y * fit_scale,
+                    mask1.half_size.x * fit_scale,
+                    mask1.half_size.y * fit_scale,
+                );
+
+                // Second mask (if present)
+                let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
+                    let mask2 = active_masks[1];
+                    let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+                    let m2_type = if mask2.is_exclude {
+                        base_type2 + 2.0
+                    } else {
+                        base_type2
+                    };
+                    let m2_params = Vec4::new(
+                        mask2.center.x * fit_scale,
+                        mask2.center.y * fit_scale,
+                        mask2.half_size.x * fit_scale,
+                        mask2.half_size.y * fit_scale,
+                    );
+                    bevy::log::info!(
+                        "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
+                        mask1_type,
+                        m2_type,
+                        fit_scale
+                    );
+                    (m2_type, m2_params)
+                } else {
+                    bevy::log::info!(
+                        "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
+                        mask1_type,
                         mask1.center.x * fit_scale,
                         mask1.center.y * fit_scale,
                         mask1.half_size.x * fit_scale,
                         mask1.half_size.y * fit_scale,
+                        fit_scale
                     );
-                    
-                    // Second mask (if present)
-                    let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
-                        let mask2 = active_masks[1];
-                        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                        let m2_type = if mask2.is_exclude { base_type2 + 2.0 } else { base_type2 };
-                        let m2_params = Vec4::new(
-                            mask2.center.x * fit_scale,
-                            mask2.center.y * fit_scale,
-                            mask2.half_size.x * fit_scale,
-                            mask2.half_size.y * fit_scale,
-                        );
-                        bevy::log::info!(
-                            "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
-                            mask1_type, m2_type, fit_scale
-                        );
-                        (m2_type, m2_params)
-                    } else {
-                        bevy::log::info!(
-                            "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
-                            mask1_type, mask1.center.x * fit_scale, mask1.center.y * fit_scale,
-                            mask1.half_size.x * fit_scale, mask1.half_size.y * fit_scale, fit_scale
-                        );
-                        (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
-                    };
-                    
-                    (mask1_type, mask1_params, mask2_type, mask2_params)
-                }
-            } else {
-                (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0), 0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
-            };
-        
+                    (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+                };
+
+                (mask1_type, mask1_params, mask2_type, mask2_params)
+            }
+        } else {
+            (
+                0.0,
+                Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+                0.0,
+                Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            )
+        };
+
         let mut material = UnifiedEffectMaterial {
             color,
             effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
@@ -389,9 +420,8 @@ pub(crate) fn add_visual_components(
                         });
 
                         // Calculate mesh size for stretch bounds
-                        let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
-                            (max_x - min_x, max_y - min_y)
-                        });
+                        let mesh_size = initial_stretch_mesh_bounds
+                            .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
                         let material = create_unified_material(
                             unified_materials,
@@ -480,9 +510,8 @@ pub(crate) fn add_visual_components(
                         };
 
                     // Calculate mesh size for stretch bounds
-                    let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
-                        (max_x - min_x, max_y - min_y)
-                    });
+                    let mesh_size = initial_stretch_mesh_bounds
+                        .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
                     let material = create_unified_material(
                         unified_materials,
@@ -610,9 +639,8 @@ pub(crate) fn add_visual_components(
                         };
 
                     // Calculate mesh size for stretch bounds
-                    let mesh_size = initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
-                        (max_x - min_x, max_y - min_y)
-                    });
+                    let mesh_size = initial_stretch_mesh_bounds
+                        .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
                     let material = create_unified_material(
                         unified_materials,

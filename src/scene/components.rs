@@ -210,7 +210,7 @@ impl AmMaskInfo {
             .iter()
             .find(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
     }
-    
+
     /// Get all active masks for the given time (ms).
     /// Returns masks sorted by z-order (lowest first).
     /// Multiple masks can be active simultaneously for composite effects.

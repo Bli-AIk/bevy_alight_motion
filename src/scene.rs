@@ -8,36 +8,37 @@
 //! 场景构建和坐标转换。
 //! AM 场景加载、实体生成和图层管理。
 
-mod components;
-mod helpers;
-mod effects;
-mod spawn;
-mod spawn_visual;
 mod collect;
 mod collect_types;
+mod components;
+mod effects;
+mod helpers;
+mod spawn;
+mod spawn_visual;
 
 // Re-export public types
 pub use components::{
-    AmEmbedContent, AmEmbedContentMarker, AmProjectBundle, AmProjectRoot, AmPendingLayers,
-    AmLayerMarker, AmVisualSpawned, AmLayersContainer, AmEmbedContentsContainer, AmRttCamerasContainer,
-    AmLayerSpec, AmBlendingMode, AmMaskEntry, AmMaskInfo, PendingLayer, AmSceneConfig, AmPaletteMapParams,
+    AmBlendingMode, AmEmbedContent, AmEmbedContentMarker, AmEmbedContentsContainer, AmLayerMarker,
+    AmLayerSpec, AmLayersContainer, AmMaskEntry, AmMaskInfo, AmPaletteMapParams, AmPendingLayers,
+    AmProjectBundle, AmProjectRoot, AmRttCamerasContainer, AmSceneConfig, AmVisualSpawned,
+    PendingLayer,
 };
 
-pub use helpers::am_to_bevy_coords;
-pub use effects::{WipeEffectParams, StretchSegmentParams, GaussianBlurParams, PaletteMapParams};
-pub use spawn::spawn_scene;
 pub use collect::collect_pending_layers;
+pub use effects::{GaussianBlurParams, PaletteMapParams, StretchSegmentParams, WipeEffectParams};
+pub use helpers::am_to_bevy_coords;
+pub use spawn::spawn_scene;
 
 // Internal re-exports for other modules in this crate
-pub(crate) use helpers::{
-    get_initial_location, get_initial_rotation, get_initial_scale, get_initial_pivot,
-    get_initial_opacity, get_shape_size, get_shape_size_animation, get_stroke_width_animation,
-    get_base_alpha, pivot_to_anchor_and_offset, truncate_string, get_scale_at_normalized_time,
-    calculate_embed_position_compensation, calculate_pivot_compensation,
-};
 pub(crate) use effects::{
-    extract_effect_animations, extract_wipe_effect, extract_stretch_segment_effect,
-    extract_gaussian_blur_effect, extract_palette_map_effect,
+    extract_effect_animations, extract_gaussian_blur_effect, extract_palette_map_effect,
+    extract_stretch_segment_effect, extract_wipe_effect,
+};
+pub(crate) use helpers::{
+    calculate_embed_position_compensation, calculate_pivot_compensation, get_base_alpha,
+    get_initial_location, get_initial_opacity, get_initial_pivot, get_initial_rotation,
+    get_initial_scale, get_scale_at_normalized_time, get_shape_size, get_shape_size_animation,
+    get_stroke_width_animation, pivot_to_anchor_and_offset, truncate_string,
 };
 
 #[cfg(test)]

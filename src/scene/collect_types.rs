@@ -10,14 +10,20 @@ use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEmbedScene, AmImage, AmNullObj, AmShape, AmText};
+use crate::schema::{
+    AmAnimatedFloat, AmAnimatedVec2, AmEmbedScene, AmImage, AmNullObj, AmShape, AmText,
+};
 
-use super::components::*;
-use super::helpers::*;
-use super::effects::*;
 use super::collect::{apply_mask_to_children, collect_pending_layers};
+use super::components::*;
+use super::effects::*;
+use super::helpers::*;
 
-pub(crate) fn collect_shape(shape: &AmShape, config: &AmSceneConfig, z: f32) -> Option<PendingLayer> {
+pub(crate) fn collect_shape(
+    shape: &AmShape,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Option<PendingLayer> {
     let has_parent = shape.parent != 0;
     let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);

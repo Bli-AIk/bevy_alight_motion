@@ -14,8 +14,8 @@ use std::collections::HashMap;
 
 use crate::loader::FontMetrics;
 use crate::scene::{
-    AmBlendingMode, AmEmbedContent, AmEmbedContentMarker, AmLayerMarker, AmLayerSpec,
-    AmMaskInfo, AmPaletteMapParams, AmPendingLayers, AmVisualSpawned, PendingLayer,
+    AmBlendingMode, AmEmbedContent, AmEmbedContentMarker, AmLayerMarker, AmLayerSpec, AmMaskInfo,
+    AmPaletteMapParams, AmPendingLayers, AmVisualSpawned, PendingLayer,
 };
 use crate::schema::AmAnimatedVec2;
 use crate::sdf_material::SdfMaterial;
@@ -25,8 +25,8 @@ use super::helpers::{get_initial_scale_from_animated, is_descendant_of};
 use super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation, parse_keyframe_vec2,
 };
-use super::visual::{add_visual_components, extract_fill_color};
 use super::sdf_spawn::spawn_sdf_visual;
+use super::visual::{add_visual_components, extract_fill_color};
 
 /// Count total layers including nested ones.
 ///
@@ -502,7 +502,8 @@ fn spawn_layer_entity(
     }
 
     // Add visual components based on spec (skip for mask layers)
-    if layer.blending_mode != AmBlendingMode::Mask && layer.blending_mode != AmBlendingMode::Exclude {
+    if layer.blending_mode != AmBlendingMode::Mask && layer.blending_mode != AmBlendingMode::Exclude
+    {
         // Extract initial scale from animated data for SDF shapes
         // (transform.scale is set to 1.0 for SDF shapes, actual scale is in animated)
         let initial_scale = get_initial_scale_from_animated(&layer.animated.scale);
@@ -615,7 +616,7 @@ fn spawn_layer_entity(
                 let world_w = orig_width * rot_cos + orig_height * rot_sin;
                 0.8 * world_w + 0.2 * orig_width
             };
-            let base_divisor = base_size / 4.27;  // Best match for reference
+            let base_divisor = base_size / 4.27; // Best match for reference
             let stretch_factor = 1.0 + stretch_px / base_divisor;
 
             let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
@@ -755,4 +756,3 @@ fn spawn_layer_entity(
 
     entity
 }
-
