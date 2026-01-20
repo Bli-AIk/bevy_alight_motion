@@ -46,8 +46,8 @@ pub fn update_sdf_mask_system(
         let active_masks = mask_info.get_active_masks(global_time as u64);
 
         for child in children.iter() {
-            if let Ok(material_handle) = sdf_query.get_mut(child) {
-                if let Some(material) = materials.get_mut(&material_handle.0) {
+            if let Ok(material_handle) = sdf_query.get_mut(child)
+                && let Some(material) = materials.get_mut(&material_handle.0) {
                     if active_masks.is_empty() {
                         // No active masks
                         material.uniform_data.mask_type = 0.0;
@@ -108,7 +108,6 @@ pub fn update_sdf_mask_system(
                         }
                     }
                 }
-            }
         }
     }
 }

@@ -10,10 +10,10 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::effects::NeedsEmbedSceneRtt;
-use crate::loader::{AmProject, FontMetrics};
+use crate::effects::NeedsStrategyEvaluation;
+use crate::loader::FontMetrics;
 use crate::schema::{
-    AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEffect, AmLayer, AmScene, AmShape,
+    AmAnimatedFloat, AmAnimatedVec2, AmLayer, AmScene, AmShape,
 };
 use crate::sdf::AmSdfShaders;
 
@@ -22,6 +22,7 @@ use super::effects::*;
 use super::helpers::*;
 use super::spawn_visual::{spawn_image, spawn_text};
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_scene(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -284,7 +285,7 @@ pub(crate) fn spawn_shape(
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or_else(|| {
+            .unwrap_or({
                 // Fall back to @end-size attribute if no <size> element
                 // Note: end-size appears to use a different scale than <size> element
                 // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
@@ -591,8 +592,10 @@ pub(crate) fn spawn_embed_scene(
                 palette_alpha: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
-            // Mark for RTT setup (will enable clipping to scene bounds)
-            NeedsEmbedSceneRtt {
+            // Mark for render strategy evaluation (Hybrid Pipeline)
+            // The evaluate_render_strategy_system will determine if this embed
+            // needs Direct (no RTT), Stencil, or Composite (full RTT) rendering.
+            NeedsStrategyEvaluation {
                 scene_width: embed.scene.width as f32,
                 scene_height: embed.scene.height as f32,
             },
@@ -669,6 +672,7 @@ pub(crate) fn spawn_embed_scene(
 }
 
 /// Spawn an image layer (lazy - visual components spawned later by lifecycle system).
+#[allow(dead_code)]
 pub(crate) fn calculate_embed_position_compensation(
     pivot: (f32, f32),
     scale: (f32, f32),

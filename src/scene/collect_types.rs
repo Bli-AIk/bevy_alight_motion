@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
 use crate::schema::{
-    AmAnimatedFloat, AmAnimatedVec2, AmEmbedScene, AmImage, AmNullObj, AmShape, AmText,
+    AmAnimatedFloat, AmAnimatedVec2, AmShape, AmText,
 };
 
 use super::collect::{apply_mask_to_children, collect_pending_layers};
@@ -96,7 +96,7 @@ pub(crate) fn collect_shape(
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or_else(|| {
+            .unwrap_or({
                 // Fall back to @end-size attribute if no <size> element
                 // Note: end-size appears to use a different scale than <size> element
                 // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling

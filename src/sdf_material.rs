@@ -197,6 +197,7 @@ impl SdfMaterial {
     }
 
     /// Create a new SDF material with mask support.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_mask(
         shape_type: SdfShapeType,
         half_width: f32,
@@ -225,6 +226,7 @@ impl SdfMaterial {
     }
 
     /// Create a new SDF material with mask support and explicit frame_half.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_mask_and_frame_half(
         shape_type: SdfShapeType,
         half_width: f32,

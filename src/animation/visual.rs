@@ -10,19 +10,16 @@
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
-use bevy::sprite::Anchor;
 use std::collections::HashMap;
 
-use crate::loader::FontMetrics;
 use crate::scene::{
-    AmBlendingMode, AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned,
-    PendingLayer,
+    AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned,
 };
-use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with_alpha};
+use crate::sdf_material::SdfMaterial;
 
-use super::components::{AmAnimated, AmSdfParams, AmSdfShapeParent};
 use super::sdf_spawn::spawn_sdf_visual;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn add_visual_components(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -145,6 +142,7 @@ pub(crate) fn add_visual_components(
     }
 
     // Helper to create unified material with effects
+    #[allow(clippy::too_many_arguments)]
     fn create_unified_material(
         unified_materials: &mut Assets<UnifiedEffectMaterial>,
         texture: Handle<Image>,
@@ -725,17 +723,18 @@ pub(crate) fn add_visual_components(
             commands.entity(entity).insert(AmVisualSpawned);
         }
         AmLayerSpec::EmbedScene => {
-            // Add RTT setup marker if scene size is available
+            // Add render strategy evaluation marker if scene size is available
+            // The evaluate_render_strategy_system will determine the appropriate strategy
             if let Some((width, height)) = embed_scene_size {
                 bevy::log::info!(
-                    "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsEmbedSceneRtt: {}x{}",
+                    "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsStrategyEvaluation: {}x{}",
                     label,
                     id,
                     width,
                     height
                 );
                 commands.entity(entity).insert((
-                    crate::effects::NeedsEmbedSceneRtt {
+                    crate::effects::NeedsStrategyEvaluation {
                         scene_width: width,
                         scene_height: height,
                     },

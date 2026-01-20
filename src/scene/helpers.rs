@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 
 use super::components::AmSceneConfig;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmKeyframe};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
 pub fn am_to_bevy_coords(x: f32, y: f32, config: &AmSceneConfig) -> (f32, f32) {
     let bx = x - config.canvas_width / 2.0;
@@ -156,6 +156,7 @@ pub(crate) fn calculate_embed_position_compensation(
     (comp_x, comp_y)
 }
 
+#[allow(dead_code)]
 pub(crate) fn calculate_pivot_compensation(
     pivot: (f32, f32),
     scale: (f32, f32),

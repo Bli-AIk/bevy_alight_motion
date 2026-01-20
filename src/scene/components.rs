@@ -10,7 +10,6 @@ use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::AmProject;
-use crate::schema::AmAnimatedFloat;
 
 /// Component to track embed scene's content entities.
 /// Content entities are spatially decoupled (not Bevy children) but logically belong to this embed.

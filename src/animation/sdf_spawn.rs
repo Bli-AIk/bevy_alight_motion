@@ -11,13 +11,13 @@
 use bevy::asset::Assets;
 use bevy::prelude::*;
 
-use crate::scene::{AmLayerMarker, AmMaskInfo, AmVisualSpawned, PendingLayer};
-use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with_alpha};
+use crate::scene::{AmLayerMarker, AmMaskInfo, AmVisualSpawned};
+use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color};
 
 use super::components::{AmSdfParams, AmSdfShapeParent};
-use super::interpolation::parse_keyframe_vec2;
 use super::visual::extract_fill_color;
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_sdf_visual(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

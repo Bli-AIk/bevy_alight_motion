@@ -5,7 +5,6 @@
 //! Entity spawning functions for visual AM layers (image, text).
 //! 视觉 AM 图层（图片、文字）的实体生成函数。
 
-use bevy::asset::Assets;
 use bevy::prelude::*;
 use bevy::sprite::Text2d;
 use bevy::text::{TextColor, TextFont, TextLayout};
@@ -13,8 +12,7 @@ use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmText};
-use crate::sdf::AmSdfShaders;
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmText};
 
 use super::components::*;
 use super::effects::*;

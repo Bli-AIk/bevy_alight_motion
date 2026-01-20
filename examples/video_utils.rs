@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -54,25 +56,18 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
 
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(file_name) = entry.file_name().to_str() {
-                            if let Some(extension) = file_name.split('.').next_back() {
-                                if extensions.contains(&extension.to_lowercase().as_str()) {
-                                    if let Ok(metadata) = entry.metadata() {
-                                        if let Ok(modified) = metadata.modified() {
-                                            if latest_file.is_none()
-                                                || latest_file.as_ref().unwrap().1 < modified
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_file()
+                        && let Some(file_name) = entry.file_name().to_str()
+                            && let Some(extension) = file_name.split('.').next_back()
+                                && extensions.contains(&extension.to_lowercase().as_str())
+                                    && let Ok(metadata) = entry.metadata()
+                                        && let Ok(modified) = metadata.modified()
+                                            && (latest_file.is_none()
+                                                || latest_file.as_ref().unwrap().1 < modified)
                                             {
                                                 latest_file = Some((entry.path(), modified));
                                             }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
             if latest_file.is_some() {
                 break;
@@ -102,7 +97,7 @@ pub fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
         .ok()?;
 
     let fps_str = String::from_utf8_lossy(&fps_output.stdout);
-    let fps = parse_fps(&fps_str.trim()).unwrap_or(12.0);
+    let fps = parse_fps(fps_str.trim()).unwrap_or(12.0);
 
     // Get duration
     let duration_output = Command::new("ffprobe")
@@ -165,11 +160,10 @@ pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
     }
 
     // If no existing parent dir found (e.g. running from wrong CWD), try to create one relative to video
-    if base_frames_dir.is_none() {
-        if let Some(parent) = video_path.parent() {
+    if base_frames_dir.is_none()
+        && let Some(parent) = video_path.parent() {
             base_frames_dir = Some(parent.join("_video_frames"));
         }
-    }
 
     let base_frames_dir = base_frames_dir?;
     // Use video-specific subdirectory to avoid race conditions in parallel tests

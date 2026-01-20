@@ -30,20 +30,11 @@ pub use helpers::am_to_bevy_coords;
 pub use spawn::spawn_scene;
 
 // Internal re-exports for other modules in this crate
-pub(crate) use effects::{
-    extract_effect_animations, extract_gaussian_blur_effect, extract_palette_map_effect,
-    extract_stretch_segment_effect, extract_wipe_effect,
-};
-pub(crate) use helpers::{
-    calculate_embed_position_compensation, calculate_pivot_compensation, get_base_alpha,
-    get_initial_location, get_initial_opacity, get_initial_pivot, get_initial_rotation,
-    get_initial_scale, get_scale_at_normalized_time, get_shape_size, get_shape_size_animation,
-    get_stroke_width_animation, pivot_to_anchor_and_offset, truncate_string,
-};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::helpers::get_shape_size;
 
     #[test]
     fn test_am_to_bevy_coords() {

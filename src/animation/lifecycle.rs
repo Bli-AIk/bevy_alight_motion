@@ -10,11 +10,10 @@
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
-use std::collections::HashMap;
 
 use crate::loader::AmProject;
 use crate::plugin::AmWhitePixel;
-use crate::scene::{AmPendingLayers, AmProjectRoot, PendingLayer};
+use crate::scene::{AmPendingLayers, AmProjectRoot};
 use crate::sdf_material::SdfMaterial;
 
 use super::components::AmPlayback;

@@ -104,6 +104,7 @@ pub fn interpolate_float(prop: &AmAnimatedFloat, t: f32) -> Option<f32> {
 }
 
 /// Find the surrounding keyframes for a given time.
+#[allow(dead_code)]
 pub fn find_keyframes(keyframes: &[AmKeyframe], t: f32) -> (&AmKeyframe, &AmKeyframe, f32) {
     find_keyframes_internal(keyframes, t, true)
 }

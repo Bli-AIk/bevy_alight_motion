@@ -183,6 +183,7 @@ pub fn update_unified_mask_system(
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
 /// It is designed for the RTT architecture where effects are stackable.
+#[allow(clippy::type_complexity)]
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
     mut commands: Commands,
@@ -219,10 +220,8 @@ pub fn animate_unified_effect_system(
             let layer_time = animated.calc_layer_time(local_time);
             let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
             material.color.alpha = opacity * animated.base_alpha;
-        } else {
-            if !animated.is_active(local_time) {
-                continue;
-            }
+        } else if !animated.is_active(local_time) {
+            continue;
         }
 
         // Use animation local time for interpolation (affected by speed)
@@ -249,7 +248,7 @@ pub fn animate_unified_effect_system(
         // When element is rotated, its local width/height swap in world space
         let rot_cos = transform_rotation_rad.cos().abs();
         let rot_sin = transform_rotation_rad.sin().abs();
-        let world_width = orig_width * rot_cos + orig_height * rot_sin;
+        let _world_width = orig_width * rot_cos + orig_height * rot_sin;
         let world_height = orig_width * rot_sin + orig_height * rot_cos;
         let _ = world_height; // Reserved for future use
 

@@ -8,13 +8,11 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
 use crate::schema::{AmLayer, AmScene};
 
 use super::collect_types::*;
 use super::components::*;
-use super::effects::*;
 use super::helpers::*;
 
 pub fn collect_pending_layers(
@@ -99,17 +97,32 @@ pub(crate) fn flatten_pending_layers_inner(
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
         layer_without_children.children = Vec::new();
-        // Only set containing_embed_id for direct NON-EMBED children of top-level embeds
-        // that were NOT collected from a nested scene:
-        // - base_nesting_depth == 0: we're flattening the top-level scene
-        // - embed_depth == 1: this is a direct child of a top-level embed
-        // - !is_embed: not an embed layer (embeds need to be Bevy children for transform propagation)
-        // - !from_deeply_nested_scene: wasn't collected from inside another embed's scene
-        let from_nested = layer_without_children.from_deeply_nested_scene;
-        let should_decouple =
-            base_nesting_depth == 0 && embed_depth == 1 && !is_embed && !from_nested;
+        
+        // **Hybrid Rendering Pipeline**: 
+        // Set containing_embed_id for ALL non-embed content inside ANY embed.
+        // This allows propagate_render_layers_system to assign RenderLayers based on
+        // the parent embed's strategy (Direct -> Layer 0, Composite -> RTT layer).
+        //
+        // Conditions for spatial decoupling:
+        // - embed_depth >= 1: we're inside at least one embed
+        // - !is_embed: not an embed layer itself (embeds remain as Bevy children for transform)
+        //
+        // The key insight: all content inside embeds should be marked with their
+        // immediate parent embed's ID, regardless of nesting depth.
+        let should_decouple = embed_depth >= 1 && !is_embed;
         let assigned_embed_id = if should_decouple { current_embed_id } else { 0 };
         layer_without_children.containing_embed_id = assigned_embed_id;
+        
+        if should_decouple && assigned_embed_id != 0 {
+            bevy::log::debug!(
+                "[Flatten] Content '{}' (id={}) assigned to embed {} (depth={})",
+                layer_without_children.label,
+                layer_without_children.id,
+                assigned_embed_id,
+                embed_depth
+            );
+        }
+        
         result.push(layer_without_children);
 
         // Recursively flatten children and update their parent reference
@@ -202,11 +215,36 @@ pub(crate) fn flatten_pending_layers_inner(
                     child.parent = new_parent_id;
                 }
 
-                // Remap containing_embed_id if it was set to a child ID
-                if child.containing_embed_id != 0
-                    && let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id)
-                {
-                    child.containing_embed_id = new_embed_id;
+                // **Hybrid Rendering Pipeline Fix**:
+                // Remap containing_embed_id to the correct embed entity ID.
+                // 
+                // Case 1: containing_embed_id == child_embed_id (direct child of current embed)
+                //         -> Set to current embed's remapped ID (layer_id for parent's children)
+                // Case 2: containing_embed_id is in id_remap (grandchild referencing a nested embed)
+                //         -> Use the remapped ID from id_remap
+                // Case 3: containing_embed_id points to current layer (this layer IS the embed)
+                //         -> This shouldn't happen (is_embed check in should_decouple)
+                if child.containing_embed_id != 0 {
+                    if child.containing_embed_id == child_embed_id && is_embed {
+                        // Direct content of this embed - use the embed's own ID (layer_id)
+                        // Since this embed layer's ID hasn't been remapped yet (it's the current layer),
+                        // we need to use `layer_id` which will become part of parent's flattening
+                        child.containing_embed_id = layer_id;
+                        bevy::log::trace!(
+                            "[Flatten] Remapped containing_embed_id for '{}': {} -> {} (direct child of embed)",
+                            child.label,
+                            child_embed_id,
+                            layer_id
+                        );
+                    } else if let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id) {
+                        // Grandchild referencing a nested embed
+                        child.containing_embed_id = new_embed_id;
+                        bevy::log::trace!(
+                            "[Flatten] Remapped containing_embed_id for '{}' via id_remap",
+                            child.label
+                        );
+                    }
+                    // If neither case matches, keep the original ID (will be remapped in outer call)
                 }
 
                 // Also update the layer_id in animated component
@@ -400,8 +438,8 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                 continue; // Already has masks
             }
             // Check if this layer's parent has masks
-            if layer.parent != 0 {
-                if let Some(parent_masks) = layer_masks.get(&layer.parent) {
+            if layer.parent != 0
+                && let Some(parent_masks) = layer_masks.get(&layer.parent) {
                     layer.mask_info = Some(AmMaskInfo {
                         masks: parent_masks.clone(),
                     });
@@ -413,7 +451,6 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                     );
                     changes = true;
                 }
-            }
         }
         if !changes {
             break;

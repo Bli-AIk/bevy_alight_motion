@@ -80,7 +80,7 @@ fn main() {
     println!("Loading project: {}", project_file);
 
     // Default resolution
-    let mut resolution = Vec2::new(1280.0, 960.0);
+    let resolution = Vec2::new(1280.0, 960.0);
 
     // In comparison mode, try to match video resolution
     #[cfg(feature = "video-comparison")]
@@ -216,7 +216,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 fn debug_sprites(
     query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
 ) {
-    for (marker, transform, global_transform, sprite) in query.iter() {
+    for (marker, transform, global_transform, _sprite) in query.iter() {
         let global_z = global_transform.translation().z;
         println!(
             "[SpawnDebug] Sprite added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2})",

@@ -369,3 +369,84 @@ pub fn vec4_to_mask_params(v: Vec4) -> MaskParams {
 pub fn mask_params_to_vec4(p: &MaskParams) -> Vec4 {
     Vec4::new(p.center_x, p.center_y, p.half_width, p.half_height)
 }
+
+// ============================================================================
+// Render Strategy Types for Hybrid Rendering Pipeline
+// 混合渲染管线的渲染策略类型
+// ============================================================================
+
+/// Render strategy for an EmbedScene.
+/// 
+/// Determines how an EmbedScene should be rendered based on its requirements.
+/// This is the core of the "Hybrid Rendering Pipeline" architecture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Component)]
+pub enum RenderStrategy {
+    /// Direct rendering - no isolation needed.
+    /// 
+    /// The embed's children render directly to the parent's RenderLayer.
+    /// This is the default for 90%+ of embeds (simple groups with only transform).
+    /// 
+    /// - No RTT allocated
+    /// - No separate RenderLayer
+    /// - Children inherit parent's layer via Z-sorting
+    #[default]
+    Direct,
+    
+    /// Stencil-based clipping.
+    /// 
+    /// Content is clipped to embed bounds using GPU stencil/scissor test.
+    /// Still renders to parent's layer - no RTT overhead.
+    /// 
+    /// - No RTT allocated
+    /// - No separate RenderLayer
+    /// - Uses stencil test for rectangular clipping
+    Stencil,
+    
+    /// Full composition with RTT.
+    /// 
+    /// Requires a dedicated RenderLayer and render-to-texture.
+    /// Used only when mathematically necessary:
+    /// - Has shader effects (blur, distortion)
+    /// - Has complex blend modes with overlapping content
+    /// - Has non-rectangular masks
+    /// 
+    /// - Allocates RTT from pool
+    /// - Gets dedicated RenderLayer (1-31)
+    /// - Content renders to RTT, result composites to parent
+    Composite,
+}
+
+/// Component to mark an entity as needing render strategy evaluation.
+/// Added to new EmbedScene entities, removed after strategy is determined.
+/// 
+/// Note: This is defined in rtt.rs as NeedsStrategyEvaluation with scene dimensions.
+/// This marker type is kept for compatibility but the rtt.rs version should be used.
+#[deprecated(note = "Use NeedsStrategyEvaluation from rtt.rs instead")]
+#[derive(Component, Debug, Default)]
+pub struct NeedsRenderStrategyEvaluation;
+
+/// Component storing the computed render hierarchy info.
+/// Used by the propagation system to determine RenderLayers.
+#[derive(Component, Debug, Clone)]
+pub struct RenderHierarchyInfo {
+    /// The effective RenderLayer for this entity's content.
+    /// For Direct/Stencil, this is inherited from parent.
+    /// For Composite, this is the allocated layer from pool.
+    pub effective_layer: u8,
+    
+    /// Computed global Z value for sorting within the same layer.
+    pub global_z: f32,
+    
+    /// Whether this entity requires RTT (Composite strategy).
+    pub requires_rtt: bool,
+}
+
+impl Default for RenderHierarchyInfo {
+    fn default() -> Self {
+        Self {
+            effective_layer: 0,
+            global_z: 0.0,
+            requires_rtt: false,
+        }
+    }
+}

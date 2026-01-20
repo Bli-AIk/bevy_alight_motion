@@ -47,10 +47,6 @@ pub use interpolation::{
 };
 
 // Internal re-exports for other modules in this crate
-pub(crate) use helpers::{get_initial_scale_from_animated, is_descendant_of};
-pub(crate) use sdf_spawn::spawn_sdf_visual;
-pub(crate) use spawn::{count_total_layers, process_pending_layers};
-pub(crate) use visual::{add_visual_components, extract_fill_color};
 
 #[cfg(test)]
 mod tests {

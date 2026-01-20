@@ -62,7 +62,7 @@ pub fn get_initial_scale_from_animated(prop: &AmAnimatedVec2) -> (f32, f32) {
         });
         // If all keyframes are before t=0, use the last keyframe (closest to t=0)
         // Otherwise, use the first keyframe (traditional behavior for t=0 being at or after first kf)
-        let target_kf = if sorted.last().map_or(false, |kf| kf.time <= 0.0) {
+        let target_kf = if sorted.last().is_some_and(|kf| kf.time <= 0.0) {
             sorted.last().unwrap()
         } else {
             sorted.first().unwrap()

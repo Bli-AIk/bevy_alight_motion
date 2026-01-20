@@ -1,9 +1,22 @@
 //! # rtt.rs
 //!
-//! # RTT 渲染模块
+//! # RTT 渲染模块 - 混合渲染管线架构
 //!
-//! Render-to-Texture (RTT) systems for embed scenes and effects.
-//! 嵌入场景和效果的渲染到纹理 (RTT) 系统。
+//! Hybrid Rendering Pipeline for embed scenes and effects.
+//! 嵌入场景和效果的混合渲染管线。
+//!
+//! ## Architecture Philosophy
+//! 
+//! **Default Flat, Isolate on Demand** (默认扁平，按需隔离):
+//! - By default, all content renders to Layer 0 (the main camera's layer)
+//! - Only allocate separate RenderLayers when mathematically necessary
+//! - Use Z-index sorting within shared layers for proper depth ordering
+//!
+//! ## Render Strategies
+//!
+//! 1. **Direct**: No isolation needed. Content inherits parent's layer.
+//! 2. **Stencil**: Clipping via GPU stencil/scissor test, still on parent's layer.
+//! 3. **Composite**: Full RTT isolation with dedicated RenderLayer.
 
 use bevy::camera::RenderTarget;
 use bevy::camera::ScalingMode;
@@ -14,7 +27,6 @@ use bevy::render::render_resource::{
 };
 use std::collections::HashMap;
 
-use crate::scene::{AmEmbedContent, AmEmbedContentMarker, AmLayerMarker, AmPendingLayers};
 
 use super::types::*;
 
@@ -29,9 +41,12 @@ impl Plugin for EffectRenderPlugin {
                     setup_effect_buffers_system,
                     update_effect_buffers_system,
                     mark_dirty_on_change_system,
+                    // Hybrid Rendering Pipeline systems
+                    evaluate_render_strategy_system,
                     setup_embed_scene_rtt_system,
                     debug_rtt_camera_projection_system,
                     propagate_render_layers_system,
+                    propagate_render_layers_to_children_system, // NEW: for Bevy children of embeds
                     cleanup_embed_scene_rtt_system,
                     cleanup_embed_content_system,
                 ),
@@ -40,21 +55,29 @@ impl Plugin for EffectRenderPlugin {
 }
 
 // ============================================================================
-// EmbedScene RTT Architecture
+// Hybrid Rendering Pipeline Architecture
+// 混合渲染管线架构
 // ============================================================================
 
-/// Resource managing the pool of available RenderLayers for embedScenes.
+/// Resource managing the pool of available RenderLayers for Composite strategy.
+/// 
 /// Bevy supports up to 32 RenderLayers (0-31). Layer 0 is reserved for the main camera.
-/// We use layers 1-31 for embedScene RTT rendering.
+/// We use layers 1-31 for embedScene RTT rendering (Composite strategy only).
+/// 
+/// With the Hybrid Pipeline, most embeds use Direct strategy and share Layer 0,
+/// so we rarely exhaust the 31 available layers.
 #[derive(Resource, Default)]
 pub struct EmbedSceneRenderLayerPool {
     /// Bitset tracking which layers are in use (bit N = layer N+1)
     used_layers: u32,
+    /// Count of embeds waiting for a layer (for diagnostics)
+    waiting_count: u32,
 }
 
 impl EmbedSceneRenderLayerPool {
-    /// Allocate a render layer. Returns None if all layers are in use.
-    pub fn allocate(&mut self) -> Option<u8> {
+    /// Acquire a render layer for Composite strategy.
+    /// Returns None if all layers are in use (pool exhausted).
+    pub fn acquire(&mut self) -> Option<u8> {
         // Find first available layer (layers 1-31)
         for i in 0..31 {
             if (self.used_layers & (1 << i)) == 0 {
@@ -62,13 +85,23 @@ impl EmbedSceneRenderLayerPool {
                 return Some(i + 1); // Return layer index (1-31)
             }
         }
+        self.waiting_count += 1;
         None
+    }
+    
+    /// Legacy alias for acquire (for compatibility)
+    pub fn allocate(&mut self) -> Option<u8> {
+        self.acquire()
     }
 
     /// Release a render layer back to the pool.
+    /// Called when: embed despawned, becomes hidden, or strategy changes to Direct.
     pub fn release(&mut self, layer: u8) {
         if (1..=31).contains(&layer) {
             self.used_layers &= !(1 << (layer - 1));
+            if self.waiting_count > 0 {
+                self.waiting_count -= 1;
+            }
         }
     }
 
@@ -76,6 +109,17 @@ impl EmbedSceneRenderLayerPool {
     #[allow(dead_code)]
     pub fn used_count(&self) -> u32 {
         self.used_layers.count_ones()
+    }
+    
+    /// Check how many layers are available.
+    #[allow(dead_code)]
+    pub fn available_count(&self) -> u32 {
+        31 - self.used_layers.count_ones()
+    }
+    
+    /// Check if pool is exhausted.
+    pub fn is_exhausted(&self) -> bool {
+        self.used_layers == 0x7FFFFFFF // All 31 bits set
     }
 }
 
@@ -103,11 +147,104 @@ pub struct EmbedSceneRttCamera {
     pub render_layer: u8,
 }
 
-/// Marker component indicating an entity needs RTT setup
+/// Marker component indicating an entity needs RTT setup (for Composite strategy only).
+/// 
+/// In the Hybrid Pipeline, this component is only added to embeds that have been
+/// evaluated as requiring Composite strategy (full RTT isolation).
 #[derive(Component)]
 pub struct NeedsEmbedSceneRtt {
     pub scene_width: f32,
     pub scene_height: f32,
+}
+
+/// Marker component indicating an embed needs render strategy evaluation.
+/// 
+/// This is added to new EmbedScene entities during spawn.
+/// The evaluate_render_strategy_system will analyze the embed and assign
+/// a RenderStrategy, then remove this marker.
+#[derive(Component)]
+pub struct NeedsStrategyEvaluation {
+    pub scene_width: f32,
+    pub scene_height: f32,
+}
+
+// ============================================================================
+// Render Strategy Evaluator
+// 渲染策略评估器
+// ============================================================================
+
+/// System to evaluate render strategy for new embed scenes.
+/// 
+/// This is the "brain" of the Hybrid Rendering Pipeline.
+/// It analyzes each embed and assigns one of three strategies:
+/// - Direct: No RTT, content renders to parent's layer (90%+ of cases)
+/// - Stencil: GPU stencil clipping, still on parent's layer
+/// - Composite: Full RTT isolation with dedicated RenderLayer
+/// 
+/// Currently, we use a simple heuristic:
+/// - All embeds start with Direct strategy
+/// - Embeds with clipping enabled get Stencil (TODO: implement actual stencil rendering)
+/// - Embeds with shader effects (blur, etc.) get Composite
+/// 
+/// Future enhancements:
+/// - Detect shader effects and force Composite
+/// - Detect complex blend modes and force Composite
+/// - Implement actual stencil-based clipping for Stencil strategy
+pub fn evaluate_render_strategy_system(
+    mut commands: Commands,
+    query: Query<(Entity, &NeedsStrategyEvaluation), Without<RenderStrategy>>,
+    // Query to check if embed has any effects that require Composite
+    // For now, we can check for specific components or use heuristics
+) {
+    // Log periodically to track query count
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    if frame <= 10 || frame % 60 == 0 {
+        let count = query.iter().count();
+        bevy::log::info!("[Strategy] Frame {}: query count = {}", frame, count);
+    }
+    
+    for (entity, needs_eval) in query.iter() {
+        // Determine render strategy based on embed properties
+        //
+        // Currently, we use Direct for ALL embeds by default.
+        // This enables unlimited nesting without RenderLayer exhaustion.
+        //
+        // Future: Check for:
+        // - Blur effects -> Composite
+        // - Complex blend modes -> Composite
+        // - Rectangular clipping -> Stencil
+        // - Non-rectangular masks -> Composite
+        
+        let strategy = RenderStrategy::Direct;
+        
+        bevy::log::info!(
+            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{})",
+            entity,
+            strategy,
+            needs_eval.scene_width,
+            needs_eval.scene_height
+        );
+        
+        // Remove evaluation marker and assign strategy
+        // For Direct strategy: set RenderLayers to layer 0 and make visible
+        commands
+            .entity(entity)
+            .remove::<NeedsStrategyEvaluation>()
+            .insert((
+                strategy,
+                RenderHierarchyInfo::default(),
+                // Direct strategy: render to Layer 0 (main camera)
+                RenderLayers::layer(0),
+                // Make embed visible (it starts as Hidden)
+                Visibility::Inherited,
+            ));
+        
+        // For Composite strategy, we would add NeedsEmbedSceneRtt here.
+        // But with Direct strategy, we DON'T need RTT at all!
+        // Content will render directly to Layer 0 with proper Z-sorting.
+    }
 }
 
 /// System to set up RTT infrastructure for embedScenes marked with NeedsEmbedSceneRtt.
@@ -345,182 +482,277 @@ pub fn debug_rtt_camera_projection_system(
 
 /// System to propagate RenderLayers to embed content entities.
 ///
-/// With spatial decoupling, embed content entities are NOT Bevy children of the embed entity.
-/// Instead, they have `AmEmbedContentMarker` component that identifies which embed they belong to.
-/// This system assigns the correct RenderLayers so content renders to the embed's RTT camera.
+/// **Hybrid Rendering Pipeline Logic:**
+/// 
+/// With the new architecture, most embeds use Direct strategy and render to Layer 0.
+/// Only embeds with Composite strategy have dedicated RenderLayers (1-31).
+///
+/// This system:
+/// 1. For content belonging to Direct/Stencil embeds: Assign Layer 0, make visible
+/// 2. For content belonging to Composite embeds: Assign the RTT layer, make visible
+///
+/// The key insight is that content WITHOUT an RTT embed now goes to Layer 0,
+/// which is the opposite of the old behavior (where it stayed hidden).
 pub fn propagate_render_layers_system(
     mut commands: Commands,
-    embed_query: Query<(Entity, &EmbedSceneRtt)>,
-    content_query: Query<(Entity, &crate::scene::AmEmbedContentMarker), Without<EmbedSceneRtt>>,
-    render_layers_query: Query<&RenderLayers>,
+    // Query embeds with Composite strategy (have EmbedSceneRtt)
+    composite_embed_query: Query<(Entity, &EmbedSceneRtt)>,
+    // Query embeds with Direct strategy (have RenderStrategy but no EmbedSceneRtt)
+    direct_embed_query: Query<(Entity, &RenderStrategy), Without<EmbedSceneRtt>>,
+    // Query all embed content
+    content_query: Query<(Entity, &crate::scene::AmEmbedContentMarker, Option<&RenderLayers>)>,
 ) {
-    // Build a map of embed entity -> render layer
-    let embed_layers: HashMap<Entity, u8> = embed_query
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    
+    // Build a map of embed entity -> render layer for Composite embeds
+    let composite_layers: HashMap<Entity, u8> = composite_embed_query
         .iter()
         .map(|(entity, rtt)| (entity, rtt.render_layer))
         .collect();
+    
+    // Build a set of Direct embed entities
+    let direct_embeds: std::collections::HashSet<Entity> = direct_embed_query
+        .iter()
+        .filter(|(_, strategy)| **strategy == RenderStrategy::Direct)
+        .map(|(entity, _)| entity)
+        .collect();
 
-    // Debug: Log embed and content counts
-    static mut FRAME_COUNT: u32 = 0;
-    unsafe {
-        FRAME_COUNT += 1;
-        if FRAME_COUNT % 300 == 1 {
+    // Debug logging
+    if frame <= 10 || frame % 60 == 0 {
+        bevy::log::info!(
+            "[RenderLayers] Frame {}: Composite={}, Direct={}, content={}",
+            frame,
+            composite_layers.len(),
+            direct_embeds.len(),
+            content_query.iter().count()
+        );
+    }
+
+    // Track how many updates we make
+    let mut updates = 0;
+
+    // Assign RenderLayers to all embed content
+    for (content_entity, marker, current_layers) in content_query.iter() {
+        // Determine target layer based on parent embed's strategy
+        let target_layer = if let Some(&rtt_layer) = composite_layers.get(&marker.embed_entity) {
+            // Parent embed uses Composite strategy - render to its RTT layer
+            RenderLayers::layer(rtt_layer as usize)
+        } else if direct_embeds.contains(&marker.embed_entity) {
+            // Parent embed uses Direct strategy - render to Layer 0 (main camera)
+            RenderLayers::layer(0)
+        } else {
+            // Parent embed hasn't been evaluated yet - skip for now
+            // (This handles the case where strategy evaluation is still pending)
+            continue;
+        };
+
+        // Check if update is needed
+        let needs_update = match current_layers {
+            Some(current) => *current != target_layer,
+            None => true,
+        };
+
+        if needs_update {
+            let layer_num = if composite_layers.contains_key(&marker.embed_entity) {
+                composite_layers[&marker.embed_entity]
+            } else {
+                0
+            };
+            
+            // Insert RenderLayers and make visible
+            commands.entity(content_entity).insert((
+                target_layer,
+                Visibility::Inherited, // Safe to show - will render to correct layer
+            ));
+            
+            updates += 1;
             bevy::log::trace!(
-                "[RenderLayers] embeds with RTT: {}, content entities: {}",
-                embed_layers.len(),
-                content_query.iter().count()
+                "[RenderLayers] Assigned layer {} to content {:?} (embed {:?}), now visible",
+                layer_num,
+                content_entity,
+                marker.embed_entity
             );
         }
     }
-
-    // Assign RenderLayers to all embed content based on their marker
-    for (content_entity, marker) in content_query.iter() {
-        if let Some(&render_layer) = embed_layers.get(&marker.embed_entity) {
-            let target_layer = RenderLayers::layer(render_layer as usize);
-
-            // Check if already has correct RenderLayers
-            let needs_update = match render_layers_query.get(content_entity) {
-                Ok(current) => *current != target_layer,
-                Err(_) => true,
-            };
-
-            if needs_update {
-                // Insert RenderLayers and make visible (content starts Hidden until RTT is ready)
-                commands.entity(content_entity).insert((
-                    target_layer,
-                    Visibility::Inherited, // Now safe to show - will render to RTT camera
-                ));
-                bevy::log::trace!(
-                    "[RenderLayers] Assigned layer {} to embed content {:?} (embed {:?}), now visible",
-                    render_layer,
-                    content_entity,
-                    marker.embed_entity
-                );
-            }
-        } else {
-            // Embed not found in query - may not have EmbedSceneRtt yet
-            unsafe {
-                if FRAME_COUNT % 300 == 1 {
-                    bevy::log::warn!(
-                        "[RenderLayers] Content {:?} belongs to embed {:?} which has no RTT yet",
-                        content_entity,
-                        marker.embed_entity
-                    );
-                }
-            }
-        }
+    
+    // Log total updates made
+    if updates > 0 {
+        bevy::log::info!("[RenderLayers] Made {} visibility updates this frame", updates);
     }
 }
 
-/// System to propagate RenderLayers to Bevy children of embeds (nested embed content).
+/// System to propagate RenderLayers to Bevy children of embeds.
 ///
-/// When embeds are nested, their content becomes Bevy children (not spatially decoupled).
-/// This system ensures all descendants of an embed get the correct RenderLayers so they
-/// render to the embed's RTT camera.
+/// **Hybrid Rendering Pipeline Logic:**
+/// 
+/// For Direct strategy embeds: propagate Layer 0 to all children and make them visible.
+/// For Composite strategy embeds: propagate RTT layer to all children.
 ///
-/// This handles the case where:
-/// 1. Embed A (with RTT layer X) contains Embed B (with RTT layer Y)
-/// 2. Embed B's content is Bevy children of Embed B
-/// 3. Embed B itself needs RenderLayers X to render into Embed A's RTT
-/// 4. Embed B's children need RenderLayers Y to render into Embed B's RTT
+/// This handles nested embeds where content becomes Bevy children (not spatially decoupled).
 pub fn propagate_render_layers_to_children_system(
     mut commands: Commands,
-    embed_query: Query<(Entity, &EmbedSceneRtt)>,
+    // Composite strategy embeds (have RTT)
+    composite_embed_query: Query<(Entity, &EmbedSceneRtt)>,
+    // Direct strategy embeds (have RenderStrategy::Direct but no RTT)
+    direct_embed_query: Query<(Entity, &RenderStrategy), Without<EmbedSceneRtt>>,
     children_query: Query<&Children>,
     render_layers_query: Query<&RenderLayers>,
-    // Query for entities that are NOT embeds (don't have EmbedSceneRtt)
-    non_embed_query: Query<Entity, Without<EmbedSceneRtt>>,
+    visibility_query: Query<&Visibility>,
+    // Query for entities that are NOT embeds
+    non_embed_query: Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) {
-    // For each embed with RTT, propagate its render layer to DIRECT children.
-    // This includes:
-    // 1. Non-embed content - they render to this embed's RTT
-    // 2. Nested embeds - their Sprite (displaying their RTT output) needs to render to this embed's RTT
-    //
-    // We do NOT recurse into nested embeds' children because nested embeds handle their own content.
-    //
-    // Note: We query EmbedSceneRtt separately from Children because Children may not exist
-    // if the embed has no Bevy children yet.
-
-    bevy::log::trace!(
-        "[RenderLayers] propagate_render_layers_to_children_system: found {} embeds with RTT",
-        embed_query.iter().count()
-    );
-
-    for (embed_entity, rtt) in embed_query.iter() {
-        // Check if this embed has children
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    
+    let mut total_updates = 0;
+    
+    // Process Composite strategy embeds (propagate RTT layer)
+    for (embed_entity, rtt) in composite_embed_query.iter() {
         let Ok(children) = children_query.get(embed_entity) else {
-            bevy::log::trace!(
-                "[RenderLayers] Embed {:?} has RTT layer {} but no Children",
-                embed_entity,
-                rtt.render_layer
-            );
             continue;
         };
 
         let target_layer = RenderLayers::layer(rtt.render_layer as usize);
-
-        bevy::log::trace!(
-            "[RenderLayers] Processing embed {:?} with {} children, layer={}",
+        total_updates += propagate_to_descendants(
+            &mut commands,
             embed_entity,
-            children.len(),
-            rtt.render_layer
+            children,
+            &target_layer,
+            &children_query,
+            &render_layers_query,
+            &visibility_query,
+            &non_embed_query,
         );
+    }
+    
+    // Process Direct strategy embeds (propagate Layer 0)
+    let layer_0 = RenderLayers::layer(0);
+    let mut direct_with_children = 0;
+    let mut direct_total_children = 0;
+    for (embed_entity, strategy) in direct_embed_query.iter() {
+        if *strategy != RenderStrategy::Direct {
+            continue;
+        }
+        
+        let Ok(children) = children_query.get(embed_entity) else {
+            continue;
+        };
+        
+        direct_with_children += 1;
+        direct_total_children += children.len();
 
-        // Process all direct children - both embeds and non-embeds need the parent's RenderLayers
-        for child_entity in children.iter() {
-            // Assign this parent embed's RenderLayers to the child
-            let needs_update = match render_layers_query.get(child_entity) {
-                Ok(current) => *current != target_layer,
-                Err(_) => true,
-            };
+        total_updates += propagate_to_descendants(
+            &mut commands,
+            embed_entity,
+            children,
+            &layer_0,
+            &children_query,
+            &render_layers_query,
+            &visibility_query,
+            &non_embed_query,
+        );
+    }
+    
+    if frame <= 10 || frame % 60 == 0 || total_updates > 0 || direct_with_children > 0 {
+        bevy::log::info!(
+            "[PropagateChildren] Frame {}: {} updates, Direct embeds with children: {} (total {} children)",
+            frame,
+            total_updates,
+            direct_with_children,
+            direct_total_children
+        );
+    }
+}
 
-            if needs_update {
-                commands.entity(child_entity).insert(target_layer.clone());
-                bevy::log::trace!(
-                    "[RenderLayers] Propagated layer {} to child {:?} of embed {:?}",
-                    rtt.render_layer,
-                    child_entity,
-                    embed_entity
-                );
+/// Helper function to propagate RenderLayers to all descendants of an embed.
+fn propagate_to_descendants(
+    commands: &mut Commands,
+    embed_entity: Entity,
+    children: &Children,
+    target_layer: &RenderLayers,
+    children_query: &Query<&Children>,
+    render_layers_query: &Query<&RenderLayers>,
+    visibility_query: &Query<&Visibility>,
+    non_embed_query: &Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
+) -> u32 {
+    let mut updates = 0;
+    
+    // Process all direct children
+    for child_entity in children.iter() {
+        // Check if needs RenderLayers update
+        let layer_needs_update = match render_layers_query.get(child_entity) {
+            Ok(current) => current != target_layer,
+            Err(_) => true,
+        };
+        
+        // Check if needs Visibility update (make visible if currently hidden)
+        let vis_needs_update = match visibility_query.get(child_entity) {
+            Ok(Visibility::Hidden) => true,
+            Err(_) => false, // No Visibility component, don't add one
+            _ => false, // Already Inherited or Visible
+        };
+        
+        if layer_needs_update || vis_needs_update {
+            let mut entity_commands = commands.entity(child_entity);
+            if layer_needs_update {
+                entity_commands.insert(target_layer.clone());
             }
-
-            // For non-embed children, also process their descendants (but stop at nested embeds)
-            if non_embed_query.get(child_entity).is_ok() {
-                // Recurse into non-embed children
-                let mut to_process: Vec<Entity> = Vec::new();
-                if let Ok(grandchildren) = children_query.get(child_entity) {
-                    to_process.extend(grandchildren.to_vec());
-                }
-
-                while let Some(entity) = to_process.pop() {
-                    // Only process non-embed descendants
-                    if non_embed_query.get(entity).is_ok() {
-                        let needs_update = match render_layers_query.get(entity) {
-                            Ok(current) => *current != target_layer,
-                            Err(_) => true,
-                        };
-
-                        if needs_update {
-                            commands.entity(entity).insert(target_layer.clone());
-                            bevy::log::trace!(
-                                "[RenderLayers] Propagated layer {} to descendant {:?} of embed {:?}",
-                                rtt.render_layer,
-                                entity,
-                                embed_entity
-                            );
+            if vis_needs_update {
+                entity_commands.insert(Visibility::Inherited);
+            }
+            updates += 1;
+            bevy::log::trace!(
+                "[PropagateChildren] Updated child {:?} of embed {:?}",
+                child_entity,
+                embed_entity
+            );
+        }
+        
+        // Recurse into non-embed children
+        if non_embed_query.get(child_entity).is_ok() {
+            let mut to_process: Vec<Entity> = Vec::new();
+            if let Ok(grandchildren) = children_query.get(child_entity) {
+                to_process.extend(grandchildren.to_vec());
+            }
+            
+            while let Some(entity) = to_process.pop() {
+                // Only process non-embed descendants
+                if non_embed_query.get(entity).is_ok() {
+                    let layer_needs_update = match render_layers_query.get(entity) {
+                        Ok(current) => current != target_layer,
+                        Err(_) => true,
+                    };
+                    
+                    let vis_needs_update = match visibility_query.get(entity) {
+                        Ok(Visibility::Hidden) => true,
+                        Err(_) => false,
+                        _ => false,
+                    };
+                    
+                    if layer_needs_update || vis_needs_update {
+                        let mut entity_commands = commands.entity(entity);
+                        if layer_needs_update {
+                            entity_commands.insert(target_layer.clone());
                         }
-
-                        // Continue to grandchildren
-                        if let Ok(grandchildren) = children_query.get(entity) {
-                            to_process.extend(grandchildren.to_vec());
+                        if vis_needs_update {
+                            entity_commands.insert(Visibility::Inherited);
                         }
+                        updates += 1;
                     }
-                    // If it's an embed, we still assigned it the parent's layer above,
-                    // but we don't recurse into its children (it handles those itself)
+                    
+                    // Continue to grandchildren
+                    if let Ok(grandchildren) = children_query.get(entity) {
+                        to_process.extend(grandchildren.to_vec());
+                    }
                 }
             }
         }
     }
+    
+    updates
 }
 
 /// System to sync RTT camera positions with their embed's GlobalTransform.

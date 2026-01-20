@@ -8,25 +8,21 @@
 //! AM 图层的实体生成函数，包括 process_pending_layers、spawn_layer_entity 及相关辅助函数。
 
 use bevy::asset::Assets;
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::sprite::Anchor;
 use std::collections::HashMap;
 
-use crate::loader::FontMetrics;
 use crate::scene::{
-    AmBlendingMode, AmEmbedContent, AmEmbedContentMarker, AmLayerMarker, AmLayerSpec, AmMaskInfo,
-    AmPaletteMapParams, AmPendingLayers, AmVisualSpawned, PendingLayer,
+    AmBlendingMode, AmLayerMarker, AmPendingLayers, PendingLayer,
 };
-use crate::schema::AmAnimatedVec2;
 use crate::sdf_material::SdfMaterial;
 
-use super::components::{AmAnimated, AmSdfParams, AmSdfShapeParent, DEBUG_NEGATIVE_HEIGHT_SCALE};
+use super::components::DEBUG_NEGATIVE_HEIGHT_SCALE;
 use super::helpers::{get_initial_scale_from_animated, is_descendant_of};
 use super::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation, parse_keyframe_vec2,
+    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
 };
-use super::sdf_spawn::spawn_sdf_visual;
-use super::visual::{add_visual_components, extract_fill_color};
+use super::visual::add_visual_components;
 
 /// Count total layers including nested ones.
 ///
@@ -465,15 +461,17 @@ fn spawn_layer_entity(
         animated.inv_fit_scale = inv_fit_scale;
     }
 
-    // For embed content, start hidden until RenderLayers is assigned
-    // This prevents the first-frame jump where content renders to wrong camera
-    let initial_visibility = if layer.containing_embed_id != 0 {
-        Visibility::Hidden
-    } else {
-        Visibility::Inherited
-    };
+    // **Hybrid Rendering Pipeline**:
+    // All content starts visible and renders to Layer 0 (main camera).
+    // For Composite strategy embeds, content will later be reassigned to RTT layers.
+    // This ensures content is always visible and eliminates the first-frame hidden issue.
+    //
+    // Note: embed content that WAS using containing_embed_id for spatial decoupling
+    // now uses Bevy parent-child hierarchy for RenderLayers propagation.
+    let initial_visibility = Visibility::Inherited;
 
     // Create base entity with common components
+    // Include RenderLayers::layer(0) by default - Direct strategy content stays on Layer 0
     let entity = commands
         .spawn((
             Name::new(entity_name),
@@ -488,6 +486,7 @@ fn spawn_layer_entity(
             initial_visibility,
             InheritedVisibility::default(),
             ViewVisibility::default(),
+            RenderLayers::layer(0), // Default to Layer 0 (main camera)
         ))
         .id();
 
@@ -718,16 +717,18 @@ fn spawn_layer_entity(
         );
     }
 
-    // Spatial decoupling: embed content is made a child of embed_contents_container
-    // but NOT a child of the embed entity itself (to prevent Transform inheritance)
+    // **Hybrid Rendering Pipeline**:
+    // In Direct strategy, ALL content inherits transforms from their embed ancestors.
+    // We make content a Bevy child of its parent (from pending.layers), NOT of embed_contents_container.
+    // This allows proper Transform propagation through the hierarchy.
+    //
+    // Note: We still add AmEmbedContentMarker for lifecycle management,
+    // but the content is parented to its actual parent (not the container).
     if layer.containing_embed_id != 0 {
-        // This is embed content - add to embed_contents_container for organization
-        // The container has identity Transform, so content coordinates remain unchanged
-        if let Some(container) = embed_contents_container {
-            commands.entity(container).add_child(entity);
-        }
-        // If no container, entity remains at root level (backward compatibility)
-
+        // This is embed content - make it a child of its parent entity
+        // This ensures proper Transform inheritance through the Bevy hierarchy
+        commands.entity(parent_entity).add_child(entity);
+        
         // Look up the embed entity and add marker for lifecycle management
         if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
             commands
@@ -737,16 +738,19 @@ fn spawn_layer_entity(
                     embed_id: layer.containing_embed_id,
                 });
             bevy::log::debug!(
-                "[Lifecycle] Embed content '{}' added to container, belongs to embed {} ({:?})",
+                "[Lifecycle] Embed content '{}' parented to {:?}, belongs to embed {} ({:?})",
                 layer.label,
+                parent_entity,
                 layer.containing_embed_id,
                 embed_entity
             );
         } else {
-            bevy::log::warn!(
-                "[Lifecycle] Embed {} not found for content '{}', marker not added",
-                layer.containing_embed_id,
-                layer.label
+            // Even if embed lookup fails, still parent correctly for Transform inheritance
+            bevy::log::debug!(
+                "[Lifecycle] Embed content '{}' parented to {:?} (embed {} not in spawned_entities)",
+                layer.label,
+                parent_entity,
+                layer.containing_embed_id
             );
         }
     } else {
