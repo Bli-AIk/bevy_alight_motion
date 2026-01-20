@@ -53,13 +53,33 @@ pub(crate) fn process_pending_layers(
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
     let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
 
-    // Helper function to check if an ancestor is active
+    // Helper function to check if an ancestor is active (with cycle detection)
     fn is_ancestor_active(
         layer_id: u64,
         layers: &[PendingLayer],
         global_time: f32,
         _time_offset: i32,
     ) -> bool {
+        is_ancestor_active_impl(layer_id, layers, global_time, _time_offset, &mut Vec::new())
+    }
+
+    fn is_ancestor_active_impl(
+        layer_id: u64,
+        layers: &[PendingLayer],
+        global_time: f32,
+        _time_offset: i32,
+        visited: &mut Vec<u64>,
+    ) -> bool {
+        // Cycle detection: if we've already visited this layer, assume active to break cycle
+        if visited.contains(&layer_id) {
+            bevy::log::warn!(
+                "[Lifecycle] Cycle detected at layer_id={}, breaking recursion",
+                layer_id
+            );
+            return true;
+        }
+        visited.push(layer_id);
+
         let layer = match layers.iter().find(|l| l.id == layer_id) {
             Some(l) => l,
             None => return true, // If not found, assume active (root)
@@ -67,6 +87,16 @@ pub(crate) fn process_pending_layers(
 
         if layer.parent == 0 {
             return true; // No parent, always considered active from parent perspective
+        }
+
+        // Self-reference check
+        if layer.parent == layer.id {
+            bevy::log::warn!(
+                "[Lifecycle] Self-referencing parent at layer '{}' (id={}), treating as root",
+                layer.label,
+                layer.id
+            );
+            return true;
         }
 
         // Check parent's active status
@@ -86,7 +116,7 @@ pub(crate) fn process_pending_layers(
         }
 
         // Recursively check grandparent
-        is_ancestor_active(layer.parent, layers, global_time, _time_offset)
+        is_ancestor_active_impl(layer.parent, layers, global_time, _time_offset, visited)
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
@@ -106,6 +136,29 @@ pub(crate) fn process_pending_layers(
         let should_be_active = own_time_active && ancestors_active;
 
         let is_spawned = pending.spawned_entities.contains_key(&layer.id);
+
+        // Debug: log layer status (only first 5 frames and first 10 layers)
+        static mut DEBUG_FRAME: u32 = 0;
+        unsafe {
+            if DEBUG_FRAME < 5 && idx < 10 {
+                bevy::log::debug!(
+                    "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, local_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
+                    layer.label,
+                    layer.id,
+                    layer.parent,
+                    global_time,
+                    local_time,
+                    layer.start_time,
+                    layer.end_time,
+                    own_time_active,
+                    ancestors_active,
+                    is_spawned
+                );
+            }
+            if idx == 0 {
+                DEBUG_FRAME += 1;
+            }
+        }
 
         if should_be_active && !is_spawned {
             to_spawn.push(idx);
@@ -243,14 +296,16 @@ pub(crate) fn process_pending_layers(
         );
 
         bevy::log::debug!(
-            "[Lifecycle] Spawned '{}' (id={}, parent={}, embed={}, z={:.6}, time={}..{}ms)",
+            "[Lifecycle] Spawned '{}' (id={}, parent={}, embed={}, z={:.6}, time={}..{}ms) -> Entity {:?} parented to {:?}",
             layer.label,
             layer.id,
             layer.parent,
             layer.containing_embed_id,
             layer.transform.translation.z,
             layer.start_time,
-            layer.end_time
+            layer.end_time,
+            entity,
+            actual_parent
         );
 
         pending.spawned_entities.insert(layer.id, entity);
@@ -501,6 +556,11 @@ fn spawn_layer_entity(
     }
 
     // Add visual components based on spec (skip for mask layers)
+    bevy::log::debug!(
+        "[spawn_layer_entity] '{}' blending_mode={:?}, checking visual spawn",
+        layer.label,
+        layer.blending_mode
+    );
     if layer.blending_mode != AmBlendingMode::Mask && layer.blending_mode != AmBlendingMode::Exclude
     {
         // Extract initial scale from animated data for SDF shapes

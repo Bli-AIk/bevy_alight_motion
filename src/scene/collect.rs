@@ -7,6 +7,7 @@
 
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::loader::FontMetrics;
 use crate::schema::{AmLayer, AmScene};
@@ -14,6 +15,16 @@ use crate::schema::{AmLayer, AmScene};
 use super::collect_types::*;
 use super::components::*;
 use super::helpers::*;
+
+/// Global counter for generating unique IDs during flatten
+static UNIQUE_ID_COUNTER: AtomicU64 = AtomicU64::new(1_000_000_000_000);
+
+/// Generate a unique ID that won't collide with original IDs
+/// Simply uses a monotonically increasing counter to guarantee uniqueness
+fn generate_unique_id(_base_id: u64) -> u64 {
+    // Just use the counter directly - this guarantees uniqueness
+    UNIQUE_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 pub fn collect_pending_layers(
     scene: &AmScene,
@@ -68,12 +79,15 @@ pub(crate) fn flatten_pending_layers(
     layers: Vec<PendingLayer>,
     nesting_depth: u32,
 ) -> Vec<PendingLayer> {
-    flatten_pending_layers_inner(layers, 0, 0, nesting_depth)
+    // Reset counter at the start of each project load for deterministic behavior
+    // (not strictly necessary but helps with debugging)
+    flatten_pending_layers_inner(layers, 0, 0, nesting_depth, 0)
 }
 
 /// Inner recursive function with containing_embed tracking.
 /// `embed_depth`: local depth within this flatten call (0 = not inside any embed in this call)
 /// `base_nesting_depth`: absolute scene nesting level when flatten was called (0 = top-level scene)
+/// `instance_counter`: monotonically increasing counter for generating unique IDs per embed instance
 ///
 /// Spatial decoupling logic:
 /// - Only content inside top-level embeds (base_nesting_depth == 0 && embed_depth == 1) gets spatially decoupled
@@ -83,6 +97,7 @@ pub(crate) fn flatten_pending_layers_inner(
     current_embed_id: u64,
     embed_depth: u32,
     base_nesting_depth: u32,
+    mut instance_counter: u64,
 ) -> Vec<PendingLayer> {
     let mut result = Vec::new();
 
@@ -126,8 +141,11 @@ pub(crate) fn flatten_pending_layers_inner(
         result.push(layer_without_children);
 
         // Recursively flatten children and update their parent reference
-        // We need to remap IDs to make them unique per embed instance
         if !children.is_empty() {
+            // Increment instance counter for this embed instance to ensure unique IDs
+            instance_counter += 1;
+            let current_instance = instance_counter;
+            
             // Determine the embed ID and depth for children:
             // - If this layer IS an embed, its children are at depth+1
             // - Otherwise, inherit the current context
@@ -142,66 +160,39 @@ pub(crate) fn flatten_pending_layers_inner(
                 child_embed_id,
                 child_depth,
                 base_nesting_depth,
+                instance_counter,
             );
 
-            // Build a map of old ID -> new ID for this embed's children
-            // IMPORTANT: Use enumerated index to ensure uniqueness when multiple children
-            // have the same ID (which can happen with deeply nested embeds that share
-            // the same internal structure, e.g., "编组 3" and "编组 3 Copy" both containing
-            // "编组 2" with id=358, leading to duplicate intermediate IDs like 358000353).
-            let mut id_remap: std::collections::HashMap<u64, u64> =
-                std::collections::HashMap::new();
-            for (idx, child) in flattened_children.iter().enumerate() {
-                // Create unique ID by combining layer_id, child_id, and index
-                // The index ensures uniqueness even when child.id is duplicated
-                // Format: layer_id * 1_000_000 + child.id + idx * 1_000_000_000_000
-                // This gives each duplicate a distinct ID while preserving the base structure
-                let base_id = layer_id.wrapping_mul(1_000_000).wrapping_add(child.id);
-                let unique_id = if id_remap.contains_key(&child.id) {
-                    // This ID already exists, add index offset to make it unique
-                    base_id.wrapping_add((idx as u64).wrapping_mul(1_000_000_000))
-                } else {
-                    base_id
-                };
-                id_remap.insert(child.id, unique_id);
-            }
+            // Remap IDs to be unique per instance.
+            // Since children may contain layers with the same original IDs (from different embed instances),
+            // we use Vec<(old_id, new_id, index)> to track each layer's mapping individually.
+            
+            // Pass 1: Generate unique IDs for each child and build mapping
+            let id_mappings: Vec<(u64, u64)> = flattened_children
+                .iter()
+                .map(|child| {
+                    let old_id = child.id;
+                    let new_id = generate_unique_id(current_instance.wrapping_mul(1_000_000).wrapping_add(child.id));
+                    (old_id, new_id)
+                })
+                .collect();
 
-            // Now remap IDs, but we need to handle duplicates specially
-            // Build a fresh remap that tracks which IDs we've seen
-            let mut seen_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
-
+            // Pass 2: Apply the mapping with correct parent lookup
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
-                let old_id = child.id;
-
-                // Calculate the new ID with index offset if needed
-                let base_id = layer_id.wrapping_mul(1_000_000).wrapping_add(old_id);
-                let new_id = if seen_ids.contains(&base_id) {
-                    // Base ID already used, add index offset
-                    base_id.wrapping_add((idx as u64).wrapping_mul(1_000_000_000))
-                } else {
-                    base_id
-                };
-                seen_ids.insert(new_id);
+                let old_id = id_mappings[idx].0;
+                let new_id = id_mappings[idx].1;
+                
+                // Save the original parent for lookup
+                let original_parent = child.parent;
+                
+                // Update child's ID
                 child.id = new_id;
 
-                // Remap the parent reference and adjust coordinates
-                if child.parent == 0 {
+                // Remap the parent reference
+                if original_parent == 0 {
                     child.parent = layer_id;
 
-                    // For spatial decoupling, embed children are NOT Bevy children of embed.
-                    // They render directly to the RTT camera at origin (0,0).
-                    // The child's coordinates were calculated relative to inner canvas center,
-                    // which is exactly where the RTT camera is positioned - no adjustment needed.
-                    //
-                    // We still set embed_offset and inv_fit_scale for size compensation:
-                    // - inv_fit_scale: compensate for project fit scaling on sprite sizes
-                    // - embed_offset: used to identify this as embed content (Vec2 != ZERO)
-                    //
-                    // NOTE: We no longer subtract embed_bevy_pos from coordinates since content
-                    // renders directly at origin for the RTT camera.
                     if is_embed {
-                        // Store embed offset to identify as embed content (triggers inv_fit_scale use)
-                        // The actual value is not used for coordinate adjustment anymore
                         child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
                         bevy::log::info!(
                             "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
@@ -211,8 +202,24 @@ pub(crate) fn flatten_pending_layers_inner(
                             embed_bevy_pos.y
                         );
                     }
-                } else if let Some(&new_parent_id) = id_remap.get(&child.parent) {
-                    child.parent = new_parent_id;
+                } else {
+                    // Find the new ID for the parent in our mapping list
+                    // Search for the first mapping where old_id matches original_parent
+                    let new_parent_id = id_mappings.iter()
+                        .find(|(old, _new)| *old == original_parent)
+                        .map(|(_, new)| *new);
+                    
+                    if let Some(new_parent_id) = new_parent_id {
+                        child.parent = new_parent_id;
+                    } else {
+                        // Parent is external to this flatten batch - keep original
+                        // (will be remapped by outer flatten call if needed)
+                        bevy::log::trace!(
+                            "[Flatten] Parent {} not found in mapping for '{}', keeping as-is",
+                            original_parent,
+                            child.label
+                        );
+                    }
                 }
 
                 // **Hybrid Rendering Pipeline Fix**:
@@ -220,8 +227,8 @@ pub(crate) fn flatten_pending_layers_inner(
                 // 
                 // Case 1: containing_embed_id == child_embed_id (direct child of current embed)
                 //         -> Set to current embed's remapped ID (layer_id for parent's children)
-                // Case 2: containing_embed_id is in id_remap (grandchild referencing a nested embed)
-                //         -> Use the remapped ID from id_remap
+                // Case 2: containing_embed_id is in id_mappings (grandchild referencing a nested embed)
+                //         -> Use the remapped ID from id_mappings
                 // Case 3: containing_embed_id points to current layer (this layer IS the embed)
                 //         -> This shouldn't happen (is_embed check in should_decouple)
                 if child.containing_embed_id != 0 {
@@ -236,13 +243,20 @@ pub(crate) fn flatten_pending_layers_inner(
                             child_embed_id,
                             layer_id
                         );
-                    } else if let Some(&new_embed_id) = id_remap.get(&child.containing_embed_id) {
-                        // Grandchild referencing a nested embed
-                        child.containing_embed_id = new_embed_id;
-                        bevy::log::trace!(
-                            "[Flatten] Remapped containing_embed_id for '{}' via id_remap",
-                            child.label
-                        );
+                    } else {
+                        // Find in mappings
+                        let new_embed_id = id_mappings.iter()
+                            .find(|(old, _new)| *old == child.containing_embed_id)
+                            .map(|(_, new)| *new);
+                        
+                        if let Some(new_embed_id) = new_embed_id {
+                            // Grandchild referencing a nested embed
+                            child.containing_embed_id = new_embed_id;
+                            bevy::log::trace!(
+                                "[Flatten] Remapped containing_embed_id for '{}' via id_mappings",
+                                child.label
+                            );
+                        }
                     }
                     // If neither case matches, keep the original ID (will be remapped in outer call)
                 }

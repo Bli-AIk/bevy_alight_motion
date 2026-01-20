@@ -47,6 +47,13 @@ pub(crate) fn add_visual_components(
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
+    bevy::log::debug!(
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}",
+        label,
+        id,
+        std::mem::discriminant(spec)
+    );
+
     // Determine which effects are needed
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
@@ -473,6 +480,10 @@ pub(crate) fn add_visual_components(
                     }
                 }
             } else if let Some(wp) = white_pixel {
+                bevy::log::info!(
+                    "[Visual] Spawning fill sprite '{}' with white_pixel, color fill",
+                    label
+                );
                 let color = extract_fill_color(fill_color);
                 if needs_any_effect {
                     // Use initial stretch mesh bounds if provided (to prevent first frame jump)
@@ -554,6 +565,13 @@ pub(crate) fn add_visual_components(
                         AmVisualSpawned,
                     ));
                 }
+            } else {
+                bevy::log::warn!(
+                    "[Visual] Cannot spawn fill sprite '{}': white_pixel is None! is_media={}, image_uri='{}'",
+                    label,
+                    is_media,
+                    image_uri
+                );
             }
         }
         AmLayerSpec::SdfShape {
