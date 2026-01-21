@@ -1206,10 +1206,6 @@ mod video_comparison_systems {
         // Wait more frames for initial load to ensure textures are uploaded to GPU
         // Increased to 30 to ensure all GPU resources are fully uploaded before first comparison
         const INITIAL_WAIT_FRAMES: u32 = 30;
-        // Extra wait frames for the first few frames to ensure all layers are fully rendered
-        // This addresses the issue where early frames have lower similarity due to incomplete rendering
-        const EARLY_FRAME_EXTRA_WAIT: u32 = 10;
-        const EARLY_FRAME_THRESHOLD: usize = 3; // Apply extra wait to frames 0, 1, 2
 
         match state.stage {
             TestStage::Initializing => {} // Handled in setup
@@ -1267,13 +1263,7 @@ mod video_comparison_systems {
 
             TestStage::WaitingForRender => {
                 state.wait_frames += 1;
-                // Use more wait frames for early frames to ensure complete rendering
-                let required_wait = if state.current_frame < EARLY_FRAME_THRESHOLD {
-                    WAIT_FRAMES + EARLY_FRAME_EXTRA_WAIT
-                } else {
-                    WAIT_FRAMES
-                };
-                if state.wait_frames >= required_wait {
+                if state.wait_frames >= WAIT_FRAMES {
                     state.stage = TestStage::Capturing;
                 }
             }
