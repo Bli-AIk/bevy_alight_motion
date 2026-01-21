@@ -18,7 +18,7 @@ use super::interpolation::{interpolate_float, interpolate_vec2};
 
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
-/// Now supports animated masks by reading Transform and AmAnimated from mask layer entities.
+/// Now supports animated masks by reading GlobalTransform and AmAnimated from mask layer entities.
 pub fn update_sdf_mask_system(
     playback: Res<AmPlayback>,
     parent_query: Query<
@@ -26,7 +26,8 @@ pub fn update_sdf_mask_system(
         With<AmSdfShapeParent>,
     >,
     pending_query: Query<&crate::scene::AmPendingLayers>,
-    mask_layer_query: Query<(&Transform, &AmAnimated, &crate::scene::AmLayerSpec)>,
+    // Use GlobalTransform for correct world position of nested embed masks
+    mask_layer_query: Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     mut sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
@@ -52,7 +53,7 @@ pub fn update_sdf_mask_system(
         let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
             // Try to get the mask layer's current transform and animation data
             if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                if let Ok((transform, mask_animated, spec)) = mask_layer_query.get(mask_entity) {
+                if let Ok((global_transform, mask_animated, spec)) = mask_layer_query.get(mask_entity) {
                     // Get base shape dimensions from spec
                     let (base_width, base_height, pivot_x, pivot_y) = match spec {
                         crate::scene::AmLayerSpec::SdfShape { width, height, pivot_x, pivot_y, .. } => {
@@ -80,8 +81,9 @@ pub fn update_sdf_mask_system(
                     let [anim_size_x, anim_size_y] = interpolate_vec2(&mask_animated.size, layer_time)
                         .unwrap_or([base_width, base_height]);
                     
-                    // Location (use transform.translation which is already converted)
-                    let translation = transform.translation;
+                    // Use GlobalTransform.translation() to get WORLD position
+                    // This is critical for nested embed masks where local transform is relative to parent
+                    let translation = global_transform.translation();
                     
                     // Calculate center: accounting for pivot offset with rotation
                     let scaled_offset_x = -pivot_x * scale_x;

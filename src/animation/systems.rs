@@ -155,7 +155,12 @@ pub fn animate_transform_system(
                 let pivot_x = pivot[0];
                 let pivot_y = pivot[1];
 
-                if sdf_parent.is_some() {
+                // Check if this is an SDF shape by either having AmSdfShapeParent component
+                // OR having SdfShape layer spec (mask layers don't have visual but still need SDF pivot handling)
+                let is_sdf_shape = sdf_parent.is_some() 
+                    || matches!(layer_spec, crate::scene::AmLayerSpec::SdfShape { .. });
+                
+                if is_sdf_shape {
                     // SDF shapes: translation is at transform center (location + pivot)
                     // Simply add pivot offset (Y flip for Bevy coordinates)
                     bx += pivot_x;
@@ -213,7 +218,8 @@ pub fn animate_transform_system(
             // Apply anchor offset compensation for SpriteShape with non-center pivot.
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
             // NOTE: Skip for SDF shapes - their pivot is already handled above via `by -= pivot_y`
-            if sdf_parent.is_none() {
+            // Check layer_spec instead of sdf_parent because mask layers don't have visual but need SDF handling
+            if !matches!(layer_spec, crate::scene::AmLayerSpec::SdfShape { .. }) && sdf_parent.is_none() {
                 bx += animated.anchor_offset.x;
                 by += animated.anchor_offset.y;
             }

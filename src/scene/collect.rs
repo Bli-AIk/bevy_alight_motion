@@ -264,6 +264,28 @@ pub(crate) fn flatten_pending_layers_inner(
                 // Also update the layer_id in animated component
                 child.animated.layer_id = child.id;
 
+                // **CRITICAL**: Remap mask_layer_id in mask_info to new IDs
+                // This is essential for nested masks to work correctly, since the
+                // mask layer's ID gets remapped during flattening.
+                if let Some(ref mut info) = child.mask_info {
+                    for mask in info.masks.iter_mut() {
+                        // Look up the new ID for this mask layer
+                        let new_mask_id = id_mappings.iter()
+                            .find(|(old, _new)| *old == mask.mask_layer_id)
+                            .map(|(_, new)| *new);
+                        
+                        if let Some(new_mask_id) = new_mask_id {
+                            bevy::log::debug!(
+                                "[Flatten] Remapped mask_layer_id for '{}': {} -> {}",
+                                child.label,
+                                mask.mask_layer_id,
+                                new_mask_id
+                            );
+                            mask.mask_layer_id = new_mask_id;
+                        }
+                    }
+                }
+
                 result.push(child);
             }
         }
@@ -512,7 +534,7 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
     let center_y = layer.transform.translation.y + pivot_y * scale_y;
 
     bevy::log::debug!(
-        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1}), is_circle={}, time={}..{}",
+        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1}), is_circle={}, time={}..{}, lifecycle_offset={}",
         width,
         height,
         pivot_x,
@@ -527,7 +549,23 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
         height / 2.0 * scale_y,
         is_circle,
         layer.start_time,
-        layer.end_time
+        layer.end_time,
+        layer.animated.lifecycle_offset
+    );
+
+    // Convert local time to global time using lifecycle_offset
+    // For nested embeds, lifecycle_offset accounts for parent time offset
+    // Global time = local_time + lifecycle_offset
+    let global_start = layer.start_time + layer.animated.lifecycle_offset;
+    let global_end = layer.end_time + layer.animated.lifecycle_offset;
+    
+    bevy::log::debug!(
+        "[MASK] Converted to global time: {}..{}ms (local {}..{}, offset={})",
+        global_start,
+        global_end,
+        layer.start_time,
+        layer.end_time,
+        layer.animated.lifecycle_offset
     );
 
     Some(AmMaskEntry {
@@ -540,8 +578,8 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
             .0,
         scale: Vec2::new(scale_x, scale_y),
         is_circle,
-        start_time: layer.start_time,
-        end_time: layer.end_time,
+        start_time: global_start,
+        end_time: global_end,
         mask_layer_id: layer.id,
         is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
     })

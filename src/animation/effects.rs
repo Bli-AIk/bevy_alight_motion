@@ -96,7 +96,8 @@ pub fn update_unified_mask_system(
     )>,
     pending_query: Query<&crate::scene::AmPendingLayers>,
     // Query for mask layer data - we look these up by mask_layer_id
-    mask_layer_query: Query<(&Transform, &super::components::AmAnimated, &crate::scene::AmLayerSpec)>,
+    // Use GlobalTransform instead of Transform to get world position for nested embed masks
+    mask_layer_query: Query<(&GlobalTransform, &super::components::AmAnimated, &crate::scene::AmLayerSpec)>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
 ) {
     if playback.force_stopped {
@@ -128,7 +129,7 @@ pub fn update_unified_mask_system(
                 let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
                     // Try to get the mask layer's current transform and animation data
                     if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                        if let Ok((transform, animated, spec)) = mask_layer_query.get(mask_entity) {
+                        if let Ok((global_transform, animated, spec)) = mask_layer_query.get(mask_entity) {
                             // Get base shape dimensions from spec
                             let (base_width, base_height, pivot_x, pivot_y) = match spec {
                                 crate::scene::AmLayerSpec::SdfShape { width, height, pivot_x, pivot_y, .. } => {
@@ -156,9 +157,9 @@ pub fn update_unified_mask_system(
                             let [anim_size_x, anim_size_y] = interpolate_vec2(&animated.size, layer_time)
                                 .unwrap_or([base_width, base_height]);
                             
-                            // Location (use transform.translation which is already converted)
-                            // Note: For SDF shapes, transform.translation is the pivot position
-                            let translation = transform.translation;
+                            // Use GlobalTransform.translation() to get WORLD position
+                            // This is critical for nested embed masks where local transform is relative to parent
+                            let translation = global_transform.translation();
                             
                             // Calculate center: accounting for pivot offset with rotation
                             // For SDF shapes with pivot, the visual center rotates around the pivot
@@ -175,14 +176,40 @@ pub fn update_unified_mask_system(
                             let half_width = anim_size_x * 0.5 * scale_x.abs();
                             let half_height = anim_size_y * 0.5 * scale_y.abs();
                             
+                            bevy::log::debug!(
+                                "[MASK] Found mask entity for id={}, global_pos=({:.1},{:.1}), center=({:.1},{:.1})",
+                                mask.mask_layer_id,
+                                translation.x,
+                                translation.y,
+                                center_x,
+                                center_y
+                            );
+                            
                             return (
                                 Vec2::new(center_x * fit_scale, center_y * fit_scale),
                                 Vec2::new(half_width * fit_scale, half_height * fit_scale),
                                 rotation_rad // Already negated above for Bevy coords
                             );
+                        } else {
+                            bevy::log::warn!(
+                                "[MASK] Mask entity found but query failed for id={}", 
+                                mask.mask_layer_id
+                            );
                         }
+                    } else {
+                        bevy::log::warn!(
+                            "[MASK] Mask entity NOT found for id={} (spawned_entities has {} entries)",
+                            mask.mask_layer_id,
+                            pending.spawned_entities.len()
+                        );
                     }
                     // Fallback to stored values if transform lookup fails
+                    bevy::log::debug!(
+                        "[MASK] Using fallback center=({:.1},{:.1}) for mask_layer_id={}",
+                        mask.center.x,
+                        mask.center.y,
+                        mask.mask_layer_id
+                    );
                     (
                         mask.center * fit_scale,
                         mask.half_size * fit_scale * mask.scale,
