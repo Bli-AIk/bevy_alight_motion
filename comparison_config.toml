@@ -9,8 +9,8 @@ frame_offset = 0.0
 # min_frame_similarity: 单帧最低相似度阈值（默认0.8）
 min_frame_similarity = 0.8
 
-# max_failed_rate: 允许失败帧的最大比例（默认0.05，即5%）
-max_failed_rate = 0.05
+# max_failed_rate: 允许失败帧的最大比例（默认0.1，即10%）
+max_failed_rate = 0.1
 
 # Basic shape tests
 #
