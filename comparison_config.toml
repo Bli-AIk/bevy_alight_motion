@@ -48,7 +48,6 @@ frame_offset = 0.45
 [overrides.complex_examples_2_ex1]
 avg_threshold = 0.95
 frame_threshold = 0.95
-min_frame_similarity = 0.7
 frame_offset = 0.45
 
 # complex_examples_2_ex3 needs stricter threshold to ensure stretch formula is correct
