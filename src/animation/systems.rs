@@ -118,9 +118,12 @@ pub fn animate_transform_system(
 
             // Apply RTT alignment correction for embed content at animation start
             // This corrects a small positioning offset that appears in early animation frames
-            if embed_content_marker.is_some() && layer_time < 0.02 {
-                bx -= 5.0;
-            }
+            // DISABLED: This correction was causing early frames to shift left, which increased
+            // the position mismatch with reference videos. Analysis showed shot frames 0-2 were
+            // already 6px left of their correct position.
+            // if embed_content_marker.is_some() && layer_time < 0.02 {
+            //     bx -= 5.0;
+            // }
 
             // Debug: log position calculation for specific layers (trace level)
             if animated.layer_id == 347000343 {
