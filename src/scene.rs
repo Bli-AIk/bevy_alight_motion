@@ -18,16 +18,32 @@ mod spawn_visual;
 
 // Re-export public types
 pub use components::{
-    AmBlendingMode, AmEmbedContent, AmEmbedContentMarker, AmEmbedContentsContainer, AmLayerMarker,
-    AmLayerSpec, AmLayersContainer, AmMaskEntry, AmMaskInfo, AmPaletteMapParams, AmPendingLayers,
-    AmProjectBundle, AmProjectRoot, AmRttCamerasContainer, AmSceneConfig, AmVisualSpawned,
-    PendingLayer,
-    // 2.3 标识与查询标准化
-    AmLayerName, AmElement,
+    AmBlendingMode,
+    AmElement,
     // 2.2 扩展钩子系统
-    AmElementType, AmEntitySpawned,
+    AmElementType,
+    AmEmbedContent,
+    AmEmbedContentMarker,
+    AmEmbedContentsContainer,
+    AmEntitySpawned,
+    AmLayerMarker,
+    // 2.3 标识与查询标准化
+    AmLayerName,
+    AmLayerSpec,
+    AmLayersContainer,
+    AmMaskEntry,
+    AmMaskInfo,
+    AmPaletteMapParams,
+    AmPendingLayers,
+    AmProjectBundle,
+    AmProjectRoot,
+    AmRttCamerasContainer,
+    AmSceneConfig,
+    AmSpawnSettings,
+    AmVisualSpawned,
     // 2.1 元素过滤机制
-    LayerFilter, AmSpawnSettings,
+    LayerFilter,
+    PendingLayer,
 };
 
 pub use collect::collect_pending_layers;
@@ -39,8 +55,8 @@ pub use spawn::spawn_scene;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::helpers::get_shape_size;
+    use super::*;
 
     #[test]
     fn test_am_to_bevy_coords() {

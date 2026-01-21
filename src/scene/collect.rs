@@ -112,8 +112,8 @@ pub(crate) fn flatten_pending_layers_inner(
         // Add the layer itself (with children cleared)
         let mut layer_without_children = layer;
         layer_without_children.children = Vec::new();
-        
-        // **Hybrid Rendering Pipeline**: 
+
+        // **Hybrid Rendering Pipeline**:
         // Set containing_embed_id for ALL non-embed content inside ANY embed.
         // This allows propagate_render_layers_system to assign RenderLayers based on
         // the parent embed's strategy (Direct -> Layer 0, Composite -> RTT layer).
@@ -127,7 +127,7 @@ pub(crate) fn flatten_pending_layers_inner(
         let should_decouple = embed_depth >= 1 && !is_embed;
         let assigned_embed_id = if should_decouple { current_embed_id } else { 0 };
         layer_without_children.containing_embed_id = assigned_embed_id;
-        
+
         if should_decouple && assigned_embed_id != 0 {
             bevy::log::debug!(
                 "[Flatten] Content '{}' (id={}) assigned to embed {} (depth={})",
@@ -137,7 +137,7 @@ pub(crate) fn flatten_pending_layers_inner(
                 embed_depth
             );
         }
-        
+
         result.push(layer_without_children);
 
         // Recursively flatten children and update their parent reference
@@ -145,7 +145,7 @@ pub(crate) fn flatten_pending_layers_inner(
             // Increment instance counter for this embed instance to ensure unique IDs
             instance_counter += 1;
             let current_instance = instance_counter;
-            
+
             // Determine the embed ID and depth for children:
             // - If this layer IS an embed, its children are at depth+1
             // - Otherwise, inherit the current context
@@ -166,13 +166,17 @@ pub(crate) fn flatten_pending_layers_inner(
             // Remap IDs to be unique per instance.
             // Since children may contain layers with the same original IDs (from different embed instances),
             // we use Vec<(old_id, new_id, index)> to track each layer's mapping individually.
-            
+
             // Pass 1: Generate unique IDs for each child and build mapping
             let id_mappings: Vec<(u64, u64)> = flattened_children
                 .iter()
                 .map(|child| {
                     let old_id = child.id;
-                    let new_id = generate_unique_id(current_instance.wrapping_mul(1_000_000).wrapping_add(child.id));
+                    let new_id = generate_unique_id(
+                        current_instance
+                            .wrapping_mul(1_000_000)
+                            .wrapping_add(child.id),
+                    );
                     (old_id, new_id)
                 })
                 .collect();
@@ -181,10 +185,10 @@ pub(crate) fn flatten_pending_layers_inner(
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
                 let old_id = id_mappings[idx].0;
                 let new_id = id_mappings[idx].1;
-                
+
                 // Save the original parent for lookup
                 let original_parent = child.parent;
-                
+
                 // Update child's ID
                 child.id = new_id;
 
@@ -205,10 +209,11 @@ pub(crate) fn flatten_pending_layers_inner(
                 } else {
                     // Find the new ID for the parent in our mapping list
                     // Search for the first mapping where old_id matches original_parent
-                    let new_parent_id = id_mappings.iter()
+                    let new_parent_id = id_mappings
+                        .iter()
                         .find(|(old, _new)| *old == original_parent)
                         .map(|(_, new)| *new);
-                    
+
                     if let Some(new_parent_id) = new_parent_id {
                         child.parent = new_parent_id;
                     } else {
@@ -224,7 +229,7 @@ pub(crate) fn flatten_pending_layers_inner(
 
                 // **Hybrid Rendering Pipeline Fix**:
                 // Remap containing_embed_id to the correct embed entity ID.
-                // 
+                //
                 // Case 1: containing_embed_id == child_embed_id (direct child of current embed)
                 //         -> Set to current embed's remapped ID (layer_id for parent's children)
                 // Case 2: containing_embed_id is in id_mappings (grandchild referencing a nested embed)
@@ -245,10 +250,11 @@ pub(crate) fn flatten_pending_layers_inner(
                         );
                     } else {
                         // Find in mappings
-                        let new_embed_id = id_mappings.iter()
+                        let new_embed_id = id_mappings
+                            .iter()
                             .find(|(old, _new)| *old == child.containing_embed_id)
                             .map(|(_, new)| *new);
-                        
+
                         if let Some(new_embed_id) = new_embed_id {
                             // Grandchild referencing a nested embed
                             child.containing_embed_id = new_embed_id;
@@ -270,10 +276,11 @@ pub(crate) fn flatten_pending_layers_inner(
                 if let Some(ref mut info) = child.mask_info {
                     for mask in info.masks.iter_mut() {
                         // Look up the new ID for this mask layer
-                        let new_mask_id = id_mappings.iter()
+                        let new_mask_id = id_mappings
+                            .iter()
                             .find(|(old, _new)| *old == mask.mask_layer_id)
                             .map(|(_, new)| *new);
-                        
+
                         if let Some(new_mask_id) = new_mask_id {
                             bevy::log::debug!(
                                 "[Flatten] Remapped mask_layer_id for '{}': {} -> {}",
@@ -475,18 +482,19 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             }
             // Check if this layer's parent has masks
             if layer.parent != 0
-                && let Some(parent_masks) = layer_masks.get(&layer.parent) {
-                    layer.mask_info = Some(AmMaskInfo {
-                        masks: parent_masks.clone(),
-                    });
-                    bevy::log::debug!(
-                        "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
-                        parent_masks.len(),
-                        layer.label,
-                        layer.id
-                    );
-                    changes = true;
-                }
+                && let Some(parent_masks) = layer_masks.get(&layer.parent)
+            {
+                layer.mask_info = Some(AmMaskInfo {
+                    masks: parent_masks.clone(),
+                });
+                bevy::log::debug!(
+                    "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
+                    parent_masks.len(),
+                    layer.label,
+                    layer.id
+                );
+                changes = true;
+            }
         }
         if !changes {
             break;
@@ -558,7 +566,7 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
     // Global time = local_time + lifecycle_offset
     let global_start = layer.start_time + layer.animated.lifecycle_offset;
     let global_end = layer.end_time + layer.animated.lifecycle_offset;
-    
+
     bevy::log::debug!(
         "[MASK] Converted to global time: {}..{}ms (local {}..{}, offset={})",
         global_start,

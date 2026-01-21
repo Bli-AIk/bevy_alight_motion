@@ -13,9 +13,15 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::scene::{
-    AmBlendingMode, AmLayerMarker, AmPendingLayers, PendingLayer,
+    AmBlendingMode,
     // 新组件导入 (New component imports)
-    AmElement, AmLayerName, AmElementType, AmEntitySpawned,
+    AmElement,
+    AmElementType,
+    AmEntitySpawned,
+    AmLayerMarker,
+    AmLayerName,
+    AmPendingLayers,
+    PendingLayer,
 };
 use crate::sdf_material::SdfMaterial;
 
@@ -797,7 +803,7 @@ fn spawn_layer_entity(
             max_blur_radius,
             initial_mesh_offset,
             initial_stretch_mesh_bounds,
-            1.0 / inv_fit_scale, // fit_scale for mask coordinates
+            1.0 / inv_fit_scale,            // fit_scale for mask coordinates
             layer.containing_embed_id != 0, // is_embed_content - force effect material for bounds clipping
             !layer.animated.scale.keyframes.is_empty(), // has_scale_animation - needs bounds clipping
         );
@@ -820,7 +826,7 @@ fn spawn_layer_entity(
         // This is embed content - make it a child of its parent entity
         // This ensures proper Transform inheritance through the Bevy hierarchy
         commands.entity(parent_entity).add_child(entity);
-        
+
         // Look up the embed entity and add marker for lifecycle management
         if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
             commands

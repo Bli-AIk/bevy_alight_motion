@@ -10,9 +10,7 @@ use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{
-    AmAnimatedFloat, AmAnimatedVec2, AmShape, AmText,
-};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmShape, AmText};
 
 use super::collect::{apply_mask_to_children, collect_pending_layers};
 use super::components::*;

@@ -1150,7 +1150,9 @@ mod video_comparison_systems {
         // So we skip frame_000001 and start from frame_000002
         if !frame_paths.is_empty() {
             frame_paths.remove(0);
-            println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
+            println!(
+                "[COMPARISON] Skipped first reference frame (AM video export timing mismatch)"
+            );
         }
 
         state.frame_paths = frame_paths;

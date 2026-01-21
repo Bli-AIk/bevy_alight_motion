@@ -84,7 +84,7 @@ fn update_mesh_for_blur(
 /// System to dynamically update mask state on entities with UnifiedEffectMaterial.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
 /// Supports up to 2 simultaneous masks for dual-mask, dual-exclude, and mixed effects.
-/// 
+///
 /// **Dynamic Transform Support**: This system reads the mask layer's current animated transform
 /// to support animated masks (rotation, scale, position changes over time).
 pub fn update_unified_mask_system(
@@ -97,7 +97,11 @@ pub fn update_unified_mask_system(
     pending_query: Query<&crate::scene::AmPendingLayers>,
     // Query for mask layer data - we look these up by mask_layer_id
     // Use GlobalTransform instead of Transform to get world position for nested embed masks
-    mask_layer_query: Query<(&GlobalTransform, &super::components::AmAnimated, &crate::scene::AmLayerSpec)>,
+    mask_layer_query: Query<(
+        &GlobalTransform,
+        &super::components::AmAnimated,
+        &crate::scene::AmLayerSpec,
+    )>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
 ) {
     if playback.force_stopped {
@@ -129,53 +133,69 @@ pub fn update_unified_mask_system(
                 let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
                     // Try to get the mask layer's current transform and animation data
                     if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                        if let Ok((global_transform, animated, spec)) = mask_layer_query.get(mask_entity) {
+                        if let Ok((global_transform, animated, spec)) =
+                            mask_layer_query.get(mask_entity)
+                        {
                             // Get base shape dimensions from spec
                             let (base_width, base_height, pivot_x, pivot_y) = match spec {
-                                crate::scene::AmLayerSpec::SdfShape { width, height, pivot_x, pivot_y, .. } => {
-                                    (*width, *height, *pivot_x, *pivot_y)
-                                }
-                                crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
-                                    (*width, *height, 0.0, 0.0)
-                                }
-                                _ => (mask.half_size.x * 2.0 / mask.scale.x, mask.half_size.y * 2.0 / mask.scale.y, 0.0, 0.0)
+                                crate::scene::AmLayerSpec::SdfShape {
+                                    width,
+                                    height,
+                                    pivot_x,
+                                    pivot_y,
+                                    ..
+                                } => (*width, *height, *pivot_x, *pivot_y),
+                                crate::scene::AmLayerSpec::SpriteShape {
+                                    width, height, ..
+                                } => (*width, *height, 0.0, 0.0),
+                                _ => (
+                                    mask.half_size.x * 2.0 / mask.scale.x,
+                                    mask.half_size.y * 2.0 / mask.scale.y,
+                                    0.0,
+                                    0.0,
+                                ),
                             };
-                            
+
                             // Calculate layer-local time for interpolation
-                            let layer_time = (global_time_sec - animated.start_time as f32 / 1000.0).max(0.0);
-                            
+                            let layer_time =
+                                (global_time_sec - animated.start_time as f32 / 1000.0).max(0.0);
+
                             // Get animated values using interpolation
                             // Rotation
-                            let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                            let rotation_deg =
+                                interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
                             let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
-                            
+
                             // Scale
-                            let [scale_x, scale_y] = interpolate_vec2(&animated.scale, layer_time)
-                                .unwrap_or([1.0, 1.0]);
-                            
+                            let [scale_x, scale_y] =
+                                interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
                             // Size - get animated size (AM stores full dimensions, we need half-extents)
-                            let [anim_size_x, anim_size_y] = interpolate_vec2(&animated.size, layer_time)
-                                .unwrap_or([base_width, base_height]);
-                            
+                            let [anim_size_x, anim_size_y] =
+                                interpolate_vec2(&animated.size, layer_time)
+                                    .unwrap_or([base_width, base_height]);
+
                             // Use GlobalTransform.translation() to get WORLD position
                             // This is critical for nested embed masks where local transform is relative to parent
                             let translation = global_transform.translation();
-                            
+
                             // Calculate center: accounting for pivot offset with rotation
                             // For SDF shapes with pivot, the visual center rotates around the pivot
                             let scaled_offset_x = -pivot_x * scale_x;
                             let scaled_offset_y = pivot_y * scale_y; // Y negated for Bevy coords
-                            
-                            let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                            let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-                            
+
+                            let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
+                                - scaled_offset_y * rotation_rad.sin();
+                            let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
+                                + scaled_offset_y * rotation_rad.cos();
+
                             let center_x = translation.x + rotated_offset_x;
                             let center_y = translation.y + rotated_offset_y;
-                            
+
                             // Half-size uses animated size and scaled by transform scale
                             let half_width = anim_size_x * 0.5 * scale_x.abs();
                             let half_height = anim_size_y * 0.5 * scale_y.abs();
-                            
+
                             bevy::log::debug!(
                                 "[MASK] Found mask entity for id={}, global_pos=({:.1},{:.1}), center=({:.1},{:.1})",
                                 mask.mask_layer_id,
@@ -184,15 +204,15 @@ pub fn update_unified_mask_system(
                                 center_x,
                                 center_y
                             );
-                            
+
                             return (
                                 Vec2::new(center_x * fit_scale, center_y * fit_scale),
                                 Vec2::new(half_width * fit_scale, half_height * fit_scale),
-                                rotation_rad // Already negated above for Bevy coords
+                                rotation_rad, // Already negated above for Bevy coords
                             );
                         } else {
                             bevy::log::warn!(
-                                "[MASK] Mask entity found but query failed for id={}", 
+                                "[MASK] Mask entity found but query failed for id={}",
                                 mask.mask_layer_id
                             );
                         }
@@ -213,14 +233,14 @@ pub fn update_unified_mask_system(
                     (
                         mask.center * fit_scale,
                         mask.half_size * fit_scale * mask.scale,
-                        mask.rotation
+                        mask.rotation,
                     )
                 };
-                
+
                 // First mask
                 let mask1 = active_masks[0];
                 let (mask1_center, mask1_half_size, mask1_rotation) = compute_mask_params(mask1);
-                
+
                 let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
                 material.effect_flags.x = if mask1.is_exclude {
                     base_type1 + 2.0
@@ -239,8 +259,9 @@ pub fn update_unified_mask_system(
                 // Second mask (if present)
                 if active_masks.len() >= 2 {
                     let mask2 = active_masks[1];
-                    let (mask2_center, mask2_half_size, mask2_rotation) = compute_mask_params(mask2);
-                    
+                    let (mask2_center, mask2_half_size, mask2_rotation) =
+                        compute_mask_params(mask2);
+
                     let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
                     material.mask2_flags.x = if mask2.is_exclude {
                         base_type2 + 2.0
@@ -645,7 +666,7 @@ pub fn animate_unified_effect_system(
                     .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 material.set_stretch_enabled(false);
-                
+
                 // For effect sprites without blur/stretch, still need to update mesh size
                 // when scale/size animation changes. This ensures content scales correctly.
                 // This applies to BOTH regular content AND embed content.
@@ -653,7 +674,7 @@ pub fn animate_unified_effect_system(
                 if !has_blur {
                     let half_w = orig_width / 2.0;
                     let half_h = orig_height / 2.0;
-                    
+
                     let vertices = vec![
                         [-half_w, -half_h, 0.0],
                         [half_w, -half_h, 0.0],

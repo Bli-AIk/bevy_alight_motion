@@ -37,7 +37,12 @@ pub fn manage_layer_lifecycle_system(
     mut sdf_materials: ResMut<Assets<SdfMaterial>>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
-    mut project_query: Query<(Entity, &AmProjectRoot, &mut AmPendingLayers, Option<&crate::scene::AmSpawnSettings>)>,
+    mut project_query: Query<(
+        Entity,
+        &AmProjectRoot,
+        &mut AmPendingLayers,
+        Option<&crate::scene::AmSpawnSettings>,
+    )>,
 ) {
     // Skip if force stopped
     if playback.force_stopped {

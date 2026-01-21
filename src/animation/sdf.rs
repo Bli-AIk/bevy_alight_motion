@@ -53,56 +53,72 @@ pub fn update_sdf_mask_system(
         let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
             // Try to get the mask layer's current transform and animation data
             if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                if let Ok((global_transform, mask_animated, spec)) = mask_layer_query.get(mask_entity) {
+                if let Ok((global_transform, mask_animated, spec)) =
+                    mask_layer_query.get(mask_entity)
+                {
                     // Get base shape dimensions from spec
                     let (base_width, base_height, pivot_x, pivot_y) = match spec {
-                        crate::scene::AmLayerSpec::SdfShape { width, height, pivot_x, pivot_y, .. } => {
-                            (*width, *height, *pivot_x, *pivot_y)
-                        }
+                        crate::scene::AmLayerSpec::SdfShape {
+                            width,
+                            height,
+                            pivot_x,
+                            pivot_y,
+                            ..
+                        } => (*width, *height, *pivot_x, *pivot_y),
                         crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
                             (*width, *height, 0.0, 0.0)
                         }
-                        _ => (mask.half_size.x * 2.0 / mask.scale.x, mask.half_size.y * 2.0 / mask.scale.y, 0.0, 0.0)
+                        _ => (
+                            mask.half_size.x * 2.0 / mask.scale.x,
+                            mask.half_size.y * 2.0 / mask.scale.y,
+                            0.0,
+                            0.0,
+                        ),
                     };
-                    
+
                     // Calculate layer-local time for interpolation
-                    let layer_time = (global_time_sec - mask_animated.start_time as f32 / 1000.0).max(0.0);
-                    
+                    let layer_time =
+                        (global_time_sec - mask_animated.start_time as f32 / 1000.0).max(0.0);
+
                     // Get animated values using interpolation
                     // Rotation
-                    let rotation_deg = interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
+                    let rotation_deg =
+                        interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
                     let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
-                    
+
                     // Scale
-                    let [scale_x, scale_y] = interpolate_vec2(&mask_animated.scale, layer_time)
-                        .unwrap_or([1.0, 1.0]);
-                    
+                    let [scale_x, scale_y] =
+                        interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
                     // Size - get animated size (AM stores full dimensions, we need half-extents)
-                    let [anim_size_x, anim_size_y] = interpolate_vec2(&mask_animated.size, layer_time)
-                        .unwrap_or([base_width, base_height]);
-                    
+                    let [anim_size_x, anim_size_y] =
+                        interpolate_vec2(&mask_animated.size, layer_time)
+                            .unwrap_or([base_width, base_height]);
+
                     // Use GlobalTransform.translation() to get WORLD position
                     // This is critical for nested embed masks where local transform is relative to parent
                     let translation = global_transform.translation();
-                    
+
                     // Calculate center: accounting for pivot offset with rotation
                     let scaled_offset_x = -pivot_x * scale_x;
                     let scaled_offset_y = pivot_y * scale_y; // Y negated for Bevy coords
-                    
-                    let rotated_offset_x = scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                    let rotated_offset_y = scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-                    
+
+                    let rotated_offset_x =
+                        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+                    let rotated_offset_y =
+                        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
                     let center_x = translation.x + rotated_offset_x;
                     let center_y = translation.y + rotated_offset_y;
-                    
+
                     // Half-size uses animated size and scaled by transform scale
                     let half_width = anim_size_x * 0.5 * scale_x.abs();
                     let half_height = anim_size_y * 0.5 * scale_y.abs();
-                    
+
                     return (
                         Vec2::new(center_x * fit_scale, center_y * fit_scale),
                         Vec2::new(half_width * fit_scale, half_height * fit_scale),
-                        rotation_rad
+                        rotation_rad,
                     );
                 }
             }
@@ -110,84 +126,87 @@ pub fn update_sdf_mask_system(
             (
                 mask.center * fit_scale,
                 mask.half_size * fit_scale * mask.scale,
-                mask.rotation
+                mask.rotation,
             )
         };
 
         for child in children.iter() {
             if let Ok(material_handle) = sdf_query.get_mut(child)
-                && let Some(material) = materials.get_mut(&material_handle.0) {
-                    if active_masks.is_empty() {
-                        // No active masks
-                        material.uniform_data.mask_type = 0.0;
-                        material.uniform_data.mask2_type = 0.0;
+                && let Some(material) = materials.get_mut(&material_handle.0)
+            {
+                if active_masks.is_empty() {
+                    // No active masks
+                    material.uniform_data.mask_type = 0.0;
+                    material.uniform_data.mask2_type = 0.0;
+                } else {
+                    // First mask
+                    let mask1 = active_masks[0];
+                    let (mask1_center, mask1_half_size, mask1_rotation) =
+                        compute_mask_params(mask1);
+
+                    material.uniform_data.mask_params = bevy::math::Vec4::new(
+                        mask1_center.x,
+                        mask1_center.y,
+                        mask1_half_size.x,
+                        mask1_half_size.y,
+                    );
+                    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+                    material.uniform_data.mask_type = if mask1.is_exclude {
+                        base_type1 + 2.0
                     } else {
-                        // First mask
-                        let mask1 = active_masks[0];
-                        let (mask1_center, mask1_half_size, mask1_rotation) = compute_mask_params(mask1);
-                        
-                        material.uniform_data.mask_params = bevy::math::Vec4::new(
+                        base_type1
+                    };
+                    // Store rotation in mask_rotation field (will add to SdfUniformData)
+                    material.uniform_data.mask_rotation = mask1_rotation;
+
+                    // Second mask (if present)
+                    if active_masks.len() >= 2 {
+                        let mask2 = active_masks[1];
+                        let (mask2_center, mask2_half_size, mask2_rotation) =
+                            compute_mask_params(mask2);
+
+                        material.uniform_data.mask2_params = bevy::math::Vec4::new(
+                            mask2_center.x,
+                            mask2_center.y,
+                            mask2_half_size.x,
+                            mask2_half_size.y,
+                        );
+                        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+                        material.uniform_data.mask2_type = if mask2.is_exclude {
+                            base_type2 + 2.0
+                        } else {
+                            base_type2
+                        };
+                        material.uniform_data.mask2_rotation = mask2_rotation;
+
+                        bevy::log::debug!(
+                            "[SdfMask] '{}' time={}, DUAL mask: mask1_type={:.0} rot={:.2}°, mask2_type={:.0} rot={:.2}°",
+                            marker.label,
+                            global_time,
+                            material.uniform_data.mask_type,
+                            mask1_rotation.to_degrees(),
+                            material.uniform_data.mask2_type,
+                            mask2_rotation.to_degrees()
+                        );
+                    } else {
+                        // Only one mask
+                        material.uniform_data.mask2_type = 0.0;
+                        material.uniform_data.mask2_rotation = 0.0;
+
+                        bevy::log::debug!(
+                            "[SdfMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°",
+                            marker.label,
+                            global_time,
+                            material.uniform_data.mask_type,
                             mask1_center.x,
                             mask1_center.y,
                             mask1_half_size.x,
                             mask1_half_size.y,
+                            mask1_rotation.to_degrees()
                         );
-                        let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                        material.uniform_data.mask_type = if mask1.is_exclude {
-                            base_type1 + 2.0
-                        } else {
-                            base_type1
-                        };
-                        // Store rotation in mask_rotation field (will add to SdfUniformData)
-                        material.uniform_data.mask_rotation = mask1_rotation;
-
-                        // Second mask (if present)
-                        if active_masks.len() >= 2 {
-                            let mask2 = active_masks[1];
-                            let (mask2_center, mask2_half_size, mask2_rotation) = compute_mask_params(mask2);
-                            
-                            material.uniform_data.mask2_params = bevy::math::Vec4::new(
-                                mask2_center.x,
-                                mask2_center.y,
-                                mask2_half_size.x,
-                                mask2_half_size.y,
-                            );
-                            let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                            material.uniform_data.mask2_type = if mask2.is_exclude {
-                                base_type2 + 2.0
-                            } else {
-                                base_type2
-                            };
-                            material.uniform_data.mask2_rotation = mask2_rotation;
-
-                            bevy::log::debug!(
-                                "[SdfMask] '{}' time={}, DUAL mask: mask1_type={:.0} rot={:.2}°, mask2_type={:.0} rot={:.2}°",
-                                marker.label,
-                                global_time,
-                                material.uniform_data.mask_type,
-                                mask1_rotation.to_degrees(),
-                                material.uniform_data.mask2_type,
-                                mask2_rotation.to_degrees()
-                            );
-                        } else {
-                            // Only one mask
-                            material.uniform_data.mask2_type = 0.0;
-                            material.uniform_data.mask2_rotation = 0.0;
-
-                            bevy::log::debug!(
-                                "[SdfMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°",
-                                marker.label,
-                                global_time,
-                                material.uniform_data.mask_type,
-                                mask1_center.x,
-                                mask1_center.y,
-                                mask1_half_size.x,
-                                mask1_half_size.y,
-                                mask1_rotation.to_degrees()
-                            );
-                        }
                     }
                 }
+            }
         }
     }
 }

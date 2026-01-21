@@ -147,7 +147,8 @@ impl Default for SdfMaterial {
                 frame_half: default_frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0, _padding2: 0.0,
+                _padding1: 0.0,
+                _padding2: 0.0,
             },
         }
     }
@@ -204,7 +205,8 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0, _padding2: 0.0,
+                _padding1: 0.0,
+                _padding2: 0.0,
             },
         }
     }
@@ -284,7 +286,8 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0, _padding2: 0.0,
+                _padding1: 0.0,
+                _padding2: 0.0,
             },
         }
     }
@@ -303,7 +306,8 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0, _padding2: 0.0,
+                _padding1: 0.0,
+                _padding2: 0.0,
             },
         }
     }

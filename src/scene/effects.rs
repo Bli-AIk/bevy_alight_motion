@@ -245,11 +245,12 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
                         // Parse color1-color8
                         if let Some(index_char) = name.strip_prefix("color")
                             && let Ok(index) = index_char.parse::<usize>()
-                                && (1..=8).contains(&index)
-                                    && let Ok(color) = crate::schema::parse_color(&prop.value) {
-                                        params.colors[index - 1] =
-                                            Vec4::new(color[0], color[1], color[2], color[3]);
-                                    }
+                            && (1..=8).contains(&index)
+                            && let Ok(color) = crate::schema::parse_color(&prop.value)
+                        {
+                            params.colors[index - 1] =
+                                Vec4::new(color[0], color[1], color[2], color[3]);
+                        }
                     }
                     _ => {}
                 }

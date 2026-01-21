@@ -70,10 +70,7 @@ fn main() {
         .insert_resource(AmProjectResolution::FitWindow)
         .add_plugins(AlightMotionPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (
-            handle_input,
-            handle_hover,
-        ))
+        .add_systems(Update, (handle_input, handle_hover))
         .run();
 }
 
@@ -127,7 +124,7 @@ fn on_am_entity_spawned(
     spec_query: Query<&AmLayerSpec>,
 ) {
     let event = trigger.event();
-    
+
     // Log all spawned entities
     info!(
         "[Hook] Entity spawned: '{}' (id={}, type={:?})",
@@ -162,13 +159,17 @@ fn on_am_entity_spawned(
 
 /// Handle keyboard input for playback control.
 /// 处理播放控制的键盘输入。
-fn handle_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut playback: ResMut<AmPlayback>,
-) {
+fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlayback>) {
     if keyboard.just_pressed(KeyCode::Space) {
         playback.playing = !playback.playing;
-        println!("Playback: {}", if playback.playing { "Playing" } else { "Paused" });
+        println!(
+            "Playback: {}",
+            if playback.playing {
+                "Playing"
+            } else {
+                "Paused"
+            }
+        );
     }
 
     if keyboard.just_pressed(KeyCode::KeyR) {
@@ -182,7 +183,10 @@ fn handle_input(
 fn handle_hover(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    interactive_query: Query<(&GlobalTransform, &AmLayerName, &InteractiveElement), With<AmElement>>,
+    interactive_query: Query<
+        (&GlobalTransform, &AmLayerName, &InteractiveElement),
+        With<AmElement>,
+    >,
     mut clear_color: ResMut<ClearColor>,
 ) {
     // Get cursor position
@@ -214,7 +218,7 @@ fn handle_hover(
 
         if dist_sq < hover_radius * hover_radius {
             hovered = true;
-            
+
             // Change background color based on element type
             // 根据元素类型改变背景颜色
             let new_color = if interactive.warm_colors {

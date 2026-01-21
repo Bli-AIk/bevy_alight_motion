@@ -12,9 +12,7 @@ use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::scene::{
-    AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned,
-};
+use crate::scene::{AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 use crate::sdf_material::SdfMaterial;
 
 use super::sdf_spawn::spawn_sdf_visual;
@@ -44,8 +42,8 @@ pub(crate) fn add_visual_components(
     initial_mesh_offset: Option<Vec4>,
     initial_stretch_mesh_bounds: Option<(f32, f32, f32, f32)>, // (min_x, max_x, min_y, max_y)
     fit_scale: f32,                                            // Scale factor for mask coordinates
-    is_embed_content: bool,                                    // True if this is content inside an embed
-    has_scale_animation: bool,                                 // True if embed has scale animation (needs bounds clipping)
+    is_embed_content: bool,    // True if this is content inside an embed
+    has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -64,7 +62,12 @@ pub(crate) fn add_visual_components(
     let needs_mask = mask_info.is_some();
     let needs_blur = blur_params.is_some();
     let needs_palette = palette_params.is_some();
-    let needs_any_effect = needs_stretch || needs_wipe || needs_mask || needs_blur || needs_palette || is_embed_content;
+    let needs_any_effect = needs_stretch
+        || needs_wipe
+        || needs_mask
+        || needs_blur
+        || needs_palette
+        || is_embed_content;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(

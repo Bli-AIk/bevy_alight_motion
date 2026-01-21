@@ -12,9 +12,7 @@ use std::collections::HashMap;
 use crate::animation::AmAnimated;
 use crate::effects::NeedsStrategyEvaluation;
 use crate::loader::FontMetrics;
-use crate::schema::{
-    AmAnimatedFloat, AmAnimatedVec2, AmLayer, AmScene, AmShape,
-};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmLayer, AmScene, AmShape};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;

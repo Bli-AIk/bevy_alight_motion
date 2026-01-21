@@ -6,7 +6,7 @@
 //! 嵌入场景和效果的混合渲染管线。
 //!
 //! ## Architecture Philosophy
-//! 
+//!
 //! **Default Flat, Isolate on Demand** (默认扁平，按需隔离):
 //! - By default, all content renders to Layer 0 (the main camera's layer)
 //! - Only allocate separate RenderLayers when mathematically necessary
@@ -26,7 +26,6 @@ use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 use std::collections::HashMap;
-
 
 use super::types::*;
 
@@ -62,10 +61,10 @@ impl Plugin for EffectRenderPlugin {
 // ============================================================================
 
 /// Resource managing the pool of available RenderLayers for Composite strategy.
-/// 
+///
 /// Bevy supports up to 32 RenderLayers (0-31). Layer 0 is reserved for the main camera.
 /// We use layers 1-31 for embedScene RTT rendering (Composite strategy only).
-/// 
+///
 /// With the Hybrid Pipeline, most embeds use Direct strategy and share Layer 0,
 /// so we rarely exhaust the 31 available layers.
 #[derive(Resource, Default)]
@@ -90,7 +89,7 @@ impl EmbedSceneRenderLayerPool {
         self.waiting_count += 1;
         None
     }
-    
+
     /// Legacy alias for acquire (for compatibility)
     pub fn allocate(&mut self) -> Option<u8> {
         self.acquire()
@@ -112,13 +111,13 @@ impl EmbedSceneRenderLayerPool {
     pub fn used_count(&self) -> u32 {
         self.used_layers.count_ones()
     }
-    
+
     /// Check how many layers are available.
     #[allow(dead_code)]
     pub fn available_count(&self) -> u32 {
         31 - self.used_layers.count_ones()
     }
-    
+
     /// Check if pool is exhausted.
     pub fn is_exhausted(&self) -> bool {
         self.used_layers == 0x7FFFFFFF // All 31 bits set
@@ -161,7 +160,7 @@ pub struct EmbedSceneBounds {
 }
 
 /// Marker component indicating an entity needs RTT setup (for Composite strategy only).
-/// 
+///
 /// In the Hybrid Pipeline, this component is only added to embeds that have been
 /// evaluated as requiring Composite strategy (full RTT isolation).
 #[derive(Component)]
@@ -171,7 +170,7 @@ pub struct NeedsEmbedSceneRtt {
 }
 
 /// Marker component indicating an embed needs render strategy evaluation.
-/// 
+///
 /// This is added to new EmbedScene entities during spawn.
 /// The evaluate_render_strategy_system will analyze the embed and assign
 /// a RenderStrategy, then remove this marker.
@@ -189,18 +188,18 @@ pub struct NeedsStrategyEvaluation {
 // ============================================================================
 
 /// System to evaluate render strategy for new embed scenes.
-/// 
+///
 /// This is the "brain" of the Hybrid Rendering Pipeline.
 /// It analyzes each embed and assigns one of three strategies:
 /// - Direct: No RTT, content renders to parent's layer (90%+ of cases)
 /// - Stencil: GPU stencil clipping, still on parent's layer
 /// - Composite: Full RTT isolation with dedicated RenderLayer
-/// 
+///
 /// Currently, we use a simple heuristic:
 /// - All embeds start with Direct strategy
 /// - Embeds with clipping enabled get Stencil (TODO: implement actual stencil rendering)
 /// - Embeds with shader effects (blur, etc.) get Composite
-/// 
+///
 /// Future enhancements:
 /// - Detect shader effects and force Composite
 /// - Detect complex blend modes and force Composite
@@ -219,7 +218,7 @@ pub fn evaluate_render_strategy_system(
         let count = query.iter().count();
         bevy::log::trace!("[Strategy] Frame {}: query count = {}", frame, count);
     }
-    
+
     for (entity, needs_eval) in query.iter() {
         // Determine render strategy based on embed properties
         //
@@ -229,7 +228,7 @@ pub fn evaluate_render_strategy_system(
         //
         // Key insight: Embeds with scale animation need bounds clipping because
         // content that was within bounds at scale=1.0 may exceed bounds when scaled.
-        
+
         let strategy = if needs_eval.has_scale_animation {
             // Embeds with scale animation need bounds clipping
             RenderStrategy::Stencil
@@ -237,7 +236,7 @@ pub fn evaluate_render_strategy_system(
             // Default to Direct for most embeds
             RenderStrategy::Direct
         };
-        
+
         bevy::log::trace!(
             "[Strategy] Embed {:?} evaluated as {:?} (size={}x{}, has_scale_anim={})",
             entity,
@@ -246,7 +245,7 @@ pub fn evaluate_render_strategy_system(
             needs_eval.scene_height,
             needs_eval.has_scale_animation
         );
-        
+
         // Remove evaluation marker and assign strategy
         // For Direct strategy: set RenderLayers to layer 0 and make visible
         commands
@@ -265,7 +264,7 @@ pub fn evaluate_render_strategy_system(
                     height: needs_eval.scene_height,
                 },
             ));
-        
+
         // For Composite strategy, we would add NeedsEmbedSceneRtt here.
         // But with Direct strategy, we DON'T need RTT at all!
         // Content will render directly to Layer 0 with proper Z-sorting.
@@ -508,7 +507,7 @@ pub fn debug_rtt_camera_projection_system(
 /// System to propagate RenderLayers to embed content entities.
 ///
 /// **Hybrid Rendering Pipeline Logic:**
-/// 
+///
 /// With the new architecture, most embeds use Direct strategy and render to Layer 0.
 /// Only embeds with Composite strategy have dedicated RenderLayers (1-31).
 ///
@@ -525,18 +524,22 @@ pub fn propagate_render_layers_system(
     // Query embeds with Direct strategy (have RenderStrategy but no EmbedSceneRtt)
     direct_embed_query: Query<(Entity, &RenderStrategy), Without<EmbedSceneRtt>>,
     // Query all embed content
-    content_query: Query<(Entity, &crate::scene::AmEmbedContentMarker, Option<&RenderLayers>)>,
+    content_query: Query<(
+        Entity,
+        &crate::scene::AmEmbedContentMarker,
+        Option<&RenderLayers>,
+    )>,
 ) {
     use std::sync::atomic::{AtomicU32, Ordering};
     static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
     let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    
+
     // Build a map of embed entity -> render layer for Composite embeds
     let composite_layers: HashMap<Entity, u8> = composite_embed_query
         .iter()
         .map(|(entity, rtt)| (entity, rtt.render_layer))
         .collect();
-    
+
     // Build a set of Direct embed entities
     let direct_embeds: std::collections::HashSet<Entity> = direct_embed_query
         .iter()
@@ -585,13 +588,13 @@ pub fn propagate_render_layers_system(
             } else {
                 0
             };
-            
+
             // Insert RenderLayers and make visible
             commands.entity(content_entity).insert((
                 target_layer,
                 Visibility::Inherited, // Safe to show - will render to correct layer
             ));
-            
+
             updates += 1;
             bevy::log::trace!(
                 "[RenderLayers] Assigned layer {} to content {:?} (embed {:?}), now visible",
@@ -601,17 +604,20 @@ pub fn propagate_render_layers_system(
             );
         }
     }
-    
+
     // Log total updates made
     if updates > 0 {
-        bevy::log::trace!("[RenderLayers] Made {} visibility updates this frame", updates);
+        bevy::log::trace!(
+            "[RenderLayers] Made {} visibility updates this frame",
+            updates
+        );
     }
 }
 
 /// System to propagate RenderLayers to Bevy children of embeds.
 ///
 /// **Hybrid Rendering Pipeline Logic:**
-/// 
+///
 /// For Direct strategy embeds: propagate Layer 0 to all children and make them visible.
 /// For Composite strategy embeds: propagate RTT layer to all children.
 ///
@@ -631,9 +637,9 @@ pub fn propagate_render_layers_to_children_system(
     use std::sync::atomic::{AtomicU32, Ordering};
     static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
     let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    
+
     let mut total_updates = 0;
-    
+
     // Process Composite strategy embeds (propagate RTT layer)
     for (embed_entity, rtt) in composite_embed_query.iter() {
         let Ok(children) = children_query.get(embed_entity) else {
@@ -652,7 +658,7 @@ pub fn propagate_render_layers_to_children_system(
             &non_embed_query,
         );
     }
-    
+
     // Process Direct strategy embeds (propagate Layer 0)
     let layer_0 = RenderLayers::layer(0);
     let mut direct_with_children = 0;
@@ -661,11 +667,11 @@ pub fn propagate_render_layers_to_children_system(
         if *strategy != RenderStrategy::Direct {
             continue;
         }
-        
+
         let Ok(children) = children_query.get(embed_entity) else {
             continue;
         };
-        
+
         direct_with_children += 1;
         direct_total_children += children.len();
 
@@ -680,7 +686,7 @@ pub fn propagate_render_layers_to_children_system(
             &non_embed_query,
         );
     }
-    
+
     if frame <= 10 || frame % 60 == 0 || total_updates > 0 || direct_with_children > 0 {
         bevy::log::trace!(
             "[PropagateChildren] Frame {}: {} updates, Direct embeds with children: {} (total {} children)",
@@ -704,7 +710,7 @@ fn propagate_to_descendants(
     non_embed_query: &Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) -> u32 {
     let mut updates = 0;
-    
+
     // Process all direct children
     for child_entity in children.iter() {
         // Check if needs RenderLayers update
@@ -712,14 +718,14 @@ fn propagate_to_descendants(
             Ok(current) => current != target_layer,
             Err(_) => true,
         };
-        
+
         // Check if needs Visibility update (make visible if currently hidden)
         let vis_needs_update = match visibility_query.get(child_entity) {
             Ok(Visibility::Hidden) => true,
             Err(_) => false, // No Visibility component, don't add one
-            _ => false, // Already Inherited or Visible
+            _ => false,      // Already Inherited or Visible
         };
-        
+
         if layer_needs_update || vis_needs_update {
             let mut entity_commands = commands.entity(child_entity);
             if layer_needs_update {
@@ -735,14 +741,14 @@ fn propagate_to_descendants(
                 embed_entity
             );
         }
-        
+
         // Recurse into non-embed children
         if non_embed_query.get(child_entity).is_ok() {
             let mut to_process: Vec<Entity> = Vec::new();
             if let Ok(grandchildren) = children_query.get(child_entity) {
                 to_process.extend(grandchildren.to_vec());
             }
-            
+
             while let Some(entity) = to_process.pop() {
                 // Only process non-embed descendants
                 if non_embed_query.get(entity).is_ok() {
@@ -750,13 +756,13 @@ fn propagate_to_descendants(
                         Ok(current) => current != target_layer,
                         Err(_) => true,
                     };
-                    
+
                     let vis_needs_update = match visibility_query.get(entity) {
                         Ok(Visibility::Hidden) => true,
                         Err(_) => false,
                         _ => false,
                     };
-                    
+
                     if layer_needs_update || vis_needs_update {
                         let mut entity_commands = commands.entity(entity);
                         if layer_needs_update {
@@ -767,7 +773,7 @@ fn propagate_to_descendants(
                         }
                         updates += 1;
                     }
-                    
+
                     // Continue to grandchildren
                     if let Ok(grandchildren) = children_query.get(entity) {
                         to_process.extend(grandchildren.to_vec());
@@ -776,7 +782,7 @@ fn propagate_to_descendants(
             }
         }
     }
-    
+
     updates
 }
 
@@ -857,15 +863,15 @@ pub fn cleanup_embed_scene_rtt_system(
 }
 
 /// System to apply embed boundary clipping to embed content using shader masks.
-/// 
+///
 /// For Direct render strategy, content is rendered directly to Layer 0 without RTT.
 /// To achieve proper clipping, we set mask_params on content materials to clip
 /// pixels outside the embed's bounds.
-/// 
+///
 /// Note: This only applies to embeds with Stencil or Composite strategy.
 /// Direct strategy embeds don't need bounds clipping as content renders
 /// directly to the main canvas without any composition.
-/// 
+///
 /// Note: This only works correctly for non-rotated embeds. Rotated embeds would
 /// need a more complex solution (e.g., rotated rectangle SDF in shader).
 pub fn apply_embed_bounds_clipping_system(
@@ -881,13 +887,13 @@ pub fn apply_embed_bounds_clipping_system(
 ) {
     // Get current playback time for mask layer checks
     let global_time = playback.current_time_ms as u64;
-    
+
     for (_entity, marker, material_handle, mask_info) in content_query.iter() {
         // Get the embed's bounds, transform, and render strategy
         let Ok((bounds, embed_gt, strategy)) = embed_query.get(marker.embed_entity) else {
             continue;
         };
-        
+
         // Skip clipping for Direct strategy embeds
         // Direct embeds render content directly to main canvas without composition.
         // For embeds that need bounds clipping (e.g., those with scale animation),
@@ -895,29 +901,29 @@ pub fn apply_embed_bounds_clipping_system(
         if strategy.map_or(false, |s| *s == RenderStrategy::Direct) {
             continue;
         }
-        
+
         // Skip if material doesn't exist
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
-        
+
         // Check if this content has active masks from mask layers
         // If it does, mask layers take priority over embed bounds
         let has_active_mask = mask_info
             .map(|info| !info.get_active_masks(global_time).is_empty())
             .unwrap_or(false);
-        
+
         if has_active_mask {
             // Let the mask layer system handle this content
             continue;
         }
-        
+
         // Extract embed's world position and scale from GlobalTransform
         // Note: GlobalTransform already includes fit_scale from parent chain,
         // so we DON'T need to multiply by fit_scale again!
         let embed_pos = embed_gt.translation();
         let embed_scale = embed_gt.to_scale_rotation_translation().0;
-        
+
         // Calculate embed bounds in world coordinates
         // bounds.width/height are in project coordinates (e.g., 1440x1080)
         // embed_scale already includes fit_scale (e.g., 0.8889)
@@ -925,17 +931,12 @@ pub fn apply_embed_bounds_clipping_system(
         let half_height = bounds.height * 0.5 * embed_scale.y.abs();
         let center_x = embed_pos.x;
         let center_y = embed_pos.y;
-        
+
         // Set mask params for rectangular clipping
         // mask_type 1.0 = rectangle include (only show pixels inside)
         material.effect_flags.x = 1.0; // Rectangle mask
-        material.mask_params = bevy::math::Vec4::new(
-            center_x,
-            center_y,
-            half_width,
-            half_height,
-        );
-        
+        material.mask_params = bevy::math::Vec4::new(center_x, center_y, half_width, half_height);
+
         bevy::log::trace!(
             "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), embed_scale=({:.3},{:.3})",
             _entity,
