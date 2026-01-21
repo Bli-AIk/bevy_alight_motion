@@ -14,6 +14,8 @@ use std::collections::HashMap;
 
 use crate::scene::{
     AmBlendingMode, AmLayerMarker, AmPendingLayers, PendingLayer,
+    // 新组件导入 (New component imports)
+    AmElement, AmLayerName, AmElementType, AmEntitySpawned,
 };
 use crate::sdf_material::SdfMaterial;
 
@@ -48,6 +50,7 @@ pub(crate) fn process_pending_layers(
     global_time: f32,
     parent_entity: Entity,
     time_offset: i32,
+    filter: &crate::scene::LayerFilter,
 ) {
     // We need to collect actions to avoid borrowing issues
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
@@ -160,7 +163,10 @@ pub(crate) fn process_pending_layers(
             }
         }
 
-        if should_be_active && !is_spawned {
+        // 应用过滤器检查 (Apply filter check)
+        let should_spawn_filtered = should_be_active && filter.should_spawn(&layer.label);
+
+        if should_spawn_filtered && !is_spawned {
             to_spawn.push(idx);
         } else if !should_be_active && is_spawned {
             to_despawn.push(layer.id);
@@ -525,8 +531,20 @@ fn spawn_layer_entity(
     // now uses Bevy parent-child hierarchy for RenderLayers propagation.
     let initial_visibility = Visibility::Inherited;
 
+    // Determine element type based on layer spec
+    // 根据图层规格确定元素类型
+    let element_type = match &layer.spec {
+        crate::scene::AmLayerSpec::SpriteShape { .. } => AmElementType::Shape,
+        crate::scene::AmLayerSpec::SdfShape { .. } => AmElementType::Shape,
+        crate::scene::AmLayerSpec::Text { .. } => AmElementType::Text,
+        crate::scene::AmLayerSpec::Image { .. } => AmElementType::Image,
+        crate::scene::AmLayerSpec::Null => AmElementType::Null,
+        crate::scene::AmLayerSpec::EmbedScene => AmElementType::EmbedScene,
+    };
+
     // Create base entity with common components
     // Include RenderLayers::layer(0) by default - Direct strategy content stays on Layer 0
+    // 创建带有通用组件的基础实体
     let entity = commands
         .spawn((
             Name::new(entity_name),
@@ -534,6 +552,9 @@ fn spawn_layer_entity(
                 id: layer.id,
                 label: layer.label.clone(),
             },
+            // 2.3 标识与查询标准化 (Identification & Query Standardization)
+            AmLayerName::new(layer.label.clone()),
+            AmElement, // Marker for all AM-generated entities
             animated,
             layer.spec.clone(),
             transform_to_use,
@@ -544,6 +565,15 @@ fn spawn_layer_entity(
             RenderLayers::layer(0), // Default to Layer 0 (main camera)
         ))
         .id();
+
+    // 2.2 扩展钩子系统 - 触发 AmEntitySpawned 事件
+    // (Hook System - trigger AmEntitySpawned event)
+    commands.trigger(AmEntitySpawned {
+        entity,
+        layer_name: layer.label.clone(),
+        layer_id: layer.id,
+        element_type,
+    });
 
     // Add mask info component if this layer is affected by a mask
     if let Some(mask_info) = &layer.mask_info {

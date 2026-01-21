@@ -80,6 +80,9 @@ impl Plugin for AlightMotionPlugin {
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
             .init_resource::<AmProjectResolution>()
+            // 注意: AmEntitySpawned 使用 EntityEvent derive，不需要 add_event 注册
+            // Note: AmEntitySpawned uses EntityEvent derive, no need for add_event registration
+            // 用户可以通过 commands.add_observer() 或 app.add_observer() 来监听事件
             .add_systems(Startup, setup_white_pixel_system)
             .add_systems(
                 Update,

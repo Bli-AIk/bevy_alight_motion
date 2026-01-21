@@ -22,6 +22,12 @@ pub use components::{
     AmLayerSpec, AmLayersContainer, AmMaskEntry, AmMaskInfo, AmPaletteMapParams, AmPendingLayers,
     AmProjectBundle, AmProjectRoot, AmRttCamerasContainer, AmSceneConfig, AmVisualSpawned,
     PendingLayer,
+    // 2.3 标识与查询标准化
+    AmLayerName, AmElement,
+    // 2.2 扩展钩子系统
+    AmElementType, AmEntitySpawned,
+    // 2.1 元素过滤机制
+    LayerFilter, AmSpawnSettings,
 };
 
 pub use collect::collect_pending_layers;

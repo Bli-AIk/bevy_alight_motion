@@ -31,3 +31,7 @@ video-comparison = []
 [[example]]
 name = "player"
 path = "examples/player.rs"
+
+[[example]]
+name = "interactive_bg"
+path = "examples/interactive_bg.rs"

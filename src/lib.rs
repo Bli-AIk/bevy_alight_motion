@@ -58,6 +58,14 @@ pub mod prelude {
     pub use crate::plugin::{AlightMotionPlugin, AmProjectResolution, load_am_project};
     pub use crate::scene::{
         AmLayerMarker, AmProjectBundle, AmProjectRoot, AmSceneConfig, am_to_bevy_coords,
+        // Layer specification
+        AmLayerSpec,
+        // 2.3 标识与查询标准化
+        AmLayerName, AmElement,
+        // 2.2 扩展钩子系统
+        AmElementType, AmEntitySpawned,
+        // 2.1 元素过滤机制
+        LayerFilter, AmSpawnSettings,
     };
     pub use crate::schema::{
         AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEmbedScene, AmKeyframe, AmLayer,

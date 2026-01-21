@@ -37,7 +37,7 @@ pub fn manage_layer_lifecycle_system(
     mut sdf_materials: ResMut<Assets<SdfMaterial>>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
-    mut project_query: Query<(Entity, &AmProjectRoot, &mut AmPendingLayers)>,
+    mut project_query: Query<(Entity, &AmProjectRoot, &mut AmPendingLayers, Option<&crate::scene::AmSpawnSettings>)>,
 ) {
     // Skip if force stopped
     if playback.force_stopped {
@@ -52,7 +52,7 @@ pub fn manage_layer_lifecycle_system(
         FRAME_COUNT += 1;
     }
 
-    for (project_entity, root, mut pending) in project_query.iter_mut() {
+    for (project_entity, root, mut pending, spawn_settings) in project_query.iter_mut() {
         let Some(project) = projects.get(&root.handle) else {
             continue;
         };
@@ -61,6 +61,11 @@ pub fn manage_layer_lifecycle_system(
 
         // Use layers_container as parent for top-level layers, fall back to project_entity
         let parent_for_layers = pending.layers_container.unwrap_or(project_entity);
+
+        // 获取过滤器 (Get the filter)
+        let filter = spawn_settings
+            .map(|s| &s.filter)
+            .unwrap_or(&crate::scene::LayerFilter::None);
 
         // Process all pending layers (including nested ones)
         process_pending_layers(
@@ -75,6 +80,7 @@ pub fn manage_layer_lifecycle_system(
             global_time,
             parent_for_layers,
             0, // root time offset
+            filter,
         );
 
         // Log stats occasionally
