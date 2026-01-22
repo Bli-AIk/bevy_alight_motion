@@ -200,17 +200,25 @@ pub fn update_unified_mask_system(
                             let center_y = mask_translation.y + rotated_offset_y;
 
                             // Half-size uses animated size and local scale, then scaled by entity's global scale
-                            let half_width = anim_size_x * 0.5 * scale_x.abs() * entity_global_scale.x.abs();
-                            let half_height = anim_size_y * 0.5 * scale_y.abs() * entity_global_scale.y.abs();
+                            let half_width =
+                                anim_size_x * 0.5 * scale_x.abs() * entity_global_scale.x.abs();
+                            let half_height =
+                                anim_size_y * 0.5 * scale_y.abs() * entity_global_scale.y.abs();
 
                             bevy::log::debug!(
                                 "[MASK-UE] mask_trans=({:.1},{:.1}), entity_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                                mask_translation.x, mask_translation.y,
-                                entity_global_scale.x, entity_global_scale.y,
-                                scale_x, scale_y,
-                                pivot_x, pivot_y,
-                                center_x, center_y,
-                                half_width, half_height
+                                mask_translation.x,
+                                mask_translation.y,
+                                entity_global_scale.x,
+                                entity_global_scale.y,
+                                scale_x,
+                                scale_y,
+                                pivot_x,
+                                pivot_y,
+                                center_x,
+                                center_y,
+                                half_width,
+                                half_height
                             );
 
                             // Return world coordinates in entity's coordinate space

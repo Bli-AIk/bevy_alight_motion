@@ -113,17 +113,23 @@ impl Plugin for AlightMotionPlugin {
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
-                    update_sdf_mask_system, // Update SDF mask state based on timing
-                    update_unified_mask_system, // Update unified effect mask state based on timing
                     animate_unified_effect_system, // Unified effect system (RTT-ready)
-                    animate_rtt_blur_system, // RTT Gaussian blur animation
-                    apply_mask_clipping_system, // Apply mask clipping to masked layers
-                    hot_reload_shader_system, // Hot-reload shader when 'R' is pressed
-                                            // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
-                                            // crate::effects::sync_rtt_camera_position_system,
+                    animate_rtt_blur_system,       // RTT Gaussian blur animation
+                    apply_mask_clipping_system,    // Apply mask clipping to masked layers
+                    hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
+                                                   // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
+                                                   // crate::effects::sync_rtt_camera_position_system,
                 )
                     .chain()
                     .after(crate::effects::fix_nested_embed_render_layers_system),
+            )
+            // Run mask systems in PostUpdate after TransformPropagate
+            // This ensures GlobalTransform is correctly propagated before mask calculations
+            .add_systems(
+                PostUpdate,
+                (update_sdf_mask_system, update_unified_mask_system)
+                    .chain()
+                    .after(bevy::transform::TransformSystems::Propagate),
             );
     }
 }

@@ -14,7 +14,9 @@ use crate::scene::{AmLayerMarker, AmMaskInfo};
 use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
-use super::interpolation::{interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation};
+use super::interpolation::{
+    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
+};
 
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
@@ -22,7 +24,13 @@ use super::interpolation::{interpolate_float, interpolate_vec2, interpolate_vec3
 pub fn update_sdf_mask_system(
     playback: Res<AmPlayback>,
     parent_query: Query<
-        (&AmAnimated, &Children, &AmMaskInfo, &AmLayerMarker, &GlobalTransform),
+        (
+            &AmAnimated,
+            &Children,
+            &AmMaskInfo,
+            &AmLayerMarker,
+            &GlobalTransform,
+        ),
         With<AmSdfShapeParent>,
     >,
     pending_query: Query<&crate::scene::AmPendingLayers>,
@@ -51,9 +59,10 @@ pub fn update_sdf_mask_system(
         bevy::log::debug!(
             "[MaskParent] '{}' parent_global_scale=({:.2},{:.2})",
             marker.label,
-            parent_scale.x, parent_scale.y,
+            parent_scale.x,
+            parent_scale.y,
         );
-        
+
         // Get all active masks for current time (supports up to 2)
         let active_masks = mask_info.get_active_masks(global_time as u64);
 
@@ -117,28 +126,28 @@ pub fn update_sdf_mask_system(
                     // The mask layer's GlobalTransform includes its own animated scale (1.75)
                     // But the SDF child entity's GlobalTransform only includes parent_global_scale (0.5)
                     // We need to use parent_global_scale for size calculations to match SDF's coordinate space
-                    
+
                     // Calculate the ratio between mask's position scale and SDF's scale
                     // Mask's translation is already in world coords (scaled by mask's global scale)
                     // We need to convert it to SDF's coordinate space
                     let scale_ratio_x = parent_global_scale.x / mask_global_scale.x;
                     let scale_ratio_y = parent_global_scale.y / mask_global_scale.y;
-                    
+
                     // Adjust mask translation to SDF coordinate space
                     // The mask's translation is scaled by mask_global_scale, but SDF uses parent_global_scale
                     // Actually, both mask and SDF are children of the same AM project root
                     // So they share the same base translation from the root
                     // The difference is only in their local scales
-                    
+
                     // For center calculation:
                     // - mask_translation is the world position of mask's pivot point
                     // - We need to add the pivot offset to get geometric center
                     // - The pivot offset should be scaled by mask's own scale (scale_x, scale_y)
                     //   and then by how much the SDF's scale differs from mask's scale
-                    
+
                     // Since mask and SDF share the same root transform, their world positions should align
                     // The issue is that mask's local scale affects its position calculation differently
-                    
+
                     // Actually, let's just use the mask's world position directly
                     // The pivot offset needs to be calculated in world coords
                     let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
@@ -154,19 +163,28 @@ pub fn update_sdf_mask_system(
                     let center_y = mask_translation.y + rotated_offset_y;
 
                     // Half-size uses animated size and local scale, then scaled by parent's global scale
-                    let half_width = anim_size_x * 0.5 * scale_x.abs() * parent_global_scale.x.abs();
-                    let half_height = anim_size_y * 0.5 * scale_y.abs() * parent_global_scale.y.abs();
+                    let half_width =
+                        anim_size_x * 0.5 * scale_x.abs() * parent_global_scale.x.abs();
+                    let half_height =
+                        anim_size_y * 0.5 * scale_y.abs() * parent_global_scale.y.abs();
 
                     bevy::log::debug!(
                         "[MaskDebug] mask_layer_id={}, mask_trans=({:.1},{:.1}), mask_scale=({:.2},{:.2}), parent_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
                         mask.mask_layer_id,
-                        mask_translation.x, mask_translation.y,
-                        mask_global_scale.x, mask_global_scale.y,
-                        parent_global_scale.x, parent_global_scale.y,
-                        scale_x, scale_y,
-                        pivot_x, pivot_y,
-                        center_x, center_y,
-                        half_width, half_height
+                        mask_translation.x,
+                        mask_translation.y,
+                        mask_global_scale.x,
+                        mask_global_scale.y,
+                        parent_global_scale.x,
+                        parent_global_scale.y,
+                        scale_x,
+                        scale_y,
+                        pivot_x,
+                        pivot_y,
+                        center_x,
+                        center_y,
+                        half_width,
+                        half_height
                     );
 
                     // Return world coordinates in parent's coordinate space
@@ -193,7 +211,7 @@ pub fn update_sdf_mask_system(
                 let child_translation = child_global_transform.translation();
                 let child_scale = child_global_transform.to_scale_rotation_translation().0;
                 let frame_half = material.uniform_data.frame_half;
-                
+
                 if active_masks.is_empty() {
                     // No active masks
                     material.uniform_data.mask_type = 0.0;
@@ -207,13 +225,19 @@ pub fn update_sdf_mask_system(
                     // Log comparison between mask and child SDF entity
                     bevy::log::debug!(
                         "[MaskVsSdf] mask_center=({:.1},{:.1}), mask_half=({:.1},{:.1}) | sdf_pos=({:.1},{:.1}), sdf_scale=({:.2},{:.2}), frame_half={:.1}, sdf_world_range=[{:.1}..{:.1}, {:.1}..{:.1}]",
-                        mask1_center.x, mask1_center.y,
-                        mask1_half_size.x, mask1_half_size.y,
-                        child_translation.x, child_translation.y,
-                        child_scale.x, child_scale.y,
+                        mask1_center.x,
+                        mask1_center.y,
+                        mask1_half_size.x,
+                        mask1_half_size.y,
+                        child_translation.x,
+                        child_translation.y,
+                        child_scale.x,
+                        child_scale.y,
                         frame_half,
-                        child_translation.x - frame_half * child_scale.x, child_translation.x + frame_half * child_scale.x,
-                        child_translation.y - frame_half * child_scale.y, child_translation.y + frame_half * child_scale.y,
+                        child_translation.x - frame_half * child_scale.x,
+                        child_translation.x + frame_half * child_scale.x,
+                        child_translation.y - frame_half * child_scale.y,
+                        child_translation.y + frame_half * child_scale.y,
                     );
 
                     material.uniform_data.mask_params = bevy::math::Vec4::new(

@@ -35,6 +35,8 @@ pub fn spawn_sdf_visual(
     marker: &AmLayerMarker,
     initial_scale: (f32, f32),
     mask_info: &Option<AmMaskInfo>,
+    global_time_ms: u64, // Current playback time for mask initialization
+    fit_scale: f32,      // Scale factor for mask coordinates
 ) {
     let fill = extract_fill_color(fill_color);
     let stroke = if !stroke_color_value.is_empty() {
@@ -100,9 +102,15 @@ pub fn spawn_sdf_visual(
     };
 
     // Create SDF material - with or without mask
-    // Use first active mask at time 0
-    let active_mask_at_zero = mask_info.as_ref().and_then(|m| m.get_active_mask(0));
-    let material = if let Some(mask) = active_mask_at_zero {
+    // Use first active mask at current playback time
+    // Apply fit_scale to mask coordinates to convert from canvas space to world space
+    let active_mask = mask_info
+        .as_ref()
+        .and_then(|m| m.get_active_mask(global_time_ms));
+    let material = if let Some(mask) = active_mask {
+        // Scale mask center and half_size by fit_scale for world coordinate space
+        let scaled_center = mask.center * fit_scale;
+        let scaled_half_size = mask.half_size * fit_scale * mask.scale;
         sdf_materials.add(SdfMaterial::new_with_mask_and_frame_half(
             sdf_shape_type,
             target_half_width,
@@ -110,8 +118,8 @@ pub fn spawn_sdf_visual(
             fill,
             stroke_width,
             stroke,
-            mask.center,
-            mask.half_size,
+            scaled_center,
+            scaled_half_size,
             mask.is_circle,
             mask.is_exclude,
             frame_half,

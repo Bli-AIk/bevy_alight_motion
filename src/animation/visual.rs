@@ -44,6 +44,7 @@ pub(crate) fn add_visual_components(
     fit_scale: f32,                                            // Scale factor for mask coordinates
     is_embed_content: bool,    // True if this is content inside an embed
     has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
+    global_time_ms: u64,       // Current playback time for mask initialization
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -171,6 +172,7 @@ pub(crate) fn add_visual_components(
         mesh_offset: Option<Vec4>,
         mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
         fit_scale: f32,                // Scale factor for mask coordinates
+        global_time_ms: u64,           // Current playback time for mask initialization
     ) -> Handle<UnifiedEffectMaterial> {
         // Use mesh_size if provided (for stretch bounds), otherwise use original size
         let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
@@ -183,11 +185,12 @@ pub(crate) fn add_visual_components(
             initial_mask2_flags_x,
             initial_mask2_params,
         ) = if let Some(mask_info) = mask_info {
-            let active_masks = mask_info.get_active_masks(0);
+            let active_masks = mask_info.get_active_masks(global_time_ms);
 
             if active_masks.is_empty() {
                 bevy::log::trace!(
-                    "[MaterialInit] No active mask at time 0, mask_info has {} masks",
+                    "[MaterialInit] No active mask at time {}, mask_info has {} masks",
+                    global_time_ms,
                     mask_info.masks.len()
                 );
                 (
@@ -205,11 +208,12 @@ pub(crate) fn add_visual_components(
                 } else {
                     base_type1
                 };
+                // Apply fit_scale to center and half_size * scale for world coordinate space
                 let mask1_params = Vec4::new(
                     mask1.center.x * fit_scale,
                     mask1.center.y * fit_scale,
-                    mask1.half_size.x * fit_scale,
-                    mask1.half_size.y * fit_scale,
+                    mask1.half_size.x * fit_scale * mask1.scale.x,
+                    mask1.half_size.y * fit_scale * mask1.scale.y,
                 );
 
                 // Second mask (if present)
@@ -221,11 +225,12 @@ pub(crate) fn add_visual_components(
                     } else {
                         base_type2
                     };
+                    // Apply fit_scale to center and half_size * scale for world coordinate space
                     let m2_params = Vec4::new(
                         mask2.center.x * fit_scale,
                         mask2.center.y * fit_scale,
-                        mask2.half_size.x * fit_scale,
-                        mask2.half_size.y * fit_scale,
+                        mask2.half_size.x * fit_scale * mask2.scale.x,
+                        mask2.half_size.y * fit_scale * mask2.scale.y,
                     );
                     bevy::log::trace!(
                         "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
@@ -240,8 +245,8 @@ pub(crate) fn add_visual_components(
                         mask1_type,
                         mask1.center.x * fit_scale,
                         mask1.center.y * fit_scale,
-                        mask1.half_size.x * fit_scale,
-                        mask1.half_size.y * fit_scale,
+                        mask1.half_size.x * fit_scale * mask1.scale.x,
+                        mask1.half_size.y * fit_scale * mask1.scale.y,
                         fit_scale
                     );
                     (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
@@ -449,6 +454,7 @@ pub(crate) fn add_visual_components(
                             initial_mesh_offset,
                             mesh_size,
                             fit_scale,
+                            global_time_ms,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -543,6 +549,7 @@ pub(crate) fn add_visual_components(
                         initial_mesh_offset,
                         mesh_size,
                         fit_scale,
+                        global_time_ms,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -612,6 +619,8 @@ pub(crate) fn add_visual_components(
                 },
                 initial_scale,
                 mask_info,
+                global_time_ms,
+                fit_scale,
             );
         }
         AmLayerSpec::Image {
@@ -679,6 +688,7 @@ pub(crate) fn add_visual_components(
                         initial_mesh_offset,
                         mesh_size,
                         fit_scale,
+                        global_time_ms,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
