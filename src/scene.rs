@@ -26,6 +26,7 @@ pub use components::{
     AmEmbedContentMarker,
     AmEmbedContentsContainer,
     AmEntitySpawned,
+    AmForceHidden,
     AmLayerMarker,
     // 2.3 标识与查询标准化
     AmLayerName,

@@ -214,9 +214,18 @@ pub fn update_sdf_mask_system(
 /// System to animate SDF shape opacity (handles SdfMaterial entities).
 /// Uses Visibility component for proper show/hide behavior and material alpha for opacity animation.
 /// Only skips updates when force_stopped is true (for inspector editing).
+/// Respects AmForceHidden component - if present on parent, keeps visibility Hidden.
 pub fn animate_sdf_opacity_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children, &AmLayerMarker), With<AmSdfShapeParent>>,
+    parent_query: Query<
+        (
+            &AmAnimated,
+            &Children,
+            &AmLayerMarker,
+            Option<&crate::scene::AmForceHidden>,
+        ),
+        With<AmSdfShapeParent>,
+    >,
     mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Visibility)>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
@@ -227,11 +236,14 @@ pub fn animate_sdf_opacity_system(
 
     let global_time = playback.current_time_ms;
 
-    for (animated, children, _marker) in parent_query.iter() {
+    for (animated, children, _marker, force_hidden) in parent_query.iter() {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
         let layer_time = animated.calc_layer_time(local_time);
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+
+        // Check if this layer is forced hidden (external control)
+        let is_force_hidden = force_hidden.is_some();
 
         // Update all SDF children
         for child in children.iter() {
@@ -248,8 +260,13 @@ pub fn animate_sdf_opacity_system(
                     continue;
                 }
 
-                // Show shape when within its time range
-                *visibility = Visibility::Inherited;
+                // If force hidden, keep visibility Hidden but still update material for proper timing
+                if is_force_hidden {
+                    *visibility = Visibility::Hidden;
+                } else {
+                    // Show shape when within its time range and not force hidden
+                    *visibility = Visibility::Inherited;
+                }
 
                 if let Some(material) = materials.get_mut(&material_handle.0) {
                     // Multiply by base_alpha to preserve original fill color transparency

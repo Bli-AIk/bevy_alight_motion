@@ -528,6 +528,7 @@ pub fn propagate_render_layers_system(
         Entity,
         &crate::scene::AmEmbedContentMarker,
         Option<&RenderLayers>,
+        Option<&Visibility>,
     )>,
 ) {
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -562,7 +563,7 @@ pub fn propagate_render_layers_system(
     let mut updates = 0;
 
     // Assign RenderLayers to all embed content
-    for (content_entity, marker, current_layers) in content_query.iter() {
+    for (content_entity, marker, current_layers, current_visibility) in content_query.iter() {
         // Determine target layer based on parent embed's strategy
         let target_layer = if let Some(&rtt_layer) = composite_layers.get(&marker.embed_entity) {
             // Parent embed uses Composite strategy - render to its RTT layer
@@ -589,18 +590,25 @@ pub fn propagate_render_layers_system(
                 0
             };
 
-            // Insert RenderLayers and make visible
-            commands.entity(content_entity).insert((
-                target_layer,
-                Visibility::Inherited, // Safe to show - will render to correct layer
-            ));
+            // Determine visibility: preserve Hidden state if already set, otherwise use Inherited
+            // This allows external systems to hide entities without being overridden
+            let target_visibility = match current_visibility {
+                Some(Visibility::Hidden) => Visibility::Hidden,
+                _ => Visibility::Inherited,
+            };
+
+            // Insert RenderLayers and visibility
+            commands
+                .entity(content_entity)
+                .insert((target_layer, target_visibility));
 
             updates += 1;
             bevy::log::trace!(
-                "[RenderLayers] Assigned layer {} to content {:?} (embed {:?}), now visible",
+                "[RenderLayers] Assigned layer {} to content {:?} (embed {:?}), visibility={:?}",
                 layer_num,
                 content_entity,
-                marker.embed_entity
+                marker.embed_entity,
+                target_visibility
             );
         }
     }

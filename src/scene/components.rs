@@ -200,6 +200,17 @@ pub struct AmEntitySpawned {
     pub element_type: AmElementType,
 }
 
+/// Marker component to force an entity to stay hidden.
+/// When present, animation systems will respect the Hidden visibility state
+/// instead of overriding it to Inherited.
+///
+/// 强制隐藏标记组件。
+/// 当存在此组件时，动画系统将保持实体的 Hidden 可见性状态，
+/// 而不是将其覆盖为 Inherited。
+#[derive(Component, Debug, Clone, Default, Reflect)]
+#[reflect(Component)]
+pub struct AmForceHidden;
+
 // ============================================================================
 // 2.1 元素过滤机制 (Selective Importing)
 // ============================================================================

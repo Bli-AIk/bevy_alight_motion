@@ -61,6 +61,7 @@ pub mod prelude {
         // 2.2 扩展钩子系统
         AmElementType,
         AmEntitySpawned,
+        AmForceHidden,
         AmLayerMarker,
         // 2.3 标识与查询标准化
         AmLayerName,
