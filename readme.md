@@ -7,16 +7,19 @@
 
 **bevy_alight_motion** — Bevy plugin for loading and playing Alight Motion project files.
 
-| English | Simplified Chinese |
-|---------|--------------------|
+| English | Simplified Chinese          |
+|---------|-----------------------------|
 | English | [简体中文](./readme_zh-hans.md) |
 
 ## Introduction
 
-`bevy_alight_motion` is a plugin for the [Bevy](https://bevyengine.org/) game engine that allows you to import and animate assets directly from [Alight Motion](https://alightmotion.com/) project files.  
-It solves the problem of manual animation recreation in code, allowing designers to create complex animations in Alight Motion and developers to run them directly in Bevy.
+`bevy_alight_motion` is a plugin for the [Bevy](https://bevyengine.org/) game engine that allows you to import and
+animate assets directly from [Alight Motion](https://alightmotion.com/) project files.  
+It solves the problem of manual animation recreation in code, allowing designers to create complex animations in Alight
+Motion and developers to run them directly in Bevy.
 
-With `bevy_alight_motion`, you only need to export your Alight Motion project as an `.amproj` file and load it with a single function call.  
+With `bevy_alight_motion`, you only need to export your Alight Motion project as an `.amproj` file and load it with a
+single function call.  
 In the future, it may also support more complex effects and shaders exported from Alight Motion.
 
 ## Features
@@ -92,13 +95,20 @@ In the future, it may also support more complex effects and shaders exported fro
 
 This project uses the following crates:
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [bevy](https://crates.io/crates/bevy) | 0.17.2 | Game engine |
-| [quick-xml](https://crates.io/crates/quick-xml) | 0.37 | High-performance XML pull-parser/serializer |
-| [serde](https://crates.io/crates/serde) | 1.0 | Serialization/deserialization framework |
-| [zip](https://crates.io/crates/zip) | 2.2 | ZIP archive reading/writing |
-| [thiserror](https://crates.io/crates/thiserror) | 2.0 | Error derive macros |
+| Crate                                           | Version | Description                                 |
+|-------------------------------------------------|---------|---------------------------------------------|
+| [bevy](https://crates.io/crates/bevy)           | 0.17.2  | Game engine                                 |
+| [quick-xml](https://crates.io/crates/quick-xml) | 0.37    | High-performance XML pull-parser/serializer |
+| [serde](https://crates.io/crates/serde)         | 1.0     | Serialization/deserialization framework     |
+| [zip](https://crates.io/crates/zip)             | 2.2     | ZIP archive reading/writing                 |
+| [thiserror](https://crates.io/crates/thiserror) | 2.0     | Error derive macros                         |
+
+## Contributors
+
+### Non-Code Contributors
+
+* **71**: Provided many Alight Motion example projects (including Undertale bullet patterns and visual PVs) during
+  testing, provided a great help with this project!
 
 ## Contributing
 
@@ -112,7 +122,8 @@ Whether you want to fix a bug, add a feature, or improve documentation:
 
 This project is licensed under either of
 
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0))
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)
+  or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0))
 * MIT license ([LICENSE-MIT](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT))
 
 at your option.
