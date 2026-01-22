@@ -67,6 +67,11 @@ pub mod prelude {
         AmLayerName,
         // Layer specification
         AmLayerSpec,
+        // Mask info for debug visualization
+        AmMaskEntry,
+        AmMaskInfo,
+        // Pending layers for external modification
+        AmPendingLayers,
         AmProjectBundle,
         AmProjectRoot,
         AmSceneConfig,

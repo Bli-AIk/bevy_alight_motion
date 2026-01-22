@@ -86,7 +86,7 @@ pub fn update_sdf_mask_system(
                         interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
                     let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
 
-                    // Scale
+                    // Scale (local animated scale)
                     let [scale_x, scale_y] =
                         interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
@@ -99,9 +99,15 @@ pub fn update_sdf_mask_system(
                     // This is critical for nested embed masks where local transform is relative to parent
                     let translation = global_transform.translation();
 
+                    // Extract global scale from transform to properly scale the offset
+                    let global_scale = global_transform.to_scale_rotation_translation().0;
+
                     // Calculate center: accounting for pivot offset with rotation
-                    let scaled_offset_x = -pivot_x * scale_x;
-                    let scaled_offset_y = pivot_y * scale_y; // Y negated for Bevy coords
+                    // Translation is at pivot point (AM center + (pivot_x, -pivot_y) in Bevy coords)
+                    // To get back to geometric center: center = translation + (-pivot_x, +pivot_y) * scale
+                    // Pivot offset needs to be scaled by BOTH local animated scale AND global (parent) scale
+                    let scaled_offset_x = -pivot_x * scale_x * global_scale.x;
+                    let scaled_offset_y = pivot_y * scale_y * global_scale.y;
 
                     let rotated_offset_x =
                         scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
@@ -111,13 +117,26 @@ pub fn update_sdf_mask_system(
                     let center_x = translation.x + rotated_offset_x;
                     let center_y = translation.y + rotated_offset_y;
 
-                    // Half-size uses animated size and scaled by transform scale
-                    let half_width = anim_size_x * 0.5 * scale_x.abs();
-                    let half_height = anim_size_y * 0.5 * scale_y.abs();
+                    // Half-size uses animated size and scaled by BOTH local and global scale
+                    let half_width = anim_size_x * 0.5 * scale_x.abs() * global_scale.x.abs();
+                    let half_height = anim_size_y * 0.5 * scale_y.abs() * global_scale.y.abs();
 
+                    bevy::log::debug!(
+                        "[MaskDebug] translation=({:.1},{:.1}), global_scale=({:.2},{:.2}), anim_size=({:.1},{:.1}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                        translation.x, translation.y,
+                        global_scale.x, global_scale.y,
+                        anim_size_x, anim_size_y,
+                        scale_x, scale_y,
+                        pivot_x, pivot_y,
+                        center_x, center_y,
+                        half_width, half_height
+                    );
+
+                    // Return world coordinates directly - no fit_scale needed
+                    // because GlobalTransform already contains the full transform chain
                     return (
-                        Vec2::new(center_x * fit_scale, center_y * fit_scale),
-                        Vec2::new(half_width * fit_scale, half_height * fit_scale),
+                        Vec2::new(center_x, center_y),
+                        Vec2::new(half_width, half_height),
                         rotation_rad,
                     );
                 }
