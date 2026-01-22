@@ -93,6 +93,7 @@ pub fn update_unified_mask_system(
         &AmMaskInfo,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &AmLayerMarker,
+        &GlobalTransform,
     )>,
     pending_query: Query<&crate::scene::AmPendingLayers>,
     // Query for mask layer data - we look these up by mask_layer_id
@@ -117,9 +118,12 @@ pub fn update_unified_mask_system(
     let global_time = playback.current_time_ms as u64;
     let global_time_sec = playback.current_time_ms / 1000.0;
 
-    for (mask_info, material_handle, marker) in query.iter() {
+    for (mask_info, material_handle, marker, entity_global_transform) in query.iter() {
         // Get all active masks for current time (supports up to 2)
         let active_masks = mask_info.get_active_masks(global_time);
+
+        // Get entity's global scale - this is the coordinate system we need to match
+        let entity_global_scale = entity_global_transform.to_scale_rotation_translation().0;
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             if active_masks.is_empty() {
@@ -130,10 +134,12 @@ pub fn update_unified_mask_system(
                 material.mask2_flags.z = 0.0; // mask2 rotation
             } else {
                 // Helper function to compute mask parameters from layer transform
+                // IMPORTANT: The returned coordinates must be in the same space as the entity's world_position.
+                // We use entity_global_scale to match the entity's coordinate space.
                 let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
                     // Try to get the mask layer's current transform and animation data
                     if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                        if let Ok((global_transform, animated, spec)) =
+                        if let Ok((mask_global_transform, animated, spec)) =
                             mask_layer_query.get(mask_entity)
                         {
                             // Get base shape dimensions from spec
@@ -166,7 +172,7 @@ pub fn update_unified_mask_system(
                                 interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
                             let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
 
-                            // Scale
+                            // Scale (local animated scale)
                             let [scale_x, scale_y] =
                                 interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
@@ -175,40 +181,43 @@ pub fn update_unified_mask_system(
                                 interpolate_vec2(&animated.size, layer_time)
                                     .unwrap_or([base_width, base_height]);
 
-                            // Use GlobalTransform.translation() to get WORLD position
-                            // This is critical for nested embed masks where local transform is relative to parent
-                            let translation = global_transform.translation();
+                            // Use the mask layer's GlobalTransform to get world position
+                            // This already includes AM project root offset and all parent transforms
+                            let mask_translation = mask_global_transform.translation();
 
                             // Calculate center: accounting for pivot offset with rotation
-                            // For SDF shapes with pivot, the visual center rotates around the pivot
-                            let scaled_offset_x = -pivot_x * scale_x;
-                            let scaled_offset_y = pivot_y * scale_y; // Y negated for Bevy coords
+                            // Pivot offset is scaled by local animated scale, then by entity's global scale
+                            let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
+                            let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
 
                             let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
                                 - scaled_offset_y * rotation_rad.sin();
                             let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
                                 + scaled_offset_y * rotation_rad.cos();
 
-                            let center_x = translation.x + rotated_offset_x;
-                            let center_y = translation.y + rotated_offset_y;
+                            // Use mask's world translation and add pivot offset
+                            let center_x = mask_translation.x + rotated_offset_x;
+                            let center_y = mask_translation.y + rotated_offset_y;
 
-                            // Half-size uses animated size and scaled by transform scale
-                            let half_width = anim_size_x * 0.5 * scale_x.abs();
-                            let half_height = anim_size_y * 0.5 * scale_y.abs();
+                            // Half-size uses animated size and local scale, then scaled by entity's global scale
+                            let half_width = anim_size_x * 0.5 * scale_x.abs() * entity_global_scale.x.abs();
+                            let half_height = anim_size_y * 0.5 * scale_y.abs() * entity_global_scale.y.abs();
 
                             bevy::log::debug!(
-                                "[MASK] Found mask entity for id={}, global_pos=({:.1},{:.1}), center=({:.1},{:.1})",
-                                mask.mask_layer_id,
-                                translation.x,
-                                translation.y,
-                                center_x,
-                                center_y
+                                "[MASK-UE] mask_trans=({:.1},{:.1}), entity_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                                mask_translation.x, mask_translation.y,
+                                entity_global_scale.x, entity_global_scale.y,
+                                scale_x, scale_y,
+                                pivot_x, pivot_y,
+                                center_x, center_y,
+                                half_width, half_height
                             );
 
+                            // Return world coordinates in entity's coordinate space
                             return (
-                                Vec2::new(center_x * fit_scale, center_y * fit_scale),
-                                Vec2::new(half_width * fit_scale, half_height * fit_scale),
-                                rotation_rad, // Already negated above for Bevy coords
+                                Vec2::new(center_x, center_y),
+                                Vec2::new(half_width, half_height),
+                                rotation_rad,
                             );
                         } else {
                             bevy::log::warn!(

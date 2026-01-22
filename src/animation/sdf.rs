@@ -109,25 +109,38 @@ pub fn update_sdf_mask_system(
                         interpolate_vec2(&mask_animated.size, layer_time)
                             .unwrap_or([base_width, base_height]);
 
-                    // Get mask layer's animated location (in AM canvas coordinates)
-                    // AM coords: origin at top-left, Y-down
-                    // Bevy coords: origin at center, Y-up
-                    let location = interpolate_vec3_with_extrapolation(&mask_animated.location, layer_time)
-                        .unwrap_or([mask_animated.canvas_width / 2.0, mask_animated.canvas_height / 2.0, 0.0]);
+                    // Use the mask layer's GlobalTransform to get world position
+                    // This already includes AM project root offset and all parent transforms
+                    let mask_translation = _global_transform.translation();
+                    let mask_global_scale = _global_transform.to_scale_rotation_translation().0;
+
+                    // The mask layer's GlobalTransform includes its own animated scale (1.75)
+                    // But the SDF child entity's GlobalTransform only includes parent_global_scale (0.5)
+                    // We need to use parent_global_scale for size calculations to match SDF's coordinate space
                     
-                    // Convert from AM canvas coords to Bevy local coords
-                    // Step 1: Translate origin from top-left to center
-                    // Step 2: Flip Y axis
-                    let local_x = location[0] - mask_animated.canvas_width / 2.0;
-                    let local_y = mask_animated.canvas_height / 2.0 - location[1];
-
-                    // Apply parent's global scale to get world coordinates
-                    // This matches what the SDF child entity's mesh vertices will use
-                    let world_x = local_x * parent_global_scale.x;
-                    let world_y = local_y * parent_global_scale.y;
-
-                    // Calculate center: accounting for pivot offset with rotation
-                    // Pivot offset is scaled by local animated scale, then by parent's global scale
+                    // Calculate the ratio between mask's position scale and SDF's scale
+                    // Mask's translation is already in world coords (scaled by mask's global scale)
+                    // We need to convert it to SDF's coordinate space
+                    let scale_ratio_x = parent_global_scale.x / mask_global_scale.x;
+                    let scale_ratio_y = parent_global_scale.y / mask_global_scale.y;
+                    
+                    // Adjust mask translation to SDF coordinate space
+                    // The mask's translation is scaled by mask_global_scale, but SDF uses parent_global_scale
+                    // Actually, both mask and SDF are children of the same AM project root
+                    // So they share the same base translation from the root
+                    // The difference is only in their local scales
+                    
+                    // For center calculation:
+                    // - mask_translation is the world position of mask's pivot point
+                    // - We need to add the pivot offset to get geometric center
+                    // - The pivot offset should be scaled by mask's own scale (scale_x, scale_y)
+                    //   and then by how much the SDF's scale differs from mask's scale
+                    
+                    // Since mask and SDF share the same root transform, their world positions should align
+                    // The issue is that mask's local scale affects its position calculation differently
+                    
+                    // Actually, let's just use the mask's world position directly
+                    // The pivot offset needs to be calculated in world coords
                     let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
                     let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
 
@@ -136,19 +149,20 @@ pub fn update_sdf_mask_system(
                     let rotated_offset_y =
                         scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
 
-                    let center_x = world_x + rotated_offset_x;
-                    let center_y = world_y + rotated_offset_y;
+                    // Use mask's world translation and add pivot offset
+                    let center_x = mask_translation.x + rotated_offset_x;
+                    let center_y = mask_translation.y + rotated_offset_y;
 
                     // Half-size uses animated size and local scale, then scaled by parent's global scale
                     let half_width = anim_size_x * 0.5 * scale_x.abs() * parent_global_scale.x.abs();
                     let half_height = anim_size_y * 0.5 * scale_y.abs() * parent_global_scale.y.abs();
 
                     bevy::log::debug!(
-                        "[MaskDebug] mask_layer_id={}, local=({:.1},{:.1}), parent_scale=({:.2},{:.2}), anim_size=({:.1},{:.1}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                        "[MaskDebug] mask_layer_id={}, mask_trans=({:.1},{:.1}), mask_scale=({:.2},{:.2}), parent_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
                         mask.mask_layer_id,
-                        local_x, local_y,
+                        mask_translation.x, mask_translation.y,
+                        mask_global_scale.x, mask_global_scale.y,
                         parent_global_scale.x, parent_global_scale.y,
-                        anim_size_x, anim_size_y,
                         scale_x, scale_y,
                         pivot_x, pivot_y,
                         center_x, center_y,
