@@ -52,7 +52,7 @@ pub mod sdf_material;
 
 /// Prelude module for convenient imports.
 pub mod prelude {
-    pub use crate::animation::{AmAnimated, AmPlayback};
+    pub use crate::animation::{AmAnimated, AmPlayback, interpolate_vec2};
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
     pub use crate::plugin::{AlightMotionPlugin, AmProjectResolution, load_am_project};
