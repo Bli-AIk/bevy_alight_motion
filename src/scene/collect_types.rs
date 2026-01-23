@@ -110,15 +110,12 @@ pub(crate) fn collect_shape(
             .map(|c| c.value.clone())
             .unwrap_or_default();
 
-        // For fillType="none", use None for fill_color to render as transparent
-        let sdf_fill_color = if shape.fill_type == "none" {
-            None
-        } else {
-            shape.fill_color.clone()
-        };
+        // Track whether this is a "no fill" shape (fillType="none")
+        // This is different from having no fillColor value (defaults to white)
+        let no_fill = shape.fill_type == "none";
 
         AmLayerSpec::SdfShape {
-            fill_color: sdf_fill_color,
+            fill_color: shape.fill_color.clone(),
             stroke_color_value,
             stroke_width,
             stroke_join: stroke.join.clone(),
@@ -127,6 +124,7 @@ pub(crate) fn collect_shape(
             pivot_x,
             pivot_y,
             shape_type: shape.shape_type.clone(),
+            no_fill,
         }
     } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         AmLayerSpec::SpriteShape {

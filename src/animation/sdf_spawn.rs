@@ -37,8 +37,9 @@ pub fn spawn_sdf_visual(
     mask_info: &Option<AmMaskInfo>,
     global_time_ms: u64, // Current playback time for mask initialization
     fit_scale: f32,      // Scale factor for mask coordinates
+    no_fill: bool,       // Whether this shape has no fill (fillType="none")
 ) {
-    let fill = extract_fill_color(fill_color);
+    let fill = extract_fill_color(fill_color, no_fill);
     let stroke = if !stroke_color_value.is_empty() {
         crate::schema::parse_color(stroke_color_value)
             .map(|c| Color::srgba(c[0], c[1], c[2], c[3]))

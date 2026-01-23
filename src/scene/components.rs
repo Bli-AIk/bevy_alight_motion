@@ -318,6 +318,9 @@ pub enum AmLayerSpec {
         pivot_x: f32,
         pivot_y: f32,
         shape_type: String,
+        /// Whether the shape has no fill (fillType="none").
+        /// When true, fill is transparent. When false, fill defaults to white if fill_color is None.
+        no_fill: bool,
     },
     /// Text layer
     Text {

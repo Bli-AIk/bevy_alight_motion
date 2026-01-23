@@ -497,7 +497,7 @@ pub(crate) fn add_visual_components(
                     "[Visual] Spawning fill sprite '{}' with white_pixel, color fill",
                     label
                 );
-                let color = extract_fill_color(fill_color);
+                let color = extract_fill_color(fill_color, false);
                 if needs_any_effect {
                     // Use initial stretch mesh bounds if provided (to prevent first frame jump)
                     let mesh =
@@ -598,6 +598,7 @@ pub(crate) fn add_visual_components(
             pivot_x,
             pivot_y,
             shape_type,
+            no_fill,
         } => {
             spawn_sdf_visual(
                 commands,
@@ -621,6 +622,7 @@ pub(crate) fn add_visual_components(
                 mask_info,
                 global_time_ms,
                 fit_scale,
+                *no_fill,
             );
         }
         AmLayerSpec::Image {
@@ -729,7 +731,7 @@ pub(crate) fn add_visual_components(
         } => {
             use bevy::text::Justify;
 
-            let color = extract_fill_color(fill_color);
+            let color = extract_fill_color(fill_color, false);
             let justify = match align.as_str() {
                 "center" => Justify::Center,
                 "right" => Justify::Right,
@@ -790,7 +792,19 @@ pub(crate) fn add_visual_components(
 }
 
 /// Extract fill color from AmFillColor.
-pub(crate) fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>) -> Color {
+///
+/// - `no_fill`: When true (fillType="none"), always returns transparent regardless of fill_color.
+/// - When false and `fill_color` is None, returns white as default.
+/// - Otherwise extracts color from fill_color value or keyframes.
+pub(crate) fn extract_fill_color(
+    fill_color: &Option<crate::schema::AmFillColor>,
+    no_fill: bool,
+) -> Color {
+    // fillType="none" means transparent fill
+    if no_fill {
+        return Color::srgba(0.0, 0.0, 0.0, 0.0);
+    }
+
     if let Some(fc) = fill_color {
         if !fc.value.is_empty() {
             if let Ok(c) = crate::schema::parse_color(&fc.value) {
@@ -807,10 +821,7 @@ pub(crate) fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>
                 return Color::srgba(c[0], c[1], c[2], c[3]);
             }
         }
-        // fill_color exists but has no valid value - use white as default
-        Color::WHITE
-    } else {
-        // fill_color is None - use transparent (for fillType="none")
-        Color::srgba(0.0, 0.0, 0.0, 0.0)
     }
+    // Default to white when no fill color specified (fillType="color" without fillColor element)
+    Color::WHITE
 }
