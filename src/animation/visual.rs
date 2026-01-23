@@ -807,6 +807,10 @@ pub(crate) fn extract_fill_color(fill_color: &Option<crate::schema::AmFillColor>
                 return Color::srgba(c[0], c[1], c[2], c[3]);
             }
         }
+        // fill_color exists but has no valid value - use white as default
+        Color::WHITE
+    } else {
+        // fill_color is None - use transparent (for fillType="none")
+        Color::srgba(0.0, 0.0, 0.0, 0.0)
     }
-    Color::WHITE
 }

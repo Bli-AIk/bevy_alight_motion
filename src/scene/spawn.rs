@@ -240,7 +240,8 @@ pub(crate) fn spawn_shape(
 
     // Check if this is a stroked shape that needs SDF rendering
     // Also use SDF for circles (better quality than sprite rect)
-    let needs_sdf = shape.fill_type == "color"
+    // fillType="none" also needs SDF for stroke-only rendering (no fill)
+    let needs_sdf = (shape.fill_type == "color" || shape.fill_type == "none")
         && (shape.shape_type == ".circle"
             || shape.stroke.as_ref().is_some_and(|s| {
                 // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
@@ -300,8 +301,15 @@ pub(crate) fn spawn_shape(
             .map(|c| c.value.clone())
             .unwrap_or_default();
 
+        // For fillType="none", use None for fill_color to render as transparent
+        let sdf_fill_color = if shape.fill_type == "none" {
+            None
+        } else {
+            shape.fill_color.clone()
+        };
+
         AmLayerSpec::SdfShape {
-            fill_color: shape.fill_color.clone(),
+            fill_color: sdf_fill_color,
             stroke_color_value,
             stroke_width,
             stroke_join: stroke.join.clone(),
