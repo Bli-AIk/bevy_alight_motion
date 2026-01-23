@@ -77,6 +77,10 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides.basic_child_mask]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 # fx_1_ex has dynamic angle animation which is hard to match perfectly
 # 特殊情况：动态角度动画难以完美匹配
 [overrides.fx_1_ex_stretch_segment]
