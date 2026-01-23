@@ -260,3 +260,60 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
 
     params
 }
+
+/// Scale Assist effect parameters
+/// axis: 1=X only, 2=Y only, 3=XY both
+#[derive(Debug, Clone, Default)]
+pub struct ScaleAssistParams {
+    /// Which axis to apply scale (1=X, 2=Y, 3=XY)
+    pub axis: i32,
+    /// Scale multiplier (animated)
+    pub scale: AmAnimatedFloat,
+    /// Damping factor (animated)
+    pub damp: AmAnimatedFloat,
+}
+
+impl ScaleAssistParams {
+    /// Check if this has any scale assist effect parameters set
+    pub fn has_effect(&self) -> bool {
+        self.scale.value.is_some() || !self.scale.keyframes.is_empty()
+    }
+}
+
+/// Extract scale assist effect parameters from effects.
+pub(crate) fn extract_scale_assist_effect(effects: &[AmEffect]) -> ScaleAssistParams {
+    let mut params = ScaleAssistParams::default();
+    params.scale.value = Some(1.0); // Default: no scaling
+    params.damp.value = Some(1.0); // Default: no damping
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.scaleassist" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "axis" => {
+                        if let Ok(v) = prop.value.parse::<i32>() {
+                            params.axis = v;
+                        }
+                    }
+                    "scale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.scale.value = Some(v);
+                        }
+                    }
+                    "damp" => {
+                        if !prop.keyframes.is_empty() {
+                            params.damp.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.damp.value = Some(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}

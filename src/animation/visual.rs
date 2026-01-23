@@ -44,20 +44,23 @@ pub(crate) fn add_visual_components(
     fit_scale: f32,                                            // Scale factor for mask coordinates
     is_embed_content: bool,    // True if this is content inside an embed
     has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
-    global_time_ms: u64,       // Current playback time for mask initialization
+    has_scale_assist: bool, // True if layer has scale_assist effect (needs UnifiedEffectMaterial for dynamic sizing)
+    global_time_ms: u64,    // Current playback time for mask initialization
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}",
         label,
         id,
         std::mem::discriminant(spec),
-        is_embed_content
+        is_embed_content,
+        has_scale_assist
     );
 
     // Determine which effects are needed
     // Embed content always needs effect material to support bounds clipping later
+    // Scale_assist also needs effect material for dynamic sizing
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
     let needs_mask = mask_info.is_some();
@@ -68,7 +71,8 @@ pub(crate) fn add_visual_components(
         || needs_mask
         || needs_blur
         || needs_palette
-        || is_embed_content;
+        || is_embed_content
+        || has_scale_assist;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -600,6 +604,7 @@ pub(crate) fn add_visual_components(
             shape_type,
             no_fill,
         } => {
+            bevy::log::info!("[Visual] Spawning SdfShape for '{}'", label);
             spawn_sdf_visual(
                 commands,
                 meshes,

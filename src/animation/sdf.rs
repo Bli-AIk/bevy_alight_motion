@@ -238,9 +238,20 @@ pub fn update_sdf_mask_system(
                 let frame_half = material.uniform_data.frame_half;
 
                 if active_masks.is_empty() {
-                    // No active masks
+                    // No active masks - disable masking
                     material.uniform_data.mask_type = 0.0;
                     material.uniform_data.mask2_type = 0.0;
+                    // Debug log when mask is disabled
+                    static MASK_DISABLE_LOG: std::sync::atomic::AtomicU32 =
+                        std::sync::atomic::AtomicU32::new(0);
+                    let count = MASK_DISABLE_LOG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if count < 20 {
+                        bevy::log::info!(
+                            "[MASK_DISABLED] '{}' at time {}ms: mask_type set to 0 (no active masks)",
+                            marker.label,
+                            global_time
+                        );
+                    }
                 } else {
                     // First mask
                     let mask1 = active_masks[0];
@@ -442,7 +453,35 @@ pub fn animate_sdf_scale_system(
 
     let global_time = playback.current_time_ms;
 
+    // Debug: count SDF parents
+    static SDF_PARENT_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let parent_count = parent_query.iter().count();
+    let cnt = SDF_PARENT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if cnt < 5 {
+        bevy::log::info!(
+            "[SDF_SYSTEM] animate_sdf_scale_system: {} SDF parents found at time {:.1}ms",
+            parent_count,
+            global_time
+        );
+    }
+
     for (animated, children) in parent_query.iter() {
+        // Debug: Log scale_assist status for first few occurrences
+        if animated.scale_assist_axis != 0 {
+            static SDF_DEBUG_COUNTER: std::sync::atomic::AtomicU32 =
+                std::sync::atomic::AtomicU32::new(0);
+            let count = SDF_DEBUG_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count < 20 {
+                bevy::log::info!(
+                    "[SDF_DEBUG] Found SDF parent with scale_assist: layer={}, axis={}, kf_count={}, time={:.1}ms",
+                    animated.layer_id,
+                    animated.scale_assist_axis,
+                    animated.scale_assist.keyframes.len(),
+                    global_time
+                );
+            }
+        }
+
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
 
@@ -455,7 +494,70 @@ pub fn animate_sdf_scale_system(
         let layer_time = animated.calc_layer_time(local_time);
 
         // Get animation scale from keyframes
-        let anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        let mut anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
+        // Apply scale_assist effect (multiplies scale based on axis)
+        // Formula derived from reference video analysis:
+        //   axis=1 (Y only): scale_y *= scale_param
+        //   axis=2 (X only): scale_x *= scale_param
+        //   axis=3 (Both):   scale_x *= scale_param
+        //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
+        //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+        if animated.scale_assist_axis != 0 {
+            if let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time) {
+                // Get damp value (defaults to 1.0)
+                let damp_param =
+                    interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
+
+                // Constants derived from empirical analysis of AM reference videos
+                // scale divisor = scale_param^SCALE_POWER
+                // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+                const DAMP_COEFF: f32 = 2.75;
+                const DAMP_POWER: f32 = 1.93;
+
+                let scale_before = anim_scale;
+
+                match animated.scale_assist_axis {
+                    1 => {
+                        // Y only (vertical stretch)
+                        anim_scale[1] *= scale_param;
+                    }
+                    2 => {
+                        // X only (horizontal stretch)
+                        anim_scale[0] *= scale_param;
+                    }
+                    3 => {
+                        // Both axes - X stretches, Y compresses
+                        // This creates the characteristic "line stretch" effect
+                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                        let damp_factor = damp_param.powf(damp_exp);
+                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
+                        anim_scale[0] *= scale_param;
+                        anim_scale[1] /= scale_divisor;
+                    }
+                    _ => {}
+                }
+
+                // Debug log
+                static SDF_SCALE_DEBUG: std::sync::atomic::AtomicU32 =
+                    std::sync::atomic::AtomicU32::new(0);
+                let cnt = SDF_SCALE_DEBUG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if cnt < 50 {
+                    bevy::log::info!(
+                        "[SDF_SCALE_ASSIST] layer={}, time={:.1}ms, scale_param={:.4}, damp={:.4}, scale: ({:.4},{:.4}) -> ({:.4},{:.4})",
+                        animated.layer_id,
+                        global_time,
+                        scale_param,
+                        damp_param,
+                        scale_before[0],
+                        scale_before[1],
+                        anim_scale[0],
+                        anim_scale[1]
+                    );
+                }
+            }
+        }
 
         // Get animated stroke width (or use base value from sdf_params if no animation)
         let stroke_width_animated = if !animated.stroke_width.keyframes.is_empty() {
@@ -487,6 +589,16 @@ pub fn animate_sdf_scale_system(
                         final_stroke_width,
                         sdf_params.packed_stroke,
                     );
+
+                    // Dynamically update frame_half to accommodate scaled dimensions
+                    // This is critical for scale_assist effect which can create extreme stretching
+                    // The shader uses frame_half to define the coordinate system range
+                    let new_frame_half =
+                        scaled_half_width.max(scaled_half_height) + final_stroke_width * 2.0;
+                    // Only update if larger than current (avoid shrinking mesh bounds)
+                    if new_frame_half > material.uniform_data.frame_half {
+                        material.uniform_data.frame_half = new_frame_half;
+                    }
                 }
 
                 // Update translation to simulate scaling around pivot

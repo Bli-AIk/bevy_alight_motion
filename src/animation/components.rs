@@ -111,6 +111,12 @@ pub struct AmAnimated {
     pub base_alpha: f32,
     /// Palette map effect alpha (effect strength, 0.0-1.0).
     pub palette_alpha: AmAnimatedFloat,
+    /// Scale assist effect scale multiplier (animated).
+    pub scale_assist: AmAnimatedFloat,
+    /// Scale assist effect damp factor (animated).
+    pub scale_assist_damp: AmAnimatedFloat,
+    /// Scale assist effect axis (1=X, 2=Y, 3=XY).
+    pub scale_assist_axis: i32,
 }
 
 impl AmAnimated {

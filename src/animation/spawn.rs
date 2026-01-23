@@ -524,6 +524,14 @@ fn spawn_layer_entity(
     // Use containing_embed_id to detect embed content, not embed_offset
     // (embed_offset can be ZERO when embed is at canvas center)
     let mut animated = layer.animated.clone();
+    if animated.scale_assist_axis != 0 {
+        bevy::log::info!(
+            "[SPAWN] Layer '{}' has scale_assist_axis={}, keyframes={}",
+            layer.label,
+            animated.scale_assist_axis,
+            animated.scale_assist.keyframes.len()
+        );
+    }
     if layer.containing_embed_id != 0 {
         animated.inv_fit_scale = inv_fit_scale;
     }
@@ -806,7 +814,8 @@ fn spawn_layer_entity(
             1.0 / inv_fit_scale,            // fit_scale for mask coordinates
             layer.containing_embed_id != 0, // is_embed_content - force effect material for bounds clipping
             !layer.animated.scale.keyframes.is_empty(), // has_scale_animation - needs bounds clipping
-            global_time as u64, // current playback time for mask initialization
+            layer.animated.scale_assist_axis != 0, // has_scale_assist - needs UnifiedEffectMaterial for dynamic sizing
+            global_time as u64,                    // current playback time for mask initialization
         );
     } else {
         bevy::log::trace!(

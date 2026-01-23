@@ -92,7 +92,52 @@ pub fn animate_transform_system(
 
         // Get current scale for pivot compensation and flip detection
         // For SDF shapes and effect sprites, magnitude is handled separately, but we need sign for flipping
-        let actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        let mut actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
+        // Apply scale_assist effect (multiplies scale based on axis)
+        // Formula derived from reference video analysis:
+        //   axis=1 (Y only): scale_y *= scale_param
+        //   axis=2 (X only): scale_x *= scale_param
+        //   axis=3 (Both):   scale_x *= scale_param
+        //                    scale_y /= (scale_param^1.71 * damp_param^2.6)
+        if animated.scale_assist_axis != 0 {
+            if let Some(scale_param) = crate::animation::interpolation::interpolate_float(
+                &animated.scale_assist,
+                layer_time,
+            ) {
+                // Get damp value (defaults to 1.0)
+                let damp_param = crate::animation::interpolation::interpolate_float(
+                    &animated.scale_assist_damp,
+                    layer_time,
+                )
+                .unwrap_or(1.0);
+
+                // Constants derived from empirical analysis of AM reference videos
+                const SCALE_POWER: f32 = 1.71; // Power for scale in Y divisor
+                const DAMP_POWER: f32 = 2.6; // Power for damp in Y divisor
+
+                match animated.scale_assist_axis {
+                    1 => {
+                        // Y only (vertical stretch)
+                        actual_scale[1] *= scale_param;
+                    }
+                    2 => {
+                        // X only (horizontal stretch)
+                        actual_scale[0] *= scale_param;
+                    }
+                    3 => {
+                        // Both axes - X stretches, Y compresses
+                        // This creates the characteristic "line stretch" effect
+                        let scale_divisor =
+                            scale_param.powf(SCALE_POWER) * damp_param.powf(DAMP_POWER);
+                        actual_scale[0] *= scale_param;
+                        actual_scale[1] /= scale_divisor;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         let current_scale = if sdf_parent.is_some() || effect_marker.is_some() {
             [1.0_f32, 1.0_f32]
         } else {

@@ -42,6 +42,15 @@ pub(crate) fn collect_shape(
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let palette_map = extract_palette_map_effect(&shape.effects);
+    let scale_assist = extract_scale_assist_effect(&shape.effects);
+    if scale_assist.axis != 0 {
+        bevy::log::info!(
+            "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
+            shape.label,
+            scale_assist.axis,
+            !scale_assist.scale.keyframes.is_empty()
+        );
+    }
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
@@ -198,6 +207,9 @@ pub(crate) fn collect_shape(
             stroke_width: stroke_width_anim,
             base_alpha: get_base_alpha(&shape.fill_color, shape.fill_type == "none"),
             palette_alpha: palette_map.alpha.clone(),
+            scale_assist: scale_assist.scale,
+            scale_assist_damp: scale_assist.damp,
+            scale_assist_axis: scale_assist.axis,
         },
         spec,
         z_index: z,
@@ -233,6 +245,7 @@ pub(crate) fn collect_null(
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
+    let scale_assist = extract_scale_assist_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -281,6 +294,9 @@ pub(crate) fn collect_null(
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Null objects are fully opaque
             palette_alpha: AmAnimatedFloat::default(),
+            scale_assist: scale_assist.scale,
+            scale_assist_damp: scale_assist.damp,
+            scale_assist_axis: scale_assist.axis,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -433,6 +449,9 @@ pub(crate) fn collect_embed_scene(
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&embed.fill_color, false),
             palette_alpha: AmAnimatedFloat::default(),
+            scale_assist: AmAnimatedFloat::default(),
+            scale_assist_damp: AmAnimatedFloat::default(),
+            scale_assist_axis: 0,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -568,6 +587,9 @@ pub(crate) fn collect_text(
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&text.fill_color, false),
             palette_alpha: AmAnimatedFloat::default(),
+            scale_assist: AmAnimatedFloat::default(),
+            scale_assist_damp: AmAnimatedFloat::default(),
+            scale_assist_axis: 0,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -602,6 +624,7 @@ pub(crate) fn collect_image(
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let palette_map = extract_palette_map_effect(&image.effects);
+    let scale_assist = extract_scale_assist_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -657,6 +680,9 @@ pub(crate) fn collect_image(
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Image layers are fully opaque
             palette_alpha: palette_map.alpha.clone(),
+            scale_assist: scale_assist.scale,
+            scale_assist_damp: scale_assist.damp,
+            scale_assist_axis: scale_assist.axis,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

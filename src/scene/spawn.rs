@@ -210,6 +210,7 @@ pub(crate) fn spawn_shape(
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
+    let scale_assist = extract_scale_assist_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -394,6 +395,9 @@ pub(crate) fn spawn_shape(
                 stroke_width: stroke_width_anim,
                 base_alpha,
                 palette_alpha: palette_map.alpha.clone(),
+                scale_assist: scale_assist.scale,
+                scale_assist_damp: scale_assist.damp,
+                scale_assist_axis: scale_assist.axis,
             },
             layer_spec,
             transform,
@@ -429,6 +433,7 @@ pub(crate) fn spawn_null(
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
+    let scale_assist = extract_scale_assist_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -491,6 +496,9 @@ pub(crate) fn spawn_null(
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: 1.0, // Null objects are fully opaque
                 palette_alpha: AmAnimatedFloat::default(),
+                scale_assist: scale_assist.scale,
+                scale_assist_damp: scale_assist.damp,
+                scale_assist_axis: scale_assist.axis,
             },
             AmLayerSpec::Null,
             transform,
@@ -595,6 +603,9 @@ pub(crate) fn spawn_embed_scene(
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: get_base_alpha(&embed.fill_color, false),
                 palette_alpha: AmAnimatedFloat::default(),
+                scale_assist: AmAnimatedFloat::default(),
+                scale_assist_damp: AmAnimatedFloat::default(),
+                scale_assist_axis: 0,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

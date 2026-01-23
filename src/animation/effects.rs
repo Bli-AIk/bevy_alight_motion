@@ -132,6 +132,24 @@ pub fn update_unified_mask_system(
                 material.mask2_flags.x = 0.0;
                 material.mask2_flags.y = 0.0; // mask1 rotation
                 material.mask2_flags.z = 0.0; // mask2 rotation
+                // Debug log when mask is disabled for unified effect
+                static UNIFIED_MASK_LOG: std::sync::atomic::AtomicU32 =
+                    std::sync::atomic::AtomicU32::new(0);
+                let count = UNIFIED_MASK_LOG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                // Log at frame 32 time (1066ms) and after
+                if global_time >= 1060 && global_time <= 1100 && count < 50 {
+                    bevy::log::info!(
+                        "[UNIFIED_MASK_DISABLED] '{}' at time {}ms: effect_flags set to 0, mask_info.masks.len={}, mask_times={:?}",
+                        marker.label,
+                        global_time,
+                        mask_info.masks.len(),
+                        mask_info
+                            .masks
+                            .iter()
+                            .map(|m| (m.start_time, m.end_time))
+                            .collect::<Vec<_>>()
+                    );
+                }
             } else {
                 // Helper function to compute mask parameters from layer transform
                 // IMPORTANT: The returned coordinates must be in the same space as the entity's world_position.
@@ -378,7 +396,50 @@ pub fn animate_unified_effect_system(
 
         // Get sprite base size and scale
         let sprite_size = interpolate_vec2(&animated.size, layer_time).unwrap_or([100.0, 100.0]);
-        let scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        let mut scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
+        // Apply scale_assist effect
+        // Formula derived from reference video analysis:
+        //   axis=1 (Y only): scale_y *= scale_param
+        //   axis=2 (X only): scale_x *= scale_param
+        //   axis=3 (Both):   scale_x *= scale_param
+        //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
+        //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+        if animated.scale_assist_axis != 0 {
+            if let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time) {
+                let damp_param =
+                    interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
+
+                // Constants derived from empirical analysis of AM reference videos
+                // scale divisor = scale_param^SCALE_POWER
+                // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+                const DAMP_COEFF: f32 = 2.75;
+                const DAMP_POWER: f32 = 1.93;
+
+                match animated.scale_assist_axis {
+                    1 => {
+                        // Y only (vertical stretch)
+                        scale[1] *= scale_param;
+                    }
+                    2 => {
+                        // X only (horizontal stretch)
+                        scale[0] *= scale_param;
+                    }
+                    3 => {
+                        // Both axes - X stretches, Y compresses
+                        // This creates the characteristic "line stretch" effect
+                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                        let damp_factor = damp_param.powf(damp_exp);
+                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
+                        scale[0] *= scale_param;
+                        scale[1] /= scale_divisor;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Actual rendered size = base size * scale
         // Use abs() because negative size in AM behaves same as positive (no flip)
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);

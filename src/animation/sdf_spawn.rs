@@ -75,9 +75,10 @@ pub fn spawn_sdf_visual(
 
     // Frame size for rendering - must be large enough for the largest expected shape.
     // Since we scale via params, the frame needs to accommodate the max size + stroke.
-    // We use a conservative estimate based on the target size * reasonable max scale factor.
-    // AM animations typically don't exceed 10x scale, so use that as a safety margin.
-    let max_scale_factor = 10.0;
+    // We use a large safety margin to accommodate extreme scale effects like scale_assist.
+    // Scale_assist can create very elongated shapes (e.g., 100:1 aspect ratios).
+    // Combined with transform scale animations, shapes can exceed 50x base size.
+    let max_scale_factor = 100.0;
     let frame_half =
         (target_half_width.max(target_half_height) * max_scale_factor) + stroke_width * 2.0;
     let frame_size = frame_half * 2.0;

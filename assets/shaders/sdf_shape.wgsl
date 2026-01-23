@@ -96,8 +96,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let mask1_enabled = mask1_type > 0.5 && material.mask_params.z < 5000.0;
     let mask2_enabled = mask2_type > 0.5 && material.mask2_params.z < 5000.0;
     
-    // For masked shapes: discard outside mask area, continue to normal rendering inside
-    if mask1_enabled {
+    // For include masks: can do early discard outside mask area
+    // For exclude masks: must NOT do early discard (we keep pixels OUTSIDE the mask)
+    let mask1_is_include_type = mask1_type > 0.5 && mask1_type < 2.5; // types 1.0 and 2.0 are includes
+    if mask1_enabled && mask1_is_include_type {
         let world_pos = in.world_position.xy;
         let center1 = material.mask_params.xy;
         let half_size1 = material.mask_params.zw;
@@ -112,13 +114,20 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             rel_pos1.x * sin1 + rel_pos1.y * cos1
         );
         
-        let inside = abs(rel_pos1.x) <= half_size1.x && abs(rel_pos1.y) <= half_size1.y;
+        let is_ellipse1 = mask1_type > 1.5;
+        var inside: bool;
+        if is_ellipse1 {
+            let normalized1 = rel_pos1 / half_size1;
+            inside = dot(normalized1, normalized1) <= 1.0;
+        } else {
+            inside = abs(rel_pos1.x) <= half_size1.x && abs(rel_pos1.y) <= half_size1.y;
+        }
         
         if !inside {
-            // Outside mask - discard
+            // Outside include mask - discard
             discard;
         }
-        // Inside mask - continue to normal rendering below
+        // Inside include mask - continue to normal rendering below
     }
     
     if mask1_enabled || mask2_enabled {
