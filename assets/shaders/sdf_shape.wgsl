@@ -96,6 +96,31 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let mask1_enabled = mask1_type > 0.5 && material.mask_params.z < 5000.0;
     let mask2_enabled = mask2_type > 0.5 && material.mask2_params.z < 5000.0;
     
+    // For masked shapes: discard outside mask area, continue to normal rendering inside
+    if mask1_enabled {
+        let world_pos = in.world_position.xy;
+        let center1 = material.mask_params.xy;
+        let half_size1 = material.mask_params.zw;
+        var rel_pos1 = world_pos - center1;
+        
+        // Apply rotation
+        let rot1 = -material.mask_rotation;
+        let cos1 = cos(rot1);
+        let sin1 = sin(rot1);
+        rel_pos1 = vec2<f32>(
+            rel_pos1.x * cos1 - rel_pos1.y * sin1,
+            rel_pos1.x * sin1 + rel_pos1.y * cos1
+        );
+        
+        let inside = abs(rel_pos1.x) <= half_size1.x && abs(rel_pos1.y) <= half_size1.y;
+        
+        if !inside {
+            // Outside mask - discard
+            discard;
+        }
+        // Inside mask - continue to normal rendering below
+    }
+    
     if mask1_enabled || mask2_enabled {
         let world_pos = in.world_position.xy;
         
@@ -253,7 +278,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // Composite: stroke over fill
         let out_a = stroke_col.a + fill_col.a * (1.0 - stroke_col.a);
         
-        if out_a <= 0.0 {
+        // Use threshold to handle floating point precision issues
+        if out_a < 0.01 {
             discard;
         }
         

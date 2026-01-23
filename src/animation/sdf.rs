@@ -50,6 +50,19 @@ pub fn update_sdf_mask_system(
     };
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
+    // Log fit_scale once per frame
+    static mut LOGGED_SCALE: bool = false;
+    unsafe {
+        if !LOGGED_SCALE {
+            bevy::log::info!(
+                "[MASK_SYSTEM] fit_scale={}, inv_fit_scale={}",
+                fit_scale,
+                pending.inv_fit_scale
+            );
+            LOGGED_SCALE = true;
+        }
+    }
+
     let global_time = playback.current_time_ms;
     let global_time_sec = global_time as f32 / 1000.0;
 
@@ -162,11 +175,23 @@ pub fn update_sdf_mask_system(
                     let center_x = mask_translation.x + rotated_offset_x;
                     let center_y = mask_translation.y + rotated_offset_y;
 
-                    // Half-size uses animated size and local scale, then scaled by parent's global scale
-                    let half_width =
-                        anim_size_x * 0.5 * scale_x.abs() * parent_global_scale.x.abs();
-                    let half_height =
-                        anim_size_y * 0.5 * scale_y.abs() * parent_global_scale.y.abs();
+                    // Half-size: Use precomputed mask.half_size as base (already includes parent scale for child masks)
+                    // Then apply fit_scale and animated scale ratio
+                    // mask.half_size = base_half_size * initial_scale * parent_scale (from collect stage)
+                    // So we need to apply: fit_scale * (current_scale / initial_scale) for animation
+                    // Since initial_scale = mask.scale, the ratio is (scale_x/mask.scale.x, scale_y/mask.scale.y)
+                    let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
+                        scale_x / mask.scale.x
+                    } else {
+                        1.0
+                    };
+                    let scale_ratio_y = if mask.scale.y.abs() > 0.001 {
+                        scale_y / mask.scale.y
+                    } else {
+                        1.0
+                    };
+                    let half_width = mask.half_size.x * fit_scale * scale_ratio_x.abs();
+                    let half_height = mask.half_size.y * fit_scale * scale_ratio_y.abs();
 
                     bevy::log::debug!(
                         "[MaskDebug] mask_layer_id={}, mask_trans=({:.1},{:.1}), mask_scale=({:.2},{:.2}), parent_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
@@ -240,12 +265,24 @@ pub fn update_sdf_mask_system(
                         child_translation.y + frame_half * child_scale.y,
                     );
 
+                    // Use calculated mask params
                     material.uniform_data.mask_params = bevy::math::Vec4::new(
                         mask1_center.x,
                         mask1_center.y,
                         mask1_half_size.x,
                         mask1_half_size.y,
                     );
+
+                    // Debug log actual mask params being sent to shader
+                    bevy::log::debug!(
+                        "[SdfMaskParams] '{}': shader_center=({:.1},{:.1}), shader_half=({:.1},{:.1})",
+                        marker.label,
+                        mask1_center.x,
+                        mask1_center.y,
+                        mask1_half_size.x,
+                        mask1_half_size.y
+                    );
+
                     let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
                     material.uniform_data.mask_type = if mask1.is_exclude {
                         base_type1 + 2.0

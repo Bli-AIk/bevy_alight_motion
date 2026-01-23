@@ -112,6 +112,17 @@ pub fn spawn_sdf_visual(
         // Scale mask center and half_size by fit_scale for world coordinate space
         let scaled_center = mask.center * fit_scale;
         let scaled_half_size = mask.half_size * fit_scale * mask.scale;
+        bevy::log::info!(
+            "[SDF_SPAWN] '{}': Creating material with mask center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.2}, original_center=({:.1},{:.1})",
+            marker.label,
+            scaled_center.x,
+            scaled_center.y,
+            scaled_half_size.x,
+            scaled_half_size.y,
+            fit_scale,
+            mask.center.x,
+            mask.center.y
+        );
         sdf_materials.add(SdfMaterial::new_with_mask_and_frame_half(
             sdf_shape_type,
             target_half_width,

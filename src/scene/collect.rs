@@ -377,38 +377,121 @@ pub(crate) fn collect_layer(
 }
 pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // Find all mask layers and their info
-    // Masks are root-level layers (parent=0) with blending_mode=Mask or Exclude
-    let mut mask_layers: Vec<(u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, z_index, mask_entry)
+    // Masks are layers with blending_mode=Mask or Exclude (regardless of parent)
+    let mut mask_layers: Vec<(u64, u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, mask_parent_id, z_index, mask_entry)
+
+    // Build lookup table for parent transform info (needed to transform child mask coordinates to global)
+    let parent_transform_info: std::collections::HashMap<
+        u64,
+        (bevy::math::Vec2, bevy::math::Vec2),
+    > = layers
+        .iter()
+        .map(|l| {
+            let scale = get_scale_at_normalized_time(&l.animated.scale, 0.0);
+            (
+                l.id,
+                (
+                    bevy::math::Vec2::new(l.transform.translation.x, l.transform.translation.y),
+                    bevy::math::Vec2::new(scale.0, scale.1),
+                ),
+            )
+        })
+        .collect();
 
     for layer in layers.iter() {
         let is_mask = layer.blending_mode == AmBlendingMode::Mask
             || layer.blending_mode == AmBlendingMode::Exclude;
-        if is_mask && layer.parent == 0 {
+        if is_mask {
             // Extract mask geometry from the layer's transform and spec
             let mask_entry = extract_mask_info_from_layer(layer);
             if let Some(mut entry) = mask_entry {
                 // Set is_exclude based on blending mode
                 entry.is_exclude = layer.blending_mode == AmBlendingMode::Exclude;
-                bevy::log::trace!(
-                    "[MASK] Found {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
-                    if entry.is_exclude { "exclude" } else { "mask" },
-                    layer.label,
-                    layer.id,
-                    layer.z_index,
-                    entry.center.x,
-                    entry.center.y,
-                    entry.half_size.x,
-                    entry.half_size.y,
-                    entry.start_time,
-                    entry.end_time
-                );
-                mask_layers.push((layer.id, layer.z_index, entry));
+
+                // For child masks, transform coordinates to global space using parent's transform
+                if layer.parent != 0 {
+                    if let Some(&(parent_translation, parent_scale)) =
+                        parent_transform_info.get(&layer.parent)
+                    {
+                        // Transform child mask center to global coordinates
+                        let global_center = parent_translation
+                            + bevy::math::Vec2::new(
+                                entry.center.x * parent_scale.x,
+                                entry.center.y * parent_scale.y,
+                            );
+                        // Transform half_size by parent scale
+                        let global_half_size = bevy::math::Vec2::new(
+                            entry.half_size.x * parent_scale.x,
+                            entry.half_size.y * parent_scale.y,
+                        );
+
+                        bevy::log::trace!(
+                            "[MASK] Found child {} layer '{}' (id={}, parent={}) at z={:.4}, global_center=({:.1},{:.1}), global_half_size=({:.1},{:.1}), time={}..{}ms",
+                            if entry.is_exclude { "exclude" } else { "mask" },
+                            layer.label,
+                            layer.id,
+                            layer.parent,
+                            layer.z_index,
+                            global_center.x,
+                            global_center.y,
+                            global_half_size.x,
+                            global_half_size.y,
+                            entry.start_time,
+                            entry.end_time
+                        );
+
+                        entry.center = global_center;
+                        entry.half_size = global_half_size;
+                    }
+                } else {
+                    bevy::log::trace!(
+                        "[MASK] Found root {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
+                        if entry.is_exclude { "exclude" } else { "mask" },
+                        layer.label,
+                        layer.id,
+                        layer.z_index,
+                        entry.center.x,
+                        entry.center.y,
+                        entry.half_size.x,
+                        entry.half_size.y,
+                        entry.start_time,
+                        entry.end_time
+                    );
+                }
+
+                mask_layers.push((layer.id, layer.parent, layer.z_index, entry));
             }
         }
     }
 
     if mask_layers.is_empty() {
         return;
+    }
+
+    // Build parent_id lookup for ancestor checking
+    let parent_map: std::collections::HashMap<u64, u64> =
+        layers.iter().map(|l| (l.id, l.parent)).collect();
+
+    // Helper to check if `layer_id` is an ancestor of `mask_id`
+    // An ancestor is in the parent chain: mask -> parent -> grandparent -> ...
+    fn is_ancestor_of_mask(
+        layer_id: u64,
+        mask_parent_id: u64,
+        parent_map: &std::collections::HashMap<u64, u64>,
+    ) -> bool {
+        if mask_parent_id == 0 {
+            return false; // Root mask has no ancestors
+        }
+        if layer_id == mask_parent_id {
+            return true; // Direct parent
+        }
+        // Check grandparents
+        if let Some(&grandparent_id) = parent_map.get(&mask_parent_id) {
+            if grandparent_id != 0 {
+                return is_ancestor_of_mask(layer_id, grandparent_id, parent_map);
+            }
+        }
+        false
     }
 
     // For each non-mask root layer, collect ALL masks that are above it (higher z-index)
@@ -425,9 +508,13 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         }
 
         // Collect all masks that are above this layer (higher z-index)
+        // Skip masks where this layer is an ancestor of the mask
         let mut applicable_masks: Vec<AmMaskEntry> = Vec::new();
-        for (mask_id, mask_z, mask_entry) in &mask_layers {
-            if *mask_z > layer.z_index && *mask_id != layer.id {
+        for (mask_id, mask_parent_id, mask_z, mask_entry) in &mask_layers {
+            if *mask_z > layer.z_index
+                && *mask_id != layer.id
+                && !is_ancestor_of_mask(layer.id, *mask_parent_id, &parent_map)
+            {
                 applicable_masks.push(mask_entry.clone());
             }
         }

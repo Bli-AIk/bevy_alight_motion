@@ -308,7 +308,17 @@ pub(crate) fn get_stroke_width_animation(
         keyframes: Vec::new(),
     }
 }
-pub(crate) fn get_base_alpha(fill_color: &Option<crate::schema::AmFillColor>) -> f32 {
+/// Get the base alpha from fill color, considering no_fill flag.
+/// When no_fill is true, returns 0.0 regardless of fillColor value.
+pub(crate) fn get_base_alpha(
+    fill_color: &Option<crate::schema::AmFillColor>,
+    no_fill: bool,
+) -> f32 {
+    // fillType="none" means no fill, alpha should be 0
+    if no_fill {
+        return 0.0;
+    }
+
     if let Some(fc) = fill_color {
         if !fc.value.is_empty() {
             if let Ok(c) = crate::schema::parse_color(&fc.value) {

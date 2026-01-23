@@ -328,7 +328,7 @@ pub(crate) fn spawn_text(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&text.fill_color),
+            base_alpha: get_base_alpha(&text.fill_color, false),
             palette_alpha: AmAnimatedFloat::default(),
         },
         transform,

@@ -349,7 +349,8 @@ pub(crate) fn spawn_shape(
     };
 
     let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
-    let base_alpha = get_base_alpha(&shape.fill_color);
+    let no_fill = shape.fill_type == "none";
+    let base_alpha = get_base_alpha(&shape.fill_color, no_fill);
     let palette_map = extract_palette_map_effect(&shape.effects);
 
     let entity = commands
@@ -592,7 +593,7 @@ pub(crate) fn spawn_embed_scene(
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
-                base_alpha: get_base_alpha(&embed.fill_color),
+                base_alpha: get_base_alpha(&embed.fill_color, false),
                 palette_alpha: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
