@@ -87,6 +87,16 @@ frame_threshold = 0.98
 avg_threshold = 0.90
 frame_threshold = 0.90
 
+# complex_turn_9 simplified test cases
+# complex_turn_9 简化测试用例
+[overrides.complex_turn_9_ex]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+[overrides.complex_turn_9_ex1]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 # basic_gradient uses gradient feature which is not implemented yet
 # basic_gradient 使用渐变功能，尚未实现
 [overrides.basic_gradient]

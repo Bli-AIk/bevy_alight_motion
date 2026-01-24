@@ -217,20 +217,31 @@ pub fn update_unified_mask_system(
                             let center_x = mask_translation.x + rotated_offset_x;
                             let center_y = mask_translation.y + rotated_offset_y;
 
-                            // Half-size uses animated size and local scale, then scaled by entity's global scale
-                            let half_width =
-                                anim_size_x * 0.5 * scale_x.abs() * entity_global_scale.x.abs();
-                            let half_height =
-                                anim_size_y * 0.5 * scale_y.abs() * entity_global_scale.y.abs();
+                            // Half-size: Use precomputed mask.half_size from collect stage
+                            // This already includes initial scale and parent scale for child masks
+                            // Then apply animation scale ratio: (current_scale / initial_scale)
+                            // Since mask.scale contains the initial scale, the ratio adjusts for any animation
+                            let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
+                                scale_x / mask.scale.x
+                            } else {
+                                1.0
+                            };
+                            let scale_ratio_y = if mask.scale.y.abs() > 0.001 {
+                                scale_y / mask.scale.y
+                            } else {
+                                1.0
+                            };
+                            let half_width = mask.half_size.x * scale_ratio_x.abs();
+                            let half_height = mask.half_size.y * scale_ratio_y.abs();
 
-                            bevy::log::debug!(
-                                "[MASK-UE] mask_trans=({:.1},{:.1}), entity_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                            bevy::log::trace!(
+                                "[MASK-UE] mask_trans=({:.1},{:.1}), mask_half_size=({:.1},{:.1}), scale_ratio=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
                                 mask_translation.x,
                                 mask_translation.y,
-                                entity_global_scale.x,
-                                entity_global_scale.y,
-                                scale_x,
-                                scale_y,
+                                mask.half_size.x,
+                                mask.half_size.y,
+                                scale_ratio_x,
+                                scale_ratio_y,
                                 pivot_x,
                                 pivot_y,
                                 center_x,

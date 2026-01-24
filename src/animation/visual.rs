@@ -353,6 +353,12 @@ pub(crate) fn add_visual_components(
             let base_height = *height * size_scale;
 
             if *is_media && !image_uri.is_empty() {
+                bevy::log::debug!(
+                    "[add_visual_components] SpriteShape '{}': is_media=true, image_uri='{}', image_found={}",
+                    label,
+                    image_uri,
+                    images.contains_key(image_uri)
+                );
                 if let Some(handle) = images.get(image_uri) {
                     // Check if ONLY blur is needed (no mask/wipe/stretch)
                     // In this case, use Sprite + RTT blur for best quality

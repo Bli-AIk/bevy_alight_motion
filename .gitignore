@@ -41,7 +41,7 @@ yarn-error.log*
 ignore_music.wav
 
 complex_*.amproj
-
+complex_*.bak
 complex_*.mp4
 
 _video_frames/
