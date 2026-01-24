@@ -273,8 +273,8 @@ fn debug_unified_effects(
 
 /// Debug system to track position changes per frame
 fn debug_position_changes(
-    _playback: Res<AmPlayback>,
-    _query: Query<
+    playback: Res<AmPlayback>,
+    query: Query<
         (
             &AmLayerMarker,
             &Transform,
@@ -285,28 +285,24 @@ fn debug_position_changes(
     >,
     _materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
 ) {
-    // Debug output disabled to reduce log spam
-    // Enable by uncommenting the following:
-    /*
-    for (marker, transform, global_transform, material_handle) in query.iter() {
-        if marker.label.contains("骨头") {
+    // Debug output for 长方形 2
+    #[cfg(not(feature = "video-comparison"))]
+    for (marker, transform, global_transform, _material_handle) in query.iter() {
+        if marker.label == "长方形 2" && playback.current_time_ms > 2000.0 && playback.current_time_ms < 2200.0 {
             let gt = global_transform.translation();
-            if let Some(material) = materials.get(&material_handle.0) {
-                println!(
-                    "[PosDebug] frame_time={:.1}ms '{}' local=({:.1},{:.1}) global=({:.1},{:.1}) mesh_offset=({:.1},{:.1})",
-                    playback.current_time_ms,
-                    marker.label,
-                    transform.translation.x,
-                    transform.translation.y,
-                    gt.x,
-                    gt.y,
-                    material.mesh_offset.x,
-                    material.mesh_offset.y,
-                );
-            }
+            println!(
+                "[PosDebug] time={:.1}ms '{}' local=({:.1},{:.1}) global=({:.1},{:.1}) scale=({:.3},{:.3})",
+                playback.current_time_ms,
+                marker.label,
+                transform.translation.x,
+                transform.translation.y,
+                gt.x,
+                gt.y,
+                transform.scale.x,
+                transform.scale.y,
+            );
         }
     }
-    */
 }
 
 /// Debug system to print SDF shape info once

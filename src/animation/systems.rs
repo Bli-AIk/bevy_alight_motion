@@ -99,7 +99,8 @@ pub fn animate_transform_system(
         //   axis=1 (Y only): scale_y *= scale_param
         //   axis=2 (X only): scale_x *= scale_param
         //   axis=3 (Both):   scale_x *= scale_param
-        //                    scale_y /= (scale_param^1.71 * damp_param^2.6)
+        //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
+        //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
         if animated.scale_assist_axis != 0 {
             if let Some(scale_param) = crate::animation::interpolation::interpolate_float(
                 &animated.scale_assist,
@@ -113,8 +114,10 @@ pub fn animate_transform_system(
                 .unwrap_or(1.0);
 
                 // Constants derived from empirical analysis of AM reference videos
-                const SCALE_POWER: f32 = 1.71; // Power for scale in Y divisor
-                const DAMP_POWER: f32 = 2.6; // Power for damp in Y divisor
+                // Must match effects.rs for consistent scale calculations
+                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+                const DAMP_COEFF: f32 = 2.75;
+                const DAMP_POWER: f32 = 1.93;
 
                 match animated.scale_assist_axis {
                     1 => {
@@ -128,8 +131,9 @@ pub fn animate_transform_system(
                     3 => {
                         // Both axes - X stretches, Y compresses
                         // This creates the characteristic "line stretch" effect
-                        let scale_divisor =
-                            scale_param.powf(SCALE_POWER) * damp_param.powf(DAMP_POWER);
+                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                        let damp_factor = damp_param.powf(damp_exp);
+                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
                         actual_scale[0] *= scale_param;
                         actual_scale[1] /= scale_divisor;
                     }
@@ -195,6 +199,7 @@ pub fn animate_transform_system(
             // AM transforms around (location + pivot), Bevy transforms around entity origin
             // For SDF shapes: translation should be at transform center (location + pivot)
             // For embed scenes: need full rotation-aware pivot compensation
+            // For effect sprites (scale_assist): skip pivot compensation - mesh anchor offset handles it
             // For other shapes: need pivot compensation for non-unit scale
             if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
                 let pivot_x = pivot[0];
@@ -238,12 +243,17 @@ pub fn animate_transform_system(
                     // Compensation: rotated_offset - original_offset = rotated_offset + pivot
                     bx += rotated_offset_x + pivot_x;
                     by += rotated_offset_y + pivot_bevy_y;
-                } else {
-                    // Non-SDF shapes: need pivot compensation for scale
+                } else if effect_marker.is_none() {
+                    // Non-SDF, non-effect shapes: need pivot compensation for scale
                     // Formula: pivot * (1 - scale) compensates for scale around pivot
-                    bx += pivot_x * (1.0 - current_scale[0]);
-                    by -= pivot_y * (1.0 - current_scale[1]);
+                    // NOTE: Skip for effect sprites (scale_assist) because their mesh anchor offset
+                    // is dynamically updated in animate_unified_effect_system to maintain pivot position
+                    bx += pivot_x * (1.0 - actual_scale[0]);
+                    by -= pivot_y * (1.0 - actual_scale[1]);
                 }
+                // For effect sprites: no pivot compensation needed here
+                // The mesh vertices in animate_unified_effect_system include anchor offset
+                // which keeps the pivot point fixed as the mesh size changes
             }
 
             // Apply effect position offsets (transform2 effect)
