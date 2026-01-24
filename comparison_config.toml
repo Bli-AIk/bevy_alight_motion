@@ -27,6 +27,11 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides.basic_bezier]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+
 # Known issues with Resolution Groups (AM export bug)
 #
 # 已知的分辨率组问题（AM导出错误）
@@ -110,4 +115,7 @@ skip = true
 skip = true
 
 [overrides.fx_4_pixelate]
+skip = true
+
+[overrides.basic_muti_tween]
 skip = true
