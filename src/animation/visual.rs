@@ -86,7 +86,12 @@ pub(crate) fn add_visual_components(
         let offset_y = -anchor_vec.y * height;
         bevy::log::debug!(
             "[MESH] create_anchored_rectangle: size=({:.1}, {:.1}), anchor=({:.3}, {:.3}), vertex_offset=({:.1}, {:.1})",
-            width, height, anchor_vec.x, anchor_vec.y, offset_x, offset_y
+            width,
+            height,
+            anchor_vec.x,
+            anchor_vec.y,
+            offset_x,
+            offset_y
         );
         create_anchored_rectangle_with_blur(meshes, width, height, anchor, 0.0)
     }

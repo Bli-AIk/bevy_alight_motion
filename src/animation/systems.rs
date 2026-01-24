@@ -244,12 +244,8 @@ pub fn animate_transform_system(
                     bx += rotated_offset_x + pivot_x;
                     by += rotated_offset_y + pivot_bevy_y;
                 } else if effect_marker.is_none() {
-                    // Non-SDF, non-effect shapes: need pivot compensation for scale
-                    // Formula: pivot * (1 - scale) compensates for scale around pivot
-                    // NOTE: Skip for effect sprites (scale_assist) because their mesh anchor offset
-                    // is dynamically updated in animate_unified_effect_system to maintain pivot position
-                    bx += pivot_x * (1.0 - actual_scale[0]);
-                    by -= pivot_y * (1.0 - actual_scale[1]);
+                    // Standard shapes: pivot offset is already applied in the initial transform
+                    // No additional compensation needed here
                 }
                 // For effect sprites: no pivot compensation needed here
                 // The mesh vertices in animate_unified_effect_system include anchor offset

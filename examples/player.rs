@@ -288,7 +288,10 @@ fn debug_position_changes(
     // Debug output for 长方形 2
     #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, _material_handle) in query.iter() {
-        if marker.label == "长方形 2" && playback.current_time_ms > 2000.0 && playback.current_time_ms < 2200.0 {
+        if marker.label == "长方形 2"
+            && playback.current_time_ms > 2000.0
+            && playback.current_time_ms < 2200.0
+        {
             let gt = global_transform.translation();
             println!(
                 "[PosDebug] time={:.1}ms '{}' local=({:.1},{:.1}) global=({:.1},{:.1}) scale=({:.3},{:.3})",

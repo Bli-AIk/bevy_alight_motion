@@ -410,6 +410,15 @@ pub fn animate_unified_effect_system(
                 let damp_param =
                     interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
 
+                // Debug log for scale_assist with cyclic easing
+                bevy::log::trace!(
+                    "[scale_assist] layer_time={:.4}, scale_param={:.4}, damp={:.4}, axis={}",
+                    layer_time,
+                    scale_param,
+                    damp_param,
+                    animated.scale_assist_axis
+                );
+
                 // Constants derived from empirical analysis of AM reference videos
                 // scale divisor = scale_param^SCALE_POWER
                 // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
@@ -762,7 +771,7 @@ pub fn animate_unified_effect_system(
                     // mesh_offset = -anchor * size = -(anchor_offset.x, anchor_offset.y) when size hasn't changed
                     // However, when size changes due to scale_assist, we need to recalculate
                     // anchor_offset was computed with original size, but mesh should use current size
-                    // 
+                    //
                     // Actually, let's think about this more carefully:
                     // - anchor = pivot / original_size (this is fixed, determined by pivot)
                     // - For mesh at current_size, offset should be -anchor * current_size
@@ -771,9 +780,9 @@ pub fn animate_unified_effect_system(
                     //                  = -anchor_offset * (current_size / original_size)
                     //                  = -anchor_offset * scale (since current_size = original_size * scale)
                     //
-                    // But we want the visual center to stay at Transform position, which already has 
+                    // But we want the visual center to stay at Transform position, which already has
                     // anchor_offset applied. So mesh should be offset by the OPPOSITE of what translation has.
-                    // 
+                    //
                     // WAIT - let me re-read the original logic:
                     // In visual.rs create_anchored_rectangle:
                     //   offset_x = -anchor_vec.x * width
@@ -794,7 +803,7 @@ pub fn animate_unified_effect_system(
                     // - The pivot point should stay fixed in world space
                     // - This means mesh offset needs to be: -anchor * current_size
                     //
-                    // Since anchor = anchor_offset / original_size (approximately), and 
+                    // Since anchor = anchor_offset / original_size (approximately), and
                     // current_size = (orig_width, orig_height), we need:
                     // mesh_offset_x = -anchor_x * orig_width
                     // mesh_offset_y = -anchor_y * orig_height
@@ -805,16 +814,24 @@ pub fn animate_unified_effect_system(
                     // Actually, the cleanest approach: use anchor_offset with current dimensions
                     // The anchor ratios are stored in anchor_offset / initial_size
                     // For current size (orig_width, orig_height), the offset should scale proportionally
-                    
+
                     // Get original size (before scale_assist) from the animated size property
                     let orig_size = interpolate_vec2(&animated.size, 0.0).unwrap_or([100.0, 100.0]);
                     let orig_w = orig_size[0].abs().max(1.0);
                     let orig_h = orig_size[1].abs().max(1.0);
-                    
+
                     // anchor = anchor_offset / orig_size (approximately)
-                    let anchor_x = if orig_w > 0.0 { animated.anchor_offset.x / orig_w } else { 0.0 };
-                    let anchor_y = if orig_h > 0.0 { animated.anchor_offset.y / orig_h } else { 0.0 };
-                    
+                    let anchor_x = if orig_w > 0.0 {
+                        animated.anchor_offset.x / orig_w
+                    } else {
+                        0.0
+                    };
+                    let anchor_y = if orig_h > 0.0 {
+                        animated.anchor_offset.y / orig_h
+                    } else {
+                        0.0
+                    };
+
                     // mesh offset = -anchor * current_size
                     let offset_x = -anchor_x * orig_width;
                     let offset_y = -anchor_y * orig_height;

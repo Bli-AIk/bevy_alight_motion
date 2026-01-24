@@ -100,6 +100,18 @@ pub fn interpolate_float(prop: &AmAnimatedFloat, t: f32) -> Option<f32> {
         .unwrap_or_default();
     let eased_t = easing.evaluate(local_t);
 
+    // Debug log for cyclic easing
+    if matches!(easing, Easing::Cyclic { .. }) {
+        bevy::log::trace!(
+            "[interpolate_float] Cyclic easing: local_t={:.4}, eased_t={:.4}, v_prev={}, v_next={}, result={:.4}",
+            local_t,
+            eased_t,
+            v_prev,
+            v_next,
+            lerp(v_prev, v_next, eased_t)
+        );
+    }
+
     Some(lerp(v_prev, v_next, eased_t))
 }
 

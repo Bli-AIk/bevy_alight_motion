@@ -18,6 +18,16 @@ pub enum Easing {
     /// Bounce easing (standard ease-out-bounce).
     /// Parameters are stored but currently ignored in evaluation (using standard bounce).
     Bounce { p1: f32, p2: f32 },
+    /// Cyclic easing (sinusoidal oscillation).
+    /// Creates a wave-like motion with multiple oscillations between keyframes.
+    /// Parameters: period (cycle length), phase, amplitude, p4, p5
+    Cyclic {
+        period: f32,
+        phase: f32,
+        amplitude: f32,
+        p4: f32,
+        p5: f32,
+    },
 }
 
 impl Easing {
@@ -47,6 +57,20 @@ impl Easing {
                 let p2 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 Easing::Bounce { p1, p2 }
             }
+            Some("cyclic") => {
+                let period = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.1);
+                let phase = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let amplitude = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.5);
+                let p4 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let p5 = parts.get(5).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                Easing::Cyclic {
+                    period,
+                    phase,
+                    amplitude,
+                    p4,
+                    p5,
+                }
+            }
             _ => Easing::Linear,
         }
     }
@@ -61,6 +85,12 @@ impl Easing {
             }
             Easing::CubicBezier { x1, y1, x2, y2 } => cubic_bezier_y_for_x(t, *x1, *y1, *x2, *y2),
             Easing::Bounce { p1, p2 } => am_bounce(t, *p1, *p2),
+            Easing::Cyclic {
+                period,
+                phase,
+                amplitude,
+                ..
+            } => am_cyclic(t, *period, *phase, *amplitude),
         }
     }
 }
@@ -133,6 +163,51 @@ fn am_bounce(t: f32, p1: f32, p2: f32) -> f32 {
     let bounce_height = 4.0 * local_t * (1.0 - local_t) * amplitude;
 
     1.0 - bounce_height
+}
+
+/// AM-style cyclic easing with sinusoidal oscillation.
+///
+/// Creates a wave-like motion that oscillates around a center point.
+/// Based on reference video analysis: the cyclic easing produces pure
+/// sinusoidal oscillation independent of linear interpolation progress.
+///
+/// period: length of one cycle in t-space (0.0856 = ~11.7 cycles)
+/// phase: center offset factor (affects where oscillation is centered)
+/// amplitude: oscillation amplitude (0.5 = ±0.5 around center)
+///
+/// Derived formula from video frame analysis:
+/// eased_t = center + amplitude * sin(2π * cycles * t + φ)
+///
+/// Where:
+/// - center = 0.5 + phase / 3.0 (empirically derived)
+/// - cycles = 1.0 / period
+/// - φ = -π/2 radians (-90°) initial phase offset
+///   This starts the wave at its minimum (valley)
+///
+/// This produces:
+/// - Pure sinusoidal oscillation around the center
+/// - At t=0: eased_t = center - amplitude (wave valley)
+/// - At t=0.25/cycles: eased_t = center (midpoint, rising)
+/// - At t=0.5/cycles: eased_t = center + amplitude (wave peak)
+fn am_cyclic(t: f32, period: f32, phase: f32, amplitude: f32) -> f32 {
+    // Prevent division by zero
+    let safe_period = period.max(0.001);
+
+    // Number of cycles over the keyframe span
+    let cycles = 1.0 / safe_period;
+
+    // Center of oscillation, offset by phase parameter
+    // Empirically derived: phase/3 gives the correct center offset
+    let center = 0.5 + phase / 3.0;
+
+    // Initial phase offset: -π/2 starts at wave valley
+    let phi = -std::f32::consts::FRAC_PI_2;
+
+    // Angle for sine oscillation
+    let angle = 2.0 * std::f32::consts::PI * cycles * t + phi;
+
+    // Cyclic easing: pure sinusoidal oscillation around center
+    center + amplitude * angle.sin()
 }
 
 /// Solve cubic bezier curve: find Y for given X.

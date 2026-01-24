@@ -447,11 +447,9 @@ fn spawn_layer_entity(
                 bx += pivot_x + rotated_offset_x;
                 by += pivot_bevy_y + rotated_offset_y;
             } else {
-                // Standard shapes: simple pivot compensation for non-unit scale
-                let offset_x = pivot_x * (1.0 - current_scale[0]);
-                let offset_y = -pivot_y * (1.0 - current_scale[1]);
-                bx += offset_x;
-                by += offset_y;
+                // Standard shapes: pivot offset is already applied in collect_types.rs
+                // via pivot_to_anchor_and_offset and transform.translation
+                // No additional compensation needed here
             }
         }
 
