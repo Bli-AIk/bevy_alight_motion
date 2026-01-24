@@ -76,9 +76,11 @@ pub fn animate_transform_system(
         // For embed content, add 0.5 frame offset to match AM's internal timing
         // This compensates for the difference between video frame edges and centers
         // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
-        if embed_content_marker.is_some() && animated.speed_multiplier != 0.0 {
+        let is_embed_content = embed_content_marker.is_some();
+        if is_embed_content && animated.speed_multiplier != 0.0 {
             let frame_duration_ms = 1000.0 / 30.0; // Assuming 30fps
-            local_time += frame_duration_ms * 0.35; // Adjusted based on testing
+            let offset = frame_duration_ms * 0.35;
+            local_time += offset;
         }
 
         // Use local time for visibility check (affected by speed)

@@ -458,7 +458,7 @@ pub fn animate_sdf_scale_system(
     let parent_count = parent_query.iter().count();
     let cnt = SDF_PARENT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if cnt < 5 {
-        bevy::log::info!(
+        bevy::log::debug!(
             "[SDF_SYSTEM] animate_sdf_scale_system: {} SDF parents found at time {:.1}ms",
             parent_count,
             global_time
