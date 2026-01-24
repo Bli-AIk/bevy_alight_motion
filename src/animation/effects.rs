@@ -219,7 +219,7 @@ pub fn update_unified_mask_system(
 
                             // Half-size: Use precomputed mask.half_size from collect stage
                             // This already includes initial scale and parent scale for child masks
-                            // Then apply animation scale ratio: (current_scale / initial_scale)
+                            // Then apply fit_scale and animation scale ratio: (current_scale / initial_scale)
                             // Since mask.scale contains the initial scale, the ratio adjusts for any animation
                             let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
                                 scale_x / mask.scale.x
@@ -231,8 +231,8 @@ pub fn update_unified_mask_system(
                             } else {
                                 1.0
                             };
-                            let half_width = mask.half_size.x * scale_ratio_x.abs();
-                            let half_height = mask.half_size.y * scale_ratio_y.abs();
+                            let half_width = mask.half_size.x * fit_scale * scale_ratio_x.abs();
+                            let half_height = mask.half_size.y * fit_scale * scale_ratio_y.abs();
 
                             bevy::log::trace!(
                                 "[MASK-UE] mask_trans=({:.1},{:.1}), mask_half_size=({:.1},{:.1}), scale_ratio=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
