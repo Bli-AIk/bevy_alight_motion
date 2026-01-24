@@ -31,6 +31,10 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides.basic_bezier_ex]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 
 # Known issues with Resolution Groups (AM export bug)
 #
