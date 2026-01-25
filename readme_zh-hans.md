@@ -7,13 +7,14 @@
 
 **bevy_alight_motion** — 用于加载和播放 Alight Motion 项目文件的 Bevy 插件。
 
-| English | 简体中文 |
-|---------|--------------------|
+| English                | 简体中文 |
+|------------------------|------|
 | [English](./readme.md) | 简体中文 |
 
 ## 简介
 
-`bevy_alight_motion` 是一个为 [Bevy](https://bevyengine.org/) 游戏引擎开发的插件，允许你直接从 [Alight Motion](https://alightmotion.com/) 项目文件中导入资产和动画。  
+`bevy_alight_motion` 是一个为 [Bevy](https://bevyengine.org/)
+游戏引擎开发的插件，允许你直接从 [Alight Motion](https://alightmotion.com/) 项目文件中导入资产和动画。  
 它解决了在代码中手动重建动画的问题，让设计师可以在 Alight Motion 中创建复杂的动画，并由开发者在 Bevy 中直接运行。
 
 使用 `bevy_alight_motion`，你只需将 Alight Motion 项目导出为 `.amproj` 文件，然后通过一个函数调用即可加载。  
@@ -92,13 +93,19 @@
 
 本项目使用了以下 crate:
 
-| Crate | 版本 | 描述 |
-|-------|---------|-------------|
-| [bevy](https://crates.io/crates/bevy) | 0.17.2 | 游戏引擎 |
-| [quick-xml](https://crates.io/crates/quick-xml) | 0.37 | 高性能 XML 解析/序列化库 |
-| [serde](https://crates.io/crates/serde) | 1.0 | 序列化/反序列化框架 |
-| [zip](https://crates.io/crates/zip) | 2.2 | ZIP 归档读写库 |
-| [thiserror](https://crates.io/crates/thiserror) | 2.0 | 错误派生宏 |
+| Crate                                           | 版本     | 描述              |
+|-------------------------------------------------|--------|-----------------|
+| [bevy](https://crates.io/crates/bevy)           | 0.17.2 | 游戏引擎            |
+| [quick-xml](https://crates.io/crates/quick-xml) | 0.37   | 高性能 XML 解析/序列化库 |
+| [serde](https://crates.io/crates/serde)         | 1.0    | 序列化/反序列化框架      |
+| [zip](https://crates.io/crates/zip)             | 2.2    | ZIP 归档读写库       |
+| [thiserror](https://crates.io/crates/thiserror) | 2.0    | 错误派生宏           |
+
+## 贡献者
+
+### 非代码贡献者
+
+* **71**: 他在此项目测试过程中提供了许多Alight Motion 示例工程（包括undertale弹幕，以及一些视觉pv），为此项目提供了很大帮助！
 
 ## 贡献
 
@@ -112,7 +119,8 @@
 
 本项目采用以下任一许可协议授权：
 
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) 或 [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0))
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)
+  或 [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0))
 * MIT license ([LICENSE-MIT](LICENSE-MIT) 或 [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT))
 
 可根据你的选择使用。
