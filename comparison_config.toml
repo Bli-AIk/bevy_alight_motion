@@ -106,6 +106,10 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides.complex_turn_13_ex]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 # basic_gradient uses gradient feature which is not implemented yet
 # basic_gradient 使用渐变功能，尚未实现
 [overrides.basic_gradient]
