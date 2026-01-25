@@ -50,6 +50,17 @@
 
 我们认为这是 AM 自身的 Bug，本库不刻意还原该行为。本库的实现是：**无论编组旋转与否，分辨率限制都正确生效**。
 
+### 层级和父子关系
+
+| 功能         | AM 属性             | 说明                | 完成 | Issue/PR |
+|------------|-------------------|-------------------|:--:|----------|
+| **父子层级**   | `parent` 属性       | 图层父子关系，变换继承       | ✅  | #1       |
+| **变换继承**   | -                 | 子图层继承父图层的位置/旋转/缩放 | ✅  | #1       |
+| **多层级嵌套**  | -                 | 支持多层级的父子嵌套        | ✅  | #1       |
+| **编组裁剪**   | embedScene + 尺寸限制 | 编组内容超出范围时自动裁剪     | ✅  | #1       |
+| **编组时间偏移** | `timeOffset`      | 子场景播放时间偏移         | ✅  | #1       |
+| **图层生命周期** | `start` / `end`   | 基于时间显示/隐藏图层       | ✅  | #1       |
+
 ---
 
 ## 颜色和填充
@@ -199,14 +210,72 @@ new_width = orig_width * stretch_factor
 
 **角度实现说明**：使用像素空间坐标旋转方法，通过顶点变换模拟计算精确的 AABB 包围盒。目前与 AM 原始效果存在轻微视觉差异。
 
+### 高斯模糊效果 (Gaussian Blur)
+
+| 属性     | AM 参数      | 说明      | 完成 | Issue/PR |
+|--------|------------|---------|:--:|----------|
+| **模糊** | `strength` | 模糊强度像素值 | ✅  | #1       |
+
+**概况**：高斯模糊已实现，支持动画关键帧。
+
+**效果说明**：使用多 pass 模糊实现平滑的高斯模糊效果，支持超出原始边界的发光扩散。
+
+### 遮罩效果 (Mask)
+
+| 属性       | AM 参数                       | 说明       | 完成 | Issue/PR |
+|----------|-----------------------------|----------|:--:|----------|
+| **矩形遮罩** | `blending="mask"` + rect    | 矩形裁剪     | ✅  | #1       |
+| **圆形遮罩** | `blending="mask"` + ellipse | 圆形/椭圆裁剪  | ✅  | #1       |
+| **排除遮罩** | `blending="maskexclude"`    | 反向遮罩     | ✅  | #1       |
+| **双遮罩**  | -                           | 最多支持两个遮罩 | ✅  | #1       |
+
+**概况**：支持矩形和椭圆形状的包含和排除遮罩，以及双遮罩组合。
+
+### 调色板映射效果 (Palette Map)
+
+| 属性        | AM 参数      | 说明          |  完成  | Issue/PR |
+|-----------|------------|-------------|:----:|----------|
+| **调色板颜色** | `color1-8` | 最多 8 个调色板颜色 |  ✅   | #1       |
+| **颜色数量**  | `count`    | 使用的颜色数量     |  ✅   | #1       |
+| **阴影模式**  | `shades`   | 是否启用阴影渐变    | ⚠️基础 | #1       |
+| **混合强度**  | `alpha`    | 效果混合强度      |  ✅   | #1       |
+
+**概况**：调色板映射效果基本实现，支持动画关键帧。阴影模式 (shades) 的颜色过渡算法与 AM 原版存在细微差异。
+
+### 颜色替换效果 (Replace Color)
+
+| 属性       | AM 参数           | 说明       | 完成 | Issue/PR |
+|----------|-----------------|----------|:--:|----------|
+| **旧颜色**  | `oldcolor`      | 要替换的源颜色  | ✅  | #1       |
+| **新颜色**  | `newcolor`      | 替换后的目标颜色 | ✅  | #1       |
+| **阈值**   | `threshold`     | 颜色匹配容差   | ✅  | #1       |
+| **羽化**   | `feather`       | 边缘过渡柔和度  | ✅  | #1       |
+| **透明度**  | `alpha`         | 效果强度     | ✅  | #1       |
+| **锁定亮度** | `lockluminance` | 保持原始亮度   | ✅  | #1       |
+
+**概况**：颜色替换效果完整实现，支持 sRGB 到线性颜色空间转换和动画关键帧。已通过测试。
+
+**效果说明**：将图层中的指定颜色替换为另一颜色，支持阈值和羽化控制匹配精度，锁定亮度选项可保持原始像素的亮度。
+
+### 缩放辅助效果 (Scale Assist)
+
+| 属性     | AM 参数             | 说明               | 完成 | Issue/PR |
+|--------|-------------------|------------------|:--:|----------|
+| **轴向** | `scaleassistaxis` | 缩放基准轴 (1=宽, 2=高) | ✅  | #1       |
+
+**概况**：缩放辅助效果已实现，根据选择的轴向自动调整图层尺寸以适应画布。
+
 ### 未实现效果
 
 | 效果       | AM ID | 说明         | 完成 | Issue/PR |
 |----------|-------|------------|:--:|----------|
-| **模糊**   | -     | 高斯模糊       | ❌  | -        |
 | **色彩调整** | -     | 亮度/对比度/饱和度 | ❌  | -        |
 | **发光**   | -     | 外发光/内发光    | ❌  | -        |
 | **阴影**   | -     | 投影阴影       | ❌  | -        |
+| **网格**   | -     | 网格分割效果     | ❌  | -        |
+| **像素化**  | -     | 马赛克效果      | ❌  | -        |
+| **阈值**   | -     | 二值化效果      | ❌  | -        |
+| **渐变填充** | -     | 线性/径向渐变    | ❌  | -        |
 
 ---
 
@@ -251,23 +320,75 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32
 
 ### 基础示例 (basic_*)
 
-| 示例文件                                | 验证功能                   | 状态 |
-|-------------------------------------|------------------------|:--:|
-| `basic_pivot.amproj`                | 锚点/枢轴功能、位置补偿           | ✅  |
-| `basic_shape.amproj`                | 矩形和圆形渲染、颜色填充、媒体填充、描边   | ✅  |
-| `basic_resolution_group.amproj`     | 编组分辨率限制、编组旋转/缩放        | ✅  |
-| `basic_resolution_group_ex.amproj`  | 编组分辨率限制的扩展测试           | ✅  |
-| `basic_resolution_group_ex2.amproj` | 针对编组旋转 显示范围扩大 bug的专项测试 | ⚠️ |
+| 示例文件                                 | 验证功能                 | 状态 |
+|--------------------------------------|----------------------|:--:|
+| `basic_bezier.amproj`                | 贝塞尔缓动曲线              | ✅  |
+| `basic_bezier_ex.amproj`             | 贝塞尔缓动扩展测试            | ✅  |
+| `basic_bounce_box.amproj`            | 弹跳动画效果               | ✅  |
+| `basic_child_mask.amproj`            | 子图层遮罩                | ✅  |
+| `basic_cutoff.amproj`                | 图层裁剪                 | ✅  |
+| `basic_frame.amproj`                 | 基本帧动画                | ✅  |
+| `basic_gradient.amproj`              | 渐变填充（未实现）            | ⚠️ |
+| `basic_group_cutoff.amproj`          | 编组裁剪                 | ✅  |
+| `basic_group_mask.amproj`            | 编组遮罩                 | ✅  |
+| `basic_mask_circle.amproj`           | 圆形遮罩                 | ✅  |
+| `basic_mask_square.amproj`           | 矩形遮罩                 | ✅  |
+| `basic_mask_square_ex.amproj`        | 矩形遮罩扩展测试             | ⚠️ |
+| `basic_multi_level_group.amproj`     | 多层级编组                | ✅  |
+| `basic_multi_level_group_ex.amproj`  | 多层级编组扩展测试            | ✅  |
+| `basic_multi_level_group_ex2.amproj` | 多层级编组扩展测试2           | ✅  |
+| `basic_muti_tween.amproj`            | 多重缓动（未实现）            | ⚠️ |
+| `basic_pivot.amproj`                 | 锚点/枢轴功能、位置补偿         | ✅  |
+| `basic_shape.amproj`                 | 矩形和圆形渲染、颜色填充、媒体填充、描边 | ✅  |
+| `basic_shape_ex.amproj`              | 形状扩展测试               | ✅  |
+| `basic_resolution_group.amproj`      | 编组分辨率限制、编组旋转/缩放      | ✅  |
+| `basic_resolution_group_ex.amproj`   | 编组分辨率限制的扩展测试         | ✅  |
+| `basic_resolution_group_ex2.amproj`  | 编组分辨率限制的扩展测试2        | ✅  |
 
 ### 效果示例 (fx_*)
 
 | 示例文件                              | 验证功能          | 状态 |
 |-----------------------------------|---------------|:--:|
-| `fx_1_stretch_segment.amproj`     | 拉伸片段效果基本功能    | ✅  |
-| `fx_1_ex_stretch_segment.amproj`  | 拉伸片段效果扩展测试    | ✅  |
-| `fx_1_ex2_stretch_segment.amproj` | 拉伸片段效果角度/偏移测试 | ✅  |
-| `fx_2_gaussian_blur.amproj`       | 高斯模糊效果        | ❌  |
-| `fx_3_grid.amproj`                | 网格效果          | ❌  |
+| `fx_1_stretch_segment.amproj`     | 拉伸片段效果基本功能    | ⚠️ |
+| `fx_1_ex_stretch_segment.amproj`  | 拉伸片段效果扩展测试    | ⚠️ |
+| `fx_1_ex2_stretch_segment.amproj` | 拉伸片段效果角度/偏移测试 | ⚠️ |
+| `fx_1_ex3_stretch_segment.amproj` | 拉伸片段效果扩展测试3   | ⚠️ |
+| `fx_1_ex4_stretch_segment.amproj` | 拉伸片段效果扩展测试4   | ✅  |
+| `fx_1_ex5_stretch_segment.amproj` | 拉伸片段效果扩展测试5   | ⚠️ |
+| `fx_2_gaussian_blur.amproj`       | 高斯模糊效果（未实现）   | ❌  |
+| `fx_3_grid.amproj`                | 网格效果（未实现）     | ❌  |
+| `fx_4_pixelate.amproj`            | 像素化效果（未实现）    | ❌  |
+| `fx_5_palette.amproj`             | 调色板映射效果       | ⚠️ |
+| `fx_6_scaleassist.amproj`         | 缩放辅助效果        | ✅  |
+| `fx_6_ex_scaleassist.amproj`      | 缩放辅助效果扩展测试    | ⚠️ |
+| `fx_7_threshold.amproj`           | 阈值效果（未实现）     | ❌  |
+| `fx_8_replace_color.amproj`       | 颜色替换效果        | ✅  |
+
+### 复杂示例 (complex_*)
+
+| 示例文件                              | 验证功能         | 状态 |
+|-----------------------------------|--------------|:--:|
+| `complex_simple_gb.amproj`        | 综合简单动画测试     | ⚠️ |
+| `complex_examples_2_ex.amproj`    | 复杂示例2扩展测试    | ⚠️ |
+| `complex_examples_2_ex1.amproj`   | 复杂示例2扩展测试1   | ✅  |
+| `complex_examples_2_ex2.amproj`   | 复杂示例2扩展测试2   | ⚠️ |
+| `complex_examples_2_ex3.amproj`   | 复杂示例2扩展测试3   | ✅  |
+| `complex_examples_2_ex4.amproj`   | 复杂示例2扩展测试4   | ✅  |
+| `complex_examples_3_ex.amproj`    | 复杂示例3扩展测试    | ⚠️ |
+| `complex_examples_3_ex1.amproj`   | 复杂示例3扩展测试1   | ⚠️ |
+| `complex_examples_3_ex2.amproj`   | 复杂示例3扩展测试2   | ⚠️ |
+| `complex_examples_3_ex2_1.amproj` | 复杂示例3扩展测试2-1 | ⚠️ |
+| `complex_examples_3_ex3.amproj`   | 复杂示例3扩展测试3   | ⚠️ |
+| `complex_turn_9.amproj`           | 九宫格旋转动画      | ⚠️ |
+| `complex_turn_9_ex.amproj`        | 九宫格旋转动画扩展测试  | ✅  |
+| `complex_turn_9_ex1.amproj`       | 九宫格旋转动画扩展测试1 | ✅  |
+| `complex_turn_9_ex2.amproj`       | 九宫格旋转动画扩展测试2 | ⚠️ |
+
+**图例**：
+
+- ✅ 通过测试（相似度≥95%）
+- ⚠️ 部分通过/接近通过（相似度在80%-95%之间或部分帧失败）
+- ❌ 未实现或测试失败
 
 ---
 
