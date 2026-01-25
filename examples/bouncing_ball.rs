@@ -348,8 +348,8 @@ fn update_flipper_collider(
     mut flipper: ResMut<FlipperCollider>,
     query: Query<&GlobalTransform, With<AmLayerMarker>>,
 ) {
-    // Find the flipper layer (the animated shape)
-    for global_transform in query.iter() {
+    // Find the flipper layer (only use the first shape found)
+    if let Some(global_transform) = query.iter().next() {
         // Get the flipper's current world transform
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
 
@@ -380,8 +380,6 @@ fn update_flipper_collider(
         flipper.rotation = angle;
         flipper.thickness = full_height;
         flipper.active = true;
-
-        break; // Only use the first shape found
     }
 }
 
@@ -405,18 +403,18 @@ fn physics_update(
         transform.translation.y += ball.velocity.y * dt;
 
         // Check collision with flipper
-        if flipper.active {
-            if let Some((new_pos, new_vel)) = check_flipper_collision(
+        if flipper.active
+            && let Some((new_pos, new_vel)) = check_flipper_collision(
                 transform.translation.truncate(),
                 BALL_RADIUS,
                 ball.velocity,
                 &flipper,
                 dt,
-            ) {
-                transform.translation.x = new_pos.x;
-                transform.translation.y = new_pos.y;
-                ball.velocity = new_vel;
-            }
+            )
+        {
+            transform.translation.x = new_pos.x;
+            transform.translation.y = new_pos.y;
+            ball.velocity = new_vel;
         }
 
         // Simple wall bouncing (left/right edges)
