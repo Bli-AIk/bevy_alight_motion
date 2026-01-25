@@ -1,0 +1,265 @@
+//! # components.rs
+//!
+//! # 组件模块
+//!
+//! Animation components and resources for Alight Motion projects.
+//! Contains AmAnimated, AmPlayback, AmSdfParams and related component definitions.
+//!
+//! Alight Motion 项目的动画组件和资源。
+//! 包含 AmAnimated、AmPlayback、AmSdfParams 及相关组件定义。
+
+use bevy::prelude::*;
+
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
+
+/// DEBUG: 拉伸效果乘数，用于调试编组内图片的拉伸计算
+/// 当前问题："编组 2 Copy" 内的图片拉伸效果过大
+/// 调整此值直到编组内图片的拉伸效果与AM一致
+/// 然后报告该值，用于推导正确的计算公式
+///
+/// 负height元素使用对角线公式：base_size = sqrt(w^2 + h^2) * SCALE_FACTOR
+/// 当前测试表明需要的修正因子是 1/0.615 = 1.626
+/// 而纯对角线公式给出 1.634
+/// 所以需要额外的缩放因子 = 1.626 / 1.634 = 0.995
+///
+/// 默认值 1.0 = 纯对角线公式
+/// 尝试 0.99, 0.98 等值来增大拉伸
+pub const DEBUG_NEGATIVE_HEIGHT_SCALE: f32 = 1.05;
+
+/// Component marking an entity as part of an AM animation.
+///
+/// 标记实体为 AM 动画一部分的组件。
+#[derive(Component, Debug, Clone)]
+pub struct AmAnimated {
+    /// Unique layer ID from AM.
+    ///
+    /// AM 中的唯一图层 ID。
+    pub layer_id: u64,
+    /// Start time in milliseconds (relative to time_offset).
+    ///
+    /// 开始时间（毫秒，相对于时间偏移）。
+    pub start_time: i32,
+    /// End time in milliseconds (relative to time_offset).
+    pub end_time: i32,
+    /// Time offset from parent scene (for embedded scenes).
+    /// Used for animation interpolation: local_time = (global - time_offset) * speed
+    pub time_offset: i32,
+    /// Lifecycle offset for visibility calculation (not affected by speed).
+    /// Used for spawn/despawn: lifecycle_time = global - lifecycle_offset
+    /// For embeds: lifecycle_offset = embed_start - in_time
+    pub lifecycle_offset: i32,
+    /// Location animation data.
+    pub location: AmAnimatedVec3,
+    /// Pivot/anchor point animation data.
+    pub pivot: AmAnimatedVec2,
+    /// Rotation animation data.
+    pub rotation: AmAnimatedFloat,
+    /// Scale animation data.
+    pub scale: AmAnimatedVec2,
+    /// Opacity animation data.
+    pub opacity: AmAnimatedFloat,
+    /// Canvas width for coordinate conversion.
+    pub canvas_width: f32,
+    /// Canvas height for coordinate conversion.
+    pub canvas_height: f32,
+    /// Whether this layer has a parent (uses local coordinates).
+    pub has_parent: bool,
+    /// Effect position X offset (from transform2 effect).
+    pub effect_pos_x: AmAnimatedFloat,
+    /// Effect position Y offset (from transform2 effect).
+    pub effect_pos_y: AmAnimatedFloat,
+    /// Font Y offset for text layers (to compensate for different font metrics).
+    pub font_y_offset: f32,
+    /// Size animation data (for shapes). AM size is half-extents, stored as full dimensions.
+    pub size: AmAnimatedVec2,
+    /// Position compensation for anchor offset (Bevy coords).
+    /// When anchor is not CENTER, sprite position needs adjustment to keep center at AM location.
+    pub anchor_offset: Vec2,
+    /// Wipe effect start (0.0-1.0 percentage, default 0.0).
+    pub wipe_start: AmAnimatedFloat,
+    /// Wipe effect end (0.0-1.0 percentage, default 1.0).
+    pub wipe_end: AmAnimatedFloat,
+    /// Wipe effect angle in radians (0 = left-to-right).
+    pub wipe_angle: AmAnimatedFloat,
+    /// Wipe effect feather (softness of edge, 0.0 = sharp).
+    pub wipe_feather: AmAnimatedFloat,
+    /// Stretch segment effect angle in degrees (0 = horizontal split).
+    pub stretch_angle: AmAnimatedFloat,
+    /// Stretch segment effect stretch amount (pixels, normalized to UV).
+    pub stretch_amount: AmAnimatedFloat,
+    /// Stretch segment effect offset (position of split line).
+    pub stretch_offset: AmAnimatedFloat,
+    /// Stretch segment effect smooth width (0 = hard edge).
+    pub stretch_smooth: AmAnimatedFloat,
+    /// Gaussian blur effect strength (0 = no blur).
+    pub blur_strength: AmAnimatedFloat,
+    /// Speed multiplier from parent embed scenes.
+    /// Local time = (global_time - time_offset) * speed_multiplier
+    pub speed_multiplier: f32,
+    /// Embed parent offset (Bevy coords) for coordinate adjustment.
+    /// When this layer is a child of an embed scene, this stores the embed's
+    /// Bevy position so the animation system can compensate for it.
+    pub embed_offset: Vec2,
+    /// Inverse fit scale for embed children coordinate adjustment.
+    /// When the project is scaled to fit window, embed children need their coordinates
+    /// scaled by 1/fit_scale to compensate for the root scaling.
+    pub inv_fit_scale: f32,
+    /// Stroke width animation data (for SDF shapes with stroke).
+    pub stroke_width: AmAnimatedFloat,
+    /// Base alpha from fill color (0.0-1.0).
+    /// Opacity animation is multiplied by this value to preserve original fill transparency.
+    pub base_alpha: f32,
+    /// Palette map effect alpha (effect strength, 0.0-1.0).
+    pub palette_alpha: AmAnimatedFloat,
+    /// Scale assist effect scale multiplier (animated).
+    pub scale_assist: AmAnimatedFloat,
+    /// Scale assist effect damp factor (animated).
+    pub scale_assist_damp: AmAnimatedFloat,
+    /// Scale assist effect axis (1=X, 2=Y, 3=XY).
+    pub scale_assist_axis: i32,
+    /// Replace color effect: original color to replace (RGBA)
+    pub replace_old_color: Vec4,
+    /// Replace color effect: new color (animated RGBA)
+    pub replace_new_color: crate::schema::AmAnimatedColor,
+    /// Replace color effect: threshold (0.0-1.0)
+    pub replace_threshold: AmAnimatedFloat,
+    /// Replace color effect: feather (0.0-1.0)
+    pub replace_feather: AmAnimatedFloat,
+    /// Replace color effect: alpha/strength (0.0-1.0)
+    pub replace_alpha: AmAnimatedFloat,
+    /// Replace color effect: lock luminance
+    pub replace_lock_luminance: bool,
+}
+
+impl AmAnimated {
+    /// Calculate local time considering speed_multiplier (for animation interpolation).
+    pub fn calc_local_time(&self, global_time: f32) -> f32 {
+        (global_time - self.time_offset as f32) * self.speed_multiplier
+    }
+
+    /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
+    pub fn calc_lifecycle_time(&self, global_time: f32) -> f32 {
+        global_time - self.lifecycle_offset as f32
+    }
+
+    /// Check if layer is active at the given local time.
+    pub fn is_active(&self, local_time: f32) -> bool {
+        local_time >= self.start_time as f32 && local_time <= self.end_time as f32
+    }
+
+    /// Calculate normalized layer time (0.0 to 1.0) from local time.
+    pub fn calc_layer_time(&self, local_time: f32) -> f32 {
+        let duration = (self.end_time - self.start_time) as f32;
+        if duration > 0.0 {
+            (local_time - self.start_time as f32) / duration
+        } else {
+            0.0
+        }
+    }
+}
+
+/// Resource to control animation playback.
+#[derive(Resource, Debug, Clone)]
+pub struct AmPlayback {
+    /// Current time in milliseconds.
+    pub current_time_ms: f32,
+    /// Total duration in milliseconds.
+    pub total_time_ms: f32,
+    /// Is playing.
+    pub playing: bool,
+    /// Playback speed (1.0 = normal).
+    pub speed: f32,
+    /// Loop playback.
+    pub looping: bool,
+    /// Force stopped - when true, animation systems won't update transforms.
+    /// Use this for debugging/inspector editing. Normal pause still updates animations.
+    pub force_stopped: bool,
+}
+
+impl Default for AmPlayback {
+    fn default() -> Self {
+        Self {
+            current_time_ms: 0.0,
+            total_time_ms: 2000.0,
+            playing: true,
+            speed: 1.0,
+            looping: true,
+            force_stopped: false,
+        }
+    }
+}
+
+impl AmPlayback {
+    /// Create with specific duration.
+    pub fn with_duration(total_time_ms: f32) -> Self {
+        Self {
+            total_time_ms,
+            ..Default::default()
+        }
+    }
+
+    /// Reset to beginning.
+    pub fn reset(&mut self) {
+        self.current_time_ms = 0.0;
+    }
+
+    /// Toggle play/pause.
+    pub fn toggle(&mut self) {
+        self.playing = !self.playing;
+    }
+
+    /// Toggle force stop - freezes all animation updates for inspector editing.
+    pub fn toggle_force_stop(&mut self) {
+        self.force_stopped = !self.force_stopped;
+    }
+}
+
+/// Component to store SDF shape parameters for animation.
+/// Used by animate_sdf_scale to update SdfMaterial.params based on animation scale.
+#[derive(Component, Debug, Clone)]
+pub struct AmSdfParams {
+    /// Base half width of the shape (before animation scale)
+    pub base_half_width: f32,
+    /// Base half height of the shape (before animation scale)
+    pub base_half_height: f32,
+    /// Stroke width in pixels (constant, not scaled)
+    pub stroke_width: f32,
+    /// Packed stroke color (stored to preserve during updates)
+    pub packed_stroke: f32,
+    /// Base stroke alpha (0.0-1.0) from original stroke color
+    pub base_stroke_alpha: f32,
+    /// Base pivot X in pixels
+    pub base_pivot_x: f32,
+    /// Base pivot Y in pixels
+    pub base_pivot_y: f32,
+}
+
+// Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere
+/// Component to store original SDF fill parameters for animation.
+/// @deprecated Use AmSdfParams instead
+#[derive(Component, Debug, Clone)]
+pub struct AmSdfFillParams {
+    /// Base half width of the shape (without scale)
+    pub base_half_width: f32,
+    /// Base half height of the shape (without scale)
+    pub base_half_height: f32,
+    /// Half of the stroke width (used to inset the fill)
+    pub stroke_half_width: f32,
+}
+
+/// Component to store original SDF stroke parameters for animation.
+/// @deprecated Use AmSdfParams instead
+#[derive(Component, Debug, Clone)]
+pub struct AmSdfStrokeParams {
+    /// Base half width of the shape (without scale)
+    pub base_half_width: f32,
+    /// Base half height of the shape (without scale)
+    pub base_half_height: f32,
+    /// Half of the stroke width (used to offset the stroke)
+    pub stroke_half_width: f32,
+}
+
+/// Marker component to identify entities that are SDF shape parents.
+/// Used to skip scale animation in animate_transform (scale is handled by animate_sdf_scale).
+#[derive(Component, Debug, Clone, Default)]
+pub struct AmSdfShapeParent;

@@ -39,20 +39,46 @@
 //! 3. **Runtime Layer** (`plugin`, `animation`, `scene`): ECS components and systems
 
 pub mod animation;
+pub mod effects;
 pub mod error;
+pub mod gaussian_blur;
 pub mod loader;
+pub mod masked_sprite;
 pub mod plugin;
 pub mod scene;
 pub mod schema;
+pub mod sdf;
+pub mod sdf_material;
 
 /// Prelude module for convenient imports.
 pub mod prelude {
-    pub use crate::animation::{AmAnimated, AmPlayback};
+    pub use crate::animation::{AmAnimated, AmPlayback, interpolate_vec2};
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
-    pub use crate::plugin::{AlightMotionPlugin, load_am_project};
+    pub use crate::plugin::{AlightMotionPlugin, AmProjectResolution, load_am_project};
     pub use crate::scene::{
-        AmLayerMarker, AmProjectBundle, AmProjectRoot, AmSceneConfig, am_to_bevy_coords,
+        AmElement,
+        // 2.2 扩展钩子系统
+        AmElementType,
+        AmEntitySpawned,
+        AmForceHidden,
+        AmLayerMarker,
+        // 2.3 标识与查询标准化
+        AmLayerName,
+        // Layer specification
+        AmLayerSpec,
+        // Mask info for debug visualization
+        AmMaskEntry,
+        AmMaskInfo,
+        // Pending layers for external modification
+        AmPendingLayers,
+        AmProjectBundle,
+        AmProjectRoot,
+        AmSceneConfig,
+        AmSpawnSettings,
+        // 2.1 元素过滤机制
+        LayerFilter,
+        am_to_bevy_coords,
     };
     pub use crate::schema::{
         AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3, AmEmbedScene, AmKeyframe, AmLayer,

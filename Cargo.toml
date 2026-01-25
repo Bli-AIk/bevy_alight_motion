@@ -4,17 +4,38 @@ version = "0.1.0"
 edition = "2024"
 description = "Bevy plugin for loading and playing Alight Motion project files"
 license = "MIT OR Apache-2.0"
+# Disable auto-discovery to prevent video_utils.rs from being compiled as an example
+autoexamples = false
 
 [dependencies]
-bevy = "0.17.2"
+bevy = { version = "0.17.2", features = ["jpeg"] }
 serde = { version = "1.0", features = ["derive"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 thiserror = "2.0"
+ttf-parser = "0.25"
+bevy-inspector-egui = { version = "0.35.0", optional = true }
 
 [dev-dependencies]
 bevy = "0.17.2"
+image = "0.25"
+toml = "0.8"
+owo-colors = "4.0"
+
+[features]
+default = []
+debug = ["bevy-inspector-egui"]
+video-debug = []
+video-comparison = []
 
 [[example]]
 name = "player"
 path = "examples/player.rs"
+
+[[example]]
+name = "interactive_bg"
+path = "examples/interactive_bg.rs"
+
+[[example]]
+name = "bouncing_ball"
+path = "examples/bouncing_ball.rs"
