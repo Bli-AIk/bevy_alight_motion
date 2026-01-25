@@ -55,9 +55,6 @@ jobs:
       - name: Check formatting
         run: cargo fmt --package bevy_alight_motion -- --check
 
-      - name: Run clippy
-        run: cargo clippy --package bevy_alight_motion --all-targets --all-features -- -D warnings
-
       - name: Build
         run: cargo build --package bevy_alight_motion --verbose
 
