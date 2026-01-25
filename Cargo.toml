@@ -35,3 +35,7 @@ path = "examples/player.rs"
 [[example]]
 name = "interactive_bg"
 path = "examples/interactive_bg.rs"
+
+[[example]]
+name = "bouncing_ball"
+path = "examples/bouncing_ball.rs"
