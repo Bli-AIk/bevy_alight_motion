@@ -219,35 +219,35 @@ pub fn update_unified_mask_system(
 
                             // Half-size: Use precomputed mask.half_size from collect stage
                             // This already includes initial scale and parent scale for child masks
-                            // Then apply fit_scale and animation scale ratio: (current_scale / initial_scale)
-                            // Since mask.scale contains the initial scale, the ratio adjusts for any animation
-                            let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
-                                scale_x / mask.scale.x
-                            } else {
-                                1.0
-                            };
-                            let scale_ratio_y = if mask.scale.y.abs() > 0.001 {
-                                scale_y / mask.scale.y
-                            } else {
-                                1.0
-                            };
-                            let half_width = mask.half_size.x * fit_scale * scale_ratio_x.abs();
-                            let half_height = mask.half_size.y * fit_scale * scale_ratio_y.abs();
+                            //
+                            // IMPORTANT: AM's mask clipping region does NOT animate with scale!
+                            // The mask's scale animation only affects the visual stroke/border,
+                            // not the actual clipping rectangle. This matches reference behavior
+                            // where the mask boundary stays constant while bones animate.
+                            //
+                            // Previously we calculated scale_ratio = current_scale / initial_scale
+                            // and applied it to half_size. This caused the mask to expand/shrink
+                            // with the scale animation, which is incorrect.
+                            let half_width = mask.half_size.x * fit_scale;
+                            let half_height = mask.half_size.y * fit_scale;
 
                             bevy::log::trace!(
-                                "[MASK-UE] mask_trans=({:.1},{:.1}), mask_half_size=({:.1},{:.1}), scale_ratio=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                                "[MASK-UE] mask_trans=({:.1},{:.1}), mask_half_size=({:.1},{:.1}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1}), current_scale=({:.3},{:.3}), initial_scale=({:.3},{:.3}), layer_time={:.4}",
                                 mask_translation.x,
                                 mask_translation.y,
                                 mask.half_size.x,
                                 mask.half_size.y,
-                                scale_ratio_x,
-                                scale_ratio_y,
                                 pivot_x,
                                 pivot_y,
                                 center_x,
                                 center_y,
                                 half_width,
-                                half_height
+                                half_height,
+                                scale_x,
+                                scale_y,
+                                mask.scale.x,
+                                mask.scale.y,
+                                layer_time
                             );
 
                             // Return world coordinates in entity's coordinate space
@@ -341,8 +341,10 @@ pub fn update_unified_mask_system(
                     material.mask2_flags.x = 0.0;
                     material.mask2_flags.z = 0.0;
 
+                    // Log entity world position for debugging child layer mask issues
+                    let entity_world_pos = entity_global_transform.translation();
                     bevy::log::debug!(
-                        "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°",
+                        "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°, entity_world_pos=({:.1},{:.1})",
                         marker.label,
                         global_time,
                         material.effect_flags.x,
@@ -350,7 +352,9 @@ pub fn update_unified_mask_system(
                         mask1_center.y,
                         mask1_half_size.x,
                         mask1_half_size.y,
-                        mask1_rotation.to_degrees()
+                        mask1_rotation.to_degrees(),
+                        entity_world_pos.x,
+                        entity_world_pos.y
                     );
                 }
             }

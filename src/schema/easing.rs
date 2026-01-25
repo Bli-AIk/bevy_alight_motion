@@ -18,6 +18,9 @@ pub enum Easing {
     /// Bounce easing (standard ease-out-bounce).
     /// Parameters are stored but currently ignored in evaluation (using standard bounce).
     Bounce { p1: f32, p2: f32 },
+    /// Reverse bounce easing (ease-in-bounce).
+    /// Used when the animation starts slow and ends with a bounce.
+    ReverseBounce { p1: f32, p2: f32 },
     /// Cyclic easing (sinusoidal oscillation).
     /// Creates a wave-like motion with multiple oscillations between keyframes.
     /// Parameters: period (cycle length), phase, amplitude, p4, p5
@@ -39,6 +42,19 @@ impl Easing {
         }
 
         let parts: Vec<&str> = s.split_whitespace().collect();
+
+        // Check for "reverse" prefix (e.g., "reverse bounce 2.0 0.0")
+        if parts.first().copied() == Some("reverse") {
+            match parts.get(1).copied() {
+                Some("bounce") => {
+                    let p1 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    let p2 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    return Easing::ReverseBounce { p1, p2 };
+                }
+                _ => return Easing::Linear,
+            }
+        }
+
         match parts.first().copied() {
             Some("step") => {
                 let x = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(1.0);
@@ -85,6 +101,7 @@ impl Easing {
             }
             Easing::CubicBezier { x1, y1, x2, y2 } => cubic_bezier_y_for_x(t, *x1, *y1, *x2, *y2),
             Easing::Bounce { p1, p2 } => am_bounce(t, *p1, *p2),
+            Easing::ReverseBounce { p1, p2 } => am_reverse_bounce(t, *p1, *p2),
             Easing::Cyclic {
                 period,
                 phase,
@@ -163,6 +180,18 @@ fn am_bounce(t: f32, p1: f32, p2: f32) -> f32 {
     let bounce_height = 4.0 * local_t * (1.0 - local_t) * amplitude;
 
     1.0 - bounce_height
+}
+
+/// AM-style reverse bounce (ease-in-bounce) with configurable parameters.
+///
+/// In AM, "reverse bounce" is an ease-in-bounce behavior where the animation
+/// starts slow, stays near the initial value for most of the duration, then
+/// accelerates rapidly toward the end with a bounce effect.
+/// This is the time-reversed version of ease-out-bounce.
+fn am_reverse_bounce(t: f32, _p1: f32, _p2: f32) -> f32 {
+    // ease_in_bounce = 1 - ease_out_bounce(1 - t)
+    // This keeps the value close to start for longer, then rapidly approaches end
+    1.0 - ease_out_bounce(1.0 - t)
 }
 
 /// AM-style cyclic easing with sinusoidal oscillation.
