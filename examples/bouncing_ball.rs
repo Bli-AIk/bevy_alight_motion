@@ -118,11 +118,7 @@ fn main() {
 // Setup
 // ============================================================================
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut meshes: ResMut<Assets<Mesh>>) {
     // Spawn camera
     commands.spawn(Camera2d);
 
@@ -171,10 +167,7 @@ fn setup(
 // Input Handling
 // ============================================================================
 
-fn handle_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut playback: ResMut<AmPlayback>,
-) {
+fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlayback>) {
     // Play/Pause toggle
     if keyboard.just_pressed(KeyCode::Space) {
         playback.toggle();
