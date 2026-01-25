@@ -943,8 +943,9 @@ pub fn apply_embed_bounds_clipping_system(
 
         // Set mask params for rectangular clipping
         // mask_type 1.0 = rectangle include (only show pixels inside)
-        material.effect_flags.x = 1.0; // Rectangle mask
-        material.mask_params = bevy::math::Vec4::new(center_x, center_y, half_width, half_height);
+        material.uniform_data.effect_flags.x = 1.0; // Rectangle mask
+        material.uniform_data.mask_params =
+            bevy::math::Vec4::new(center_x, center_y, half_width, half_height);
 
         bevy::log::trace!(
             "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), embed_scale=({:.3},{:.3})",

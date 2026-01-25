@@ -284,72 +284,74 @@ pub(crate) fn add_visual_components(
         };
 
         let mut material = UnifiedEffectMaterial {
-            color,
-            effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
-            mask_params: initial_mask_params,
-            wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
-            stretch_params: Vec4::ZERO,
-            original_size: Vec4::new(width, height, mesh_width, mesh_height),
-            mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
+            uniform_data: crate::masked_sprite::UnifiedEffectUniform {
+                color: Vec4::new(color.red, color.green, color.blue, color.alpha),
+                effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
+                mask_params: initial_mask_params,
+                wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                stretch_params: Vec4::ZERO,
+                original_size: Vec4::new(width, height, mesh_width, mesh_height),
+                mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
+                blur_params: Vec4::ZERO,
+                palette_flags: Vec4::ZERO,
+                palette_color1: Vec4::ZERO,
+                palette_color2: Vec4::ZERO,
+                palette_color3: Vec4::ZERO,
+                palette_color4: Vec4::ZERO,
+                palette_color5: Vec4::ZERO,
+                palette_color6: Vec4::ZERO,
+                palette_color7: Vec4::ZERO,
+                palette_color8: Vec4::ZERO,
+                mask2_params: initial_mask2_params,
+                mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
+                replace_color_flags: Vec4::ZERO,
+                replace_old_color: Vec4::ZERO,
+                replace_new_color: Vec4::ZERO,
+                replace_color_params: Vec4::ZERO,
+            },
             texture: Some(texture),
-            blur_params: Vec4::ZERO,
-            palette_flags: Vec4::ZERO,
-            palette_color1: Vec4::ZERO,
-            palette_color2: Vec4::ZERO,
-            palette_color3: Vec4::ZERO,
-            palette_color4: Vec4::ZERO,
-            palette_color5: Vec4::ZERO,
-            palette_color6: Vec4::ZERO,
-            palette_color7: Vec4::ZERO,
-            palette_color8: Vec4::ZERO,
-            mask2_params: initial_mask2_params,
-            mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
-            replace_color_flags: Vec4::ZERO,
-            replace_old_color: Vec4::ZERO,
-            replace_new_color: Vec4::ZERO,
-            replace_color_params: Vec4::ZERO,
         };
 
         // Enable wipe if present
         if let Some(wp) = wipe_params {
-            material.effect_flags.y = 1.0;
-            material.wipe_params = wp;
+            material.uniform_data.effect_flags.y = 1.0;
+            material.uniform_data.wipe_params = wp;
         }
 
         // Enable stretch if present
         if let Some(sp) = stretch_params {
-            material.effect_flags.z = 1.0;
-            material.stretch_params = sp;
+            material.uniform_data.effect_flags.z = 1.0;
+            material.uniform_data.stretch_params = sp;
         }
 
         // Enable blur if present
         if let Some(bp) = blur_params {
-            material.effect_flags.w = 1.0;
-            material.blur_params = bp;
+            material.uniform_data.effect_flags.w = 1.0;
+            material.uniform_data.blur_params = bp;
         }
 
         // Enable palette map if present
         if let Some(palette) = palette_params {
-            material.palette_flags.x = 1.0; // enabled
-            material.palette_flags.y = palette.count as f32;
-            material.palette_flags.z = if palette.shades { 1.0 } else { 0.0 };
-            material.palette_flags.w = palette.initial_alpha;
-            material.palette_color1 = palette.colors[0];
-            material.palette_color2 = palette.colors[1];
-            material.palette_color3 = palette.colors[2];
-            material.palette_color4 = palette.colors[3];
-            material.palette_color5 = palette.colors[4];
-            material.palette_color6 = palette.colors[5];
-            material.palette_color7 = palette.colors[6];
-            material.palette_color8 = palette.colors[7];
+            material.uniform_data.palette_flags.x = 1.0; // enabled
+            material.uniform_data.palette_flags.y = palette.count as f32;
+            material.uniform_data.palette_flags.z = if palette.shades { 1.0 } else { 0.0 };
+            material.uniform_data.palette_flags.w = palette.initial_alpha;
+            material.uniform_data.palette_color1 = palette.colors[0];
+            material.uniform_data.palette_color2 = palette.colors[1];
+            material.uniform_data.palette_color3 = palette.colors[2];
+            material.uniform_data.palette_color4 = palette.colors[3];
+            material.uniform_data.palette_color5 = palette.colors[4];
+            material.uniform_data.palette_color6 = palette.colors[5];
+            material.uniform_data.palette_color7 = palette.colors[6];
+            material.uniform_data.palette_color8 = palette.colors[7];
         }
 
         // Enable replace color if present
         if let Some((flags, old_color, new_color, params)) = replace_color_params {
-            material.replace_color_flags = flags;
-            material.replace_old_color = old_color;
-            material.replace_new_color = new_color;
-            material.replace_color_params = params;
+            material.uniform_data.replace_color_flags = flags;
+            material.uniform_data.replace_old_color = old_color;
+            material.uniform_data.replace_new_color = new_color;
+            material.uniform_data.replace_color_params = params;
         }
 
         unified_materials.add(material)
