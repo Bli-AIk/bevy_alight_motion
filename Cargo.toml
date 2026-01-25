@@ -10,7 +10,7 @@ autoexamples = false
 [dependencies]
 bevy = { version = "0.17.2", features = ["jpeg"] }
 serde = { version = "1.0", features = ["derive"] }
-quick-xml = { version = "0.37", features = ["serialize"] }
+quick-xml = { version = "0.39", features = ["serialize"] }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 thiserror = "2.0"
 ttf-parser = "0.25"
