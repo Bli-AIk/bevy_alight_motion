@@ -684,6 +684,17 @@ pub struct AmAnimatedFloat {
     pub keyframes: Vec<AmKeyframe>,
 }
 
+/// Animated color (Vec4 RGBA).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmAnimatedColor {
+    /// Static value (if not animated).
+    pub value: Option<bevy::prelude::Vec4>,
+
+    /// Keyframes (if animated). Values are stored as "r,g,b,a" strings.
+    #[serde(default)]
+    pub keyframes: Vec<AmKeyframe>,
+}
+
 /// Keyframe definition.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AmKeyframe {

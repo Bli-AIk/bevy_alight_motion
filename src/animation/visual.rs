@@ -46,6 +46,7 @@ pub(crate) fn add_visual_components(
     has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
     has_scale_assist: bool, // True if layer has scale_assist effect (needs UnifiedEffectMaterial for dynamic sizing)
     global_time_ms: u64,    // Current playback time for mask initialization
+    replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -66,11 +67,13 @@ pub(crate) fn add_visual_components(
     let needs_mask = mask_info.is_some();
     let needs_blur = blur_params.is_some();
     let needs_palette = palette_params.is_some();
+    let needs_replace_color = replace_color_params.is_some();
     let needs_any_effect = needs_stretch
         || needs_wipe
         || needs_mask
         || needs_blur
         || needs_palette
+        || needs_replace_color
         || is_embed_content
         || has_scale_assist;
 
@@ -189,6 +192,7 @@ pub(crate) fn add_visual_components(
         mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
         fit_scale: f32,                // Scale factor for mask coordinates
         global_time_ms: u64,           // Current playback time for mask initialization
+        replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
     ) -> Handle<UnifiedEffectMaterial> {
         // Use mesh_size if provided (for stretch bounds), otherwise use original size
         let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
@@ -300,6 +304,10 @@ pub(crate) fn add_visual_components(
             palette_color8: Vec4::ZERO,
             mask2_params: initial_mask2_params,
             mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
+            replace_color_flags: Vec4::ZERO,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: Vec4::ZERO,
+            replace_color_params: Vec4::ZERO,
         };
 
         // Enable wipe if present
@@ -334,6 +342,14 @@ pub(crate) fn add_visual_components(
             material.palette_color6 = palette.colors[5];
             material.palette_color7 = palette.colors[6];
             material.palette_color8 = palette.colors[7];
+        }
+
+        // Enable replace color if present
+        if let Some((flags, old_color, new_color, params)) = replace_color_params {
+            material.replace_color_flags = flags;
+            material.replace_old_color = old_color;
+            material.replace_new_color = new_color;
+            material.replace_color_params = params;
         }
 
         unified_materials.add(material)
@@ -477,6 +493,7 @@ pub(crate) fn add_visual_components(
                             mesh_size,
                             fit_scale,
                             global_time_ms,
+                            replace_color_params,
                         );
 
                         // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
@@ -572,6 +589,7 @@ pub(crate) fn add_visual_components(
                         mesh_size,
                         fit_scale,
                         global_time_ms,
+                        replace_color_params,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling
@@ -714,6 +732,7 @@ pub(crate) fn add_visual_components(
                         mesh_size,
                         fit_scale,
                         global_time_ms,
+                        replace_color_params,
                     );
 
                     // Transform.scale from scene.rs will handle the scaling

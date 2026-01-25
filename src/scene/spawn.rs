@@ -353,6 +353,7 @@ pub(crate) fn spawn_shape(
     let no_fill = shape.fill_type == "none";
     let base_alpha = get_base_alpha(&shape.fill_color, no_fill);
     let palette_map = extract_palette_map_effect(&shape.effects);
+    let replace_color = extract_replace_color_effect(&shape.effects);
 
     let entity = commands
         .spawn((
@@ -398,6 +399,12 @@ pub(crate) fn spawn_shape(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                replace_old_color: replace_color.old_color,
+                replace_new_color: replace_color.new_color,
+                replace_threshold: replace_color.threshold,
+                replace_feather: replace_color.feather,
+                replace_alpha: replace_color.alpha,
+                replace_lock_luminance: replace_color.lock_luminance,
             },
             layer_spec,
             transform,
@@ -434,6 +441,7 @@ pub(crate) fn spawn_null(
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
+    let replace_color = extract_replace_color_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -499,6 +507,12 @@ pub(crate) fn spawn_null(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                replace_old_color: replace_color.old_color,
+                replace_new_color: replace_color.new_color,
+                replace_threshold: replace_color.threshold,
+                replace_feather: replace_color.feather,
+                replace_alpha: replace_color.alpha,
+                replace_lock_luminance: replace_color.lock_luminance,
             },
             AmLayerSpec::Null,
             transform,
@@ -606,6 +620,12 @@ pub(crate) fn spawn_embed_scene(
                 scale_assist: AmAnimatedFloat::default(),
                 scale_assist_damp: AmAnimatedFloat::default(),
                 scale_assist_axis: 0,
+                replace_old_color: Vec4::ZERO,
+                replace_new_color: crate::schema::AmAnimatedColor::default(),
+                replace_threshold: AmAnimatedFloat::default(),
+                replace_feather: AmAnimatedFloat::default(),
+                replace_alpha: AmAnimatedFloat::default(),
+                replace_lock_luminance: false,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

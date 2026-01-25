@@ -261,6 +261,104 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
     params
 }
 
+/// Replace Color effect parameters
+/// Replaces pixels of oldcolor with newcolor, with threshold and feather controls
+#[derive(Debug, Clone, Default)]
+pub struct ReplaceColorParams {
+    /// The color to replace (RGBA, static)
+    pub old_color: Vec4,
+    /// The replacement color (RGBA, animated)
+    pub new_color: crate::schema::AmAnimatedColor,
+    /// Threshold for color matching (0.0-1.0)
+    pub threshold: AmAnimatedFloat,
+    /// Feather/falloff for smooth transitions (0.0-1.0)
+    pub feather: AmAnimatedFloat,
+    /// Effect alpha/strength (0.0-1.0)
+    pub alpha: AmAnimatedFloat,
+    /// Lock luminance - preserve original brightness
+    pub lock_luminance: bool,
+}
+
+impl ReplaceColorParams {
+    /// Check if this has any replace color effect parameters set
+    pub fn has_effect(&self) -> bool {
+        // If old_color has non-zero alpha, effect is enabled
+        self.old_color.w > 0.0
+    }
+}
+
+/// Extract replace color effect parameters from effects.
+pub(crate) fn extract_replace_color_effect(effects: &[AmEffect]) -> ReplaceColorParams {
+    let mut params = ReplaceColorParams::default();
+    params.alpha.value = Some(1.0); // Default: full effect
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.replacecolor" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "oldcolor" => {
+                        if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                            params.old_color = Vec4::new(color[0], color[1], color[2], color[3]);
+                        }
+                    }
+                    "newcolor" => {
+                        if !prop.keyframes.is_empty() {
+                            params.new_color.keyframes = prop
+                                .keyframes
+                                .iter()
+                                .filter_map(|kf| {
+                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
+                                        Some(crate::schema::AmKeyframe {
+                                            time: kf.time,
+                                            value: format!(
+                                                "{},{},{},{}",
+                                                color[0], color[1], color[2], color[3]
+                                            ),
+                                            easing: kf.easing.clone(),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                            params.new_color.value =
+                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
+                        }
+                    }
+                    "threshold" => {
+                        if !prop.keyframes.is_empty() {
+                            params.threshold.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.threshold.value = Some(v);
+                        }
+                    }
+                    "feather" => {
+                        if !prop.keyframes.is_empty() {
+                            params.feather.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.feather.value = Some(v);
+                        }
+                    }
+                    "alpha" => {
+                        if !prop.keyframes.is_empty() {
+                            params.alpha.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.alpha.value = Some(v);
+                        }
+                    }
+                    "lockLuminance" => {
+                        params.lock_luminance = prop.value == "true";
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
 /// Scale Assist effect parameters
 /// axis: 1=X only, 2=Y only, 3=XY both
 #[derive(Debug, Clone, Default)]

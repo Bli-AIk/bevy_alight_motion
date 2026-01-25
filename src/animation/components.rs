@@ -117,6 +117,18 @@ pub struct AmAnimated {
     pub scale_assist_damp: AmAnimatedFloat,
     /// Scale assist effect axis (1=X, 2=Y, 3=XY).
     pub scale_assist_axis: i32,
+    /// Replace color effect: original color to replace (RGBA)
+    pub replace_old_color: Vec4,
+    /// Replace color effect: new color (animated RGBA)
+    pub replace_new_color: crate::schema::AmAnimatedColor,
+    /// Replace color effect: threshold (0.0-1.0)
+    pub replace_threshold: AmAnimatedFloat,
+    /// Replace color effect: feather (0.0-1.0)
+    pub replace_feather: AmAnimatedFloat,
+    /// Replace color effect: alpha/strength (0.0-1.0)
+    pub replace_alpha: AmAnimatedFloat,
+    /// Replace color effect: lock luminance
+    pub replace_lock_luminance: bool,
 }
 
 impl AmAnimated {

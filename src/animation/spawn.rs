@@ -786,6 +786,47 @@ fn spawn_layer_entity(
             (None, None)
         };
 
+        // Get initial replace color params
+        let initial_replace_color = if layer.animated.replace_old_color != Vec4::ZERO
+            || layer.animated.replace_new_color.value.is_some()
+            || !layer.animated.replace_new_color.keyframes.is_empty()
+        {
+            // Extract initial new_color value
+            // If has keyframes, get color from first keyframe; otherwise use static value or default
+            let new_color_srgb = if let Some(val) = layer.animated.replace_new_color.value {
+                val
+            } else if !layer.animated.replace_new_color.keyframes.is_empty() {
+                // Parse first keyframe's color value (format: "r,g,b,a")
+                let first_kf = &layer.animated.replace_new_color.keyframes[0];
+                super::interpolation::parse_keyframe_color(&first_kf.value)
+                    .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0))
+            } else {
+                Vec4::new(1.0, 1.0, 1.0, 1.0)
+            };
+
+            let threshold = layer.animated.replace_threshold.value.unwrap_or(0.25);
+            let feather = layer.animated.replace_feather.value.unwrap_or(0.25);
+            let alpha = layer.animated.replace_alpha.value.unwrap_or(1.0);
+            let lock_lum = if layer.animated.replace_lock_luminance {
+                1.0
+            } else {
+                0.0
+            };
+
+            let flags = Vec4::new(1.0, lock_lum, 0.0, 0.0); // enabled, lock_luminance
+            let params = Vec4::new(threshold, feather, alpha, 0.0);
+
+            // Pass colors directly in sRGB - shader will convert to linear
+            Some((
+                flags,
+                layer.animated.replace_old_color,
+                new_color_srgb,
+                params,
+            ))
+        } else {
+            None
+        };
+
         add_visual_components(
             commands,
             meshes,
@@ -814,6 +855,7 @@ fn spawn_layer_entity(
             !layer.animated.scale.keyframes.is_empty(), // has_scale_animation - needs bounds clipping
             layer.animated.scale_assist_axis != 0, // has_scale_assist - needs UnifiedEffectMaterial for dynamic sizing
             global_time as u64,                    // current playback time for mask initialization
+            initial_replace_color,                 // replace color params
         );
     } else {
         bevy::log::trace!(

@@ -44,6 +44,10 @@
 @group(2) @binding(18) var<uniform> palette_color8: vec4<f32>;
 @group(2) @binding(19) var<uniform> mask2_params: vec4<f32>;
 @group(2) @binding(20) var<uniform> mask2_flags: vec4<f32>;
+@group(2) @binding(21) var<uniform> replace_color_flags: vec4<f32>;
+@group(2) @binding(22) var<uniform> replace_old_color: vec4<f32>;
+@group(2) @binding(23) var<uniform> replace_new_color: vec4<f32>;
+@group(2) @binding(24) var<uniform> replace_color_params: vec4<f32>;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -52,6 +56,24 @@ fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
     return vec2<f32>(
         v.x * c - v.y * s,
         v.x * s + v.y * c
+    );
+}
+
+// Helper: convert sRGB to linear RGB (single channel)
+fn srgb_to_linear_channel(c: f32) -> f32 {
+    if c <= 0.04045 {
+        return c / 12.92;
+    } else {
+        return pow((c + 0.055) / 1.055, 2.4);
+    }
+}
+
+// Helper: convert sRGB color to linear RGB
+fn srgb_to_linear(color: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        srgb_to_linear_channel(color.r),
+        srgb_to_linear_channel(color.g),
+        srgb_to_linear_channel(color.b)
     );
 }
 
@@ -316,24 +338,6 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
     }
 }
 
-// Convert sRGB to linear color space (per channel)
-fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        return c / 12.92;
-    } else {
-        return pow((c + 0.055) / 1.055, 2.4);
-    }
-}
-
-// Convert vec3 from sRGB to linear
-fn srgb_to_linear_rgb(c: vec3<f32>) -> vec3<f32> {
-    return vec3<f32>(
-        srgb_to_linear(c.r),
-        srgb_to_linear(c.g),
-        srgb_to_linear(c.b)
-    );
-}
-
 // Get palette color by index (0-7)
 // Palette colors are stored as sRGB values, so convert to linear for correct comparison
 fn get_palette_color(index: i32) -> vec4<f32> {
@@ -350,7 +354,7 @@ fn get_palette_color(index: i32) -> vec4<f32> {
         default: { color = palette_color1; }
     }
     // Convert from sRGB to linear color space
-    return vec4<f32>(srgb_to_linear_rgb(color.rgb), color.a);
+    return vec4<f32>(srgb_to_linear(color.rgb), color.a);
 }
 
 // Calculate color distance with bias toward brighter palette colors
@@ -413,6 +417,54 @@ fn apply_palette_map(input_color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(result_rgb, input_color.a);
 }
 
+// Apply replace color effect - replaces old_color with new_color based on threshold and feather
+// replace_color_flags: (enabled, lock_luminance, 0, 0)
+// replace_color_params: (threshold, feather, alpha, 0)
+fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
+    let threshold = replace_color_params.x;
+    let feather = replace_color_params.y;
+    let effect_alpha = replace_color_params.z;
+    let lock_luminance = replace_color_flags.y > 0.5;
+    
+    // Uniform colors are passed in sRGB space, convert to linear for blending
+    // since input_color from texture is already in linear space
+    let old_rgb = srgb_to_linear(replace_old_color.rgb);
+    var new_rgb = srgb_to_linear(replace_new_color.rgb);
+    
+    // Calculate color distance in linear RGB space (normalized 0-1)
+    let input_rgb = input_color.rgb;
+    let diff = input_rgb - old_rgb;
+    let distance = length(diff) / sqrt(3.0); // Normalize to 0-1 range
+    
+    // Calculate replacement factor based on threshold and feather
+    // If distance < threshold: full replacement
+    // If distance > threshold + feather: no replacement
+    // In between: smooth transition
+    var replace_factor: f32;
+    if feather > 0.001 {
+        replace_factor = 1.0 - smoothstep(threshold, threshold + feather, distance);
+    } else {
+        replace_factor = select(0.0, 1.0, distance <= threshold);
+    }
+    
+    // Apply effect alpha
+    replace_factor *= effect_alpha;
+    
+    // If lock_luminance is enabled, preserve original brightness
+    if lock_luminance {
+        let input_lum = dot(input_rgb, vec3<f32>(0.299, 0.587, 0.114));
+        let new_lum = dot(new_rgb, vec3<f32>(0.299, 0.587, 0.114));
+        if new_lum > 0.001 {
+            new_rgb = new_rgb * (input_lum / new_lum);
+        }
+    }
+    
+    // Blend between original and new color (all in linear space)
+    let result_rgb = mix(input_rgb, new_rgb, replace_factor);
+    
+    return vec4<f32>(result_rgb, input_color.a);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
@@ -422,6 +474,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let stretch_enabled = effect_flags.z > 0.5;
     let blur_enabled = effect_flags.w > 0.5;
     let palette_enabled = palette_flags.x > 0.5;
+    let replace_color_enabled = replace_color_flags.x > 0.5;
     
     var sample_uv = mesh.uv;
     
@@ -450,6 +503,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+    
+    // Apply replace color effect if enabled (before palette map)
+    if replace_color_enabled {
+        tex_color = apply_replace_color(tex_color);
     }
     
     // Apply palette map effect if enabled

@@ -184,6 +184,51 @@ pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
+/// Interpolate a color (Vec4 RGBA) property at normalized time t.
+/// Before the first keyframe, holds the first keyframe value (AM behavior).
+pub fn interpolate_color(
+    prop: &crate::schema::AmAnimatedColor,
+    t: f32,
+) -> Option<bevy::prelude::Vec4> {
+    use bevy::prelude::Vec4;
+
+    if prop.keyframes.is_empty() {
+        return prop.value;
+    }
+
+    // AM behavior: hold first/last keyframe value outside keyframe range (no extrapolation)
+    let (kf_prev, kf_next, local_t) = find_keyframes_internal(&prop.keyframes, t, false);
+
+    let v_prev = parse_keyframe_color(&kf_prev.value).unwrap_or(Vec4::ZERO);
+    let v_next = parse_keyframe_color(&kf_next.value).unwrap_or(v_prev);
+
+    // Easing is defined on the "target" keyframe (describes how to arrive at it)
+    let easing = kf_next
+        .easing
+        .as_ref()
+        .map(|e| Easing::parse(e))
+        .unwrap_or_default();
+    let eased_t = easing.evaluate(local_t);
+
+    Some(Vec4::new(
+        lerp(v_prev.x, v_next.x, eased_t),
+        lerp(v_prev.y, v_next.y, eased_t),
+        lerp(v_prev.z, v_next.z, eased_t),
+        lerp(v_prev.w, v_next.w, eased_t),
+    ))
+}
+
+/// Parse Vec4 color from keyframe value string (format: "r,g,b,a").
+pub fn parse_keyframe_color(s: &str) -> Option<bevy::prelude::Vec4> {
+    use bevy::prelude::Vec4;
+    let parts: Vec<f32> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();
+    if parts.len() >= 4 {
+        Some(Vec4::new(parts[0], parts[1], parts[2], parts[3]))
+    } else {
+        None
+    }
+}
+
 /// Parse Vec3 from keyframe value string.
 pub fn parse_keyframe_vec3(s: &str) -> Option<[f32; 3]> {
     crate::schema::parse_vec3(s).ok()

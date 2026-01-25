@@ -82,10 +82,26 @@ pub struct UnifiedEffectMaterial {
     #[uniform(19)]
     pub mask2_params: Vec4,
 
-    /// Mask 2 flags: (mask2_type, 0, 0, 0)
+    /// Mask 2 flags: (mask2_type, mask1_rotation, mask2_rotation, 0)
     /// mask2_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
     #[uniform(20)]
     pub mask2_flags: Vec4,
+
+    /// Replace color flags: (enabled, lock_luminance, 0, 0)
+    #[uniform(21)]
+    pub replace_color_flags: Vec4,
+
+    /// Replace color: old color to replace (r, g, b, a)
+    #[uniform(22)]
+    pub replace_old_color: Vec4,
+
+    /// Replace color: new replacement color (r, g, b, a)
+    #[uniform(23)]
+    pub replace_new_color: Vec4,
+
+    /// Replace color params: (threshold, feather, alpha, 0)
+    #[uniform(24)]
+    pub replace_color_params: Vec4,
 
     #[texture(7)]
     #[sampler(8)]
@@ -114,6 +130,10 @@ impl Default for UnifiedEffectMaterial {
             palette_color8: Vec4::ZERO,
             mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // No clip
             mask2_flags: Vec4::ZERO,
+            replace_color_flags: Vec4::ZERO,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: Vec4::ZERO,
+            replace_color_params: Vec4::ZERO,
             texture: None,
         }
     }
@@ -214,6 +234,30 @@ impl UnifiedEffectMaterial {
 
     pub fn set_palette_alpha(&mut self, alpha: f32) {
         self.palette_flags.w = alpha;
+    }
+
+    /// Set replace color effect parameters
+    pub fn set_replace_color(
+        &mut self,
+        old_color: Vec4,
+        new_color: Vec4,
+        threshold: f32,
+        feather: f32,
+        alpha: f32,
+        lock_luminance: bool,
+    ) {
+        self.replace_color_flags = Vec4::new(1.0, if lock_luminance { 1.0 } else { 0.0 }, 0.0, 0.0);
+        self.replace_old_color = old_color;
+        self.replace_new_color = new_color;
+        self.replace_color_params = Vec4::new(threshold, feather, alpha, 0.0);
+    }
+
+    pub fn set_replace_color_enabled(&mut self, enabled: bool) {
+        self.replace_color_flags.x = if enabled { 1.0 } else { 0.0 };
+    }
+
+    pub fn is_replace_color_enabled(&self) -> bool {
+        self.replace_color_flags.x > 0.5
     }
 
     pub fn is_mask_enabled(&self) -> bool {

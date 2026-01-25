@@ -888,6 +888,31 @@ pub fn animate_unified_effect_system(
                     interpolate_float(&animated.palette_alpha, layer_time).unwrap_or(1.0);
                 material.set_palette_alpha(palette_alpha);
             }
+
+            // Update replace color effect if present
+            let has_replace_color = animated.replace_old_color.w > 0.0;
+            if has_replace_color {
+                let new_color = super::interpolation::interpolate_color(
+                    &animated.replace_new_color,
+                    layer_time,
+                )
+                .unwrap_or(animated.replace_old_color);
+                let threshold =
+                    interpolate_float(&animated.replace_threshold, layer_time).unwrap_or(0.25);
+                let feather =
+                    interpolate_float(&animated.replace_feather, layer_time).unwrap_or(0.25);
+                let alpha = interpolate_float(&animated.replace_alpha, layer_time).unwrap_or(1.0);
+
+                // Pass colors directly - shader will handle color space
+                material.set_replace_color(
+                    animated.replace_old_color,
+                    new_color,
+                    threshold,
+                    feather,
+                    alpha,
+                    animated.replace_lock_luminance,
+                );
+            }
         }
     }
 }

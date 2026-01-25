@@ -34,6 +34,7 @@ pub(crate) fn spawn_image(
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
+    let replace_color = extract_replace_color_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let palette_map = extract_palette_map_effect(&image.effects);
 
@@ -113,6 +114,12 @@ pub(crate) fn spawn_image(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                replace_old_color: replace_color.old_color,
+                replace_new_color: replace_color.new_color,
+                replace_threshold: replace_color.threshold,
+                replace_feather: replace_color.feather,
+                replace_alpha: replace_color.alpha,
+                replace_lock_luminance: replace_color.lock_luminance,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -337,6 +344,12 @@ pub(crate) fn spawn_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: crate::schema::AmAnimatedColor::default(),
+            replace_threshold: AmAnimatedFloat::default(),
+            replace_feather: AmAnimatedFloat::default(),
+            replace_alpha: AmAnimatedFloat::default(),
+            replace_lock_luminance: false,
         },
         transform,
         GlobalTransform::default(),

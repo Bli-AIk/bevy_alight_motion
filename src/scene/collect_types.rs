@@ -43,6 +43,7 @@ pub(crate) fn collect_shape(
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let palette_map = extract_palette_map_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
+    let replace_color = extract_replace_color_effect(&shape.effects);
     if scale_assist.axis != 0 {
         bevy::log::info!(
             "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
@@ -210,6 +211,12 @@ pub(crate) fn collect_shape(
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
             scale_assist_axis: scale_assist.axis,
+            replace_old_color: replace_color.old_color,
+            replace_new_color: replace_color.new_color,
+            replace_threshold: replace_color.threshold,
+            replace_feather: replace_color.feather,
+            replace_alpha: replace_color.alpha,
+            replace_lock_luminance: replace_color.lock_luminance,
         },
         spec,
         z_index: z,
@@ -246,6 +253,7 @@ pub(crate) fn collect_null(
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
+    let replace_color = extract_replace_color_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -297,6 +305,12 @@ pub(crate) fn collect_null(
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
             scale_assist_axis: scale_assist.axis,
+            replace_old_color: replace_color.old_color,
+            replace_new_color: replace_color.new_color,
+            replace_threshold: replace_color.threshold,
+            replace_feather: replace_color.feather,
+            replace_alpha: replace_color.alpha,
+            replace_lock_luminance: replace_color.lock_luminance,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -452,6 +466,12 @@ pub(crate) fn collect_embed_scene(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: crate::schema::AmAnimatedColor::default(),
+            replace_threshold: AmAnimatedFloat::default(),
+            replace_feather: AmAnimatedFloat::default(),
+            replace_alpha: AmAnimatedFloat::default(),
+            replace_lock_luminance: false,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -590,6 +610,12 @@ pub(crate) fn collect_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: crate::schema::AmAnimatedColor::default(),
+            replace_threshold: AmAnimatedFloat::default(),
+            replace_feather: AmAnimatedFloat::default(),
+            replace_alpha: AmAnimatedFloat::default(),
+            replace_lock_luminance: false,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -625,6 +651,7 @@ pub(crate) fn collect_image(
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let palette_map = extract_palette_map_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
+    let replace_color = extract_replace_color_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -683,6 +710,12 @@ pub(crate) fn collect_image(
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
             scale_assist_axis: scale_assist.axis,
+            replace_old_color: replace_color.old_color,
+            replace_new_color: replace_color.new_color,
+            replace_threshold: replace_color.threshold,
+            replace_feather: replace_color.feather,
+            replace_alpha: replace_color.alpha,
+            replace_lock_luminance: replace_color.lock_luminance,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
