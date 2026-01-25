@@ -14,9 +14,7 @@ use crate::scene::{AmLayerMarker, AmMaskInfo};
 use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
-use super::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
-};
+use super::interpolation::{interpolate_float, interpolate_vec2};
 
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
@@ -64,7 +62,7 @@ pub fn update_sdf_mask_system(
     }
 
     let global_time = playback.current_time_ms;
-    let global_time_sec = global_time as f32 / 1000.0;
+    let global_time_sec = global_time / 1000.0;
 
     for (_animated, children, mask_info, marker, parent_global_transform) in parent_query.iter() {
         // Log parent entity's GlobalTransform for debugging
@@ -88,137 +86,136 @@ pub fn update_sdf_mask_system(
         // So mask coordinates must also be scaled by fit_scale, NOT by mask's own GlobalTransform.
         let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
             // Try to get the mask layer's current transform and animation data
-            if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                if let Ok((_global_transform, mask_animated, spec)) =
+            if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id)
+                && let Ok((_global_transform, mask_animated, spec)) =
                     mask_layer_query.get(mask_entity)
-                {
-                    // Get base shape dimensions from spec
-                    let (base_width, base_height, pivot_x, pivot_y) = match spec {
-                        crate::scene::AmLayerSpec::SdfShape {
-                            width,
-                            height,
-                            pivot_x,
-                            pivot_y,
-                            ..
-                        } => (*width, *height, *pivot_x, *pivot_y),
-                        crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
-                            (*width, *height, 0.0, 0.0)
-                        }
-                        _ => (
-                            mask.half_size.x * 2.0 / mask.scale.x,
-                            mask.half_size.y * 2.0 / mask.scale.y,
-                            0.0,
-                            0.0,
-                        ),
-                    };
-
-                    // Calculate layer-local time for interpolation
-                    let layer_time =
-                        (global_time_sec - mask_animated.start_time as f32 / 1000.0).max(0.0);
-
-                    // Get animated values using interpolation
-                    // Rotation
-                    let rotation_deg =
-                        interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
-                    let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
-
-                    // Scale (local animated scale)
-                    let [scale_x, scale_y] =
-                        interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
-
-                    // Size - get animated size (AM stores full dimensions, we need half-extents)
-                    let [anim_size_x, anim_size_y] =
-                        interpolate_vec2(&mask_animated.size, layer_time)
-                            .unwrap_or([base_width, base_height]);
-
-                    // Use the mask layer's GlobalTransform to get world position
-                    // This already includes AM project root offset and all parent transforms
-                    let mask_translation = _global_transform.translation();
-                    let mask_global_scale = _global_transform.to_scale_rotation_translation().0;
-
-                    // The mask layer's GlobalTransform includes its own animated scale (1.75)
-                    // But the SDF child entity's GlobalTransform only includes parent_global_scale (0.5)
-                    // We need to use parent_global_scale for size calculations to match SDF's coordinate space
-
-                    // Calculate the ratio between mask's position scale and SDF's scale
-                    // Mask's translation is already in world coords (scaled by mask's global scale)
-                    // We need to convert it to SDF's coordinate space
-                    let scale_ratio_x = parent_global_scale.x / mask_global_scale.x;
-                    let scale_ratio_y = parent_global_scale.y / mask_global_scale.y;
-
-                    // Adjust mask translation to SDF coordinate space
-                    // The mask's translation is scaled by mask_global_scale, but SDF uses parent_global_scale
-                    // Actually, both mask and SDF are children of the same AM project root
-                    // So they share the same base translation from the root
-                    // The difference is only in their local scales
-
-                    // For center calculation:
-                    // - mask_translation is the world position of mask's pivot point
-                    // - We need to add the pivot offset to get geometric center
-                    // - The pivot offset should be scaled by mask's own scale (scale_x, scale_y)
-                    //   and then by how much the SDF's scale differs from mask's scale
-
-                    // Since mask and SDF share the same root transform, their world positions should align
-                    // The issue is that mask's local scale affects its position calculation differently
-
-                    // Actually, let's just use the mask's world position directly
-                    // The pivot offset needs to be calculated in world coords
-                    let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
-                    let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
-
-                    let rotated_offset_x =
-                        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                    let rotated_offset_y =
-                        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-
-                    // Use mask's world translation and add pivot offset
-                    let center_x = mask_translation.x + rotated_offset_x;
-                    let center_y = mask_translation.y + rotated_offset_y;
-
-                    // Half-size: Use precomputed mask.half_size as base (already includes parent scale for child masks)
-                    // Then apply fit_scale and animated scale ratio
-                    // mask.half_size = base_half_size * initial_scale * parent_scale (from collect stage)
-                    // So we need to apply: fit_scale * (current_scale / initial_scale) for animation
-                    // Since initial_scale = mask.scale, the ratio is (scale_x/mask.scale.x, scale_y/mask.scale.y)
-                    let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
-                        scale_x / mask.scale.x
-                    } else {
-                        1.0
-                    };
-                    let scale_ratio_y = if mask.scale.y.abs() > 0.001 {
-                        scale_y / mask.scale.y
-                    } else {
-                        1.0
-                    };
-                    let half_width = mask.half_size.x * fit_scale * scale_ratio_x.abs();
-                    let half_height = mask.half_size.y * fit_scale * scale_ratio_y.abs();
-
-                    bevy::log::debug!(
-                        "[MaskDebug] mask_layer_id={}, mask_trans=({:.1},{:.1}), mask_scale=({:.2},{:.2}), parent_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
-                        mask.mask_layer_id,
-                        mask_translation.x,
-                        mask_translation.y,
-                        mask_global_scale.x,
-                        mask_global_scale.y,
-                        parent_global_scale.x,
-                        parent_global_scale.y,
-                        scale_x,
-                        scale_y,
+            {
+                // Get base shape dimensions from spec
+                let (base_width, base_height, pivot_x, pivot_y) = match spec {
+                    crate::scene::AmLayerSpec::SdfShape {
+                        width,
+                        height,
                         pivot_x,
                         pivot_y,
-                        center_x,
-                        center_y,
-                        half_width,
-                        half_height
-                    );
+                        ..
+                    } => (*width, *height, *pivot_x, *pivot_y),
+                    crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
+                        (*width, *height, 0.0, 0.0)
+                    }
+                    _ => (
+                        mask.half_size.x * 2.0 / mask.scale.x,
+                        mask.half_size.y * 2.0 / mask.scale.y,
+                        0.0,
+                        0.0,
+                    ),
+                };
 
-                    // Return world coordinates in parent's coordinate space
-                    return (
-                        Vec2::new(center_x, center_y),
-                        Vec2::new(half_width, half_height),
-                        rotation_rad,
-                    );
-                }
+                // Calculate layer-local time for interpolation
+                let layer_time =
+                    (global_time_sec - mask_animated.start_time as f32 / 1000.0).max(0.0);
+
+                // Get animated values using interpolation
+                // Rotation
+                let rotation_deg =
+                    interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
+                let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
+
+                // Scale (local animated scale)
+                let [scale_x, scale_y] =
+                    interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+
+                // Size - get animated size (AM stores full dimensions, we need half-extents)
+                let [_anim_size_x, _anim_size_y] =
+                    interpolate_vec2(&mask_animated.size, layer_time)
+                        .unwrap_or([base_width, base_height]);
+
+                // Use the mask layer's GlobalTransform to get world position
+                // This already includes AM project root offset and all parent transforms
+                let mask_translation = _global_transform.translation();
+                let mask_global_scale = _global_transform.to_scale_rotation_translation().0;
+
+                // The mask layer's GlobalTransform includes its own animated scale (1.75)
+                // But the SDF child entity's GlobalTransform only includes parent_global_scale (0.5)
+                // We need to use parent_global_scale for size calculations to match SDF's coordinate space
+
+                // Calculate the ratio between mask's position scale and SDF's scale
+                // Mask's translation is already in world coords (scaled by mask's global scale)
+                // We need to convert it to SDF's coordinate space
+                let _scale_ratio_x = parent_global_scale.x / mask_global_scale.x;
+                let _scale_ratio_y = parent_global_scale.y / mask_global_scale.y;
+
+                // Adjust mask translation to SDF coordinate space
+                // The mask's translation is scaled by mask_global_scale, but SDF uses parent_global_scale
+                // Actually, both mask and SDF are children of the same AM project root
+                // So they share the same base translation from the root
+                // The difference is only in their local scales
+
+                // For center calculation:
+                // - mask_translation is the world position of mask's pivot point
+                // - We need to add the pivot offset to get geometric center
+                // - The pivot offset should be scaled by mask's own scale (scale_x, scale_y)
+                //   and then by how much the SDF's scale differs from mask's scale
+
+                // Since mask and SDF share the same root transform, their world positions should align
+                // The issue is that mask's local scale affects its position calculation differently
+
+                // Actually, let's just use the mask's world position directly
+                // The pivot offset needs to be calculated in world coords
+                let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
+                let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
+
+                let rotated_offset_x =
+                    scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+                let rotated_offset_y =
+                    scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+                // Use mask's world translation and add pivot offset
+                let center_x = mask_translation.x + rotated_offset_x;
+                let center_y = mask_translation.y + rotated_offset_y;
+
+                // Half-size: Use precomputed mask.half_size as base (already includes parent scale for child masks)
+                // Then apply fit_scale and animated scale ratio
+                // mask.half_size = base_half_size * initial_scale * parent_scale (from collect stage)
+                // So we need to apply: fit_scale * (current_scale / initial_scale) for animation
+                // Since initial_scale = mask.scale, the ratio is (scale_x/mask.scale.x, scale_y/mask.scale.y)
+                let scale_ratio_x = if mask.scale.x.abs() > 0.001 {
+                    scale_x / mask.scale.x
+                } else {
+                    1.0
+                };
+                let scale_ratio_y = if mask.scale.y.abs() > 0.001 {
+                    scale_y / mask.scale.y
+                } else {
+                    1.0
+                };
+                let half_width = mask.half_size.x * fit_scale * scale_ratio_x.abs();
+                let half_height = mask.half_size.y * fit_scale * scale_ratio_y.abs();
+
+                bevy::log::debug!(
+                    "[MaskDebug] mask_layer_id={}, mask_trans=({:.1},{:.1}), mask_scale=({:.2},{:.2}), parent_scale=({:.2},{:.2}), scale=({:.2},{:.2}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1})",
+                    mask.mask_layer_id,
+                    mask_translation.x,
+                    mask_translation.y,
+                    mask_global_scale.x,
+                    mask_global_scale.y,
+                    parent_global_scale.x,
+                    parent_global_scale.y,
+                    scale_x,
+                    scale_y,
+                    pivot_x,
+                    pivot_y,
+                    center_x,
+                    center_y,
+                    half_width,
+                    half_height
+                );
+
+                // Return world coordinates in parent's coordinate space
+                return (
+                    Vec2::new(center_x, center_y),
+                    Vec2::new(half_width, half_height),
+                    rotation_rad,
+                );
             }
             // Fallback to stored values if transform lookup fails
             (
@@ -503,59 +500,59 @@ pub fn animate_sdf_scale_system(
         //   axis=3 (Both):   scale_x *= scale_param
         //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
         //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-        if animated.scale_assist_axis != 0 {
-            if let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time) {
-                // Get damp value (defaults to 1.0)
-                let damp_param =
-                    interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
+        if animated.scale_assist_axis != 0
+            && let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time)
+        {
+            // Get damp value (defaults to 1.0)
+            let damp_param =
+                interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
 
-                // Constants derived from empirical analysis of AM reference videos
-                // scale divisor = scale_param^SCALE_POWER
-                // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
-                const DAMP_COEFF: f32 = 2.75;
-                const DAMP_POWER: f32 = 1.93;
+            // Constants derived from empirical analysis of AM reference videos
+            // scale divisor = scale_param^SCALE_POWER
+            // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+            const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+            const DAMP_COEFF: f32 = 2.75;
+            const DAMP_POWER: f32 = 1.93;
 
-                let scale_before = anim_scale;
+            let scale_before = anim_scale;
 
-                match animated.scale_assist_axis {
-                    1 => {
-                        // Y only (vertical stretch)
-                        anim_scale[1] *= scale_param;
-                    }
-                    2 => {
-                        // X only (horizontal stretch)
-                        anim_scale[0] *= scale_param;
-                    }
-                    3 => {
-                        // Both axes - X stretches, Y compresses
-                        // This creates the characteristic "line stretch" effect
-                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
-                        let damp_factor = damp_param.powf(damp_exp);
-                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
-                        anim_scale[0] *= scale_param;
-                        anim_scale[1] /= scale_divisor;
-                    }
-                    _ => {}
+            match animated.scale_assist_axis {
+                1 => {
+                    // Y only (vertical stretch)
+                    anim_scale[1] *= scale_param;
                 }
-
-                // Debug log
-                static SDF_SCALE_DEBUG: std::sync::atomic::AtomicU32 =
-                    std::sync::atomic::AtomicU32::new(0);
-                let cnt = SDF_SCALE_DEBUG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if cnt < 50 {
-                    bevy::log::info!(
-                        "[SDF_SCALE_ASSIST] layer={}, time={:.1}ms, scale_param={:.4}, damp={:.4}, scale: ({:.4},{:.4}) -> ({:.4},{:.4})",
-                        animated.layer_id,
-                        global_time,
-                        scale_param,
-                        damp_param,
-                        scale_before[0],
-                        scale_before[1],
-                        anim_scale[0],
-                        anim_scale[1]
-                    );
+                2 => {
+                    // X only (horizontal stretch)
+                    anim_scale[0] *= scale_param;
                 }
+                3 => {
+                    // Both axes - X stretches, Y compresses
+                    // This creates the characteristic "line stretch" effect
+                    let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                    let damp_factor = damp_param.powf(damp_exp);
+                    let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
+                    anim_scale[0] *= scale_param;
+                    anim_scale[1] /= scale_divisor;
+                }
+                _ => {}
+            }
+
+            // Debug log
+            static SDF_SCALE_DEBUG: std::sync::atomic::AtomicU32 =
+                std::sync::atomic::AtomicU32::new(0);
+            let cnt = SDF_SCALE_DEBUG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if cnt < 50 {
+                bevy::log::info!(
+                    "[SDF_SCALE_ASSIST] layer={}, time={:.1}ms, scale_param={:.4}, damp={:.4}, scale: ({:.4},{:.4}) -> ({:.4},{:.4})",
+                    animated.layer_id,
+                    global_time,
+                    scale_param,
+                    damp_param,
+                    scale_before[0],
+                    scale_before[1],
+                    anim_scale[0],
+                    anim_scale[1]
+                );
             }
         }
 

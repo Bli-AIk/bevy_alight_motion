@@ -137,7 +137,7 @@ pub fn update_unified_mask_system(
                     std::sync::atomic::AtomicU32::new(0);
                 let count = UNIFIED_MASK_LOG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 // Log at frame 32 time (1066ms) and after
-                if global_time >= 1060 && global_time <= 1100 && count < 50 {
+                if (1060..=1100).contains(&global_time) && count < 50 {
                     bevy::log::info!(
                         "[UNIFIED_MASK_DISABLED] '{}' at time {}ms: effect_flags set to 0, mask_info.masks.len={}, mask_times={:?}",
                         marker.label,
@@ -195,7 +195,7 @@ pub fn update_unified_mask_system(
                                 interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
                             // Size - get animated size (AM stores full dimensions, we need half-extents)
-                            let [anim_size_x, anim_size_y] =
+                            let [_anim_size_x, _anim_size_y] =
                                 interpolate_vec2(&animated.size, layer_time)
                                     .unwrap_or([base_width, base_height]);
 
@@ -420,47 +420,47 @@ pub fn animate_unified_effect_system(
         //   axis=3 (Both):   scale_x *= scale_param
         //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
         //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-        if animated.scale_assist_axis != 0 {
-            if let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time) {
-                let damp_param =
-                    interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
+        if animated.scale_assist_axis != 0
+            && let Some(scale_param) = interpolate_float(&animated.scale_assist, layer_time)
+        {
+            let damp_param =
+                interpolate_float(&animated.scale_assist_damp, layer_time).unwrap_or(1.0);
 
-                // Debug log for scale_assist with cyclic easing
-                bevy::log::trace!(
-                    "[scale_assist] layer_time={:.4}, scale_param={:.4}, damp={:.4}, axis={}",
-                    layer_time,
-                    scale_param,
-                    damp_param,
-                    animated.scale_assist_axis
-                );
+            // Debug log for scale_assist with cyclic easing
+            bevy::log::trace!(
+                "[scale_assist] layer_time={:.4}, scale_param={:.4}, damp={:.4}, axis={}",
+                layer_time,
+                scale_param,
+                damp_param,
+                animated.scale_assist_axis
+            );
 
-                // Constants derived from empirical analysis of AM reference videos
-                // scale divisor = scale_param^SCALE_POWER
-                // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
-                const DAMP_COEFF: f32 = 2.75;
-                const DAMP_POWER: f32 = 1.93;
+            // Constants derived from empirical analysis of AM reference videos
+            // scale divisor = scale_param^SCALE_POWER
+            // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
+            const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+            const DAMP_COEFF: f32 = 2.75;
+            const DAMP_POWER: f32 = 1.93;
 
-                match animated.scale_assist_axis {
-                    1 => {
-                        // Y only (vertical stretch)
-                        scale[1] *= scale_param;
-                    }
-                    2 => {
-                        // X only (horizontal stretch)
-                        scale[0] *= scale_param;
-                    }
-                    3 => {
-                        // Both axes - X stretches, Y compresses
-                        // This creates the characteristic "line stretch" effect
-                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
-                        let damp_factor = damp_param.powf(damp_exp);
-                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
-                        scale[0] *= scale_param;
-                        scale[1] /= scale_divisor;
-                    }
-                    _ => {}
+            match animated.scale_assist_axis {
+                1 => {
+                    // Y only (vertical stretch)
+                    scale[1] *= scale_param;
                 }
+                2 => {
+                    // X only (horizontal stretch)
+                    scale[0] *= scale_param;
+                }
+                3 => {
+                    // Both axes - X stretches, Y compresses
+                    // This creates the characteristic "line stretch" effect
+                    let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                    let damp_factor = damp_param.powf(damp_exp);
+                    let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
+                    scale[0] *= scale_param;
+                    scale[1] /= scale_divisor;
+                }
+                _ => {}
             }
         }
 

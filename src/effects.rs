@@ -15,6 +15,7 @@ mod rtt;
 mod types;
 
 // Re-export all public types
+#[allow(deprecated)]
 pub use types::{
     EffectLayer,
     EffectOutputTexture,

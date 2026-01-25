@@ -279,13 +279,7 @@ pub struct ReplaceColorParams {
     pub lock_luminance: bool,
 }
 
-impl ReplaceColorParams {
-    /// Check if this has any replace color effect parameters set
-    pub fn has_effect(&self) -> bool {
-        // If old_color has non-zero alpha, effect is enabled
-        self.old_color.w > 0.0
-    }
-}
+impl ReplaceColorParams {}
 
 /// Extract replace color effect parameters from effects.
 pub(crate) fn extract_replace_color_effect(effects: &[AmEffect]) -> ReplaceColorParams {
@@ -371,12 +365,7 @@ pub struct ScaleAssistParams {
     pub damp: AmAnimatedFloat,
 }
 
-impl ScaleAssistParams {
-    /// Check if this has any scale assist effect parameters set
-    pub fn has_effect(&self) -> bool {
-        self.scale.value.is_some() || !self.scale.keyframes.is_empty()
-    }
-}
+impl ScaleAssistParams {}
 
 /// Extract scale assist effect parameters from effects.
 pub(crate) fn extract_scale_assist_effect(effects: &[AmEffect]) -> ScaleAssistParams {

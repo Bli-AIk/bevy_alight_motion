@@ -103,44 +103,44 @@ pub fn animate_transform_system(
         //   axis=3 (Both):   scale_x *= scale_param
         //                    scale_y /= (scale_param^SCALE_POWER * damp_factor)
         //                    where damp_factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-        if animated.scale_assist_axis != 0 {
-            if let Some(scale_param) = crate::animation::interpolation::interpolate_float(
+        if animated.scale_assist_axis != 0
+            && let Some(scale_param) = crate::animation::interpolation::interpolate_float(
                 &animated.scale_assist,
                 layer_time,
-            ) {
-                // Get damp value (defaults to 1.0)
-                let damp_param = crate::animation::interpolation::interpolate_float(
-                    &animated.scale_assist_damp,
-                    layer_time,
-                )
-                .unwrap_or(1.0);
+            )
+        {
+            // Get damp value (defaults to 1.0)
+            let damp_param = crate::animation::interpolation::interpolate_float(
+                &animated.scale_assist_damp,
+                layer_time,
+            )
+            .unwrap_or(1.0);
 
-                // Constants derived from empirical analysis of AM reference videos
-                // Must match effects.rs for consistent scale calculations
-                const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
-                const DAMP_COEFF: f32 = 2.75;
-                const DAMP_POWER: f32 = 1.93;
+            // Constants derived from empirical analysis of AM reference videos
+            // Must match effects.rs for consistent scale calculations
+            const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+            const DAMP_COEFF: f32 = 2.75;
+            const DAMP_POWER: f32 = 1.93;
 
-                match animated.scale_assist_axis {
-                    1 => {
-                        // Y only (vertical stretch)
-                        actual_scale[1] *= scale_param;
-                    }
-                    2 => {
-                        // X only (horizontal stretch)
-                        actual_scale[0] *= scale_param;
-                    }
-                    3 => {
-                        // Both axes - X stretches, Y compresses
-                        // This creates the characteristic "line stretch" effect
-                        let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
-                        let damp_factor = damp_param.powf(damp_exp);
-                        let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
-                        actual_scale[0] *= scale_param;
-                        actual_scale[1] /= scale_divisor;
-                    }
-                    _ => {}
+            match animated.scale_assist_axis {
+                1 => {
+                    // Y only (vertical stretch)
+                    actual_scale[1] *= scale_param;
                 }
+                2 => {
+                    // X only (horizontal stretch)
+                    actual_scale[0] *= scale_param;
+                }
+                3 => {
+                    // Both axes - X stretches, Y compresses
+                    // This creates the characteristic "line stretch" effect
+                    let damp_exp = 1.0 + DAMP_COEFF * (damp_param - 1.0).powf(DAMP_POWER);
+                    let damp_factor = damp_param.powf(damp_exp);
+                    let scale_divisor = scale_param.powf(SCALE_POWER) * damp_factor;
+                    actual_scale[0] *= scale_param;
+                    actual_scale[1] /= scale_divisor;
+                }
+                _ => {}
             }
         }
 

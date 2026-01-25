@@ -92,6 +92,7 @@ pub(crate) fn flatten_pending_layers(
 /// Spatial decoupling logic:
 /// - Only content inside top-level embeds (base_nesting_depth == 0 && embed_depth == 1) gets spatially decoupled
 /// - Content inside nested embeds (base_nesting_depth > 0 OR embed_depth > 1) becomes Bevy children
+#[allow(clippy::only_used_in_recursion)]
 pub(crate) fn flatten_pending_layers_inner(
     layers: Vec<PendingLayer>,
     current_embed_id: u64,
@@ -183,7 +184,7 @@ pub(crate) fn flatten_pending_layers_inner(
 
             // Pass 2: Apply the mapping with correct parent lookup
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
-                let old_id = id_mappings[idx].0;
+                let _old_id = id_mappings[idx].0;
                 let new_id = id_mappings[idx].1;
 
                 // Save the original parent for lookup
@@ -486,10 +487,10 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             return true; // Direct parent
         }
         // Check grandparents
-        if let Some(&grandparent_id) = parent_map.get(&mask_parent_id) {
-            if grandparent_id != 0 {
-                return is_ancestor_of_mask(layer_id, grandparent_id, parent_map);
-            }
+        if let Some(&grandparent_id) = parent_map.get(&mask_parent_id)
+            && grandparent_id != 0
+        {
+            return is_ancestor_of_mask(layer_id, grandparent_id, parent_map);
         }
         false
     }

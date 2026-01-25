@@ -119,7 +119,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 /// This is triggered for every entity spawned by the AM library.
 /// 这会为 AM 库生成的每个实体触发。
 fn on_am_entity_spawned(
-    trigger: Trigger<AmEntitySpawned>,
+    trigger: On<AmEntitySpawned>,
     mut commands: Commands,
     spec_query: Query<&AmLayerSpec>,
 ) {

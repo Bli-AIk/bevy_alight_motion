@@ -226,9 +226,6 @@ pub enum LayerFilter {
     AllowList(Vec<String>),
     /// 不生成名称在列表中的图层 (Don't spawn layers with names in the list)
     BlockList(Vec<String>),
-    /// 使用正则表达式匹配图层名称 (Match layer names with regex pattern)
-    #[cfg(feature = "regex")]
-    Regex(String),
 }
 
 impl LayerFilter {
@@ -239,12 +236,6 @@ impl LayerFilter {
             LayerFilter::None => true,
             LayerFilter::AllowList(list) => list.iter().any(|name| name == layer_name),
             LayerFilter::BlockList(list) => !list.iter().any(|name| name == layer_name),
-            #[cfg(feature = "regex")]
-            LayerFilter::Regex(pattern) => {
-                regex::Regex::new(pattern)
-                    .map(|re| re.is_match(layer_name))
-                    .unwrap_or(true) // If regex fails, default to spawning
-            }
         }
     }
 }

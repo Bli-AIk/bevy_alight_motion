@@ -214,7 +214,7 @@ pub fn evaluate_render_strategy_system(
     use std::sync::atomic::{AtomicU32, Ordering};
     static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
     let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    if frame <= 10 || frame % 60 == 0 {
+    if frame <= 10 || frame.is_multiple_of(60) {
         let count = query.iter().count();
         bevy::log::trace!("[Strategy] Frame {}: query count = {}", frame, count);
     }
@@ -549,7 +549,7 @@ pub fn propagate_render_layers_system(
         .collect();
 
     // Debug logging
-    if frame <= 10 || frame % 60 == 0 {
+    if frame <= 10 || frame.is_multiple_of(60) {
         bevy::log::trace!(
             "[RenderLayers] Frame {}: Composite={}, Direct={}, content={}",
             frame,
@@ -695,7 +695,7 @@ pub fn propagate_render_layers_to_children_system(
         );
     }
 
-    if frame <= 10 || frame % 60 == 0 || total_updates > 0 || direct_with_children > 0 {
+    if frame <= 10 || frame.is_multiple_of(60) || total_updates > 0 || direct_with_children > 0 {
         bevy::log::trace!(
             "[PropagateChildren] Frame {}: {} updates, Direct embeds with children: {} (total {} children)",
             frame,
@@ -707,6 +707,7 @@ pub fn propagate_render_layers_to_children_system(
 }
 
 /// Helper function to propagate RenderLayers to all descendants of an embed.
+#[allow(clippy::too_many_arguments)]
 fn propagate_to_descendants(
     commands: &mut Commands,
     embed_entity: Entity,
@@ -906,7 +907,7 @@ pub fn apply_embed_bounds_clipping_system(
         // Direct embeds render content directly to main canvas without composition.
         // For embeds that need bounds clipping (e.g., those with scale animation),
         // Stencil or Composite strategy should be used instead.
-        if strategy.map_or(false, |s| *s == RenderStrategy::Direct) {
+        if strategy.is_some_and(|s| *s == RenderStrategy::Direct) {
             continue;
         }
 

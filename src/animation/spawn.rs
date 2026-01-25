@@ -343,7 +343,7 @@ fn spawn_layer_entity(
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
     parent_entity: Entity,
-    embed_contents_container: Option<Entity>,
+    _embed_contents_container: Option<Entity>,
     inv_fit_scale: f32,
     spawned_entities: &HashMap<u64, Entity>,
     global_time: f32,

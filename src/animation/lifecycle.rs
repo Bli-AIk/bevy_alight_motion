@@ -47,7 +47,7 @@ pub fn manage_layer_lifecycle_system(
     let global_time = playback.current_time_ms;
 
     // Debug logging for force_stopped state
-    if global_time >= 990.0 && global_time <= 1050.0 {
+    if (990.0..=1050.0).contains(&global_time) {
         bevy::log::info!(
             "[Lifecycle ENTRY] time={:.1}ms force_stopped={}",
             global_time,
@@ -66,7 +66,7 @@ pub fn manage_layer_lifecycle_system(
     let frame_count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     // Debug: Log time around frame 30 (time 1000-1033)
-    if global_time >= 990.0 && global_time <= 1050.0 {
+    if (990.0..=1050.0).contains(&global_time) {
         bevy::log::info!(
             "[Lifecycle] Frame {} global_time={:.1}ms playing={}",
             frame_count,

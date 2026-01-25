@@ -5,6 +5,9 @@
 //! Effect parameter types and data structures.
 //! 效果参数类型和数据结构。
 
+// Allow deprecated items in this module (NeedsRenderStrategyEvaluation is deprecated but kept for compatibility)
+#![allow(deprecated)]
+
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
