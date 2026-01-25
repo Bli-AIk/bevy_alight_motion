@@ -213,15 +213,31 @@ fn am_cyclic(t: f32, period: f32, phase: f32, amplitude: f32) -> f32 {
 /// Solve cubic bezier curve: find Y for given X.
 /// Control points are (0,0), (x1,y1), (x2,y2), (1,1).
 fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
+    // Apply AM-specific x-coordinate correction ONLY when:
+    // - x1 is close to 1.0 (within 0.1)
+    // - x2 is close to 0.0 (within 0.1)
+    //
+    // For these "extreme" curves, AM uses slightly different x-coordinates:
+    //   x1_corrected = x1 * 0.95
+    //   x2_corrected = x2 * 0.95 + 0.05
+    //
+    // This was derived from video frame analysis comparing AM's actual output
+    // with standard CSS cubic-bezier behavior.
+    let (x1_corr, x2_corr) = if (x1 - 1.0).abs() < 0.1 && x2.abs() < 0.1 {
+        (x1 * 0.95, x2 * 0.95 + 0.05)
+    } else {
+        (x1, x2)
+    };
+
     // Find t for given x using Newton's method
     let mut t = x;
     for _ in 0..8 {
-        let x_t = bezier_component(t, x1, x2);
+        let x_t = bezier_component(t, x1_corr, x2_corr);
         let dx = x - x_t;
         if dx.abs() < 1e-6 {
             break;
         }
-        let dx_dt = bezier_derivative(t, x1, x2);
+        let dx_dt = bezier_derivative(t, x1_corr, x2_corr);
         if dx_dt.abs() < 1e-6 {
             break;
         }

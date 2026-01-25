@@ -949,6 +949,8 @@ mod video_comparison_systems {
         pub max_failed_rate: f32,      // Maximum ratio of failed frames allowed
         pub project_name: String,
         pub skipped: bool,
+        pub pending_time_ms: Option<f32>, // Time to set in next First schedule
+        pub render_wait_frames: u32, // Frames to wait after applying time before allowing screenshot
     }
 
     #[derive(PartialEq, Debug)]
@@ -958,6 +960,7 @@ mod video_comparison_systems {
         SettingTime,
         WaitingForRender,
         Capturing,
+        WaitingForScreenshot, // Wait one frame for screenshot to be executed
         Comparing,
         Finished,
         Cancelled, // User closed the window
@@ -982,6 +985,8 @@ mod video_comparison_systems {
                 max_failed_rate: 0.05,
                 project_name: String::new(),
                 skipped: false,
+                pending_time_ms: None,
+                render_wait_frames: 0,
             }
         }
     }
@@ -1167,10 +1172,46 @@ mod video_comparison_systems {
     /// Runs at the very beginning of each frame (First schedule) to prevent
     /// playback from advancing during load. This ensures animation doesn't
     /// "run through" the first few frames before comparison starts.
+    /// Also handles force_stopped for screenshot capture timing and applies pending time changes.
     pub fn ensure_paused_during_load(
-        state: Res<ComparisonState>,
+        mut state: ResMut<ComparisonState>,
         mut playback: ResMut<AmPlayback>,
     ) {
+        // Apply pending time change (set in previous frame's SettingTime stage)
+        // This ensures time is set in First schedule, BEFORE lifecycle_system runs in Update
+        if let Some(time_ms) = state.pending_time_ms.take() {
+            playback.current_time_ms = time_ms;
+            // NOTE: Keep force_stopped=true for this frame!
+            // Start a wait period - lifecycle needs to run with the new time first,
+            // then we need to wait for the scene to be rendered.
+            playback.force_stopped = true;
+            state.render_wait_frames = 2; // Wait 2 frames: 1 for lifecycle to run, 1 for render
+            bevy::log::debug!(
+                "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames=2",
+                time_ms
+            );
+            return; // Don't override force_stopped below
+        }
+
+        // Handle render_wait_frames countdown
+        if state.render_wait_frames > 0 {
+            state.render_wait_frames -= 1;
+            if state.render_wait_frames > 0 {
+                // Still waiting - allow lifecycle to run (force_stopped=false)
+                // but don't proceed to screenshot yet
+                playback.force_stopped = false;
+                bevy::log::debug!(
+                    "[PAUSED] render_wait_frames={} (allowing lifecycle)",
+                    state.render_wait_frames
+                );
+            } else {
+                // Wait complete - keep force_stopped=true for screenshot capture
+                playback.force_stopped = true;
+                bevy::log::debug!("[PAUSED] render_wait_frames=0 (ready for screenshot)");
+            }
+            return;
+        }
+
         // Keep playback paused and at time 0 until we're in SettingTime stage
         match state.stage {
             TestStage::Initializing | TestStage::WaitingForProjectLoad => {
@@ -1182,6 +1223,23 @@ mod video_comparison_systems {
                 }
                 playback.playing = false;
                 playback.current_time_ms = 0.0;
+            }
+            // During these stages, freeze lifecycle to prevent spawning
+            // SettingTime: comparison_loop will set pending_time_ms but lifecycle shouldn't run yet
+            // Capturing/WaitingForScreenshot/Comparing: waiting for screenshot to complete
+            TestStage::SettingTime
+            | TestStage::Capturing
+            | TestStage::WaitingForScreenshot
+            | TestStage::Comparing => {
+                playback.force_stopped = true;
+                bevy::log::debug!("[PAUSED] stage={:?} force_stopped=true", state.stage);
+            }
+            // In WaitingForRender, lifecycle should be managed by render_wait_frames
+            // If we get here with render_wait_frames=0, it means we're waiting for comparison_loop
+            // to advance to Capturing
+            TestStage::WaitingForRender => {
+                // force_stopped should already be set by render_wait_frames logic above
+                // or this is after screenshot capture
             }
             _ => {}
         }
@@ -1243,7 +1301,7 @@ mod video_comparison_systems {
                     return;
                 }
 
-                // Set precise time for this frame
+                // Calculate time for this frame
                 // Add half-frame offset to match AM video export timing
                 // Use config frame_offset, or env var FRAME_OFFSET as override
                 // Note: We add 1 to current_frame because we skipped the first reference frame
@@ -1254,8 +1312,24 @@ mod video_comparison_systems {
                     .unwrap_or(state.frame_offset);
                 let time_sec = (state.current_frame as f32 + 1.0 + frame_offset) / state.fps;
                 playback.playing = false; // Ensure paused
-                playback.current_time_ms = time_sec * 1000.0;
-                playback.force_stopped = false; // Allow update
+
+                // DON'T set time immediately - store it as pending to be applied in next frame's First schedule
+                // This ensures lifecycle_system won't run with new time in this frame's Update schedule
+                let time_ms = time_sec * 1000.0;
+                state.pending_time_ms = Some(time_ms);
+
+                // Debug: log time setting for frame 30
+                if state.current_frame == 29 || state.current_frame == 30 {
+                    println!(
+                        "[COMPARISON DEBUG] Frame {}: SETTING PENDING TIME: current_frame={}, frame_offset={}, fps={}, time_sec={}, time_ms={}",
+                        state.current_frame + 1,
+                        state.current_frame,
+                        frame_offset,
+                        state.fps,
+                        time_sec,
+                        time_ms
+                    );
+                }
 
                 // Start frame counter
                 state.wait_frames = 0;
@@ -1263,10 +1337,16 @@ mod video_comparison_systems {
             }
 
             TestStage::WaitingForRender => {
-                state.wait_frames += 1;
-                if state.wait_frames >= WAIT_FRAMES {
-                    state.stage = TestStage::Capturing;
+                // Wait until render_wait_frames countdown is complete
+                // This is decremented in ensure_paused_during_load (First schedule)
+                // and controls when lifecycle is allowed to run
+                if state.render_wait_frames == 0 {
+                    state.wait_frames += 1;
+                    if state.wait_frames >= WAIT_FRAMES {
+                        state.stage = TestStage::Capturing;
+                    }
                 }
+                // If render_wait_frames > 0, just wait for it to count down
             }
 
             TestStage::Capturing => {
@@ -1274,11 +1354,20 @@ mod video_comparison_systems {
                 let report_dir = state.report_dir.clone();
                 let shot_path = report_dir.join(format!("shot_{:06}.png", frame_idx));
 
+                // Note: force_stopped is set in ensure_paused_during_load (First schedule)
+                // to guarantee it's set BEFORE lifecycle_system runs
+
                 // Trigger screenshot
                 commands
                     .spawn(Screenshot::primary_window())
                     .observe(save_to_disk(shot_path));
 
+                state.stage = TestStage::WaitingForScreenshot;
+            }
+
+            TestStage::WaitingForScreenshot => {
+                // Wait one frame for screenshot to be executed (in Render phase)
+                // This ensures the screenshot captures the frozen state
                 state.stage = TestStage::Comparing;
             }
 
@@ -1299,6 +1388,21 @@ mod video_comparison_systems {
                 };
 
                 let ref_path = &state.frame_paths[frame_idx];
+
+                // Debug: log actual paths being compared for frame 30 and copy ref frame
+                if frame_idx == 30 {
+                    println!(
+                        "[COMPARE DEBUG] Frame {}: shot={:?}, ref={:?}",
+                        frame_idx,
+                        shot_path.file_name(),
+                        ref_path.file_name()
+                    );
+                    // Copy reference frame to report dir for inspection
+                    let ref_copy_path = state.report_dir.join("ref_000030.png");
+                    let _ = std::fs::copy(ref_path, &ref_copy_path);
+                    println!("[COMPARE DEBUG] Copied ref to {:?}", ref_copy_path);
+                }
+
                 let ref_img = image::open(ref_path)
                     .expect("Failed to open ref image")
                     .to_rgba8();
