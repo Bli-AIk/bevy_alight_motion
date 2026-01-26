@@ -109,6 +109,7 @@ This project uses the following crates:
 
 * **71**: Provided many Alight Motion example projects (including Undertale bullet patterns and visual PVs) during
   testing, provided a great help with this project!
+* **陈皮**: Provided many Alight Motion example projects (mostly Undertale bullet patterns), providing great help for AM integration.
 
 ## Contributing
 
