@@ -250,7 +250,7 @@ fn debug_unified_effects(
     #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, material_handle) in query.iter() {
         let mesh_offset = if let Some(material) = materials.get(&material_handle.0) {
-            (material.mesh_offset.x, material.mesh_offset.y)
+            (material.mesh_offset().x, material.mesh_offset().y)
         } else {
             (0.0, 0.0)
         };

@@ -9,7 +9,8 @@ repository = "https://github.com/Bli-AIk/bevy_alight_motion"
 description = "Bevy plugin for loading and playing Alight Motion project files"
 exclude = [
     "target/*",
-    ".github/*"
+    ".github/*",
+    "*.mp4"
 ]
 autoexamples = false
 
