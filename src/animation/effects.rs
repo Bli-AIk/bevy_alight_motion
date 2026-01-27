@@ -128,10 +128,10 @@ pub fn update_unified_mask_system(
         if let Some(material) = materials.get_mut(&material_handle.0) {
             if active_masks.is_empty() {
                 // No active masks - disable masking
-                material.effect_flags.x = 0.0;
-                material.mask2_flags.x = 0.0;
-                material.mask2_flags.y = 0.0; // mask1 rotation
-                material.mask2_flags.z = 0.0; // mask2 rotation
+                material.uniform_data.effect_flags.x = 0.0;
+                material.uniform_data.mask2_flags.x = 0.0;
+                material.uniform_data.mask2_flags.y = 0.0; // mask1 rotation
+                material.uniform_data.mask2_flags.z = 0.0; // mask2 rotation
                 // Debug log when mask is disabled for unified effect
                 static UNIFIED_MASK_LOG: std::sync::atomic::AtomicU32 =
                     std::sync::atomic::AtomicU32::new(0);
@@ -288,19 +288,19 @@ pub fn update_unified_mask_system(
                 let (mask1_center, mask1_half_size, mask1_rotation) = compute_mask_params(mask1);
 
                 let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                material.effect_flags.x = if mask1.is_exclude {
+                material.uniform_data.effect_flags.x = if mask1.is_exclude {
                     base_type1 + 2.0
                 } else {
                     base_type1
                 };
-                material.mask_params = bevy::math::Vec4::new(
+                material.uniform_data.mask_params = bevy::math::Vec4::new(
                     mask1_center.x,
                     mask1_center.y,
                     mask1_half_size.x,
                     mask1_half_size.y,
                 );
                 // Store mask1 rotation in mask2_flags.y (radians)
-                material.mask2_flags.y = mask1_rotation;
+                material.uniform_data.mask2_flags.y = mask1_rotation;
 
                 // Second mask (if present)
                 if active_masks.len() >= 2 {
@@ -309,37 +309,37 @@ pub fn update_unified_mask_system(
                         compute_mask_params(mask2);
 
                     let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                    material.mask2_flags.x = if mask2.is_exclude {
+                    material.uniform_data.mask2_flags.x = if mask2.is_exclude {
                         base_type2 + 2.0
                     } else {
                         base_type2
                     };
-                    material.mask2_params = bevy::math::Vec4::new(
+                    material.uniform_data.mask2_params = bevy::math::Vec4::new(
                         mask2_center.x,
                         mask2_center.y,
                         mask2_half_size.x,
                         mask2_half_size.y,
                     );
                     // Store mask2 rotation in mask2_flags.z (radians)
-                    material.mask2_flags.z = mask2_rotation;
+                    material.uniform_data.mask2_flags.z = mask2_rotation;
 
                     bevy::log::debug!(
                         "[UnifiedMask] '{}' time={}, DUAL mask: mask1_type={:.0} center=({:.1},{:.1}) rot={:.2}°, mask2_type={:.0} center=({:.1},{:.1}) rot={:.2}°",
                         marker.label,
                         global_time,
-                        material.effect_flags.x,
+                        material.uniform_data.effect_flags.x,
                         mask1_center.x,
                         mask1_center.y,
                         mask1_rotation.to_degrees(),
-                        material.mask2_flags.x,
+                        material.uniform_data.mask2_flags.x,
                         mask2_center.x,
                         mask2_center.y,
                         mask2_rotation.to_degrees()
                     );
                 } else {
                     // Only one mask - disable second mask
-                    material.mask2_flags.x = 0.0;
-                    material.mask2_flags.z = 0.0;
+                    material.uniform_data.mask2_flags.x = 0.0;
+                    material.uniform_data.mask2_flags.z = 0.0;
 
                     // Log entity world position for debugging child layer mask issues
                     let entity_world_pos = entity_global_transform.translation();
@@ -347,7 +347,7 @@ pub fn update_unified_mask_system(
                         "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°, entity_world_pos=({:.1},{:.1})",
                         marker.label,
                         global_time,
-                        material.effect_flags.x,
+                        material.uniform_data.effect_flags.x,
                         mask1_center.x,
                         mask1_center.y,
                         mask1_half_size.x,
@@ -394,14 +394,14 @@ pub fn animate_unified_effect_system(
         if let Some(material) = materials.get_mut(&material_handle.0) {
             if !animated.is_active(local_time) {
                 // Hide layer by setting alpha to 0
-                material.color.alpha = 0.0;
+                material.uniform_data.color.w = 0.0;
                 continue;
             }
 
             // Layer is active - restore alpha (will be updated by opacity below)
             let layer_time = animated.calc_layer_time(local_time);
             let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-            material.color.alpha = opacity * animated.base_alpha;
+            material.uniform_data.color.w = opacity * animated.base_alpha;
         } else if !animated.is_active(local_time) {
             continue;
         }
@@ -510,7 +510,8 @@ pub fn animate_unified_effect_system(
                 let wipe_angle = interpolate_float(&animated.wipe_angle, layer_time).unwrap_or(0.0);
                 let wipe_feather =
                     interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
-                material.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
+                material.uniform_data.wipe_params =
+                    Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
             } else {
                 material.set_wipe_enabled(false);
             }
@@ -538,7 +539,7 @@ pub fn animate_unified_effect_system(
                     // blur_params.y = original width (for UV calculations)
                     // blur_params.z = original height (for UV calculations)
                     // blur_params.w = blur expansion in pixels
-                    material.blur_params =
+                    material.uniform_data.blur_params =
                         Vec4::new(blur_radius_px, orig_width, orig_height, blur_expansion);
 
                     // Update mesh bounds for blur overflow
@@ -731,10 +732,12 @@ pub fn animate_unified_effect_system(
                 }
 
                 // Update material parameters
-                material.stretch_params =
+                material.uniform_data.stretch_params =
                     Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
-                material.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
-                material.mesh_offset = Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0);
+                material.uniform_data.original_size =
+                    Vec4::new(orig_width, orig_height, new_width, new_height);
+                material.uniform_data.mesh_offset =
+                    Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0);
 
                 // Create new mesh with expanded bounds
                 let vertices = vec![
