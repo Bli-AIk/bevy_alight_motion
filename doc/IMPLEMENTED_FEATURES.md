@@ -94,7 +94,7 @@
 
 ### 技术说明
 
-描边使用 SDF（有向距离场）渲染，通过 `bevy_smud` 库实现。描边宽度在缩放动画中保持不变，与 AM 行为一致。
+描边使用 SDF（有向距离场）渲染，通过自定义 `SdfMaterial` 实现。描边宽度在缩放动画中保持不变，与 AM 行为一致。
 
 ---
 
@@ -407,8 +407,8 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32
 | 情况              | 渲染方式                    |
 |-----------------|-------------------------|
 | 颜色填充 + 无描边      | Bevy Sprite             |
-| 颜色填充 + 有描边      | SDF (bevy_smud)         |
-| 圆形 (任何填充)       | SDF (bevy_smud)         |
+| 颜色填充 + 有描边      | SDF (SdfMaterial)       |
+| 圆形 (任何填充)       | SDF (SdfMaterial)       |
 | 媒体填充            | Bevy Sprite             |
 | 媒体填充 + 效果       | UnifiedEffectMaterial   |
 | 编组 (embedScene) | EmbedClipMaterial + RTT |

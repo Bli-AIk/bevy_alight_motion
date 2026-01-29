@@ -52,7 +52,7 @@ pub use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with
 pub const BASE_HALF_EXTENT: f32 = 50.0;
 
 /// Legacy resource placeholder for shader handles.
-/// This is now deprecated as we use SdfMaterial instead of bevy_smud.
+/// This is now deprecated as we use SdfMaterial directly.
 /// Kept for compatibility with scene.rs during transition.
 #[derive(Resource, Default)]
 pub struct AmSdfShaders {

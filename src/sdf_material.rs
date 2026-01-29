@@ -1,7 +1,7 @@
 //! Custom SDF Material for Alight Motion shapes.
 //!
 //! This module provides a custom Material2d implementation for rendering SDF shapes
-//! (rectangles, circles, ellipses) with strokes, replacing bevy_smud.
+//! (rectangles, circles, ellipses) with strokes.
 
 use bevy::{
     prelude::*,
@@ -57,8 +57,6 @@ pub struct SdfMaterialUniform {
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
-///
-/// This replaces bevy_smud with a simpler, more controllable implementation.
 ///
 /// Params layout:
 /// - `params.x`: half_width (for box) or radius_x (for circle/ellipse)
