@@ -266,12 +266,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     
-    // Anti-aliasing width based on screen-space derivatives
-    let aa_width = fwidth(dist);
-    let safe_aa_width = clamp(aa_width, 0.5, 10.0);
+    // Hard edge rendering (pixel-perfect for retro style games)
+    // Use step instead of smoothstep for crisp edges
     
-    // Fill: inside the shape (dist < 0)
-    let fill_alpha = 1.0 - smoothstep(-safe_aa_width, safe_aa_width, dist);
+    // Fill: inside the shape (dist <= 0)
+    let fill_alpha = step(dist, 0.0);
     let fill_col = vec4<f32>(material.color.rgb, material.color.a * fill_alpha);
     
     // Handle stroke if stroke_width > 0
@@ -281,7 +280,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // Centered stroke: distance band around the edge
         let half_stroke = stroke_width * 0.5;
         let dist_from_edge = abs(dist);
-        let stroke_alpha = 1.0 - smoothstep(half_stroke - safe_aa_width, half_stroke + safe_aa_width, dist_from_edge);
+        // Hard edge stroke: inside if dist_from_edge <= half_stroke
+        let stroke_alpha = step(dist_from_edge, half_stroke);
         let stroke_col = vec4<f32>(stroke_color.rgb, stroke_color.a * stroke_alpha);
         
         // Composite: stroke over fill
