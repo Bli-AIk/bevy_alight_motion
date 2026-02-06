@@ -43,6 +43,7 @@ ignore_music.wav
 complex_*.amproj
 complex_*.bak
 complex_*.mp4
+回合*.amproj
 
 _video_frames/
 

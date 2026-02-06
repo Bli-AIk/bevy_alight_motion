@@ -1,3 +1,11 @@
+#![allow(
+    clippy::collapsible_if,
+    dead_code,
+    unused_variables,
+    unused_imports,
+    unused_mut,
+    deprecated
+)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
 //!
@@ -18,6 +26,7 @@
 //! cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
 //! ```
 //!
+#![allow(clippy::collapsible_else_if, clippy::manual_is_multiple_of)]
 //! ### Run Video Comparison Test / 运行视频比对测试
 //! ```bash
 //! cargo run -p bevy_alight_motion --example player --features video-comparison -- <project_name>
