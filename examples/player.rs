@@ -1,4 +1,11 @@
-#![allow(clippy::collapsible_if)]
+#![allow(
+    clippy::collapsible_if,
+    dead_code,
+    unused_variables,
+    unused_imports,
+    unused_mut,
+    deprecated
+)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
 //!

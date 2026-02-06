@@ -1,4 +1,4 @@
-#![allow(dead_code, clippy::collapsible_if, clippy::cast_abs_to_unsigned)]
+#![allow(dead_code, clippy::collapsible_if, clippy::cast_abs_to_unsigned, unused_imports)]
 
 use std::fs;
 use std::path::{Path, PathBuf};
