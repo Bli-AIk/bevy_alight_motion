@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Bevy Dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -36,30 +36,39 @@ jobs:
             libxinerama-dev \
             libxcursor-dev \
             libgl1-mesa-dev \
-            pkg-config
+            pkg-config \
+            mold
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Check formatting
-        run: cargo fmt --package bevy_alight_motion -- --check
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
-        run: cargo build --package bevy_alight_motion --verbose
+        run: cargo build --verbose
 
       - name: Run tests
-        run: cargo test --package bevy_alight_motion --verbose
+        run: cargo nextest run --verbose
+
+  deny:
+    name: Cargo Deny
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: --all-features
 
   security:
     name: Security Audit
@@ -67,10 +76,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Generate lockfile
-        run: cargo generate-lockfile
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          CARGO_TERM_COLOR: never
