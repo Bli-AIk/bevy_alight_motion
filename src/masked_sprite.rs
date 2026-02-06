@@ -84,7 +84,7 @@ pub struct UnifiedEffectUniform {
 /// - `effect_flags.y > 0.5`: Wipe enabled
 /// - `effect_flags.z > 0.5`: Stretch segment enabled
 /// - `effect_flags.w > 0.5`: Blur enabled
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 pub struct UnifiedEffectMaterial {
     /// All uniform data packed into a single binding
     #[uniform(0)]
@@ -209,15 +209,6 @@ impl Default for UnifiedEffectUniform {
             replace_old_color: Vec4::ZERO,
             replace_new_color: Vec4::ZERO,
             replace_color_params: Vec4::ZERO,
-        }
-    }
-}
-
-impl Default for UnifiedEffectMaterial {
-    fn default() -> Self {
-        Self {
-            uniform_data: UnifiedEffectUniform::default(),
-            texture: None,
         }
     }
 }
