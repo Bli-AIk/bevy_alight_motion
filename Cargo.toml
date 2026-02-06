@@ -18,7 +18,7 @@ autoexamples = false
 bevy = { version = "0.17.2", features = ["jpeg"] }
 serde = { version = "1.0", features = ["derive"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zip = { version = "7.4", default-features = false, features = ["deflate"] }
 thiserror = "2.0"
 ttf-parser = "0.25"
 bevy-inspector-egui = { version = "0.35.0", optional = true }
