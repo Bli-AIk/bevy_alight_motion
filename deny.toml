@@ -30,6 +30,8 @@ allow = [
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "MPL-2.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.8
 
