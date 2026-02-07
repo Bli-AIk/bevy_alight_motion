@@ -4,6 +4,14 @@ export default defineConfig({
   title: "bevy_alight_motion",
   description: "Alight Motion project parser and player for Bevy",
   
+  head: [
+    ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;700&display=swap' }]
+  ],
+
+  markdown: {
+    lineNumbers: true
+  },
+
   locales: {
     root: {
       label: 'English',
@@ -128,8 +136,25 @@ export default defineConfig({
   },
 
   themeConfig: {
+    lastUpdated: {
+      text: 'Last Forged',
+      formatOptions: {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }
+    },
     search: {
-      provider: 'local'
+      provider: 'local',
+      options: {
+        locales: {
+          'zh-hans': {
+            translations: {
+              button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
+              modal: { noResultsText: '未找到相关指令', footer: { selectText: '选择', navigateText: '切换' } }
+            }
+          }
+        }
+      }
     },
     socialLinks: [
       { icon: 'github', link: 'https://github.com/your-repo/bevy_alight_motion' }

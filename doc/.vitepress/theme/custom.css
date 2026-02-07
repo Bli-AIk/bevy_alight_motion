@@ -1,51 +1,146 @@
+/* Crucible Theme - Industrial Rust Aesthetic */
 :root {
-  --vp-c-brand-1: #9b4dff;
-  --vp-c-brand-2: #8033ff;
-  --vp-c-brand-3: #6b26e0;
-  --vp-c-brand-soft: rgba(155, 77, 255, 0.14);
+  /* 品牌色系统 - 氧化铜与琥珀 */
+  --vp-c-brand-1: #e68a4f; /* 主色：拉丝铜 */
+  --vp-c-brand-2: #cf7a44;
+  --vp-c-brand-3: #b36b3c;
+  --vp-c-brand-soft: rgba(230, 138, 79, 0.12);
 
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #bd34fe 30%, #41d1ff);
+  /* 语义色 - 工业标准 */
+  --vp-c-tip: #7daea3;     /* 冷金属绿 */
+  --vp-c-warning: #d8a657;  /* 警示黄 */
+  --vp-c-danger: #ea6962;   /* 警告红 */
+
+  /* 字体系统 */
+  --vp-font-family-base: "Public Sans", "Inter", -apple-system, sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", "Fira Code", "IBM Plex Mono", monospace;
+
+  /* 布局控制 */
+  --vp-screen-max-width: 1440px;
+
+  /* 首页背景 - 工程栅格效果 */
+  --crucible-grid: radial-gradient(var(--vp-c-divider) 0.5px, transparent 0.5px);
 }
 
-.VPImage.logo {
-  filter: drop-shadow(0 0 10px rgba(155, 77, 255, 0.5));
+/* --- 深色模式 (核心) --- */
+.dark {
+  --vp-c-bg: #0f1113;      /* 深炭黑 */
+  --vp-c-bg-soft: #16191d; /* 表面层级 */
+  --vp-c-bg-alt: #0a0b0d;
+  --vp-c-bg-elv: #1a1d21;
+
+  --vp-c-text-1: #d1d5db;  /* 铝灰色 */
+  --vp-c-text-2: #9ca3af;
+  --vp-c-text-3: #6b7280;
+
+  --vp-c-divider: #2d3238; /* 钢板接缝色 */
+  --vp-c-border: #374151;
+
+  --vp-code-bg: #050505;   /* 代码块背景 - 极黑 */
 }
 
-/* Feature cards styling */
-.VPFeatures .VPCard {
-  border-radius: 12px;
-  transition: all 0.3s ease;
-  border: 1px solid var(--vp-c-bg-soft);
-  background-color: var(--vp-c-bg-soft);
+/* --- 浅色模式 (高对比工业) --- */
+:root:not(.dark) {
+  --vp-c-bg: #f4f4f5;
+  --vp-c-bg-soft: #ffffff;
+  --vp-c-bg-alt: #e4e4e7;
+  --vp-c-text-1: #18181b;
+  --vp-c-divider: #d4d4d8;
 }
 
-.VPFeatures .VPCard:hover {
-  border-color: var(--vp-c-brand-1);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+/* --------------------------------------------------
+   进阶组件样式重塑
+   -------------------------------------------------- */
+
+/* 全局背景 */
+.VPContent {
+  background-image: var(--crucible-grid);
+  background-size: 32px 32px;
 }
 
-/* Sidebar styling */
-.VPSidebarItem.level-0 .text {
+/* 1. 全局标题样式 - 力量感与直线条 */
+.vp-doc h1, .vp-doc h2, .vp-doc h3 {
+  letter-spacing: -0.02em;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 12px;
-  color: var(--vp-c-text-2);
-  margin-bottom: 8px;
 }
 
-/* Custom badge for status */
-.status-tag {
+.vp-doc h2 {
+  margin-top: 48px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vp-c-divider);
+  display: flex;
+  align-items: center;
+}
+
+.vp-doc h2::before {
+  content: "";
+  width: 4px;
+  height: 24px;
+  background: var(--vp-c-brand-1);
+  margin-right: 12px;
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: bold;
-  margin-left: 8px;
 }
 
-.status-passed { background: #4caf50; color: white; }
-.status-partial { background: #ff9800; color: white; }
-.status-wip { background: #2196f3; color: white; }
+/* 2. 侧边栏定制 - 移除圆角，强调边框 */
+.VPSidebarItem.level-0.is-active > .item > .text {
+  color: var(--vp-c-brand-1) !important;
+  font-weight: 700;
+}
+
+.VPSidebarItem.item.is-active > .text {
+  border-left: 2px solid var(--vp-c-brand-1);
+  background-color: var(--vp-c-brand-soft);
+  border-radius: 0 !important; /* 强制直线 */
+  padding-left: 12px;
+}
+
+/* 3. 代码块增强 - 终端感 */
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  background-color: var(--vp-code-bg) !important;
+}
+
+.vp-doc div[class*='language-']::before {
+  content: attr(data-ext);
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  font-family: var(--vp-font-family-mono);
+  font-size: 10px;
+  color: var(--vp-c-text-3);
+  text-transform: uppercase;
+}
+
+/* 4. 自定义提示框 - 移除背景，强调侧边 */
+.custom-block {
+  border-radius: 0 !important;
+  border-left-width: 4px !important;
+  border-right: 1px solid var(--vp-c-divider);
+  border-top: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--vp-c-divider);
+  background-color: transparent !important;
+}
+
+.custom-block.tip { border-left-color: var(--vp-c-tip) !important; }
+.custom-block.warning { border-left-color: var(--vp-c-warning) !important; }
+.custom-block.danger { border-left-color: var(--vp-c-danger) !important; }
+
+/* 首页 Hero 特效 */
+.VPHomeHero .name {
+  background: -webkit-linear-gradient(120deg, #bd34fe 30%, #e68a4f);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 细节：行内代码块微调 */
+:not(pre) > code {
+  border: 1px solid var(--vp-c-divider);
+  background-color: var(--vp-c-bg-soft) !important;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.9em;
+  color: var(--vp-c-brand-1);
+}
