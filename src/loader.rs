@@ -239,7 +239,10 @@ async fn load_amproj(
 
     // Validate the scene and generate report
     let validation_report = crate::validation::ValidationReport::validate(&scene);
+    #[cfg(not(target_arch = "wasm32"))]
     validation_report.log_report(&scene.title);
+    #[cfg(target_arch = "wasm32")]
+    validation_report.log_report_wasm(&scene.title);
 
     Ok(AmProject {
         scene,
@@ -258,7 +261,10 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
 
     // Validate the scene and generate report
     let validation_report = crate::validation::ValidationReport::validate(&scene);
+    #[cfg(not(target_arch = "wasm32"))]
     validation_report.log_report(&scene.title);
+    #[cfg(target_arch = "wasm32")]
+    validation_report.log_report_wasm(&scene.title);
 
     Ok(AmProject {
         scene,

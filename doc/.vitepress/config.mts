@@ -21,7 +21,8 @@ export default defineConfig({
         nav: [
           { text: 'Guide', link: '/en/guide/introduction' },
           { text: 'Effects', link: '/en/effects/' },
-          { text: 'Examples', link: '/en/examples/' }
+          { text: 'Examples', link: '/en/examples/' },
+          { text: 'Playground', link: '/en/playground/' }
         ],
         sidebar: {
           '/en/guide/': [
@@ -81,7 +82,8 @@ export default defineConfig({
         nav: [
           { text: '指南', link: '/zh-hans/guide/introduction' },
           { text: '效果', link: '/zh-hans/effects/' },
-          { text: '示例', link: '/zh-hans/examples/' }
+          { text: '示例', link: '/zh-hans/examples/' },
+          { text: 'Playground', link: '/zh-hans/playground/' }
         ],
         sidebar: {
           '/zh-hans/guide/': [

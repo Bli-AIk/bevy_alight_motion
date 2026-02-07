@@ -1,0 +1,54 @@
+[package]
+name = "bevy_alight_motion_wasm"
+version = "0.1.0"
+edition = "2024"
+authors = ["Bli-AIk <haikun2333@gmail.com>"]
+description = "WASM build of bevy_alight_motion for browser playback"
+license = "MIT OR Apache-2.0"
+
+# This package is intentionally outside the main workspace
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bevy_alight_motion = { path = ".." }
+# 使用 webgl2 + 单线程模式，兼容 GitHub Pages (无需 COOP/COEP 头)
+bevy = { version = "0.17.2", default-features = false, features = [
+    # 核心功能
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_asset",
+    "bevy_winit",
+    "bevy_sprite",
+    "bevy_pbr",
+    "bevy_text",
+    # 图片格式
+    "png",
+    "jpeg",
+    # WASM 专用：使用 WebGL2，避免 WebGPU 多线程问题
+    "webgl2",
+]}
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "ImageData",
+    "Blob",
+    "Url",
+    "FileReader"
+]}
+
+[profile.release]
+opt-level = "s"
+lto = true

@@ -12,12 +12,15 @@
 //! - Unsupported layer types (Audio, Video, Camera)
 
 use crate::schema::{AmEffect, AmLayer, AmScene};
-use owo_colors::OwoColorize;
+use serde::Serialize;
 use std::collections::HashMap;
+
+#[cfg(not(target_arch = "wasm32"))]
+use owo_colors::OwoColorize;
 
 /// Effect support level
 /// 效果支持级别
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum EffectSupportLevel {
     /// Fully supported
     Full,
@@ -78,7 +81,7 @@ pub const KNOWN_EFFECTS: &[EffectDef] = &[
 
 /// Validation report containing information about supported and unsupported features
 /// 验证报告，包含支持和不支持的特性信息
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct ValidationReport {
     /// Effects that are used and supported
     /// 使用中且被支持的效果
@@ -103,7 +106,7 @@ pub struct ValidationReport {
 
 /// Information about an effect being used
 /// 使用中的效果信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EffectUsage {
     /// Effect ID (e.g., "com.alightcreative.effects.transform2")
     pub effect_id: String,
@@ -117,7 +120,7 @@ pub struct EffectUsage {
 
 /// Information about an unsupported effect
 /// 不支持的效果信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct UnsupportedEffect {
     /// Effect ID
     pub effect_id: String,
@@ -131,7 +134,7 @@ pub struct UnsupportedEffect {
 
 /// Information about an unsupported layer type
 /// 不支持的图层类型信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct UnsupportedLayer {
     /// Layer label
     pub label: String,
@@ -143,7 +146,7 @@ pub struct UnsupportedLayer {
 
 /// Scene statistics
 /// 场景统计信息
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct SceneStats {
     /// Total number of layers (including nested)
     pub total_layers: u32,
@@ -326,8 +329,9 @@ impl ValidationReport {
         }
     }
 
-    /// Log the validation report with colored output
-    /// 使用彩色输出日志验证报告
+    /// Log the validation report with colored output (native only)
+    /// 使用彩色输出日志验证报告 (仅限原生环境)
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn log_report(&self, project_title: &str) {
         println!();
         println!("{}", "========================================".cyan());
@@ -499,5 +503,168 @@ impl ValidationReport {
         }
         println!("{}", "========================================".cyan());
         println!();
+    }
+
+    /// Log the validation report for WASM (outputs JSON for JavaScript parsing)
+    /// WASM 版本的验证报告输出 (输出 JSON 供 JavaScript 解析)
+    #[cfg(target_arch = "wasm32")]
+    pub fn log_report_wasm(&self, project_title: &str) {
+        use web_sys::console;
+
+        // Output JSON for structured parsing by JavaScript
+        #[derive(Serialize)]
+        struct WasmReport<'a> {
+            project_title: &'a str,
+            stats: &'a SceneStats,
+            supported_effects: &'a Vec<EffectUsage>,
+            unsupported_effects: &'a Vec<UnsupportedEffect>,
+            unsupported_layers: &'a Vec<UnsupportedLayer>,
+        }
+
+        let report = WasmReport {
+            project_title,
+            stats: &self.stats,
+            supported_effects: &self.supported_effects_used,
+            unsupported_effects: &self.unsupported_effects,
+            unsupported_layers: &self.unsupported_layers,
+        };
+
+        if let Ok(json) = serde_json::to_string(&report) {
+            console::log_1(&format!("[AM_VALIDATION_JSON]{}", json).into());
+        }
+
+        // Also output human-readable version
+        console::log_1(&"========================================".into());
+        console::log_1(&format!("[AM Validation] Project: {}", project_title).into());
+        console::log_1(&"========================================".into());
+        console::log_1(&format!("[AM Validation] {} layers total", self.stats.total_layers).into());
+        console::log_1(
+            &format!(
+                "  · Shape: {}, Text: {}, Image: {}, Null: {}, Embed: {}",
+                self.stats.shape_count,
+                self.stats.text_count,
+                self.stats.image_count,
+                self.stats.null_count,
+                self.stats.embed_count
+            )
+            .into(),
+        );
+
+        let full_count = self
+            .supported_effects_used
+            .iter()
+            .filter(|e| e.level == EffectSupportLevel::Full)
+            .count();
+        let partial_count = self
+            .supported_effects_used
+            .iter()
+            .filter(|e| e.level == EffectSupportLevel::Partial)
+            .count();
+
+        if self.supported_effects_used.is_empty() {
+            console::log_1(&"[AM Validation] Effects: None used".into());
+        } else {
+            console::log_1(
+                &format!(
+                    "[AM Validation] Effects in use: {} full, {} partial",
+                    full_count, partial_count
+                )
+                .into(),
+            );
+            for effect in &self.supported_effects_used {
+                let icon = if effect.level == EffectSupportLevel::Full {
+                    "✓"
+                } else {
+                    "⚠"
+                };
+                let suffix = if effect.level == EffectSupportLevel::Partial {
+                    " (partial support)"
+                } else {
+                    ""
+                };
+                console::log_1(
+                    &format!(
+                        "  {} {} - {} usage(s){}",
+                        icon, effect.display_name, effect.usage_count, suffix
+                    )
+                    .into(),
+                );
+            }
+        }
+
+        if !self.unsupported_effects.is_empty() {
+            let mut effect_counts: HashMap<&str, usize> = HashMap::new();
+            for effect in &self.unsupported_effects {
+                *effect_counts.entry(&effect.effect_id).or_insert(0) += 1;
+            }
+            console::warn_1(
+                &format!(
+                    "[AM Validation] Unsupported effects ({} unique types):",
+                    effect_counts.len()
+                )
+                .into(),
+            );
+            for effect in &self.unsupported_effects {
+                let count = effect_counts.get(effect.effect_id.as_str()).unwrap_or(&1);
+                if *count == 1 {
+                    console::warn_1(
+                        &format!(
+                            "  ✗ '{}' ({}) on layer '{}' (id={})",
+                            effect.effect_label,
+                            effect.effect_id,
+                            effect.layer_label,
+                            effect.layer_id
+                        )
+                        .into(),
+                    );
+                } else {
+                    console::warn_1(
+                        &format!(
+                            "  ✗ '{}' ({}) - {} usage(s)",
+                            effect.effect_label, effect.effect_id, count
+                        )
+                        .into(),
+                    );
+                }
+                // Remove from counts to avoid duplicate output
+                effect_counts.remove(effect.effect_id.as_str());
+            }
+        }
+
+        if !self.unsupported_layers.is_empty() {
+            console::warn_1(
+                &format!(
+                    "[AM Validation] Unsupported layer types ({}):",
+                    self.unsupported_layers.len()
+                )
+                .into(),
+            );
+            for layer in &self.unsupported_layers {
+                console::warn_1(
+                    &format!(
+                        "  ✗ {} '{}' (id={}) - will be skipped",
+                        layer.layer_type, layer.label, layer.id
+                    )
+                    .into(),
+                );
+            }
+        }
+
+        console::log_1(&"----------------------------------------".into());
+        if self.unsupported_effects.is_empty() && self.unsupported_layers.is_empty() {
+            console::log_1(
+                &"[AM Validation] ✓ All features in this project are fully supported".into(),
+            );
+        } else {
+            let total_issues = self.unsupported_effects.len() + self.unsupported_layers.len();
+            console::warn_1(
+                &format!(
+                    "[AM Validation] ⚠ {} unsupported feature(s) will be skipped",
+                    total_issues
+                )
+                .into(),
+            );
+        }
+        console::log_1(&"========================================".into());
     }
 }
