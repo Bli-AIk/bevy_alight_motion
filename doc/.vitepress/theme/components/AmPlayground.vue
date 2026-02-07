@@ -1,76 +1,52 @@
 <template>
   <div class="am-playground">
-    <!-- 状态提示 -->
-    <div class="status-bar" :class="statusClass">
-      <span class="status-icon">{{ statusIcon }}</span>
-      <span class="status-text">{{ statusText }}</span>
-    </div>
-
     <!-- WASM 不可用提示 -->
     <div class="wasm-unavailable" v-if="wasmError">
       <div class="warning-box">
-        <h4>⚠️ WASM 模块未构建</h4>
-        <p>Playground 需要 WASM 模块才能运行。请先构建：</p>
+        <h4>{{ i18n.wasmNotBuiltTitle }}</h4>
+        <p>{{ i18n.wasmNotBuiltDesc }}</p>
         <pre class="build-cmd">cd wasm && ./build.sh</pre>
-        <p class="hint">构建完成后刷新页面即可使用。</p>
+        <p class="hint">{{ i18n.wasmNotBuiltHint }}</p>
       </div>
     </div>
 
-    <!-- 文件上传区 -->
-    <div class="upload-section" v-if="!wasmError">
+    <!-- 文件上传区（WASM 未加载时显示） -->
+    <div class="upload-section" v-if="!isLoaded && !wasmError">
       <FileUploader
-        label="上传 .amproj 文件"
+        :label="i18n.uploadLabel"
         accept=".amproj"
         @file-selected="loadProject"
-        @file-cleared="clearProject"
       />
+      <p class="upload-hint">{{ i18n.uploadHint }}</p>
     </div>
 
-    <!-- 播放区域 -->
-    <div class="player-section" v-show="isLoaded">
-      <div class="canvas-container">
+    <!-- 加载中 -->
+    <div class="loading-section" v-if="isLoading">
+      <div class="spinner"></div>
+      <span>{{ i18n.loading }}</span>
+    </div>
+
+    <!-- 播放区域（加载后显示） -->
+    <div class="player-section" v-show="isLoaded && !isLoading">
+      <div class="canvas-container" ref="canvasContainer">
         <canvas id="bevy-canvas" ref="canvas"></canvas>
-        <div class="loading-overlay" v-if="isLoading">
-          <div class="spinner"></div>
-          <span>加载中...</span>
-        </div>
+        <!-- 全屏按钮 -->
+        <button class="fullscreen-btn" @click="toggleFullscreen" :title="i18n.fullscreen">
+          ⛶
+        </button>
+        <!-- 关闭按钮 -->
+        <button class="close-btn" @click="closePlayer" :title="i18n.close">
+          ✕
+        </button>
       </div>
 
-      <!-- 控制面板 -->
-      <div class="controls">
-        <div class="playback-controls">
-          <button @click="reset" :disabled="!isLoaded" title="重置">⏮</button>
-          <button @click="togglePlay" :disabled="!isLoaded" :title="isPlaying ? '暂停' : '播放'">
-            {{ isPlaying ? '⏸' : '▶' }}
-          </button>
-          <button @click="stepForward" :disabled="!isLoaded" title="下一帧">⏭</button>
-        </div>
-
-        <div class="time-display" v-if="isLoaded">
-          <span>{{ formatFrame(currentFrame) }}</span>
-          <span>/</span>
-          <span>{{ formatFrame(totalFrames) }}</span>
-        </div>
-
-        <div class="speed-control" v-if="isLoaded">
-          <label>速度:</label>
-          <select v-model="playbackSpeed" @change="updateSpeed">
-            <option value="0.25">0.25x</option>
-            <option value="0.5">0.5x</option>
-            <option value="1">1x</option>
-            <option value="2">2x</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 时间轴 -->
-      <div class="timeline" v-if="isLoaded">
-        <input
-          type="range"
-          v-model.number="currentFrame"
-          :max="totalFrames"
-          @input="seek"
-        />
+      <!-- 快捷键提示 -->
+      <div class="shortcuts-bar">
+        <span class="shortcut">[Space] {{ i18n.playPause }}</span>
+        <span class="shortcut">[R] {{ i18n.reset }}</span>
+        <span class="shortcut">[←/→] {{ i18n.frameStep }}</span>
+        <span class="shortcut">[↑/↓] {{ i18n.speed }}</span>
+        <span class="shortcut">[L] {{ i18n.loop }}</span>
       </div>
     </div>
 
@@ -82,93 +58,114 @@
 
     <!-- 调试日志（可折叠） -->
     <details class="debug-logs" v-if="logs.length > 0">
-      <summary>🔍 Console Logs ({{ logs.length }})</summary>
+      <summary>🔍 {{ i18n.consoleLogs }} ({{ logs.length }})</summary>
       <pre class="log-content">{{ logs.join('\n') }}</pre>
     </details>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
+import { useData } from 'vitepress'
 import FileUploader from './FileUploader.vue'
 import ValidationReport from './ValidationReport.vue'
 import { useConsoleCapture } from '../composables/useConsoleCapture'
 
-// WASM 模块引用
-let wasmModule: any = null
+// 获取当前语言
+const { lang } = useData()
+const isZhHans = computed(() => lang.value === 'zh-Hans' || lang.value.startsWith('zh'))
+
+// 本地化文本
+const i18n = computed(() => isZhHans.value ? {
+  uploadLabel: '上传 .amproj 文件',
+  uploadHint: '上传文件后将自动加载 WASM 播放器',
+  wasmNotBuiltTitle: '⚠️ WASM 模块未构建',
+  wasmNotBuiltDesc: 'Playground 需要 WASM 模块才能运行。请先构建：',
+  wasmNotBuiltHint: '构建完成后刷新页面即可使用。',
+  loading: '正在加载 WASM 和项目...',
+  fullscreen: '全屏',
+  close: '关闭 (刷新页面)',
+  playPause: '播放/暂停',
+  reset: '重置',
+  frameStep: '帧步进',
+  speed: '速度',
+  loop: '循环',
+  consoleLogs: 'Console Logs'
+} : {
+  uploadLabel: 'Upload .amproj file',
+  uploadHint: 'WASM player will load automatically when you upload a file',
+  wasmNotBuiltTitle: '⚠️ WASM Module Not Built',
+  wasmNotBuiltDesc: 'Playground requires the WASM module to run. Please build it first:',
+  wasmNotBuiltHint: 'Refresh the page after the build completes.',
+  loading: 'Loading WASM and project...',
+  fullscreen: 'Fullscreen',
+  close: 'Close (refresh page)',
+  playPause: 'Play/Pause',
+  reset: 'Reset',
+  frameStep: 'Frame Step',
+  speed: 'Speed',
+  loop: 'Loop',
+  consoleLogs: 'Console Logs'
+})
 
 // 响应式状态
 const canvas = ref<HTMLCanvasElement | null>(null)
-const isWasmLoaded = ref(false)
+const canvasContainer = ref<HTMLElement | null>(null)
 const wasmError = ref(false)
 const isLoading = ref(false)
 const isLoaded = ref(false)
-const isPlaying = ref(false)
-const currentFrame = ref(0)
-const totalFrames = ref(0)
-const playbackSpeed = ref(1)
+
+// 存储上传的文件数据，以便在 WASM 加载后使用
+let pendingFileBytes: Uint8Array | null = null
 
 // Console 捕获
 const { validationReport, logs, clearLogs } = useConsoleCapture()
 
-// 计算属性
-const statusClass = computed(() => {
-  if (isLoading.value) return 'loading'
-  if (isLoaded.value) return 'loaded'
-  if (!isWasmLoaded.value) return 'init'
-  return 'ready'
-})
-
-const statusIcon = computed(() => {
-  if (isLoading.value) return '⏳'
-  if (isLoaded.value) return '✅'
-  if (!isWasmLoaded.value) return '🔄'
-  return '📂'
-})
-
-const statusText = computed(() => {
-  if (isLoading.value) return '正在加载项目...'
-  if (isLoaded.value) return '项目已加载'
-  if (!isWasmLoaded.value) return '正在初始化 WASM...'
-  return '准备就绪，请上传 .amproj 文件'
-})
-
-// 生命周期
-onMounted(async () => {
+// 检查 WASM 文件是否存在
+const checkWasmExists = async (): Promise<boolean> => {
   try {
-    // 动态导入 WASM 模块
-    // 注意：WASM 文件需要先通过 wasm/build.sh 构建到 doc/public/wasm/
-    const wasmUrl = '/wasm/bevy_alight_motion.js'
-
-    // 检查 WASM 文件是否存在
-    const response = await fetch(wasmUrl, { method: 'HEAD' })
-    if (!response.ok) {
-      console.warn('[Playground] WASM module not found. Run wasm/build.sh to build it.')
-      wasmError.value = true
-      return
-    }
-
-    const wasm = await import(/* @vite-ignore */ wasmUrl)
-    await wasm.default()
-    wasmModule = wasm
-    isWasmLoaded.value = true
-    console.log('[Playground] WASM module loaded')
-  } catch (error) {
-    console.warn('[Playground] Failed to load WASM:', error)
-    console.warn('[Playground] This is expected in dev mode. Run wasm/build.sh to build the WASM module.')
-    wasmError.value = true
+    const response = await fetch('/wasm/bevy_alight_motion.js', { method: 'HEAD' })
+    return response.ok
+  } catch {
+    return false
   }
-})
+}
 
-onUnmounted(() => {
-  // 清理资源
-  wasmModule = null
-})
+// 加载 WASM 模块
+const loadWasm = async (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const wasmUrl = '/wasm/bevy_alight_motion.js'
+    
+    const script = document.createElement('script')
+    script.type = 'module'
+    script.textContent = `
+      import init, * as wasm from '${wasmUrl}';
+      await init();
+      window.__bevy_wasm = wasm;
+      window.dispatchEvent(new CustomEvent('bevy-wasm-loaded'));
+    `
+    document.head.appendChild(script)
 
-// 方法
+    const timeout = setTimeout(() => {
+      console.warn('[Playground] WASM load timeout')
+      resolve(false)
+    }, 60000) // 60秒超时
+
+    window.addEventListener('bevy-wasm-loaded', () => {
+      clearTimeout(timeout)
+      console.log('[Playground] WASM module loaded')
+      resolve(true)
+    }, { once: true })
+  })
+}
+
+// 上传文件并加载
 const loadProject = async (file: File) => {
-  if (!wasmModule) {
-    alert('WASM 模块尚未加载，请稍候')
+  // 检查 WASM 是否存在
+  const wasmExists = await checkWasmExists()
+  if (!wasmExists) {
+    console.warn('[Playground] WASM module not found. Run wasm/build.sh to build it.')
+    wasmError.value = true
     return
   }
 
@@ -176,77 +173,70 @@ const loadProject = async (file: File) => {
   isLoading.value = true
 
   try {
+    // 读取文件
     const arrayBuffer = await file.arrayBuffer()
-    const bytes = new Uint8Array(arrayBuffer)
+    pendingFileBytes = new Uint8Array(arrayBuffer)
+    console.log(`[Playground] File loaded: ${file.name} (${pendingFileBytes.length} bytes)`)
 
-    console.log(`[Playground] Loading project: ${file.name} (${bytes.length} bytes)`)
+    // 加载 WASM
+    const wasmLoaded = await loadWasm()
+    if (!wasmLoaded) {
+      throw new Error('WASM load failed')
+    }
 
-    const success = wasmModule.load_project_from_bytes(bytes)
+    // 等待一帧让 Bevy 初始化
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    await new Promise(resolve => setTimeout(resolve, 500)) // 额外等待 500ms
 
-    if (success) {
-      isLoaded.value = true
-
-      // 获取项目信息
-      const state = wasmModule.get_state()
-      if (state) {
-        totalFrames.value = state.total_frames || 0
-        currentFrame.value = 0
+    // 加载项目
+    const wasmModule = (window as any).__bevy_wasm
+    if (wasmModule && pendingFileBytes) {
+      console.log('[Playground] Loading project into WASM...')
+      const success = wasmModule.load_project_from_bytes(pendingFileBytes)
+      if (success) {
+        isLoaded.value = true
+        console.log('[Playground] Project loaded successfully')
+      } else {
+        throw new Error('Project load failed')
       }
-    } else {
-      alert('项目加载失败')
     }
   } catch (error) {
-    console.error('[Playground] Load error:', error)
-    alert('项目加载出错: ' + error)
+    console.error('[Playground] Error:', error)
+    wasmError.value = true
   } finally {
     isLoading.value = false
   }
 }
 
-const clearProject = () => {
-  isLoaded.value = false
-  isPlaying.value = false
-  currentFrame.value = 0
-  totalFrames.value = 0
-  clearLogs()
-}
-
-const togglePlay = () => {
-  if (!wasmModule) return
-  if (isPlaying.value) {
-    wasmModule.pause()
-  } else {
-    wasmModule.play()
+// 关闭播放器（刷新页面以完全卸载 WASM）
+const closePlayer = () => {
+  if (confirm(isZhHans.value ? '关闭播放器将刷新页面。确定要继续吗？' : 'Closing the player will refresh the page. Are you sure?')) {
+    window.location.reload()
   }
-  isPlaying.value = !isPlaying.value
 }
 
-const reset = () => {
-  if (!wasmModule) return
-  wasmModule.seek(0)
-  currentFrame.value = 0
-  isPlaying.value = false
+// 全屏切换
+const toggleFullscreen = async () => {
+  const container = canvasContainer.value
+  if (!container) return
+
+  try {
+    if (!document.fullscreenElement) {
+      await container.requestFullscreen()
+    } else {
+      await document.exitFullscreen()
+    }
+  } catch (err) {
+    console.warn('[Playground] Fullscreen error:', err)
+  }
 }
 
-const stepForward = () => {
-  if (!wasmModule) return
-  currentFrame.value = Math.min(currentFrame.value + 1, totalFrames.value)
-  wasmModule.seek(currentFrame.value)
-}
-
-const seek = () => {
-  if (!wasmModule) return
-  wasmModule.seek(currentFrame.value)
-}
-
-const updateSpeed = () => {
-  // TODO: 实现速度控制
-  console.log(`[Playground] Speed changed to ${playbackSpeed.value}x`)
-}
-
-const formatFrame = (frame: number): string => {
-  return frame.toString().padStart(4, '0')
-}
+// 组件卸载时提示用户刷新页面
+onUnmounted(() => {
+  if (isLoaded.value) {
+    console.log('[Playground] Component unmounted. WASM may still be running.')
+  }
+})
 </script>
 
 <style scoped>
@@ -254,37 +244,6 @@ const formatFrame = (frame: number): string => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 1rem;
-}
-
-/* 状态栏 */
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  font-weight: 500;
-}
-
-.status-bar.init {
-  background: var(--vp-c-yellow-soft);
-  color: var(--vp-c-yellow-1);
-}
-
-.status-bar.loading {
-  background: var(--vp-c-blue-soft);
-  color: var(--vp-c-blue-1);
-}
-
-.status-bar.ready {
-  background: var(--vp-c-gray-soft);
-  color: var(--vp-c-text-2);
-}
-
-.status-bar.loaded {
-  background: var(--vp-c-green-soft);
-  color: var(--vp-c-green-1);
 }
 
 /* WASM 不可用提示 */
@@ -328,6 +287,45 @@ const formatFrame = (frame: number): string => {
   margin-bottom: 1.5rem;
 }
 
+.upload-hint {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--vp-c-text-2);
+  text-align: center;
+}
+
+/* 加载中 */
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  background: var(--vp-c-bg-soft);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.loading-section span {
+  margin-top: 1rem;
+  color: var(--vp-c-text-2);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--vp-c-divider);
+  border-top-color: var(--vp-c-brand);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* 播放器区域 */
 .player-section {
   background: var(--vp-c-bg-soft);
@@ -350,104 +348,55 @@ const formatFrame = (frame: number): string => {
   height: 100%;
 }
 
-.loading-overlay {
+/* 全屏和关闭按钮 */
+.fullscreen-btn,
+.close-btn {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  gap: 0.5rem;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* 控制面板 */
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 0.75rem;
-  padding: 0.5rem;
-}
-
-.playback-controls {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.playback-controls button {
-  padding: 0.5rem 0.75rem;
-  font-size: 1.2rem;
-  background: var(--vp-c-brand);
-  color: white;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.6);
   border: none;
   border-radius: 4px;
+  color: white;
+  font-size: 18px;
   cursor: pointer;
-  transition: background 0.2s;
+  opacity: 0.7;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 10;
 }
 
-.playback-controls button:hover:not(:disabled) {
-  background: var(--vp-c-brand-dark);
+.fullscreen-btn {
+  bottom: 10px;
+  right: 10px;
 }
 
-.playback-controls button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.close-btn {
+  top: 10px;
+  right: 10px;
 }
 
-.time-display {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
-  color: var(--vp-c-text-2);
+.fullscreen-btn:hover,
+.close-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.8);
 }
 
-.speed-control {
+/* 快捷键提示 */
+.shortcuts-bar {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-
-.speed-control label {
-  font-size: 0.875rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  font-size: 0.8rem;
   color: var(--vp-c-text-2);
 }
 
-.speed-control select {
+.shortcut {
+  background: var(--vp-c-bg);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   border: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg);
-  color: var(--vp-c-text-1);
-}
-
-/* 时间轴 */
-.timeline {
-  margin-top: 0.5rem;
-}
-
-.timeline input[type='range'] {
-  width: 100%;
-  cursor: pointer;
 }
 
 /* 验证报告区域 */
@@ -487,13 +436,12 @@ const formatFrame = (frame: number): string => {
 
 /* 响应式 */
 @media (max-width: 640px) {
-  .controls {
-    flex-wrap: wrap;
+  .shortcuts-bar {
+    font-size: 0.7rem;
   }
-
-  .speed-control {
-    margin-left: 0;
-    width: 100%;
+  
+  .shortcut {
+    padding: 0.2rem 0.4rem;
   }
 }
 </style>

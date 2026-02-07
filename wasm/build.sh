@@ -15,6 +15,10 @@ echo "🔧 Building bevy_alight_motion WASM (单线程/WebGL2 模式)..."
 # Ensure wasm target is installed
 rustup target add wasm32-unknown-unknown
 
+# 设置 assets 路径供 bevy_embedded_assets 使用
+export BEVY_ASSET_PATH="$(cd .. && pwd)/assets"
+echo "📁 Asset path: $BEVY_ASSET_PATH"
+
 # Build in release mode for smaller size
 # 注意：Cargo.toml 已配置 webgl2 feature，避免多线程依赖
 cargo build --target wasm32-unknown-unknown --release
@@ -28,7 +32,7 @@ wasm-bindgen \
     --target web \
     --out-dir ../doc/public/wasm \
     --out-name bevy_alight_motion \
-    ../../target/wasm32-unknown-unknown/release/bevy_alight_motion_wasm.wasm
+    ./target/wasm32-unknown-unknown/release/bevy_alight_motion_wasm.wasm
 
 # Optimize WASM size with wasm-opt (strongly recommended for production)
 if command -v wasm-opt &> /dev/null; then

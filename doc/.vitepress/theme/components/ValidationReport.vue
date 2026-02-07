@@ -31,7 +31,7 @@
     </div>
 
     <!-- 支持的效果 -->
-    <div class="section effects-section" v-if="report.supported_effects_used.length">
+    <div class="section effects-section" v-if="report.supported_effects_used?.length">
       <div class="line">
         <span class="label">[AM Validation]</span>
         <span class="value">
@@ -77,7 +77,7 @@
     </div>
 
     <!-- 不支持的图层 -->
-    <div class="section unsupported-section" v-if="report.unsupported_layers.length">
+    <div class="section unsupported-section" v-if="report.unsupported_layers?.length">
       <div class="line">
         <span class="label">[AM Validation]</span>
         <span class="value error">
@@ -134,11 +134,11 @@ const props = defineProps<{
 }>()
 
 const fullSupportCount = computed(() =>
-  props.report?.supported_effects_used.filter(e => e.support_level === 'Full').length ?? 0
+  props.report?.supported_effects_used?.filter(e => e.support_level === 'Full').length ?? 0
 )
 
 const partialSupportCount = computed(() =>
-  props.report?.supported_effects_used.filter(e => e.support_level === 'Partial').length ?? 0
+  props.report?.supported_effects_used?.filter(e => e.support_level === 'Partial').length ?? 0
 )
 
 const hasUnsupportedLayerCounts = computed(() => {
@@ -148,7 +148,7 @@ const hasUnsupportedLayerCounts = computed(() => {
 })
 
 const groupedUnsupportedEffects = computed(() => {
-  if (!props.report) return []
+  if (!props.report?.unsupported_effects) return []
   const groups = new Map<string, { id: string; label: string; count: number }>()
   for (const effect of props.report.unsupported_effects) {
     const existing = groups.get(effect.id)
@@ -162,15 +162,15 @@ const groupedUnsupportedEffects = computed(() => {
 })
 
 const totalIssues = computed(() =>
-  (props.report?.unsupported_effects.length ?? 0) +
-  (props.report?.unsupported_layers.length ?? 0)
+  (props.report?.unsupported_effects?.length ?? 0) +
+  (props.report?.unsupported_layers?.length ?? 0)
 )
 
 const hasIssues = computed(() => totalIssues.value > 0)
 
 const issueUrl = computed(() => {
   const effects = groupedUnsupportedEffects.value.map(e => `- ${e.label} (${e.id})`).join('\n')
-  const layers = props.report?.unsupported_layers.map(l => `- ${l.layer_type}`).join('\n') ?? ''
+  const layers = props.report?.unsupported_layers?.map(l => `- ${l.layer_type}`).join('\n') ?? ''
   const body = encodeURIComponent(
     `## Unsupported Effects\n${effects || 'None'}\n\n## Unsupported Layers\n${layers || 'None'}`
   )

@@ -30,6 +30,9 @@ bevy = { version = "0.17.2", default-features = false, features = [
     # WASM 专用：使用 WebGL2，避免 WebGPU 多线程问题
     "webgl2",
 ]}
+# 嵌入式资产：在编译时将 assets 目录嵌入 WASM 文件
+# Bevy 0.17 对应 bevy_embedded_assets 0.14
+bevy_embedded_assets = "0.14"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"

@@ -360,6 +360,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_alight_motion",
+ "bevy_embedded_assets",
  "console_error_panic_hook",
  "js-sys",
  "serde",
@@ -676,6 +677,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "bevy_embedded_assets"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d74a80901405b5c70661f44492b4e2ef02b37497d38abc3b0a4a4a0614cc8d0e"
+dependencies = [
+ "bevy_app",
+ "bevy_asset",
+ "bevy_ecs",
+ "cargo-emit",
+ "futures-io",
+ "futures-lite",
+ "log",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1714,6 +1731,12 @@ dependencies = [
  "wayland-backend",
  "wayland-client",
 ]
+
+[[package]]
+name = "cargo-emit"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1582e1c9e755dd6ad6b224dcffb135d199399a4568d454bd89fe515ca8425695"
 
 [[package]]
 name = "cc"
