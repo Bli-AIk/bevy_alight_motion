@@ -593,10 +593,15 @@ impl ValidationReport {
         }
 
         if !self.unsupported_effects.is_empty() {
-            let mut effect_counts: HashMap<&str, usize> = HashMap::new();
+            // First, collect deduplicated effect counts
+            let mut effect_counts: HashMap<&str, (&UnsupportedEffect, usize)> = HashMap::new();
             for effect in &self.unsupported_effects {
-                *effect_counts.entry(&effect.effect_id).or_insert(0) += 1;
+                effect_counts
+                    .entry(&effect.effect_id)
+                    .and_modify(|(_, count)| *count += 1)
+                    .or_insert((effect, 1));
             }
+
             console::warn_1(
                 &format!(
                     "[AM Validation] Unsupported effects ({} unique types):",
@@ -604,14 +609,15 @@ impl ValidationReport {
                 )
                 .into(),
             );
-            for effect in &self.unsupported_effects {
-                let count = effect_counts.get(effect.effect_id.as_str()).unwrap_or(&1);
+
+            // Now output each unique effect
+            for (effect_id, (effect, count)) in &effect_counts {
                 if *count == 1 {
                     console::warn_1(
                         &format!(
                             "  ✗ '{}' ({}) on layer '{}' (id={})",
                             effect.effect_label,
-                            effect.effect_id,
+                            effect_id,
                             effect.layer_label,
                             effect.layer_id
                         )
@@ -621,13 +627,11 @@ impl ValidationReport {
                     console::warn_1(
                         &format!(
                             "  ✗ '{}' ({}) - {} usage(s)",
-                            effect.effect_label, effect.effect_id, count
+                            effect.effect_label, effect_id, count
                         )
                         .into(),
                     );
                 }
-                // Remove from counts to avoid duplicate output
-                effect_counts.remove(effect.effect_id.as_str());
             }
         }
 

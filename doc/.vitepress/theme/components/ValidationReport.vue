@@ -43,14 +43,14 @@
       <div
         class="line indent"
         v-for="effect in report.supported_effects_used"
-        :key="effect.id"
+        :key="effect.effect_id"
       >
-        <span :class="['icon', effect.support_level.toLowerCase()]">
-          {{ effect.support_level === 'Full' ? '✓' : '⚠' }}
+        <span :class="['icon', effect.level.toLowerCase()]">
+          {{ effect.level === 'Full' ? '✓' : '⚠' }}
         </span>
         <span class="effect-name">{{ effect.display_name }}</span>
         <span class="usage">- {{ effect.usage_count }} usage(s)</span>
-        <span class="partial-note" v-if="effect.support_level === 'Partial'">
+        <span class="partial-note" v-if="effect.level === 'Partial'">
           (partial support)
         </span>
       </div>
@@ -67,11 +67,11 @@
       <div
         class="line indent"
         v-for="effect in groupedUnsupportedEffects"
-        :key="effect.id"
+        :key="effect.effect_id"
       >
         <span class="icon error">✗</span>
-        <span class="error">'{{ effect.label }}'</span>
-        <span class="id">({{ effect.id }})</span>
+        <span class="error">'{{ effect.effect_label }}'</span>
+        <span class="id">({{ effect.effect_id }})</span>
         <span class="usage">- {{ effect.count }} usage(s)</span>
       </div>
     </div>
@@ -119,8 +119,12 @@
     <!-- 提交 Issue 链接 -->
     <div class="actions" v-if="hasIssues">
       <a :href="issueUrl" target="_blank" class="submit-issue-btn">
-        📝 Request Feature Support
+        <svg class="github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+        </svg>
+        Request Feature Support
       </a>
+      <span class="issue-hint">Check existing issues before submitting</span>
     </div>
   </div>
 </template>
@@ -134,11 +138,11 @@ const props = defineProps<{
 }>()
 
 const fullSupportCount = computed(() =>
-  props.report?.supported_effects_used?.filter(e => e.support_level === 'Full').length ?? 0
+  props.report?.supported_effects_used?.filter(e => e.level === 'Full').length ?? 0
 )
 
 const partialSupportCount = computed(() =>
-  props.report?.supported_effects_used?.filter(e => e.support_level === 'Partial').length ?? 0
+  props.report?.supported_effects_used?.filter(e => e.level === 'Partial').length ?? 0
 )
 
 const hasUnsupportedLayerCounts = computed(() => {
@@ -149,13 +153,13 @@ const hasUnsupportedLayerCounts = computed(() => {
 
 const groupedUnsupportedEffects = computed(() => {
   if (!props.report?.unsupported_effects) return []
-  const groups = new Map<string, { id: string; label: string; count: number }>()
+  const groups = new Map<string, { effect_id: string; effect_label: string; count: number }>()
   for (const effect of props.report.unsupported_effects) {
-    const existing = groups.get(effect.id)
+    const existing = groups.get(effect.effect_id)
     if (existing) {
       existing.count++
     } else {
-      groups.set(effect.id, { id: effect.id, label: effect.label, count: 1 })
+      groups.set(effect.effect_id, { effect_id: effect.effect_id, effect_label: effect.effect_label, count: 1 })
     }
   }
   return Array.from(groups.values())
@@ -169,12 +173,58 @@ const totalIssues = computed(() =>
 const hasIssues = computed(() => totalIssues.value > 0)
 
 const issueUrl = computed(() => {
-  const effects = groupedUnsupportedEffects.value.map(e => `- ${e.label} (${e.id})`).join('\n')
-  const layers = props.report?.unsupported_layers?.map(l => `- ${l.layer_type}`).join('\n') ?? ''
+  // Group unsupported effects by effect_id
+  const effectGroups = groupedUnsupportedEffects.value
+  const effectsList = effectGroups.map(e =>
+    `- Effect ID: \`${e.effect_id}\` (${e.count} usage(s))`
+  ).join('\n')
+
+  const layersList = props.report?.unsupported_layers?.map(l =>
+    `- Layer type: ${l.layer_type}`
+  ).join('\n') ?? ''
+
+  // Create unique effect IDs for search query
+  const uniqueEffectIds = effectGroups.map(e => {
+    // Extract short name from full ID (e.g., "threshold" from "com.alightcreative.effects.threshold")
+    const parts = e.effect_id.split('.')
+    return parts[parts.length - 1]
+  }).join(' OR ')
+
+  const title = encodeURIComponent('feat: [Support for unsupported effects/layers]')
+
   const body = encodeURIComponent(
-    `## Unsupported Effects\n${effects || 'None'}\n\n## Unsupported Layers\n${layers || 'None'}`
-  )
-  return `https://github.com/Bli-AIk/bevy_alight_motion/issues/new?title=Feature%20Request&body=${body}`
+`> **IMPORTANT**: Before submitting, please check if a similar issue already exists:
+> Search: https://github.com/Bli-AIk/bevy_alight_motion/issues?q=${uniqueEffectIds}
+
+### Is your feature request related to a specific issue?
+
+bevy_alight_motion is missing support for certain AM effects/layer types detected in my project.
+
+---
+
+### AM Effect Reference (if applicable)
+
+**Unsupported Effects:**
+${effectsList || 'None'}
+
+**Unsupported Layer Types:**
+${layersList || 'None'}
+
+---
+
+### Feature Description
+
+Please add support for the above effects/layers to match AM's rendering.
+
+---
+
+### Additional Information
+
+- Project stats: ${props.report?.stats.total_layers || 0} layers total
+- Detected by: WASM Playground validation report
+`)
+
+  return `https://github.com/Bli-AIk/bevy_alight_motion/issues/new?labels=enhancement&title=${title}&body=${body}`
 })
 </script>
 
@@ -293,16 +343,32 @@ const issueUrl = computed(() => {
 
 .actions {
   margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.issue-hint {
+  color: #888;
+  font-size: 0.8rem;
+  font-style: italic;
 }
 
 .submit-issue-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 1rem;
   background: #4a4a6a;
   color: #fff;
   border-radius: 4px;
   text-decoration: none;
   transition: background 0.2s;
+  width: fit-content;
+}
+
+.github-icon {
+  flex-shrink: 0;
 }
 
 .submit-issue-btn:hover {

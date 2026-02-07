@@ -21,16 +21,15 @@ export interface SceneStats {
 }
 
 export interface EffectUsage {
-  id: string
-  label: string
+  effect_id: string
   display_name: string
-  support_level: 'Full' | 'Partial' | 'Ignored'
   usage_count: number
+  level: 'Full' | 'Partial' | 'Unsupported'
 }
 
 export interface UnsupportedEffect {
-  id: string
-  label: string
+  effect_id: string
+  effect_label: string
   layer_label: string
   layer_id: number
 }

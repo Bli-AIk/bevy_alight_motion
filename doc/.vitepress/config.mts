@@ -159,7 +159,7 @@ export default defineConfig({
       }
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-repo/bevy_alight_motion' }
+      { icon: 'github', link: 'https://github.com/Bli-AIk/bevy_alight_motion' }
     ],
     footer: {
       message: 'Released under the MIT License.',

@@ -4,7 +4,7 @@ Add `bevy_alight_motion` to your `Cargo.toml` dependencies:
 
 ```toml
 [dependencies]
-bevy_alight_motion = { git = "https://github.com/your-repo/bevy_alight_motion" }
+bevy_alight_motion = { git = "https://github.com/Bli-AIk/bevy_alight_motion" }
 ```
 
 ## System Dependencies
