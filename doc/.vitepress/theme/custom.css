@@ -1,162 +1,172 @@
-/* Crucible Theme - Industrial Rust Aesthetic */
+/* Tauri V1 Blueprint Style - Compact & Overflow Fix */
+
 :root {
-  /* 品牌色系统 - 氧化铜与琥珀 */
-  --vp-c-brand-1: #e68a4f; /* 主色：拉丝铜 */
-  --vp-c-brand-2: #cf7a44;
-  --vp-c-brand-3: #b36b3c;
-  --vp-c-brand-soft: rgba(230, 138, 79, 0.12);
-
-  /* 语义色 - 工业标准 */
-  --vp-c-tip: #7daea3;     /* 冷金属绿 */
-  --vp-c-warning: #d8a657;  /* 警示黄 */
-  --vp-c-danger: #ea6962;   /* 警告红 */
-
-  /* 字体系统 */
-  --vp-font-family-base: "Public Sans", "Inter", -apple-system, sans-serif;
-  --vp-font-family-mono: "JetBrains Mono", "Fira Code", "IBM Plex Mono", monospace;
-
-  /* 布局控制 */
-  --vp-screen-max-width: 1440px;
-
-  /* 首页背景 - 工程栅格效果 */
-  --crucible-grid: radial-gradient(var(--vp-c-divider) 0.5px, transparent 0.5px);
+  --vp-c-bg: #0b0c10;
+  --vp-c-bg-soft: #14161a;
+  --vp-c-brand-1: #ff7e33;
+  --vp-c-brand-2: #e0561a;
+  --vp-c-text-1: #ffffff;
+  --vp-c-text-2: #aab2c0;
+  --grid-line: rgba(255, 255, 255, 0.05);
 }
 
-/* --- 深色模式 (核心) --- */
-.dark {
-  --vp-c-bg: #0f1113;      /* 深炭黑 */
-  --vp-c-bg-soft: #16191d; /* 表面层级 */
-  --vp-c-bg-alt: #0a0b0d;
-  --vp-c-bg-elv: #1a1d21;
-
-  --vp-c-text-1: #d1d5db;  /* 铝灰色 */
-  --vp-c-text-2: #9ca3af;
-  --vp-c-text-3: #6b7280;
-
-  --vp-c-divider: #2d3238; /* 钢板接缝色 */
-  --vp-c-border: #374151;
-
-  --vp-code-bg: #050505;   /* 代码块背景 - 极黑 */
-}
-
-/* --- 浅色模式 (高对比工业) --- */
-:root:not(.dark) {
-  --vp-c-bg: #f4f4f5;
-  --vp-c-bg-soft: #ffffff;
-  --vp-c-bg-alt: #e4e4e7;
-  --vp-c-text-1: #18181b;
-  --vp-c-divider: #d4d4d8;
-}
-
-/* --------------------------------------------------
-   进阶组件样式重塑
-   -------------------------------------------------- */
-
-/* 全局背景 */
-.VPContent {
-  background-image: var(--crucible-grid);
-  background-size: 32px 32px;
-}
-
-/* 1. 全局标题样式 - 力量感与直线条 */
-.vp-doc h1, .vp-doc h2, .vp-doc h3 {
-  letter-spacing: -0.02em;
-  font-weight: 700;
-}
-
-.vp-doc h2 {
-  margin-top: 48px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--vp-c-divider);
-  display: flex;
-  align-items: center;
-}
-
-.vp-doc h2::before {
-  content: "";
-  width: 4px;
-  height: 24px;
-  background: var(--vp-c-brand-1);
-  margin-right: 12px;
-  display: inline-block;
-}
-
-/* 2. 侧边栏定制 - 移除圆角，强调边框 */
-.VPSidebarItem.level-0.is-active > .item > .text {
-  color: var(--vp-c-brand-1) !important;
-  font-weight: 700;
-}
-
-.VPSidebarItem.item.is-active > .text {
-  border-left: 2px solid var(--vp-c-brand-1);
-  background-color: var(--vp-c-brand-soft);
-  border-radius: 0 !important; /* 强制直线 */
-  padding-left: 12px;
-}
-
-/* 3. 代码块增强 - 终端感 */
-.vp-doc div[class*='language-'] {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 4px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-  background-color: var(--vp-code-bg) !important;
-}
-
-.vp-doc div[class*='language-']::before {
-  content: attr(data-ext);
-  position: absolute;
-  top: 4px;
-  right: 12px;
-  font-family: var(--vp-font-family-mono);
-  font-size: 10px;
-  color: var(--vp-c-text-3);
-  text-transform: uppercase;
-}
-
-/* 4. 自定义提示框 - 移除背景，强调侧边 */
-.custom-block {
-  border-radius: 0 !important;
-  border-left-width: 4px !important;
-  border-right: 1px solid var(--vp-c-divider);
-  border-top: 1px solid var(--vp-c-divider);
-  border-bottom: 1px solid var(--vp-c-divider);
-  background-color: transparent !important;
-}
-
-.custom-block.tip { border-left-color: var(--vp-c-tip) !important; }
-.custom-block.warning { border-left-color: var(--vp-c-warning) !important; }
-.custom-block.danger { border-left-color: var(--vp-c-danger) !important; }
-
-/* 首页 Hero 特效 */
-.VPHomeHero {
-  text-align: center;
-  white-space: nowrap; /* 禁止首页文本换行 */
-}
-
-.VPHomeHero .container {
+/* 1. Global Home Reset */
+.VPHome {
+  background-color: var(--vp-c-bg);
+  background-image: 
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center top;
+  min-height: calc(100vh - var(--vp-nav-height));
+  padding: 64px 24px !important;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.VPHomeHero .name {
-  background: linear-gradient(to bottom, #e68a4f 0%, #3e2723 100%); /* 橙色到深棕色纵向渐变 */
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  line-height: 1.2;
-}
-
-.VPHomeHero .actions {
   justify-content: center;
 }
 
-/* 细节：行内代码块微调 */
-:not(pre) > code {
-  border: 1px solid var(--vp-c-divider);
-  background-color: var(--vp-c-bg-soft) !important;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-family: var(--vp-font-family-mono);
-  font-size: 0.9em;
-  color: var(--vp-c-brand-1);
+/* 2. Target VPHomeHero - More Compact Padding */
+.VPHomeHero {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+}
+
+.VPHomeHero .container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+
+.VPHomeHero .main {
+  width: 100% !important;
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+}
+
+/* 3. Typography - Responsive & Visible */
+.VPHomeHero .name {
+  font-size: clamp(40px, 7vw, 72px) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
+  background: linear-gradient(135deg, #ff7e33 0%, #ff4500 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 8vh auto 16px !important; /* Added top spacing */
+  line-height: 1.1 !important;
+  display: block !important;
+  word-break: break-word !important; /* prevent overflow */
+  max-width: 90% !important; /* Ensure it fits on screen */
+}
+
+@media (max-width: 960px) {
+  .VPHomeHero .name {
+    margin-top: 4vh !important;
+  }
+}
+
+.VPHomeHero .text {
+  font-size: clamp(20px, 3vw, 32px) !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  max-width: 1200px !important; /* Increased width */
+  margin: 0 auto 12px !important;
+  line-height: 1.3 !important;
+}
+
+.VPHomeHero .tagline {
+  font-size: clamp(16px, 2vw, 20px) !important;
+  color: var(--vp-c-text-2) !important;
+  max-width: 1200px !important; /* Increased width */
+  margin: 0 auto 24px !important; /* Compact spacing */
+  line-height: 1.5 !important;
+}
+
+/* 4. Install Widget - Terminal Style */
+.install-widget {
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto 32px !important; /* Compact spacing */
+  background: #000000;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.install-cmd {
+  font-size: 15px;
+  color: #eee;
+}
+
+.install-copy {
+  color: #666;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.install-copy:hover {
+  color: #fff;
+}
+
+/* 5. Action Buttons */
+.hero-actions-manual {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  padding: 14px 40px !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  text-decoration: none !important;
+  transition: transform 0.2s, background-color 0.2s !important;
+}
+
+.btn-primary:hover {
+  background-color: #e5e5e5 !important;
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background-color: transparent !important;
+  color: #ffffff !important;
+  padding: 14px 40px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  text-decoration: none !important;
+  transition: background-color 0.2s, border-color 0.2s !important;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(255,255,255,0.05) !important;
+  border-color: rgba(255,255,255,0.5) !important;
+}
+
+/* Hide default elements */
+.VPHomeHero .image, .VPHomeFeatures, .VPFeatures, .VPHomeHero .actions {
+  display: none !important;
+}
+
+/* Footer Tweak */
+.VPFooter {
+  background-color: var(--vp-c-bg) !important;
+  border-top: 1px solid var(--grid-line) !important;
+  padding: 24px 0 !important;
 }
