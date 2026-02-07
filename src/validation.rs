@@ -7,35 +7,73 @@
 //!
 //! This module provides functionality to validate AM project files and report:
 //! - Supported effects that are in use
+//! - Partially supported effects (works but with some limitations)
 //! - Unsupported effects that will be skipped
 //! - Unsupported layer types (Audio, Video, Camera)
-//! - Unknown XML elements that couldn't be parsed
 
 use crate::schema::{AmEffect, AmLayer, AmScene};
-use std::collections::{HashMap, HashSet};
+use owo_colors::OwoColorize;
+use std::collections::HashMap;
 
-/// Supported effect IDs and their display names
-/// 支持的效果 ID 及其显示名称
-pub const SUPPORTED_EFFECTS: &[(&str, &str)] = &[
-    ("com.alightcreative.effects.transform2", "Transform2 (位置偏移)"),
-    ("com.alightcreative.effects.wipe2", "Wipe2 (擦除效果)"),
-    (
-        "com.alightcreative.effects.stretchsegment",
-        "StretchSegment (拉伸分割)",
-    ),
-    (
-        "com.alightcreative.effects.gaussianblur",
-        "GaussianBlur (高斯模糊)",
-    ),
-    (
-        "com.alightcreative.effects.palettemap",
-        "PaletteMap (调色板映射)",
-    ),
-    ("com.alightcreative.replacecolor", "ReplaceColor (颜色替换)"),
-    (
-        "com.alightcreative.effects.scaleassist",
-        "ScaleAssist (缩放辅助)",
-    ),
+/// Effect support level
+/// 效果支持级别
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectSupportLevel {
+    /// Fully supported
+    Full,
+    /// Partially supported (some features may not work)
+    Partial,
+    /// Not supported at all
+    Unsupported,
+}
+
+/// Effect definition with support level
+pub struct EffectDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub level: EffectSupportLevel,
+}
+
+/// All known effects and their support levels
+/// 所有已知效果及其支持级别
+pub const KNOWN_EFFECTS: &[EffectDef] = &[
+    // Fully supported effects
+    EffectDef {
+        id: "com.alightcreative.effects.transform2",
+        name: "Transform2 (位置偏移)",
+        level: EffectSupportLevel::Full,
+    },
+    EffectDef {
+        id: "com.alightcreative.effects.wipe2",
+        name: "Wipe2 (擦除效果)",
+        level: EffectSupportLevel::Full,
+    },
+    EffectDef {
+        id: "com.alightcreative.replacecolor",
+        name: "ReplaceColor (颜色替换)",
+        level: EffectSupportLevel::Full,
+    },
+    // Partially supported effects
+    EffectDef {
+        id: "com.alightcreative.effects.stretchsegment",
+        name: "StretchSegment (拉伸分割)",
+        level: EffectSupportLevel::Partial,
+    },
+    EffectDef {
+        id: "com.alightcreative.effects.gaussianblur",
+        name: "GaussianBlur (高斯模糊)",
+        level: EffectSupportLevel::Partial,
+    },
+    EffectDef {
+        id: "com.alightcreative.effects.palettemap",
+        name: "PaletteMap (调色板映射)",
+        level: EffectSupportLevel::Partial,
+    },
+    EffectDef {
+        id: "com.alightcreative.effects.scaleassist",
+        name: "ScaleAssist (缩放辅助)",
+        level: EffectSupportLevel::Partial,
+    },
 ];
 
 /// Validation report containing information about supported and unsupported features
@@ -73,6 +111,8 @@ pub struct EffectUsage {
     pub display_name: String,
     /// Number of layers using this effect
     pub usage_count: u32,
+    /// Support level
+    pub level: EffectSupportLevel,
 }
 
 /// Information about an unsupported effect
@@ -132,18 +172,21 @@ impl ValidationReport {
     /// 验证 AM 场景并生成报告
     pub fn validate(scene: &AmScene) -> Self {
         let mut report = Self::default();
-        let supported_ids: HashSet<&str> = SUPPORTED_EFFECTS.iter().map(|(id, _)| *id).collect();
+        // Create a map of effect ID -> EffectDef for quick lookup
+        let effect_defs: HashMap<&str, &EffectDef> =
+            KNOWN_EFFECTS.iter().map(|e| (e.id, e)).collect();
         let mut effect_usage_map: HashMap<String, u32> = HashMap::new();
 
-        report.validate_layers_recursive(&scene.layers, &supported_ids, &mut effect_usage_map);
+        report.validate_layers_recursive(&scene.layers, &effect_defs, &mut effect_usage_map);
 
         // Build supported effects list with usage counts
-        for (id, name) in SUPPORTED_EFFECTS {
-            if let Some(&count) = effect_usage_map.get(*id) {
+        for effect_def in KNOWN_EFFECTS {
+            if let Some(&count) = effect_usage_map.get(effect_def.id) {
                 report.supported_effects_used.push(EffectUsage {
-                    effect_id: id.to_string(),
-                    display_name: name.to_string(),
+                    effect_id: effect_def.id.to_string(),
+                    display_name: effect_def.name.to_string(),
                     usage_count: count,
+                    level: effect_def.level,
                 });
             }
         }
@@ -155,7 +198,7 @@ impl ValidationReport {
     fn validate_layers_recursive(
         &mut self,
         layers: &[AmLayer],
-        supported_ids: &HashSet<&str>,
+        effect_defs: &HashMap<&str, &EffectDef>,
         effect_usage_map: &mut HashMap<String, u32>,
     ) {
         for layer in layers {
@@ -168,7 +211,7 @@ impl ValidationReport {
                         &shape.effects,
                         &shape.label,
                         shape.id,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                 }
@@ -179,7 +222,7 @@ impl ValidationReport {
                         &text.effects,
                         &text.label,
                         text.id,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                 }
@@ -189,7 +232,7 @@ impl ValidationReport {
                         &image.effects,
                         &image.label,
                         image.id,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                 }
@@ -199,7 +242,7 @@ impl ValidationReport {
                         &null.effects,
                         &null.label,
                         null.id,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                 }
@@ -209,7 +252,7 @@ impl ValidationReport {
                     // Recursively validate nested scene
                     self.validate_layers_recursive(
                         &embed.scene.layers,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                 }
@@ -228,7 +271,7 @@ impl ValidationReport {
                         &video.effects,
                         &video.label,
                         video.id,
-                        supported_ids,
+                        effect_defs,
                         effect_usage_map,
                     );
                     self.unsupported_layers.push(UnsupportedLayer {
@@ -259,11 +302,11 @@ impl ValidationReport {
         effects: &[AmEffect],
         layer_label: &str,
         layer_id: u64,
-        supported_ids: &HashSet<&str>,
+        effect_defs: &HashMap<&str, &EffectDef>,
         effect_usage_map: &mut HashMap<String, u32>,
     ) {
         for effect in effects {
-            if supported_ids.contains(effect.id.as_str()) {
+            if effect_defs.contains_key(effect.id.as_str()) {
                 *effect_usage_map.entry(effect.id.clone()).or_insert(0) += 1;
             } else {
                 // Effect doesn't have a label field, use a short form of id as label
@@ -283,20 +326,27 @@ impl ValidationReport {
         }
     }
 
-    /// Log the validation report
-    /// 输出验证报告到日志
+    /// Log the validation report with colored output
+    /// 使用彩色输出日志验证报告
     pub fn log_report(&self, project_title: &str) {
-        bevy::log::info!("========================================");
-        bevy::log::info!("[AM Validation] Project: {}", project_title);
-        bevy::log::info!("========================================");
+        println!();
+        println!("{}", "========================================".cyan());
+        println!(
+            "{} {}",
+            "[AM Validation]".cyan().bold(),
+            format!("Project: {}", project_title).white()
+        );
+        println!("{}", "========================================".cyan());
 
         // Scene statistics
-        bevy::log::info!(
-            "[AM Validation] Scene stats: {} layers total",
-            self.stats.total_layers
+        println!(
+            "{} {} layers total",
+            "[AM Validation]".cyan(),
+            self.stats.total_layers.to_string().white()
         );
-        bevy::log::info!(
-            "  - Shape: {}, Text: {}, Image: {}, Null: {}, Embed: {}",
+        println!(
+            "  {} Shape: {}, Text: {}, Image: {}, Null: {}, Embed: {}",
+            "·".dimmed(),
             self.stats.shape_count,
             self.stats.text_count,
             self.stats.image_count,
@@ -306,18 +356,53 @@ impl ValidationReport {
 
         // Supported effects in use
         if self.supported_effects_used.is_empty() {
-            bevy::log::info!("[AM Validation] Effects: None used");
-        } else {
-            bevy::log::info!(
-                "[AM Validation] Supported effects in use ({}):",
-                self.supported_effects_used.len()
+            println!(
+                "{} Effects: {}",
+                "[AM Validation]".cyan(),
+                "None used".dimmed()
             );
+        } else {
+            let full_count = self
+                .supported_effects_used
+                .iter()
+                .filter(|e| e.level == EffectSupportLevel::Full)
+                .count();
+            let partial_count = self
+                .supported_effects_used
+                .iter()
+                .filter(|e| e.level == EffectSupportLevel::Partial)
+                .count();
+
+            println!(
+                "{} Effects in use: {} full, {} partial",
+                "[AM Validation]".cyan(),
+                full_count.to_string().green(),
+                partial_count.to_string().yellow()
+            );
+
             for effect in &self.supported_effects_used {
-                bevy::log::info!(
-                    "  ✓ {} - {} usage(s)",
-                    effect.display_name,
-                    effect.usage_count
-                );
+                match effect.level {
+                    EffectSupportLevel::Full => {
+                        println!(
+                            "  {} {} - {} usage(s)",
+                            "✓".green(),
+                            effect.display_name.green(),
+                            effect.usage_count
+                        );
+                    }
+                    EffectSupportLevel::Partial => {
+                        println!(
+                            "  {} {} - {} usage(s) {}",
+                            "⚠".yellow(),
+                            effect.display_name.yellow(),
+                            effect.usage_count,
+                            "(partial support)".dimmed()
+                        );
+                    }
+                    EffectSupportLevel::Unsupported => {
+                        // This shouldn't happen in supported_effects_used
+                    }
+                }
             }
         }
 
@@ -332,25 +417,29 @@ impl ValidationReport {
                     .push(effect);
             }
 
-            bevy::log::warn!(
-                "[AM Validation] Unsupported effects ({} unique types):",
+            println!(
+                "{} {} ({} unique types):",
+                "[AM Validation]".cyan(),
+                "Unsupported effects".red().bold(),
                 effect_counts.len()
             );
             for (effect_id, usages) in &effect_counts {
                 let first = usages.first().unwrap();
                 if usages.len() == 1 {
-                    bevy::log::warn!(
-                        "  ✗ '{}' ({}) on layer '{}' (id={})",
-                        first.effect_label,
-                        effect_id,
+                    println!(
+                        "  {} '{}' ({}) on layer '{}' (id={})",
+                        "✗".red(),
+                        first.effect_label.red(),
+                        effect_id.dimmed(),
                         first.layer_label,
                         first.layer_id
                     );
                 } else {
-                    bevy::log::warn!(
-                        "  ✗ '{}' ({}) - {} usage(s)",
-                        first.effect_label,
-                        effect_id,
+                    println!(
+                        "  {} '{}' ({}) - {} usage(s)",
+                        "✗".red(),
+                        first.effect_label.red(),
+                        effect_id.dimmed(),
                         usages.len()
                     );
                 }
@@ -359,14 +448,17 @@ impl ValidationReport {
 
         // Unsupported layers
         if !self.unsupported_layers.is_empty() {
-            bevy::log::warn!(
-                "[AM Validation] Unsupported layer types ({}):",
+            println!(
+                "{} {} ({}):",
+                "[AM Validation]".cyan(),
+                "Unsupported layer types".red().bold(),
                 self.unsupported_layers.len()
             );
             for layer in &self.unsupported_layers {
-                bevy::log::warn!(
-                    "  ✗ {} '{}' (id={}) - will be skipped",
-                    layer.layer_type,
+                println!(
+                    "  {} {} '{}' (id={}) - will be skipped",
+                    "✗".red(),
+                    layer.layer_type.red(),
                     layer.label,
                     layer.id
                 );
@@ -374,16 +466,38 @@ impl ValidationReport {
         }
 
         // Summary
+        println!("{}", "----------------------------------------".dimmed());
         if self.unsupported_effects.is_empty() && self.unsupported_layers.is_empty() {
-            bevy::log::info!("[AM Validation] ✓ All features in this project are supported");
+            let partial_count = self
+                .supported_effects_used
+                .iter()
+                .filter(|e| e.level == EffectSupportLevel::Partial)
+                .count();
+            if partial_count > 0 {
+                println!(
+                    "{} {} (with {} partial effects)",
+                    "[AM Validation]".cyan(),
+                    "All features supported".green().bold(),
+                    partial_count.to_string().yellow()
+                );
+            } else {
+                println!(
+                    "{} {}",
+                    "[AM Validation]".cyan(),
+                    "✓ All features in this project are fully supported"
+                        .green()
+                        .bold()
+                );
+            }
         } else {
             let total_issues = self.unsupported_effects.len() + self.unsupported_layers.len();
-            bevy::log::warn!(
-                "[AM Validation] ⚠ {} unsupported feature(s) will be skipped",
-                total_issues
+            println!(
+                "{} {} unsupported feature(s) will be skipped",
+                "[AM Validation]".cyan(),
+                format!("⚠ {}", total_issues).red().bold()
             );
         }
-
-        bevy::log::info!("========================================");
+        println!("{}", "========================================".cyan());
+        println!();
     }
 }
