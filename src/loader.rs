@@ -181,6 +181,19 @@ async fn load_amproj(
     let mut fonts = HashMap::new();
     let mut font_metrics = HashMap::new();
     for (name, data) in embedded_fonts {
+        // Try loading font with fontdb first to check if it's valid
+        // fontdb is what Bevy's text pipeline uses internally
+        // 先用 fontdb 测试字体是否有效，fontdb 是 Bevy 文本管线内部使用的
+        let mut test_db = fontdb::Database::new();
+        test_db.load_font_data(data.clone());
+        if test_db.faces().count() == 0 {
+            bevy::log::warn!(
+                "Font '{}' failed fontdb validation, skipping to avoid text pipeline panic",
+                name
+            );
+            continue;
+        }
+
         // Extract font metrics using ttf-parser
         if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
             let upm = face.units_per_em();

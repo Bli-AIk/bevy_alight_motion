@@ -358,8 +358,8 @@ pub(crate) fn spawn_text(
         ViewVisibility::default(),
     ));
 
-    // Add Text2d component immediately (text needs font handles which are context-dependent)
-    // TODO: In the future, could move to lazy spawning with font handle caching
+    // Add Text2d component with embedded font or Bevy's default font
+    // 使用嵌入字体或 Bevy 默认字体添加 Text2d 组件
     let text_font = if let Some(font_handle) = fonts.get(&font_name) {
         bevy::log::trace!("  -> Using embedded font: {}", font_name);
         TextFont {
@@ -368,10 +368,17 @@ pub(crate) fn spawn_text(
             ..default()
         }
     } else {
-        bevy::log::trace!("  -> Font not found '{}', using default", font_name);
+        bevy::log::warn!(
+            "Font '{}' not available for text '{}' (id={}), using Bevy's default font",
+            font_name,
+            text.label,
+            text.id
+        );
+        // Use TextFont::default() which points to Bevy's built-in FiraMono font
+        // when the default_font feature is enabled (which is the default)
         TextFont {
             font_size,
-            ..default()
+            ..TextFont::default()
         }
     };
 
