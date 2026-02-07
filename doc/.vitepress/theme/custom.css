@@ -128,10 +128,26 @@
 .custom-block.danger { border-left-color: var(--vp-c-danger) !important; }
 
 /* 首页 Hero 特效 */
+.VPHomeHero {
+  text-align: center;
+  white-space: nowrap; /* 禁止首页文本换行 */
+}
+
+.VPHomeHero .container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .VPHomeHero .name {
-  background: -webkit-linear-gradient(120deg, #bd34fe 30%, #e68a4f);
+  background: linear-gradient(to bottom, #e68a4f 0%, #3e2723 100%); /* 橙色到深棕色纵向渐变 */
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  line-height: 1.2;
+}
+
+.VPHomeHero .actions {
+  justify-content: center;
 }
 
 /* 细节：行内代码块微调 */
