@@ -1,16 +1,21 @@
 # Scale Assist
 
-Scale Assist automatically adjusts a layer's scale to match the canvas dimensions along a specific axis.
+Automatically adjusts a layer's scale to match the canvas dimensions along a specific axis.
 
-## Implementation
+- **Axis**: ✅ Supported (Horizontal or Vertical)
+- **Automatic Fit**: ✅ Supported
 
-During the spawning phase, we calculate the ratio between the layer's original size and the target canvas size based on the chosen axis.
+**Associated Test Files:**
+- `fx_6_scaleassist.amproj`
 
-## Associated Test Files
+---
 
-| File | Description |
-|------|-------------|
-| `fx_6_scaleassist.amproj` | Tests width and height based scaling. |
+<details>
+<summary>Technical Details & Implementation</summary>
 
-## Status
-- **Axis Selection**: ✅ Supported
+### Logic
+Scale Assist calculates the ratio between the layer's source size and the project's target resolution. It then applies this ratio as a scale factor to the chosen axis.
+
+### Use Case
+Commonly used to ensure background images or UI frames cover the screen correctly regardless of the source asset resolution.
+</details>

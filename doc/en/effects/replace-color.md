@@ -1,18 +1,23 @@
 # Replace Color
 
-This effect swaps a specific source color with a target color.
+Swaps a specific source color with a target color within a given tolerance.
 
-## Implementation
-
-Implemented in the shader, it compares the current pixel's color with the `oldcolor` parameter. If it's within the `threshold`, it blends towards the `newcolor`.
-
-## Associated Test Files
-
-| File | Description |
-|------|-------------|
-| `fx_8_replace_color.amproj` | Comprehensive test for replacement, threshold, and feathering. |
-
-## Status
-- **Basic Replacement**: ✅ Supported
-- **Threshold/Feather**: ✅ Supported
+- **Old/New Color**: ✅ Supported
+- **Threshold**: ✅ Supported (Tolerance)
+- **Feather**: ✅ Supported (Edge softening)
 - **Lock Luminance**: ✅ Supported
+
+**Associated Test Files:**
+- `fx_8_replace_color.amproj`
+
+---
+
+<details>
+<summary>Technical Details & Implementation</summary>
+
+### Comparison Logic
+We calculate the distance between the pixel color and `oldcolor` in the RGB color space.
+
+### Lock Luminance
+When enabled, the target color's luminance is adjusted to match the original pixel's luminance, preserving textures and shading.
+</details>

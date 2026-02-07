@@ -1,19 +1,21 @@
 # Gaussian Blur
 
-The Gaussian Blur effect creates a smooth blurring of the layer.
+Smooth pixel blurring effect to soften layer edges or create depth.
 
-## Implementation
+- **Strength**: ✅ Supported (Blur radius in pixels)
+- **Animation**: ✅ Supported
 
-We use a dual-pass (horizontal and vertical) Gaussian blur approach. This is efficient and allows for large blur radii without significant performance impact.
+**Associated Test Files:**
+- `fx_2_gaussian_blur.amproj`
 
-## Parameters
-- **Strength**: The radius of the blur in pixels.
+---
 
-## Associated Test Files
+<details>
+<summary>Technical Details & Implementation</summary>
 
-| File | Description |
-|------|-------------|
-| `fx_2_gaussian_blur.amproj` | Basic blur strength and animation. |
+### Dual-Pass Strategy
+To maintain performance, we use a separable Gaussian filter (horizontal pass followed by a vertical pass). This reduces the complexity from O(N²) to O(N).
 
-## Status
-- **Blur Strength**: ✅ Supported
+### Out-of-Bounds Rendering
+The blur effect expands the effective rendering area of the layer to account for the "glow" or spread of pixels beyond the original container.
+</details>
