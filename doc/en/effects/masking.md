@@ -1,20 +1,24 @@
 # Layer Masks
 
-Masking allows one layer to define the visibility of another.
+Visibility control where one layer's shape acts as a stencil for others.
 
-## Implementation
+- **Inclusion Mask**: ✅ Supported (Show inside)
+- **Exclusion Mask**: ✅ Supported (Show outside)
+- **Multi-Mask**: ✅ Supported (Up to two masks)
 
-Currently, we support rectangular and elliptical masks via the `UnifiedEffectMaterial`. Complex path-based masks are not yet implemented.
+**Associated Test Files:**
+- `basic_mask_square.amproj`
+- `basic_mask_circle.amproj`
+- `basic_child_mask.amproj`
 
-## Associated Test Files
+---
 
-| File | Description |
-|------|-------------|
-| `basic_mask_square.amproj` | Rectangular inclusion masks. |
-| `basic_mask_circle.amproj` | Elliptical inclusion masks. |
-| `basic_child_mask.amproj` | Masking applied through parent-child hierarchy. |
+<details>
+<summary>Technical Details & Implementation</summary>
 
-## Status
-- **Rectangle/Ellipse Mask**: ✅ Supported
-- **Exclusion Mask**: ✅ Supported
-- **Complex Path Mask**: ❌ Not Yet Implemented
+### Fragment Clipping
+Masking is performed in the `UnifiedEffectMaterial`. The shader checks if the pixel is inside the mask layer's bounds.
+
+### Coordinate Space
+Masks are calculated in the target layer's local space to handle parent transformations correctly.
+</details>

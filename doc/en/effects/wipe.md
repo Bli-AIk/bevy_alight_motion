@@ -1,28 +1,25 @@
-# Wipe Effect
+# Wipe (Cutoff)
 
-The **Wipe** effect (also known as Cutoff) creates a transition by hiding parts of a layer from its sides.
+Layer visibility transition from edges based on a specified angle.
 
-## Parameters
+- **Start/End**: ✅ Supported (0.0 to 1.0 range)
+- **Angle**: ✅ Supported (Linear direction)
+- **Feather**: ⚠️ Supported (Needs visual calibration)
 
-- **Start**: The starting percentage of the visible area (0.0 to 1.0).
-- **End**: The ending percentage of the visible area (0.0 to 1.0).
-- **Angle**: The direction of the wipe transition.
-- **Feather**: Softness of the edge.
+**Associated Test Files:**
+- `basic_cutoff.amproj`
+- `showcase.amproj`
 
-## Implementation Details
+---
 
-The Wipe effect is part of our `UnifiedEffectMaterial`. It uses a linear gradient calculation in the fragment shader to determine the alpha value of each pixel.
+<details>
+<summary>Technical Details & Implementation</summary>
 
 ### Shader Logic
-In `unified_effect.wgsl`, we project the pixel's UV coordinates onto the axis defined by the **Angle**. If the projected value is outside the **[Start, End]** range, the pixel is discarded or its alpha is reduced.
+Part of `UnifiedEffectMaterial`. It projects the pixel UV onto the direction vector defined by the angle.
+`val = dot(uv, vec2(cos(angle), sin(angle)))`
+Pixels outside the `[start, end]` range are discarded.
 
-## Associated Test Files
-
-| File | Description |
-|------|-------------|
-| `basic_cutoff.amproj` | Tests basic vertical/horizontal wipes. |
-| `showcase.amproj` | Uses wipes for complex text transitions. |
-
-## Implementation Status
-- **Start/End/Angle**: ✅ Fully Supported
-- **Feather**: ⚠️ Basic support (calibration with AM needed)
+### Calibration
+AM's feathering behavior is non-linear. Current implementation uses a linear ramp which might differ slightly in soft edge appearances.
+</details>

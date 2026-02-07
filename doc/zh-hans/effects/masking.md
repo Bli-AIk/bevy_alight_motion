@@ -1,20 +1,24 @@
 # 图层遮罩
 
-遮罩允许一个图层定义另一个图层的可见性。
+通过一个图层的形状来控制另一个图层可见性的功能。
 
-## 实现方式
+- **包含遮罩 (Inclusion)**: ✅ 已支持 (内部显示)
+- **排除遮罩 (Exclusion)**: ✅ 已支持 (外部显示)
+- **多重遮罩**: ✅ 已支持 (最多支持两个叠加遮罩)
 
-目前，我们通过 `UnifiedEffectMaterial` 支持矩形和椭圆遮罩。复杂的基于路径的遮罩尚未实现。
+**关联测试文件：**
+- `basic_mask_square.amproj`
+- `basic_mask_circle.amproj`
+- `basic_child_mask.amproj`
 
-## 关联测试文件
+---
 
-| 文件 | 说明 |
-|------|-------------|
-| `basic_mask_square.amproj` | 矩形包含遮罩。 |
-| `basic_mask_circle.amproj` | 椭圆包含遮罩。 |
-| `basic_child_mask.amproj` | 通过父子层级应用的遮罩。 |
+<details>
+<summary>技术细节与实现</summary>
 
-## 状态
-- **矩形/椭圆遮罩**：✅ 已支持
-- **排除遮罩 (Exclusion)**：✅ 已支持
-- **复杂路径遮罩**：❌ 暂未实现
+### 片段裁剪
+遮罩逻辑在 `UnifiedEffectMaterial` 中执行。着色器会检查当前像素是否位于遮罩图层的形状边界内。
+
+### 空间坐标
+遮罩计算在目标图层的局部空间中进行，以确保能够正确处理父级变换。
+</details>
