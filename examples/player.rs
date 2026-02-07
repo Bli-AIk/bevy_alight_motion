@@ -228,7 +228,7 @@ fn debug_sprites(
     #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, _sprite) in query.iter() {
         let global_z = global_transform.translation().z;
-        println!(
+        bevy::log::trace!(
             "[SpawnDebug] Sprite added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2})",
             marker.label,
             transform.translation.x,
@@ -263,7 +263,7 @@ fn debug_unified_effects(
         } else {
             (0.0, 0.0)
         };
-        println!(
+        bevy::log::trace!(
             "[SpawnDebug] UnifiedEffect added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2}) mesh_offset=({:.2},{:.2})",
             marker.label,
             transform.translation.x,

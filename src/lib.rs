@@ -49,6 +49,7 @@ pub mod scene;
 pub mod schema;
 pub mod sdf;
 pub mod sdf_material;
+pub mod validation;
 
 /// Prelude module for convenient imports.
 pub mod prelude {

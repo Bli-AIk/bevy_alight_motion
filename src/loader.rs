@@ -42,6 +42,8 @@ pub struct AmProject {
     pub font_metrics: HashMap<String, FontMetrics>,
     /// Raw image data for embedded images (before loading).
     pub embedded_images: HashMap<String, Vec<u8>>,
+    /// Validation report about supported/unsupported features.
+    pub validation_report: crate::validation::ValidationReport,
 }
 
 /// Loader for .amproj and .xml AM files.
@@ -235,12 +237,17 @@ async fn load_amproj(
         fonts.insert(name, handle);
     }
 
+    // Validate the scene and generate report
+    let validation_report = crate::validation::ValidationReport::validate(&scene);
+    validation_report.log_report(&scene.title);
+
     Ok(AmProject {
         scene,
         images,
         fonts,
         font_metrics,
         embedded_images,
+        validation_report,
     })
 }
 
@@ -249,12 +256,17 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
     let content = String::from_utf8_lossy(bytes);
     let scene: AmScene = quick_xml::de::from_str(&content)?;
 
+    // Validate the scene and generate report
+    let validation_report = crate::validation::ValidationReport::validate(&scene);
+    validation_report.log_report(&scene.title);
+
     Ok(AmProject {
         scene,
         images: HashMap::new(),
         fonts: HashMap::new(),
         font_metrics: HashMap::new(),
         embedded_images: HashMap::new(),
+        validation_report,
     })
 }
 
