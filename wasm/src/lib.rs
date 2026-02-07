@@ -7,7 +7,10 @@
 
 use bevy::asset::io::memory::{Dir, MemoryAssetReader};
 use bevy::asset::io::{AssetSource, AssetSourceId};
+use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
+use bevy::text::{TextFont, TextColor};
+use bevy::ui::Node;
 use bevy::window::WindowPlugin;
 use bevy_alight_motion::prelude::*;
 use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
@@ -40,6 +43,14 @@ struct AppState {
 struct PendingProjectLoad {
     should_load: bool,
 }
+
+/// UI text component for status display
+#[derive(Component)]
+struct StatusText;
+
+/// UI text component for instructions display
+#[derive(Component)]
+struct InstructionsText;
 
 /// Plugin to register the "uploaded://" asset source
 struct UploadedAssetSourcePlugin;
@@ -84,7 +95,7 @@ pub fn main() -> Result<(), JsValue> {
                     primary_window: Some(Window {
                         canvas: Some("#bevy-canvas".into()),
                         fit_canvas_to_parent: true,
-                        prevent_default_event_handling: false,
+                        prevent_default_event_handling: true,
                         ..default()
                     }),
                     ..default()
@@ -99,16 +110,133 @@ pub fn main() -> Result<(), JsValue> {
         .insert_resource(AmProjectResolution::FitWindow) // 适应窗口大小
         .init_resource::<PendingProjectLoad>()
         .add_systems(Startup, setup_camera)
-        .add_systems(Update, (check_pending_load, sync_state_to_js, handle_pending_load).chain())
+        .add_systems(Update, (check_pending_load, handle_input, update_ui, sync_state_to_js, handle_pending_load).chain())
         .run();
 
     Ok(())
 }
 
-/// Setup the 2D camera
+/// Setup the 2D camera and UI text
 fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
     info!("[WASM] Camera2d spawned");
+    
+    // Status text (top-left)
+    commands.spawn((
+        Text::new("Loading..."),
+        TextFont {
+            font_size: 20.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        StatusText,
+    ));
+
+    // Instructions text (bottom-left)
+    commands.spawn((
+        Text::new("[Space] Play/Pause | [R] Reset | [P] Replay | [←/→] Frame Step | [↑/↓] Speed | [L] Loop"),
+        TextFont {
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(Color::srgba(0.8, 0.8, 0.8, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        InstructionsText,
+    ));
+}
+
+/// Handle keyboard input for playback control
+/// 处理键盘输入以控制播放
+fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: Option<ResMut<AmPlayback>>) {
+    let Some(ref mut playback) = playback else {
+        return;
+    };
+
+    // Play/Pause toggle (Space)
+    if keyboard.just_pressed(KeyCode::Space) {
+        playback.toggle();
+        info!("[WASM] Toggle playback: {}", if playback.playing { "playing" } else { "paused" });
+    }
+
+    // Reset (R)
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        playback.reset();
+        info!("[WASM] Reset playback");
+    }
+
+    // Replay (P) - reset and play
+    if keyboard.just_pressed(KeyCode::KeyP) {
+        playback.reset();
+        playback.playing = true;
+        info!("[WASM] Replay");
+    }
+
+    // Frame-by-frame stepping (Left/Right arrows)
+    let frame_duration_ms = 1000.0 / 30.0; // 30 fps
+    if keyboard.just_pressed(KeyCode::ArrowLeft) {
+        playback.playing = false;
+        playback.current_time_ms = (playback.current_time_ms - frame_duration_ms).max(0.0);
+        info!("[WASM] Frame step back: {:.1}ms", playback.current_time_ms);
+    }
+    if keyboard.just_pressed(KeyCode::ArrowRight) {
+        playback.playing = false;
+        playback.current_time_ms = (playback.current_time_ms + frame_duration_ms).min(playback.total_time_ms);
+        info!("[WASM] Frame step forward: {:.1}ms", playback.current_time_ms);
+    }
+
+    // Speed control (Up = faster, Down = slower)
+    if keyboard.just_pressed(KeyCode::ArrowUp) {
+        playback.speed = (playback.speed + 0.1).min(4.0);
+        info!("[WASM] Speed: {:.1}x", playback.speed);
+    }
+    if keyboard.just_pressed(KeyCode::ArrowDown) {
+        playback.speed = (playback.speed - 0.1).max(0.1);
+        info!("[WASM] Speed: {:.1}x", playback.speed);
+    }
+
+    // Loop toggle (L)
+    if keyboard.just_pressed(KeyCode::KeyL) {
+        playback.looping = !playback.looping;
+        info!("[WASM] Loop: {}", playback.looping);
+    }
+}
+
+/// Update UI text with playback status
+fn update_ui(playback: Option<Res<AmPlayback>>, mut query: Query<&mut Text, With<StatusText>>) {
+    let Some(playback) = playback else {
+        // 项目尚未加载
+        for mut text in query.iter_mut() {
+            **text = "Upload a .amproj file to start".to_string();
+        }
+        return;
+    };
+
+    for mut text in query.iter_mut() {
+        let status = if playback.force_stopped {
+            "STOPPED"
+        } else if playback.playing {
+            "Playing"
+        } else {
+            "Paused"
+        };
+        let loop_status = if playback.looping { "Loop" } else { "Once" };
+
+        **text = format!(
+            "{} | {:.0}/{:.0}ms | {:.1}x | {}",
+            status, playback.current_time_ms, playback.total_time_ms, playback.speed, loop_status
+        );
+    }
 }
 
 /// Handle pending project load requests
