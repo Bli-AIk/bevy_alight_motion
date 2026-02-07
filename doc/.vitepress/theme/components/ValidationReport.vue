@@ -116,26 +116,45 @@
     <!-- 结束分隔线 -->
     <div class="header-bar">========================================</div>
 
+    <!-- 已存在的相关 Issues -->
+    <div class="existing-issues" v-if="existingEffectIssues.length > 0">
+      <div class="existing-issues-title">Related open issues:</div>
+      <div class="existing-issue-item" v-for="item in existingEffectIssues" :key="item.effect">
+        <span class="effect-name">{{ item.effect }}</span>
+        <a :href="item.issue.url" target="_blank" class="issue-link">#{{ item.issue.number }}</a>
+      </div>
+    </div>
+
     <!-- 提交 Issue 链接 -->
     <div class="actions" v-if="hasIssues">
-      <a :href="issueUrl" target="_blank" class="submit-issue-btn">
-        <svg class="github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
-          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
-        </svg>
-        Request Feature Support
-      </a>
-      <span class="issue-hint">Check existing issues before submitting</span>
+      <div class="loading-hint" v-if="loadingIssues">Checking existing issues...</div>
+      <div class="error-hint" v-else-if="issuesError">{{ issuesError }}</div>
+      <template v-else>
+        <a :href="issueUrl" target="_blank" class="submit-issue-btn" v-if="newEffects.length > 0">
+          <svg class="github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+            <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+          </svg>
+          Request Feature Support
+        </a>
+        <span class="issue-hint" v-if="newEffects.length > 0">{{ newEffects.length }} new effect(s) to request</span>
+        <span class="issue-hint" v-else>All unsupported effects already have open issues</span>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ValidationReport } from '../composables/useConsoleCapture'
 
 const props = defineProps<{
   report: ValidationReport | null
 }>()
+
+// Existing open issues cache
+const existingIssues = ref<{ title: string; number: number; url: string }[]>([])
+const loadingIssues = ref(false)
+const issuesError = ref<string | null>(null)
 
 const fullSupportCount = computed(() =>
   props.report?.supported_effects_used?.filter(e => e.level === 'Full').length ?? 0
@@ -172,41 +191,115 @@ const totalIssues = computed(() =>
 
 const hasIssues = computed(() => totalIssues.value > 0)
 
+// Extract short effect name from full ID
+function getEffectShortName(effectId: string): string {
+  const parts = effectId.split('.')
+  return parts[parts.length - 1]
+}
+
+// Fetch existing open issues from GitHub
+async function fetchExistingIssues() {
+  if (existingIssues.value.length > 0) return // Already fetched
+
+  loadingIssues.value = true
+  issuesError.value = null
+
+  try {
+    const response = await fetch(
+      'https://api.github.com/repos/Bli-AIk/bevy_alight_motion/issues?state=open&per_page=100',
+      { headers: { 'Accept': 'application/vnd.github.v3+json' } }
+    )
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`)
+    }
+
+    const issues = await response.json()
+    existingIssues.value = issues.map((issue: any) => ({
+      title: issue.title.toLowerCase(),
+      number: issue.number,
+      url: issue.html_url
+    }))
+  } catch (e) {
+    issuesError.value = e instanceof Error ? e.message : 'Failed to fetch issues'
+    console.error('Failed to fetch GitHub issues:', e)
+  } finally {
+    loadingIssues.value = false
+  }
+}
+
+// Watch for report changes to fetch issues
+watch(() => props.report, (newReport) => {
+  if (newReport && hasIssues.value) {
+    fetchExistingIssues()
+  }
+}, { immediate: true })
+
+// Find effects that already have open issues
+const existingEffectIssues = computed(() => {
+  const result: { effect: string; issue: { number: number; url: string } }[] = []
+
+  for (const effect of groupedUnsupportedEffects.value) {
+    const shortName = getEffectShortName(effect.effect_id).toLowerCase()
+    const matchingIssue = existingIssues.value.find(issue =>
+      issue.title.includes(shortName) ||
+      issue.title.includes(effect.effect_id.toLowerCase())
+    )
+    if (matchingIssue) {
+      result.push({ effect: shortName, issue: matchingIssue })
+    }
+  }
+
+  return result
+})
+
+// Effects that don't have existing issues
+const newEffects = computed(() => {
+  const existingShortNames = new Set(existingEffectIssues.value.map(e => e.effect))
+  return groupedUnsupportedEffects.value.filter(e =>
+    !existingShortNames.has(getEffectShortName(e.effect_id).toLowerCase())
+  )
+})
+
 const issueUrl = computed(() => {
-  // Group unsupported effects by effect_id
-  const effectGroups = groupedUnsupportedEffects.value
-  const effectsList = effectGroups.map(e =>
-    `- Effect ID: \`${e.effect_id}\` (${e.count} usage(s))`
+  const effectGroups = newEffects.value
+  const allEffects = groupedUnsupportedEffects.value
+
+  // Build title with new effects only
+  const effectNames = effectGroups.map(e => getEffectShortName(e.effect_id))
+  const title = effectNames.length > 0
+    ? `feat: Support for ${effectNames.slice(0, 3).join(', ')}${effectNames.length > 3 ? ', ...' : ''}`
+    : 'feat: Support for additional AM effects'
+
+  // Build effects list
+  const newEffectsList = effectGroups.map(e =>
+    `- \`${getEffectShortName(e.effect_id)}\` (${e.effect_id}) - ${e.count} usage(s)`
+  ).join('\n')
+
+  // Build existing issues reference
+  const existingRefs = existingEffectIssues.value.map(e =>
+    `- \`${e.effect}\` - see #${e.issue.number}`
   ).join('\n')
 
   const layersList = props.report?.unsupported_layers?.map(l =>
-    `- Layer type: ${l.layer_type}`
+    `- ${l.layer_type}`
   ).join('\n') ?? ''
 
-  // Create unique effect IDs for search query
-  const uniqueEffectIds = effectGroups.map(e => {
-    // Extract short name from full ID (e.g., "threshold" from "com.alightcreative.effects.threshold")
-    const parts = e.effect_id.split('.')
-    return parts[parts.length - 1]
-  }).join(' OR ')
+  const body =
+`### Is your feature request related to a specific issue?
 
-  const title = encodeURIComponent('feat: [Support for unsupported effects/layers]')
-
-  const body = encodeURIComponent(
-`> **IMPORTANT**: Before submitting, please check if a similar issue already exists:
-> Search: https://github.com/Bli-AIk/bevy_alight_motion/issues?q=${uniqueEffectIds}
-
-### Is your feature request related to a specific issue?
-
-bevy_alight_motion is missing support for certain AM effects/layer types detected in my project.
+bevy_alight_motion is missing support for certain AM effects detected in my project.
 
 ---
 
-### AM Effect Reference (if applicable)
+### AM Effect Reference
 
-**Unsupported Effects:**
-${effectsList || 'None'}
-
+**New effects to support:**
+${newEffectsList || 'None (all effects already have open issues)'}
+${existingRefs ? `
+**Already tracked in existing issues:**
+${existingRefs}
+` : ''}
 **Unsupported Layer Types:**
 ${layersList || 'None'}
 
@@ -222,9 +315,9 @@ Please add support for the above effects/layers to match AM's rendering.
 
 - Project stats: ${props.report?.stats.total_layers || 0} layers total
 - Detected by: WASM Playground validation report
-`)
+`
 
-  return `https://github.com/Bli-AIk/bevy_alight_motion/issues/new?labels=enhancement&title=${title}&body=${body}`
+  return `https://github.com/Bli-AIk/bevy_alight_motion/issues/new?labels=enhancement&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
 })
 </script>
 
@@ -354,6 +447,49 @@ Please add support for the above effects/layers to match AM's rendering.
   font-style: italic;
 }
 
+.loading-hint {
+  color: #00d4ff;
+  font-size: 0.8rem;
+}
+
+.error-hint {
+  color: #ff4444;
+  font-size: 0.8rem;
+}
+
+.existing-issues {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(0, 212, 255, 0.1);
+  border-radius: 4px;
+}
+
+.existing-issues-title {
+  color: #00d4ff;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.existing-issue-item {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  margin-left: 1rem;
+}
+
+.existing-issue-item .effect-name {
+  color: #888;
+}
+
+.issue-link {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.issue-link:hover {
+  text-decoration: underline;
+}
+
 .submit-issue-btn {
   display: inline-flex;
   align-items: center;
@@ -426,5 +562,21 @@ Please add support for the above effects/layers to match AM's rendering.
 
 .light .submit-issue-btn:hover {
   background: #0860ca;
+}
+
+.light .existing-issues {
+  background: rgba(9, 105, 218, 0.1);
+}
+
+.light .existing-issues-title {
+  color: #0969da;
+}
+
+.light .issue-link {
+  color: #0969da;
+}
+
+.light .issue-hint {
+  color: #57606a;
 }
 </style>
