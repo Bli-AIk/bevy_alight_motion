@@ -4,6 +4,7 @@ import { zhHansEffects, enEffects, zhHansBuiltins, enBuiltins } from './sidebar-
 export default defineConfig({
   title: "bevy_alight_motion",
   description: "Alight Motion project parser and player for Bevy",
+  base: '/bevy_alight_motion/',
   
   head: [
     ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;700&display=swap' }]
