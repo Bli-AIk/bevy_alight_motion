@@ -9,21 +9,25 @@
 //! - Type definitions for effects and builtins
 //! - Effect definitions (Transform2, Wipe2, etc.)
 //! - Builtin definitions (shapes, fills, strokes, transforms)
+//! - Test results parsing and support level computation
 //! - Documentation generator
 //!
 //! 此模块提供：
 //! - 效果和内置功能的类型定义
 //! - 效果定义（Transform2、Wipe2 等）
 //! - 内置功能定义（形状、填充、描边、变换）
+//! - 测试结果解析和支持级别计算
 //! - 文档生成器
 
 pub mod builtin;
 pub mod doc_generator;
 pub mod effects;
 pub mod macros;
+pub mod test_results;
 pub mod types;
 
 pub use builtin::all as all_builtins;
 pub use effects::all as all_effects;
 pub use effects::find as find_effect;
+pub use test_results::{DEFAULT_TEST_RESULTS_PATH, TestResults};
 pub use types::{BuiltinDef, EffectDef, FieldDef, FieldType, SupportLevel};

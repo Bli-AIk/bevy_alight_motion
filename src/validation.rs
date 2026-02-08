@@ -565,10 +565,7 @@ impl ValidationReport {
                     console::warn_1(
                         &format!(
                             "  ✗ '{}' ({}) on layer '{}' (id={})",
-                            effect.effect_label,
-                            effect_id,
-                            effect.layer_label,
-                            effect.layer_id
+                            effect.effect_label, effect_id, effect.layer_label, effect.layer_id
                         )
                         .into(),
                     );
