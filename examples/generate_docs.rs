@@ -23,6 +23,7 @@ fn main() {
     let output_dir = Path::new("doc");
     let test_results_path = Path::new(DEFAULT_TEST_RESULTS_PATH);
     let effects_rs_path = Path::new("src/scene/effects.rs");
+    let assets_dir = Path::new("assets");
 
     println!("正在生成文档...");
     println!("Generating documentation...\n");
@@ -53,6 +54,38 @@ fn main() {
                 e
             );
             println!("   将使用静态字段定义 / Using static field definitions.\n");
+            None
+        }
+    };
+
+    // 扫描 amproj 文件，获取效果测试文件关联 / Scan amproj files for effect-test mapping
+    let effect_test_files = match impl_scanner::scan_amproj_files(assets_dir) {
+        Ok(mapping) => {
+            println!("✅ 已扫描测试文件关联 / Test files mapping scanned");
+            println!(
+                "   扫描 {} 个 amproj 文件，发现 {} 个效果 / Scanned {} amproj files, found {} effects",
+                mapping.total_files_scanned,
+                mapping.effect_test_map.len(),
+                mapping.total_files_scanned,
+                mapping.effect_test_map.len()
+            );
+            // 显示每个效果关联的测试文件数量
+            let mut sorted: Vec<_> = mapping.effect_test_map.iter().collect();
+            sorted.sort_by(|a, b| a.0.cmp(b.0));
+            for (effect_id, files) in sorted {
+                // 只显示简短的效果名
+                let short_name = effect_id.rsplit('.').next().unwrap_or(effect_id);
+                println!("   - {}: {} 个文件", short_name, files.len());
+            }
+            println!();
+            Some(mapping)
+        }
+        Err(e) => {
+            println!(
+                "⚠️ 无法扫描测试文件关联 / Failed to scan test files mapping: {}",
+                e
+            );
+            println!("   将使用静态测试文件定义 / Using static test file definitions.\n");
             None
         }
     };
@@ -93,6 +126,7 @@ fn main() {
     let config = doc_generator::DocGeneratorConfig {
         test_results: test_results.as_ref(),
         impl_status: impl_status.as_ref(),
+        effect_test_files: effect_test_files.as_ref(),
         stale_days: 1,
     };
 

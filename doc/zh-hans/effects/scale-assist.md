@@ -10,8 +10,8 @@
 - **轴向 (scaleassistaxis)**: ❌ 未实现 (缩放基准轴 (1=宽度, 2=高度))
 
 **关联测试文件：**
-- `fx_6_scaleassist.amproj` ✅
 - `fx_6_ex_scaleassist.amproj` ❌
+- `fx_6_scaleassist.amproj` ✅
 
 ---
 

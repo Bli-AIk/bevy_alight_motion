@@ -12,6 +12,7 @@
 //! - Test results parsing and support level computation
 //! - Documentation generator
 //! - Implementation scanner (auto-detect implemented fields from source code)
+//! - Test file scanner (auto-detect test files using each effect from amproj files)
 //!
 //! 此模块提供：
 //! - 效果和内置功能的类型定义
@@ -20,6 +21,7 @@
 //! - 测试结果解析和支持级别计算
 //! - 文档生成器
 //! - 实现扫描器（从源代码自动检测已实现的字段）
+//! - 测试文件扫描器（从 amproj 文件自动检测使用各效果的测试文件）
 
 pub mod builtin;
 pub mod doc_generator;
@@ -32,5 +34,6 @@ pub mod types;
 pub use builtin::all as all_builtins;
 pub use effects::all as all_effects;
 pub use effects::find as find_effect;
+pub use impl_scanner::{EffectImpl, EffectTestFiles, scan_amproj_files, scan_effects_rs};
 pub use test_results::{DEFAULT_TEST_RESULTS_PATH, TestResults};
 pub use types::{BuiltinDef, EffectDef, FieldDef, FieldType, SupportLevel};

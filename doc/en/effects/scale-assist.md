@@ -10,8 +10,8 @@ Automatically adjusts layer size to fit the canvas based on the selected axis.
 - **Axis (scaleassistaxis)**: ❌ Not implemented (Scale reference axis (1=width, 2=height))
 
 **Related Test Files:**
-- `fx_6_scaleassist.amproj` ✅
 - `fx_6_ex_scaleassist.amproj` ❌
+- `fx_6_scaleassist.amproj` ✅
 
 ---
 

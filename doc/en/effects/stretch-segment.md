@@ -13,12 +13,12 @@ UV domain distortion effect that stretches the image along a dividing line. Form
 - **Smooth (smooth)**: ✅ Implemented (Edge smoothness (not yet implemented))
 
 **Related Test Files:**
-- `fx_1_stretch_segment.amproj` ❌
-- `fx_1_ex_stretch_segment.amproj` ❌
 - `fx_1_ex2_stretch_segment.amproj` ❌
 - `fx_1_ex3_stretch_segment.amproj` ❌
 - `fx_1_ex4_stretch_segment.amproj` ✅
 - `fx_1_ex5_stretch_segment.amproj` ❌
+- `fx_1_ex_stretch_segment.amproj` ❌
+- `fx_1_stretch_segment.amproj` ❌
 
 ---
 

@@ -13,12 +13,12 @@ UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_w
 - **平滑 (smooth)**: ✅ 已实现 (边缘平滑度（尚未实现）)
 
 **关联测试文件：**
-- `fx_1_stretch_segment.amproj` ❌
-- `fx_1_ex_stretch_segment.amproj` ❌
 - `fx_1_ex2_stretch_segment.amproj` ❌
 - `fx_1_ex3_stretch_segment.amproj` ❌
 - `fx_1_ex4_stretch_segment.amproj` ✅
 - `fx_1_ex5_stretch_segment.amproj` ❌
+- `fx_1_ex_stretch_segment.amproj` ❌
+- `fx_1_stretch_segment.amproj` ❌
 
 ---
 

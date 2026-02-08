@@ -13,8 +13,9 @@
 //! cargo run --example scan_impl
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 /// 效果实现信息 / Effect implementation info
@@ -28,6 +29,186 @@ pub struct EffectImpl {
     pub pattern_fields: Vec<String>,
     /// 从代码中提取的行号 / Line numbers from source
     pub source_lines: Vec<usize>,
+}
+
+/// 效果与测试文件关联 / Effect to test file mapping
+#[derive(Debug, Clone, Default)]
+pub struct EffectTestFiles {
+    /// 效果 ID 到测试文件列表的映射 / Effect ID to test files mapping
+    pub effect_test_map: HashMap<String, Vec<String>>,
+    /// 所有扫描的测试文件数量 / Total scanned test files
+    pub total_files_scanned: usize,
+}
+
+/// 扫描 amproj 文件目录，提取每个效果关联的测试文件
+/// Scan amproj directory to extract test files associated with each effect
+///
+/// 只扫描被 git 追踪的文件，遵守 .gitignore 规则
+/// Only scans git-tracked files, respects .gitignore rules
+pub fn scan_amproj_files(assets_dir: &Path) -> Result<EffectTestFiles, String> {
+    let am_dir = assets_dir.join("am");
+    if !am_dir.exists() {
+        return Err(format!("Directory not found: {}", am_dir.display()));
+    }
+
+    let mut effect_map: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut total_files = 0;
+
+    // 使用 git ls-files 获取被追踪的文件列表
+    // Use git ls-files to get tracked files list
+    let tracked_files = get_git_tracked_amproj_files(&am_dir)?;
+
+    for filename in tracked_files {
+        let path = am_dir.join(&filename);
+        if path.exists() {
+            total_files += 1;
+
+            // 提取 amproj 文件中的效果 ID / Extract effect IDs from amproj file
+            match extract_effects_from_amproj(&path) {
+                Ok(effects) => {
+                    for effect_id in effects {
+                        effect_map
+                            .entry(effect_id)
+                            .or_default()
+                            .insert(filename.clone());
+                    }
+                }
+                Err(_e) => {
+                    // 静默忽略解析错误 / Silently ignore parse errors
+                    // eprintln!("Warning: Failed to parse {}: {}", filename, e);
+                }
+            }
+        }
+    }
+
+    // 转换 HashSet 为 Vec 并排序 / Convert HashSet to Vec and sort
+    let effect_test_map = effect_map
+        .into_iter()
+        .map(|(k, v)| {
+            let mut files: Vec<String> = v.into_iter().collect();
+            files.sort();
+            (k, files)
+        })
+        .collect();
+
+    Ok(EffectTestFiles {
+        effect_test_map,
+        total_files_scanned: total_files,
+    })
+}
+
+/// 获取被 git 追踪的 amproj 文件列表
+/// Get list of git-tracked amproj files
+fn get_git_tracked_amproj_files(am_dir: &Path) -> Result<Vec<String>, String> {
+    use std::process::Command;
+
+    // 将相对路径转换为绝对路径 / Convert relative path to absolute
+    let am_dir_abs = if am_dir.is_absolute() {
+        am_dir.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Failed to get current dir: {}", e))?
+            .join(am_dir)
+    };
+
+    // 获取仓库根目录 / Get repository root
+    let repo_root = am_dir_abs
+        .ancestors()
+        .find(|p| p.join(".git").exists())
+        .ok_or_else(|| format!("Not in a git repository: {}", am_dir_abs.display()))?;
+
+    // 计算相对路径 / Calculate relative path
+    let rel_path = am_dir_abs
+        .strip_prefix(repo_root)
+        .map_err(|_| "Failed to calculate relative path")?;
+
+    // 运行 git ls-files / Run git ls-files
+    let output = Command::new("/usr/bin/git")
+        .args(["ls-files", &format!("{}/*.amproj", rel_path.display())])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            // 提取文件名 / Extract filename
+            Path::new(line)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
+
+    Ok(files)
+}
+
+/// 从单个 amproj 文件中提取效果 ID 列表
+/// Extract effect IDs from a single amproj file
+fn extract_effects_from_amproj(amproj_path: &Path) -> Result<Vec<String>, String> {
+    let file = fs::File::open(amproj_path)
+        .map_err(|e| format!("Failed to open {}: {}", amproj_path.display(), e))?;
+
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read zip {}: {}", amproj_path.display(), e))?;
+
+    let mut effects = HashSet::new();
+
+    // 查找并读取 XML 文件 / Find and read XML files
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read archive entry: {}", e))?;
+
+        if file.name().ends_with(".xml") {
+            let mut content = String::new();
+            file.read_to_string(&mut content)
+                .map_err(|e| format!("Failed to read XML content: {}", e))?;
+
+            // 提取效果 ID / Extract effect IDs
+            // 格式: <effect id="com.alightcreative.effects.xxx"
+            for line in content.lines() {
+                if let Some(start) = line.find("<effect id=\"") {
+                    let rest = &line[start + 12..];
+                    if let Some(end) = rest.find('"') {
+                        let effect_id = rest[..end].to_string();
+                        effects.insert(effect_id);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(effects.into_iter().collect())
+}
+
+/// 打印效果测试文件关联结果 / Print effect test files mapping results
+pub fn print_effect_test_files(mapping: &EffectTestFiles) {
+    println!(
+        "=== 效果测试文件关联 / Effect Test Files Mapping ===\n"
+    );
+    println!(
+        "共扫描 {} 个 amproj 文件 / Scanned {} amproj files\n",
+        mapping.total_files_scanned, mapping.total_files_scanned
+    );
+
+    let mut sorted: Vec<_> = mapping.effect_test_map.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (effect_id, files) in sorted {
+        println!("📦 {} ({} 个文件 / {} files)", effect_id, files.len(), files.len());
+        for file in files {
+            println!("   - {}", file);
+        }
+        println!();
+    }
 }
 
 /// 扫描源文件提取效果实现信息 / Scan source file to extract effect implementations
@@ -79,46 +260,39 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
 
             // 检测模式匹配（如 name if name.starts_with("color")）
             // Detect pattern matches (e.g., name if name.starts_with("color"))
-            if trimmed.contains("starts_with(\"") {
-                if let Some(start) = trimmed.find("starts_with(\"") {
+            if trimmed.contains("starts_with(\"")
+                && let Some(start) = trimmed.find("starts_with(\"") {
                     let rest = &trimmed[start + 13..];
                     if let Some(end) = rest.find('"') {
                         let pattern = rest[..end].to_string();
-                        if let Some(ref effect_id) = current_effect_id {
-                            if let Some(effect) = effects.get_mut(effect_id) {
+                        if let Some(ref effect_id) = current_effect_id
+                            && let Some(effect) = effects.get_mut(effect_id) {
                                 let pattern_desc = format!("{}*", pattern);
                                 if !effect.pattern_fields.contains(&pattern_desc) {
                                     effect.pattern_fields.push(pattern_desc);
                                 }
                             }
-                        }
                     }
                 }
-            }
 
             // 检测 match 分支中的字段名 / Detect field names in match arms
             // 格式: "fieldname" => { ... }
             // 但跳过非字段名的字符串（如 "true", 颜色值等）
-            if trimmed.contains("=>") && !trimmed.contains("if ") {
-                if let Some(start) = trimmed.find('"') {
-                    if let Some(end) = trimmed[start + 1..].find('"') {
+            if trimmed.contains("=>") && !trimmed.contains("if ")
+                && let Some(start) = trimmed.find('"')
+                    && let Some(end) = trimmed[start + 1..].find('"') {
                         let field_name = trimmed[start + 1..start + 1 + end].to_string();
 
                         // 验证是否为有效的字段名 / Validate if it's a valid field name
                         // 有效字段名：小写字母开头，只包含字母、数字和下划线
-                        if is_valid_field_name(&field_name) {
-                            if let Some(ref effect_id) = current_effect_id {
-                                if let Some(effect) = effects.get_mut(effect_id) {
-                                    if !effect.implemented_fields.contains(&field_name) {
+                        if is_valid_field_name(&field_name)
+                            && let Some(ref effect_id) = current_effect_id
+                                && let Some(effect) = effects.get_mut(effect_id)
+                                    && !effect.implemented_fields.contains(&field_name) {
                                         effect.implemented_fields.push(field_name);
                                         effect.source_lines.push(line_num);
                                     }
-                                }
-                            }
-                        }
                     }
-                }
-            }
 
             // 退出 match 块 / Exit match block
             if brace_depth <= 0 {

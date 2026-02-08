@@ -60,6 +60,41 @@ jobs:
       - name: Run tests
         run: cargo nextest run --verbose
 
+  check-test-data:
+    name: Check Test Data Freshness
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check test_results.json exists and is not stale
+        run: |
+          if [ ! -f test_results.json ]; then
+            echo "⚠️ Warning: test_results.json not found"
+            echo "Run ./update_docs.sh to generate test results"
+            # 不阻止 CI，仅警告
+            exit 0
+          fi
+
+          # 检查文件是否过期（超过 7 天）
+          TIMESTAMP=$(jq -r '.timestamp' test_results.json 2>/dev/null || echo "")
+          if [ -z "$TIMESTAMP" ]; then
+            echo "⚠️ Warning: Cannot parse timestamp from test_results.json"
+            exit 0
+          fi
+
+          # 转换时间戳并检查
+          TEST_DATE=$(date -d "$TIMESTAMP" +%s 2>/dev/null || echo "0")
+          NOW=$(date +%s)
+          DAYS_OLD=$(( (NOW - TEST_DATE) / 86400 ))
+
+          if [ "$DAYS_OLD" -gt 7 ]; then
+            echo "⚠️ Warning: Test data is $DAYS_OLD days old (threshold: 7 days)"
+            echo "Consider running ./update_docs.sh to refresh test results"
+          else
+            echo "✅ Test data is $DAYS_OLD days old (within 7 day threshold)"
+          fi
+
   deny:
     name: Cargo Deny
     if: github.event.pull_request.draft == false
