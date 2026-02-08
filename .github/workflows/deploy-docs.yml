@@ -3,11 +3,10 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'  # 新版本发布时触发
     paths:
       - 'doc/**'
-      - 'wasm/**'
-      - 'src/**'
-      - 'assets/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -37,15 +36,19 @@ jobs:
           cache: npm
           cache-dependency-path: doc/package-lock.json
 
-      - name: Setup Rust
+      # 只在发布新版本时构建 WASM
+      - name: Setup Rust (for WASM build)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-bindgen-cli
+        if: startsWith(github.ref, 'refs/tags/v')
         run: cargo install wasm-bindgen-cli
 
       - name: Build WASM
+        if: startsWith(github.ref, 'refs/tags/v')
         working-directory: wasm
         run: |
           export BEVY_ASSET_PATH="$(cd .. && pwd)/assets"
