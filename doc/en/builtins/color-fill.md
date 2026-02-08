@@ -1,7 +1,7 @@
 # Color Fill
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 Fills the shape with a solid color. Color format is #AARRGGBB.
 
@@ -10,7 +10,7 @@ Fills the shape with a solid color. Color format is #AARRGGBB.
 - **Fill Color (fillColor)**: ✅ Supported (Fill color value (#AARRGGBB format))
 
 **Related Test Files:**
-- `basic_shape.amproj` ✅
+- `basic/shape/shape.amproj` ✅
 
 ---
 

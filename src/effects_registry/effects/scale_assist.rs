@@ -20,7 +20,7 @@ define_effect! {
     xml: r#"<effect id="com.alightcreative.effects.scaleassist">
     <property name="scaleassistaxis" type="float" value="1.0" />
 </effect>"#,
-    tests: ["fx_6_scaleassist.amproj", "fx_6_ex_scaleassist.amproj"],
+    tests: ["effects/scale-assist/basic.amproj", "effects/scale-assist/ex.amproj"],
     fields: [
         define_field! {
             name: "scaleassistaxis",

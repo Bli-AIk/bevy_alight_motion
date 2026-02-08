@@ -1,7 +1,7 @@
 # Transform
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 Basic transform properties for layers including position, rotation, scale, opacity and anchor. Coordinate system: AM uses top-left origin, Bevy uses center origin, the library converts automatically.
 
@@ -15,8 +15,8 @@ Basic transform properties for layers including position, rotation, scale, opaci
 - **Lock Aspect Ratio (lockAspectRatio)**: ✅ Supported (Whether to lock aspect ratio)
 
 **Related Test Files:**
-- `basic_shape.amproj` ✅
-- `basic_pivot.amproj` ✅
+- `basic/shape/shape.amproj` ✅
+- `basic/pivot/pivot.amproj` ✅
 
 ---
 

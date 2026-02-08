@@ -20,7 +20,7 @@ define_effect! {
     xml: r#"<effect id="com.alightcreative.effects.gaussianblur">
     <property name="strength" type="float" value="0.0" />
 </effect>"#,
-    tests: ["fx_2_gaussian_blur.amproj"],
+    tests: ["effects/gaussian-blur/basic.amproj"],
     fields: [
         define_field! {
             name: "strength",

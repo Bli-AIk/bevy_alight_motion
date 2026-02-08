@@ -14,68 +14,66 @@ use std::process::Command;
 pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
     use std::time::SystemTime;
 
-    let possible_paths = ["crates/bevy_alight_motion/assets/debug", "assets/debug"];
-    let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
-
-    // First, try to find a video matching the project name
+    // First, try to find a video matching the project path (same directory, .mp4 extension)
     if let Some(path) = project_path {
-        // Extract just the filename without directory and extension
-        let base_name = Path::new(path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(path);
-
-        println!(
-            "[VIDEO UTILS] Looking for video matching project: {}",
-            base_name
-        );
-
-        for debug_path in &possible_paths {
-            let path = Path::new(debug_path);
-            if !path.exists() {
-                continue;
-            }
-
-            for ext in &extensions {
-                let video_file = path.join(format!("{}.{}", base_name, ext));
-                if video_file.exists() {
-                    println!("[VIDEO UTILS] Found matching video: {:?}", video_file);
-                    return Some(video_file);
-                }
+        // project_path is like "projects/basic/shape/shape.amproj"
+        // video should be at "projects/basic/shape/shape.mp4"
+        let base_path = Path::new(path).with_extension("mp4");
+        
+        // Try both possible asset root directories
+        let possible_roots = ["crates/bevy_alight_motion/assets", "assets"];
+        for root in &possible_roots {
+            let video_file = Path::new(root).join(&base_path);
+            if video_file.exists() {
+                println!("[VIDEO UTILS] Found matching video: {:?}", video_file);
+                return Some(video_file);
             }
         }
+        
         println!(
             "[VIDEO UTILS] No matching video for '{}', falling back to latest",
-            base_name
+            path
         );
     }
 
-    // Fall back to finding the latest video file
+    // Fall back to finding the latest video file in the projects directory
     let mut latest_file: Option<(PathBuf, SystemTime)> = None;
-
-    for debug_path in &possible_paths {
-        let path = Path::new(debug_path);
-        if !path.exists() {
+    
+    let possible_paths = ["crates/bevy_alight_motion/assets/projects", "assets/projects"];
+    let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
+    
+    for projects_path in &possible_paths {
+        let base_path = Path::new(projects_path);
+        if !base_path.exists() {
             continue;
         }
-
-        if let Ok(entries) = fs::read_dir(path) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type()
-                    && file_type.is_file()
-                    && let Some(file_name) = entry.file_name().to_str()
-                    && let Some(extension) = file_name.split('.').next_back()
-                    && extensions.contains(&extension.to_lowercase().as_str())
-                    && let Ok(metadata) = entry.metadata()
-                    && let Ok(modified) = metadata.modified()
-                    && (latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified)
-                {
-                    latest_file = Some((entry.path(), modified));
+        
+        // Recursively search for video files
+        fn search_videos(dir: &Path, extensions: &[&str], latest: &mut Option<(PathBuf, SystemTime)>) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if let Ok(file_type) = entry.file_type() {
+                        if file_type.is_dir() {
+                            search_videos(&entry.path(), extensions, latest);
+                        } else if file_type.is_file() {
+                            if let Some(file_name) = entry.file_name().to_str()
+                                && let Some(extension) = file_name.split('.').next_back()
+                                && extensions.contains(&extension.to_lowercase().as_str())
+                                && let Ok(metadata) = entry.metadata()
+                                && let Ok(modified) = metadata.modified()
+                                && (latest.is_none() || latest.as_ref().unwrap().1 < modified)
+                            {
+                                *latest = Some((entry.path(), modified));
+                            }
+                        }
+                    }
                 }
             }
-            if latest_file.is_some() {
-                break;
-            }
+        }
+        
+        search_videos(base_path, &extensions, &mut latest_file);
+        if latest_file.is_some() {
+            break;
         }
     }
 

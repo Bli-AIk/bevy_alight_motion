@@ -1,7 +1,7 @@
 # Builtins List
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 | Feature | Status | Description |
 |---------|--------|-------------|

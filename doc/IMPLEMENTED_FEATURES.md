@@ -316,73 +316,73 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32
 
 ## 示例文件对照
 
-以下列出 `assets/am/` 目录中的示例文件及其对应的功能验证：
+以下列出 `assets/projects/` 目录中的示例文件及其对应的功能验证：
 
-### 基础示例 (basic_*)
+### 基础示例 (basic/)
 
-| 示例文件                                 | 验证功能                 | 状态 |
-|--------------------------------------|----------------------|:--:|
-| `basic_bezier.amproj`                | 贝塞尔缓动曲线              | ✅  |
-| `basic_bezier_ex.amproj`             | 贝塞尔缓动扩展测试            | ✅  |
-| `basic_bounce_box.amproj`            | 弹跳动画效果               | ✅  |
-| `basic_child_mask.amproj`            | 子图层遮罩                | ✅  |
-| `basic_cutoff.amproj`                | 图层裁剪                 | ✅  |
-| `basic_frame.amproj`                 | 基本帧动画                | ✅  |
-| `basic_gradient.amproj`              | 渐变填充（未实现）            | ⚠️ |
-| `basic_group_cutoff.amproj`          | 编组裁剪                 | ✅  |
-| `basic_group_mask.amproj`            | 编组遮罩                 | ✅  |
-| `basic_mask_circle.amproj`           | 圆形遮罩                 | ✅  |
-| `basic_mask_square.amproj`           | 矩形遮罩                 | ✅  |
-| `basic_mask_square_ex.amproj`        | 矩形遮罩扩展测试             | ⚠️ |
-| `basic_multi_level_group.amproj`     | 多层级编组                | ✅  |
-| `basic_multi_level_group_ex.amproj`  | 多层级编组扩展测试            | ✅  |
-| `basic_multi_level_group_ex2.amproj` | 多层级编组扩展测试2           | ✅  |
-| `basic_muti_tween.amproj`            | 多重缓动（未实现）            | ⚠️ |
-| `basic_pivot.amproj`                 | 锚点/枢轴功能、位置补偿         | ✅  |
-| `basic_shape.amproj`                 | 矩形和圆形渲染、颜色填充、媒体填充、描边 | ✅  |
-| `basic_shape_ex.amproj`              | 形状扩展测试               | ✅  |
-| `basic_resolution_group.amproj`      | 编组分辨率限制、编组旋转/缩放      | ✅  |
-| `basic_resolution_group_ex.amproj`   | 编组分辨率限制的扩展测试         | ✅  |
-| `basic_resolution_group_ex2.amproj`  | 编组分辨率限制的扩展测试2        | ✅  |
+| 示例文件                             | 验证功能                 | 状态 |
+|----------------------------------|----------------------|:--:|
+| `basic/bezier/bezier.amproj`     | 贝塞尔缓动曲线              | ✅  |
+| `basic/bezier/ex.amproj`         | 贝塞尔缓动扩展测试            | ✅  |
+| `basic/bounce/box.amproj`        | 弹跳动画效果               | ✅  |
+| `basic/mask/child.amproj`        | 子图层遮罩                | ✅  |
+| `basic/cutoff/cutoff.amproj`     | 图层裁剪                 | ✅  |
+| `basic/frame/frame.amproj`       | 基本帧动画                | ✅  |
+| `basic/gradient/gradient.amproj` | 渐变填充（未实现）            | ⚠️ |
+| `basic/group/cutoff.amproj`      | 编组裁剪                 | ✅  |
+| `basic/group/mask.amproj`        | 编组遮罩                 | ✅  |
+| `basic/mask/circle.amproj`       | 圆形遮罩                 | ✅  |
+| `basic/mask/square.amproj`       | 矩形遮罩                 | ✅  |
+| `basic/mask/square-ex.amproj`    | 矩形遮罩扩展测试             | ⚠️ |
+| `basic/group/multi-level/basic.amproj` | 多层级编组           | ✅  |
+| `basic/group/multi-level/ex.amproj`    | 多层级编组扩展测试        | ✅  |
+| `basic/group/multi-level/ex2.amproj`   | 多层级编组扩展测试2       | ✅  |
+| `basic/tween/multi.amproj`       | 多重缓动（未实现）            | ⚠️ |
+| `basic/pivot/pivot.amproj`       | 锚点/枢轴功能、位置补偿         | ✅  |
+| `basic/shape/shape.amproj`       | 矩形和圆形渲染、颜色填充、媒体填充、描边 | ✅  |
+| `basic/shape/ex.amproj`          | 形状扩展测试               | ✅  |
+| `basic/group/resolution/basic.amproj`  | 编组分辨率限制、编组旋转/缩放 | ✅  |
+| `basic/group/resolution/ex.amproj`     | 编组分辨率限制的扩展测试    | ✅  |
+| `basic/group/resolution/ex2.amproj`    | 编组分辨率限制的扩展测试2   | ✅  |
 
-### 效果示例 (fx_*)
+### 效果示例 (effects/)
 
-| 示例文件                              | 验证功能          | 状态 |
-|-----------------------------------|---------------|:--:|
-| `fx_1_stretch_segment.amproj`     | 拉伸片段效果基本功能    | ⚠️ |
-| `fx_1_ex_stretch_segment.amproj`  | 拉伸片段效果扩展测试    | ⚠️ |
-| `fx_1_ex2_stretch_segment.amproj` | 拉伸片段效果角度/偏移测试 | ⚠️ |
-| `fx_1_ex3_stretch_segment.amproj` | 拉伸片段效果扩展测试3   | ⚠️ |
-| `fx_1_ex4_stretch_segment.amproj` | 拉伸片段效果扩展测试4   | ✅  |
-| `fx_1_ex5_stretch_segment.amproj` | 拉伸片段效果扩展测试5   | ⚠️ |
-| `fx_2_gaussian_blur.amproj`       | 高斯模糊效果（未实现）   | ❌  |
-| `fx_3_grid.amproj`                | 网格效果（未实现）     | ❌  |
-| `fx_4_pixelate.amproj`            | 像素化效果（未实现）    | ❌  |
-| `fx_5_palette.amproj`             | 调色板映射效果       | ⚠️ |
-| `fx_6_scaleassist.amproj`         | 缩放辅助效果        | ✅  |
-| `fx_6_ex_scaleassist.amproj`      | 缩放辅助效果扩展测试    | ⚠️ |
-| `fx_7_threshold.amproj`           | 阈值效果（未实现）     | ❌  |
-| `fx_8_replace_color.amproj`       | 颜色替换效果        | ✅  |
+| 示例文件                                    | 验证功能          | 状态 |
+|-----------------------------------------|---------------|:--:|
+| `effects/stretch-segment/basic.amproj`  | 拉伸片段效果基本功能    | ⚠️ |
+| `effects/stretch-segment/ex.amproj`     | 拉伸片段效果扩展测试    | ⚠️ |
+| `effects/stretch-segment/ex2.amproj`    | 拉伸片段效果角度/偏移测试 | ⚠️ |
+| `effects/stretch-segment/ex3.amproj`    | 拉伸片段效果扩展测试3   | ⚠️ |
+| `effects/stretch-segment/ex4.amproj`    | 拉伸片段效果扩展测试4   | ✅  |
+| `effects/stretch-segment/ex5.amproj`    | 拉伸片段效果扩展测试5   | ⚠️ |
+| `effects/gaussian-blur/basic.amproj`    | 高斯模糊效果（未实现）   | ❌  |
+| `effects/grid/basic.amproj`             | 网格效果（未实现）     | ❌  |
+| `effects/pixelate/basic.amproj`         | 像素化效果（未实现）    | ❌  |
+| `effects/palette/basic.amproj`          | 调色板映射效果       | ⚠️ |
+| `effects/scale-assist/basic.amproj`     | 缩放辅助效果        | ✅  |
+| `effects/scale-assist/ex.amproj`        | 缩放辅助效果扩展测试    | ⚠️ |
+| `effects/threshold/basic.amproj`        | 阈值效果（未实现）     | ❌  |
+| `effects/replace-color/basic.amproj`    | 颜色替换效果        | ✅  |
 
-### 复杂示例 (complex_*)
+### 复杂示例 (complex/)
 
-| 示例文件                              | 验证功能         | 状态 |
-|-----------------------------------|--------------|:--:|
-| `complex_simple_gb.amproj`        | 综合简单动画测试     | ⚠️ |
-| `complex_examples_2_ex.amproj`    | 复杂示例2扩展测试    | ⚠️ |
-| `complex_examples_2_ex1.amproj`   | 复杂示例2扩展测试1   | ✅  |
-| `complex_examples_2_ex2.amproj`   | 复杂示例2扩展测试2   | ⚠️ |
-| `complex_examples_2_ex3.amproj`   | 复杂示例2扩展测试3   | ✅  |
-| `complex_examples_2_ex4.amproj`   | 复杂示例2扩展测试4   | ✅  |
-| `complex_examples_3_ex.amproj`    | 复杂示例3扩展测试    | ⚠️ |
-| `complex_examples_3_ex1.amproj`   | 复杂示例3扩展测试1   | ⚠️ |
-| `complex_examples_3_ex2.amproj`   | 复杂示例3扩展测试2   | ⚠️ |
-| `complex_examples_3_ex2_1.amproj` | 复杂示例3扩展测试2-1 | ⚠️ |
-| `complex_examples_3_ex3.amproj`   | 复杂示例3扩展测试3   | ⚠️ |
-| `complex_turn_9.amproj`           | 九宫格旋转动画      | ⚠️ |
-| `complex_turn_9_ex.amproj`        | 九宫格旋转动画扩展测试  | ✅  |
-| `complex_turn_9_ex1.amproj`       | 九宫格旋转动画扩展测试1 | ✅  |
-| `complex_turn_9_ex2.amproj`       | 九宫格旋转动画扩展测试2 | ⚠️ |
+| 示例文件                                | 验证功能         | 状态 |
+|-------------------------------------|--------------|:--:|
+| `complex/misc/simple_gb.amproj`     | 综合简单动画测试     | ⚠️ |
+| `complex/examples/2_ex.amproj`      | 复杂示例2扩展测试    | ⚠️ |
+| `complex/examples/2_ex1.amproj`     | 复杂示例2扩展测试1   | ✅  |
+| `complex/examples/2_ex2.amproj`     | 复杂示例2扩展测试2   | ⚠️ |
+| `complex/examples/2_ex3.amproj`     | 复杂示例2扩展测试3   | ✅  |
+| `complex/examples/2_ex4.amproj`     | 复杂示例2扩展测试4   | ✅  |
+| `complex/examples/3_ex.amproj`      | 复杂示例3扩展测试    | ⚠️ |
+| `complex/examples/3_ex1.amproj`     | 复杂示例3扩展测试1   | ⚠️ |
+| `complex/examples/3_ex2.amproj`     | 复杂示例3扩展测试2   | ⚠️ |
+| `complex/examples/3_ex2_1.amproj`   | 复杂示例3扩展测试2-1 | ⚠️ |
+| `complex/examples/3_ex3.amproj`     | 复杂示例3扩展测试3   | ⚠️ |
+| `complex/turn/9.amproj`             | 九宫格旋转动画      | ⚠️ |
+| `complex/turn/9_ex.amproj`          | 九宫格旋转动画扩展测试  | ✅  |
+| `complex/turn/9_ex1.amproj`         | 九宫格旋转动画扩展测试1 | ✅  |
+| `complex/turn/9_ex2.amproj`         | 九宫格旋转动画扩展测试2 | ⚠️ |
 
 **图例**：
 

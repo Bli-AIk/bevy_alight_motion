@@ -1,7 +1,7 @@
 # Stroke
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 Shape border stroke. Uses SDF rendering, stroke width stays constant during scale animation.
 
@@ -14,8 +14,8 @@ Shape border stroke. Uses SDF rendering, stroke width stays constant during scal
 - **Width (size)**: ✅ Supported (Stroke width (pixels))
 
 **Related Test Files:**
-- `basic_shape.amproj` ✅
-- `basic_shape_ex.amproj` ✅
+- `basic/shape/shape.amproj` ✅
+- `basic/shape/ex.amproj` ✅
 
 ---
 

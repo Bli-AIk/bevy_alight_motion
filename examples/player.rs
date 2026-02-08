@@ -68,16 +68,18 @@ use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 /// Get the project file based on CLI argument.
 fn get_project_file() -> String {
     let args: Vec<String> = std::env::args().collect();
-    let project_name = args.get(1).map(|s| s.as_str()).unwrap_or("simple_gb");
+    let project_name = args.get(1).map(|s| s.as_str()).unwrap_or("complex/misc/simple_gb");
 
+    // Shortcuts for common projects
     let path = match project_name {
-        "simple_gb" => "am/simple_gb.amproj",
-        "complex_1" => "am/complex_examples_1.amproj",
-        "complex_2" => "am/complex_examples_2.amproj",
-        "complex_3" => "am/complex_examples_3.amproj",
+        "simple_gb" => "projects/complex/misc/simple_gb.amproj",
+        "complex_1" => "projects/complex/examples/1.amproj",
+        "complex_2" => "projects/complex/examples/2.amproj",
+        "complex_3" => "projects/complex/examples/3.amproj",
         other => {
-            // Try to use the argument directly as a path
-            return format!("am/{}.amproj", other);
+            // Use the argument directly as a path under projects/
+            // e.g., "basic/shape/shape" -> "projects/basic/shape/shape.amproj"
+            return format!("projects/{}.amproj", other);
         }
     };
 
@@ -792,15 +794,15 @@ mod video_debug_systems {
 
         // Load all frames as images using relative asset paths
         // frame_paths contain absolute paths like:
-        // /path/to/crates/bevy_alight_motion/assets/debug/_video_frames/video_name/frame_000001.png
-        // We need to extract the asset-relative path: debug/_video_frames/video_name/frame_000001.png
+        // /path/to/crates/bevy_alight_motion/assets/projects/_video_frames/video_name/frame_000001.png
+        // We need to extract the asset-relative path: projects/_video_frames/video_name/frame_000001.png
         state.frame_handles = state
             .frame_paths
             .iter()
             .filter_map(|path| {
-                // Find "debug/_video_frames" in the path and extract everything after "assets/"
+                // Find "projects/_video_frames" in the path and extract everything after "assets/"
                 let path_str = path.to_string_lossy();
-                if let Some(idx) = path_str.find("debug/_video_frames") {
+                if let Some(idx) = path_str.find("projects/_video_frames") {
                     let asset_path = &path_str[idx..];
                     Some(asset_server.load(asset_path.to_string()))
                 } else {

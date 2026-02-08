@@ -25,7 +25,7 @@ define_builtin! {
     <scale value="1.5,1.5" />
     <opacity value="0.8" />
 </transform>"#,
-    tests: ["basic_shape.amproj", "basic_pivot.amproj"],
+    tests: ["basic/shape/shape.amproj", "basic/pivot/pivot.amproj"],
     fields: [
         define_field! {
             name: "location",

@@ -1,7 +1,7 @@
 # Media Fill
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 Fills the shape with an image texture. Supports JPEG and PNG formats.
 
@@ -10,7 +10,7 @@ Fills the shape with an image texture. Supports JPEG and PNG formats.
 - **Fill Image (fillImage)**: ✅ Supported (Image resource URI (amproj:filename.png))
 
 **Related Test Files:**
-- `basic_shape.amproj` ✅
+- `basic/shape/shape.amproj` ✅
 
 ---
 

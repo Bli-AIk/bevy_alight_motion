@@ -25,7 +25,7 @@ define_effect! {
     <property name="alpha" type="float" value="1.0" />
     <property name="lockluminance" type="bool" value="false" />
 </effect>"##,
-    tests: ["fx_8_replace_color.amproj"],
+    tests: ["effects/replace-color/basic.amproj"],
     fields: [
         define_field! {
             name: "oldcolor",
