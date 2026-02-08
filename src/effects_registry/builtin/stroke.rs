@@ -12,6 +12,7 @@ use crate::effects_registry::types::FieldType;
 define_builtin! {
     id: "stroke",
     short_name: "stroke",
+    category: Properties,
     zh: "描边",
     en: "Stroke",
     desc_zh: "形状边框描边。使用 SDF 渲染，描边宽度在缩放动画中保持不变。",

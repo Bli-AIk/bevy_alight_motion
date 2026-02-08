@@ -27,26 +27,50 @@ export const enEffects = {
   ]
 };
 
-export const zhHansBuiltins = {
-  text: '图形元素',
-  items: [
-    { text: '<span style="color:#22c55e">●</span> 矩形', link: '/zh-hans/builtins/rect' },
-    { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' },
-    { text: '<span style="color:#22c55e">●</span> 颜色填充', link: '/zh-hans/builtins/color-fill' },
-    { text: '<span style="color:#22c55e">●</span> 媒体填充', link: '/zh-hans/builtins/media-fill' },
-    { text: '<span style="color:#22c55e">●</span> 描边', link: '/zh-hans/builtins/stroke' },
-    { text: '<span style="color:#22c55e">●</span> 变换', link: '/zh-hans/builtins/transform' }
-  ]
-};
+export const zhHansBuiltins = [
+  {
+    text: '基本属性',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> 描边', link: '/zh-hans/builtins/stroke' },
+      { text: '<span style="color:#22c55e">●</span> 变换', link: '/zh-hans/builtins/transform' }
+    ]
+  },
+  {
+    text: '基本形状',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> 矩形', link: '/zh-hans/builtins/rect' },
+      { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' }
+    ]
+  },
+  {
+    text: '填充',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> 颜色填充', link: '/zh-hans/builtins/color-fill' },
+      { text: '<span style="color:#22c55e">●</span> 媒体填充', link: '/zh-hans/builtins/media-fill' }
+    ]
+  }
+];
 
-export const enBuiltins = {
-  text: 'Graphics Elements',
-  items: [
-    { text: '<span style="color:#22c55e">●</span> Rectangle', link: '/en/builtins/rect' },
-    { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' },
-    { text: '<span style="color:#22c55e">●</span> Color Fill', link: '/en/builtins/color-fill' },
-    { text: '<span style="color:#22c55e">●</span> Media Fill', link: '/en/builtins/media-fill' },
-    { text: '<span style="color:#22c55e">●</span> Stroke', link: '/en/builtins/stroke' },
-    { text: '<span style="color:#22c55e">●</span> Transform', link: '/en/builtins/transform' }
-  ]
-};
+export const enBuiltins = [
+  {
+    text: 'Properties',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> Stroke', link: '/en/builtins/stroke' },
+      { text: '<span style="color:#22c55e">●</span> Transform', link: '/en/builtins/transform' }
+    ]
+  },
+  {
+    text: 'Basic Shapes',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> Rectangle', link: '/en/builtins/rect' },
+      { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' }
+    ]
+  },
+  {
+    text: 'Fills',
+    items: [
+      { text: '<span style="color:#22c55e">●</span> Color Fill', link: '/en/builtins/color-fill' },
+      { text: '<span style="color:#22c55e">●</span> Media Fill', link: '/en/builtins/media-fill' }
+    ]
+  }
+];

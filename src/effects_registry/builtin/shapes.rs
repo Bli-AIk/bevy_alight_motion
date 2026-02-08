@@ -12,6 +12,7 @@ use crate::effects_registry::types::FieldType;
 define_builtin! {
     id: "shape.rect",
     short_name: "rect",
+    category: Shapes,
     zh: "矩形",
     en: "Rectangle",
     desc_zh: "基础矩形形状，支持 SDF 渲染和精灵渲染。",
@@ -50,6 +51,7 @@ pub mod circle {
     define_builtin! {
         id: "shape.circle",
         short_name: "circle",
+        category: Shapes,
         zh: "圆形",
         en: "Circle",
         desc_zh: "基础圆形形状，使用 SDF 渲染。支持非均匀缩放形成椭圆。",

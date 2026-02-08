@@ -73,6 +73,7 @@ macro_rules! define_builtin {
     (
         id: $id:literal,
         short_name: $short:literal,
+        category: $category:ident,
         zh: $name_zh:literal,
         en: $name_en:literal,
         desc_zh: $desc_zh:literal,
@@ -86,6 +87,7 @@ macro_rules! define_builtin {
         pub const BUILTIN: $crate::effects_registry::types::BuiltinDef = $crate::effects_registry::types::BuiltinDef {
             id: $id,
             short_name: $short,
+            category: $crate::effects_registry::types::BuiltinCategory::$category,
             display_name_zh: $name_zh,
             display_name_en: $name_en,
             description_zh: $desc_zh,

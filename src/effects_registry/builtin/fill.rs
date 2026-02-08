@@ -12,6 +12,7 @@ use crate::effects_registry::types::FieldType;
 define_builtin! {
     id: "fill.color",
     short_name: "color-fill",
+    category: Fill,
     zh: "颜色填充",
     en: "Color Fill",
     desc_zh: "使用纯色填充形状。颜色格式为 #AARRGGBB。",
@@ -43,6 +44,7 @@ pub mod media {
     define_builtin! {
         id: "fill.media",
         short_name: "media-fill",
+        category: Fill,
         zh: "媒体填充",
         en: "Media Fill",
         desc_zh: "使用图像纹理填充形状。支持 JPEG 和 PNG 格式。",

@@ -12,6 +12,7 @@ use crate::effects_registry::types::FieldType;
 define_builtin! {
     id: "transform",
     short_name: "transform",
+    category: Properties,
     zh: "变换",
     en: "Transform",
     desc_zh: "图层的基础变换属性，包括位置、旋转、缩放、透明度和锚点。坐标系统：AM 使用左上角原点，Bevy 使用中心原点，库自动转换。",

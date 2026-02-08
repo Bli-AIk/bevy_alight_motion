@@ -13,7 +13,7 @@ use std::path::Path;
 
 use super::impl_scanner::{EffectImpl, EffectTestFiles};
 use super::test_results::TestResults;
-use super::types::{BuiltinDef, EffectDef, FieldDef, SupportLevel};
+use super::types::{BuiltinCategory, BuiltinDef, EffectDef, FieldDef, SupportLevel};
 
 /// 文档生成配置 / Documentation generation configuration
 pub struct DocGeneratorConfig<'a> {
@@ -861,42 +861,75 @@ pub fn generate_vitepress_sidebar_snippet(
     writeln!(output, "}};").unwrap();
     writeln!(output).unwrap();
 
-    // 中文内置功能
-    writeln!(output, "export const zhHansBuiltins = {{").unwrap();
-    writeln!(output, "  text: '图形元素',").unwrap();
-    writeln!(output, "  items: [").unwrap();
-    for (i, builtin) in builtins.iter().enumerate() {
-        let comma = if i < builtins.len() - 1 { "," } else { "" };
-        let support_level = get_builtin_support_level(builtin, config);
-        let indicator = get_color_indicator(support_level);
-        writeln!(
-            output,
-            "    {{ text: '{}{}', link: '/zh-hans/builtins/{}' }}{}",
-            indicator, builtin.display_name_zh, builtin.short_name, comma
-        )
-        .unwrap();
+    // 按分类分组内置功能 / Group builtins by category
+    let categories = [
+        BuiltinCategory::Properties,
+        BuiltinCategory::Shapes,
+        BuiltinCategory::Fill,
+    ];
+
+    // 中文内置功能 - 按分类分组
+    writeln!(output, "export const zhHansBuiltins = [").unwrap();
+    for (cat_idx, category) in categories.iter().enumerate() {
+        let cat_builtins: Vec<_> = builtins
+            .iter()
+            .filter(|b| b.category == *category)
+            .collect();
+        if cat_builtins.is_empty() {
+            continue;
+        }
+
+        let cat_comma = if cat_idx < categories.len() - 1 { "," } else { "" };
+        writeln!(output, "  {{").unwrap();
+        writeln!(output, "    text: '{}',", category.display_name_zh()).unwrap();
+        writeln!(output, "    items: [").unwrap();
+        for (i, builtin) in cat_builtins.iter().enumerate() {
+            let comma = if i < cat_builtins.len() - 1 { "," } else { "" };
+            let support_level = get_builtin_support_level(builtin, config);
+            let indicator = get_color_indicator(support_level);
+            writeln!(
+                output,
+                "      {{ text: '{}{}', link: '/zh-hans/builtins/{}' }}{}",
+                indicator, builtin.display_name_zh, builtin.short_name, comma
+            )
+            .unwrap();
+        }
+        writeln!(output, "    ]").unwrap();
+        writeln!(output, "  }}{}", cat_comma).unwrap();
     }
-    writeln!(output, "  ]").unwrap();
-    writeln!(output, "}};").unwrap();
+    writeln!(output, "];").unwrap();
     writeln!(output).unwrap();
 
-    // 英文内置功能
-    writeln!(output, "export const enBuiltins = {{").unwrap();
-    writeln!(output, "  text: 'Graphics Elements',").unwrap();
-    writeln!(output, "  items: [").unwrap();
-    for (i, builtin) in builtins.iter().enumerate() {
-        let comma = if i < builtins.len() - 1 { "," } else { "" };
-        let support_level = get_builtin_support_level(builtin, config);
-        let indicator = get_color_indicator(support_level);
-        writeln!(
-            output,
-            "    {{ text: '{}{}', link: '/en/builtins/{}' }}{}",
-            indicator, builtin.display_name_en, builtin.short_name, comma
-        )
-        .unwrap();
+    // 英文内置功能 - 按分类分组
+    writeln!(output, "export const enBuiltins = [").unwrap();
+    for (cat_idx, category) in categories.iter().enumerate() {
+        let cat_builtins: Vec<_> = builtins
+            .iter()
+            .filter(|b| b.category == *category)
+            .collect();
+        if cat_builtins.is_empty() {
+            continue;
+        }
+
+        let cat_comma = if cat_idx < categories.len() - 1 { "," } else { "" };
+        writeln!(output, "  {{").unwrap();
+        writeln!(output, "    text: '{}',", category.display_name_en()).unwrap();
+        writeln!(output, "    items: [").unwrap();
+        for (i, builtin) in cat_builtins.iter().enumerate() {
+            let comma = if i < cat_builtins.len() - 1 { "," } else { "" };
+            let support_level = get_builtin_support_level(builtin, config);
+            let indicator = get_color_indicator(support_level);
+            writeln!(
+                output,
+                "      {{ text: '{}{}', link: '/en/builtins/{}' }}{}",
+                indicator, builtin.display_name_en, builtin.short_name, comma
+            )
+            .unwrap();
+        }
+        writeln!(output, "    ]").unwrap();
+        writeln!(output, "  }}{}", cat_comma).unwrap();
     }
-    writeln!(output, "  ]").unwrap();
-    writeln!(output, "}};").unwrap();
+    writeln!(output, "];").unwrap();
 
     output
 }

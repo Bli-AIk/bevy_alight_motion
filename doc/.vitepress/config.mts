@@ -63,9 +63,7 @@ export default defineConfig({
               ]
             }
           ],
-          '/en/builtins/': [
-            enBuiltins
-          ]
+          '/en/builtins/': enBuiltins
         }
       }
     },
@@ -118,9 +116,7 @@ export default defineConfig({
               ]
             }
           ],
-          '/zh-hans/builtins/': [
-            zhHansBuiltins
-          ]
+          '/zh-hans/builtins/': zhHansBuiltins
         }
       }
     }

@@ -120,6 +120,37 @@ pub struct EffectDef {
     pub test_files: &'static [&'static str],
 }
 
+/// 内置功能分类 / Builtin category
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinCategory {
+    /// 基本形状 / Basic shapes (rect, circle, etc.)
+    Shapes,
+    /// 填充 / Fills (color, media, etc.)
+    Fill,
+    /// 基本属性 / Basic properties (stroke, transform)
+    Properties,
+}
+
+impl BuiltinCategory {
+    /// 中文显示名 / Chinese display name
+    pub fn display_name_zh(&self) -> &'static str {
+        match self {
+            BuiltinCategory::Shapes => "基本形状",
+            BuiltinCategory::Fill => "填充",
+            BuiltinCategory::Properties => "基本属性",
+        }
+    }
+
+    /// 英文显示名 / English display name
+    pub fn display_name_en(&self) -> &'static str {
+        match self {
+            BuiltinCategory::Shapes => "Basic Shapes",
+            BuiltinCategory::Fill => "Fills",
+            BuiltinCategory::Properties => "Properties",
+        }
+    }
+}
+
 /// 内置功能定义 / Builtin feature definition (shapes, fills, etc.)
 #[derive(Debug, Clone)]
 pub struct BuiltinDef {
@@ -127,6 +158,8 @@ pub struct BuiltinDef {
     pub id: &'static str,
     /// 短名称 / Short name (e.g., "rect")
     pub short_name: &'static str,
+    /// 分类 / Category
+    pub category: BuiltinCategory,
     /// 中文显示名 / Chinese display name
     pub display_name_zh: &'static str,
     /// 英文显示名 / English display name

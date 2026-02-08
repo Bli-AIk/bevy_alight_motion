@@ -36,4 +36,4 @@ pub use effects::all as all_effects;
 pub use effects::find as find_effect;
 pub use impl_scanner::{EffectImpl, EffectTestFiles, scan_amproj_files, scan_effects_rs};
 pub use test_results::{DEFAULT_TEST_RESULTS_PATH, TestResults};
-pub use types::{BuiltinDef, EffectDef, FieldDef, FieldType, SupportLevel};
+pub use types::{BuiltinCategory, BuiltinDef, EffectDef, FieldDef, FieldType, SupportLevel};
