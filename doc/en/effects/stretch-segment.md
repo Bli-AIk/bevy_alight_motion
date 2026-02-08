@@ -7,10 +7,10 @@ UV domain distortion effect that stretches the image along a dividing line. Form
 
 **Support Status**: ⚠️ Partially Supported
 
-- **Stretch (stretch)**: ✅ Supported (Stretch amount (pixels))
-- **Angle (angle)**: ⚠️ Basic support (Dividing line angle (basic support, minor visual differences))
-- **Offset (offset)**: ⚠️ Basic support (Dividing line position offset (basic support, minor visual differences))
-- **Smooth (smooth)**: ❌ Not implemented (Edge smoothness (not yet implemented))
+- **Stretch (stretch)**: ✅ Implemented (Stretch amount (pixels))
+- **Angle (angle)**: ✅ Implemented (Dividing line angle (basic support, minor visual differences))
+- **Offset (offset)**: ✅ Implemented (Dividing line position offset (basic support, minor visual differences))
+- **Smooth (smooth)**: ✅ Implemented (Edge smoothness (not yet implemented))
 
 **Related Test Files:**
 - `fx_1_stretch_segment.amproj` ❌

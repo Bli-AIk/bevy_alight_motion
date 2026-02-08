@@ -7,9 +7,11 @@
 //!
 //! 生成的文档会在开头标注 "此文档由代码自动生成"。
 
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::Path;
 
+use super::impl_scanner::EffectImpl;
 use super::test_results::TestResults;
 use super::types::{BuiltinDef, EffectDef, FieldDef, SupportLevel};
 
@@ -17,6 +19,8 @@ use super::types::{BuiltinDef, EffectDef, FieldDef, SupportLevel};
 pub struct DocGeneratorConfig<'a> {
     /// 测试结果（可选）/ Test results (optional)
     pub test_results: Option<&'a TestResults>,
+    /// 实现状态扫描结果（可选）/ Implementation scan results (optional)
+    pub impl_status: Option<&'a HashMap<String, EffectImpl>>,
     /// 过期天数阈值 / Stale threshold in days
     pub stale_days: i64,
 }
@@ -25,6 +29,7 @@ impl Default for DocGeneratorConfig<'_> {
     fn default() -> Self {
         Self {
             test_results: None,
+            impl_status: None,
             stale_days: 1,
         }
     }
@@ -116,9 +121,9 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
         writeln!(doc, "**Support Status**: {}\n", status_text).unwrap();
     }
 
-    // 属性列表（使用新格式）/ Properties list (new format)
+    // 属性列表（使用新格式，基于实现状态）/ Properties list (new format, based on impl status)
     for field in effect.fields {
-        write_field_line(&mut doc, field, lang);
+        write_field_line_with_impl(&mut doc, field, lang, effect.id, config);
     }
 
     // 关联测试文件 / Related test files
@@ -167,6 +172,87 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
     writeln!(doc, "</details>").unwrap();
 
     doc
+}
+
+/// 检查字段是否已在代码中实现 / Check if field is implemented in code
+fn is_field_implemented(
+    effect_id: &str,
+    field_name: &str,
+    impl_status: Option<&HashMap<String, EffectImpl>>,
+) -> bool {
+    if let Some(status) = impl_status {
+        if let Some(impl_info) = status.get(effect_id) {
+            // 检查直接匹配 / Check direct match
+            if impl_info
+                .implemented_fields
+                .contains(&field_name.to_string())
+            {
+                return true;
+            }
+            // 检查模式匹配（如 color* 匹配 color1, color2 等）
+            // Check pattern match (e.g., color* matches color1, color2, etc.)
+            for pattern in &impl_info.pattern_fields {
+                if let Some(prefix) = pattern.strip_suffix('*') {
+                    if field_name.starts_with(prefix) {
+                        return true;
+                    }
+                }
+            }
+            // 有扫描结果但字段未找到，说明未实现
+            // Has scan results but field not found, means not implemented
+            return false;
+        }
+        // 效果有扫描但找不到对应 ID，说明效果未实现
+        // Effect not found in scan results, means not implemented
+        return false;
+    }
+    // 如果没有扫描结果，无法判断，返回 None 让调用者决定
+    // If no scan results, we can't determine - return true to fall back to definition
+    true
+}
+
+/// 写入字段行（根据实现状态）/ Write field line (based on implementation status)
+fn write_field_line_with_impl(
+    doc: &mut String,
+    field: &FieldDef,
+    lang: &str,
+    effect_id: &str,
+    config: &DocGeneratorConfig,
+) {
+    let field_name = if lang == "zh-hans" {
+        field.display_name_zh
+    } else {
+        field.display_name_en
+    };
+    let field_desc = if lang == "zh-hans" {
+        field.description_zh
+    } else {
+        field.description_en
+    };
+
+    // 根据实现扫描结果确定状态 / Determine status based on implementation scan
+    let is_implemented = is_field_implemented(effect_id, field.name, config.impl_status);
+
+    let (icon, status_text) = if is_implemented {
+        if lang == "zh-hans" {
+            (SupportLevel::Full.icon(), "已实现")
+        } else {
+            (SupportLevel::Full.icon(), "Implemented")
+        }
+    } else {
+        if lang == "zh-hans" {
+            (SupportLevel::Unsupported.icon(), "未实现")
+        } else {
+            (SupportLevel::Unsupported.icon(), "Not implemented")
+        }
+    };
+
+    writeln!(
+        doc,
+        "- **{} ({})**: {} {} ({})",
+        field_name, field.name, icon, status_text, field_desc
+    )
+    .unwrap();
 }
 
 /// 写入字段行（新格式）/ Write field line (new format)

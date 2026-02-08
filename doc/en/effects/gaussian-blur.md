@@ -7,7 +7,7 @@ Multi-pass blur implementation for smooth Gaussian blur effect, supports glow ex
 
 **Support Status**: ❌ Not Supported
 
-- **Blur Strength (strength)**: ✅ Supported (Blur strength in pixels)
+- **Blur Strength (strength)**: ❌ Not implemented (Blur strength in pixels)
 
 **Related Test Files:**
 - `fx_2_gaussian_blur.amproj` ⏭️

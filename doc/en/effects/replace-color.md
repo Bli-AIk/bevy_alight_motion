@@ -7,12 +7,12 @@ Replaces a source color with a target color within a given tolerance. Supports s
 
 **Support Status**: ✅ Fully Supported
 
-- **Old Color (oldcolor)**: ✅ Supported (The source color to replace)
-- **New Color (newcolor)**: ✅ Supported (The target color to replace with)
-- **Threshold (threshold)**: ✅ Supported (Color matching tolerance)
-- **Feather (feather)**: ✅ Supported (Edge transition softness)
-- **Alpha (alpha)**: ✅ Supported (Effect strength)
-- **Lock Luminance (lockluminance)**: ✅ Supported (Preserve original pixel luminance)
+- **Old Color (oldcolor)**: ✅ Implemented (The source color to replace)
+- **New Color (newcolor)**: ✅ Implemented (The target color to replace with)
+- **Threshold (threshold)**: ✅ Implemented (Color matching tolerance)
+- **Feather (feather)**: ✅ Implemented (Edge transition softness)
+- **Alpha (alpha)**: ✅ Implemented (Effect strength)
+- **Lock Luminance (lockluminance)**: ❌ Not implemented (Preserve original pixel luminance)
 
 **Related Test Files:**
 - `fx_8_replace_color.amproj` ✅

@@ -14,15 +14,48 @@
 //! cargo run --example generate_docs
 //! ```
 
-use bevy_alight_motion::effects_registry::{DEFAULT_TEST_RESULTS_PATH, TestResults, doc_generator};
+use bevy_alight_motion::effects_registry::{
+    DEFAULT_TEST_RESULTS_PATH, TestResults, doc_generator, impl_scanner,
+};
 use std::path::Path;
 
 fn main() {
     let output_dir = Path::new("doc");
     let test_results_path = Path::new(DEFAULT_TEST_RESULTS_PATH);
+    let effects_rs_path = Path::new("src/scene/effects.rs");
 
     println!("正在生成文档...");
     println!("Generating documentation...\n");
+
+    // 扫描代码实现状态 / Scan code implementation status
+    let impl_status = match impl_scanner::scan_effects_rs(effects_rs_path) {
+        Ok(status) => {
+            println!("✅ 已扫描代码实现状态 / Implementation status scanned");
+            println!(
+                "   发现 {} 个效果实现 / Found {} effect implementations",
+                status.len(),
+                status.len()
+            );
+            for (effect_id, impl_info) in &status {
+                println!(
+                    "   - {}: {} 字段 + {} 模式",
+                    effect_id,
+                    impl_info.implemented_fields.len(),
+                    impl_info.pattern_fields.len()
+                );
+            }
+            println!();
+            Some(status)
+        }
+        Err(e) => {
+            println!(
+                "⚠️ 无法扫描代码实现状态 / Failed to scan implementation status: {}",
+                e
+            );
+            println!("   将使用静态字段定义 / Using static field definitions.\n");
+            None
+        }
+    };
 
     // 尝试加载测试结果
     let test_results = match TestResults::load_from_file(test_results_path) {
@@ -59,6 +92,7 @@ fn main() {
     // 配置文档生成器
     let config = doc_generator::DocGeneratorConfig {
         test_results: test_results.as_ref(),
+        impl_status: impl_status.as_ref(),
         stale_days: 1,
     };
 
@@ -69,13 +103,13 @@ fn main() {
 
             // 显示生成的文件列表
             println!("生成的文件 / Generated files:");
-            println!("  doc/zh-hans/effects/_index.md");
+            println!("  doc/zh-hans/effects/index.md");
             println!("  doc/zh-hans/effects/*.md");
-            println!("  doc/zh-hans/builtins/_index.md");
+            println!("  doc/zh-hans/builtins/index.md");
             println!("  doc/zh-hans/builtins/*.md");
-            println!("  doc/en/effects/_index.md");
+            println!("  doc/en/effects/index.md");
             println!("  doc/en/effects/*.md");
-            println!("  doc/en/builtins/_index.md");
+            println!("  doc/en/builtins/index.md");
             println!("  doc/en/builtins/*.md");
 
             // 显示统计信息
