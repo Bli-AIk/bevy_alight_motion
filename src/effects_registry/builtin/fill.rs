@@ -21,7 +21,7 @@ define_builtin! {
     xml: r##"<shape fillType="color">
     <fillColor value="#ffff0000" />
 </shape>"##,
-    tests: ["basic_shape.amproj"],
+    tests: ["basic/shape/shape.amproj"],
     fields: [
         define_field! {
             name: "fillColor",
@@ -53,7 +53,7 @@ pub mod media {
         xml: r#"<shape fillType="media" fillImage="amproj:image.png">
     <property name="size" type="vec2" value="100.0,100.0" />
 </shape>"#,
-        tests: ["basic_shape.amproj"],
+        tests: ["basic/shape/shape.amproj"],
         fields: [
             define_field! {
                 name: "fillImage",

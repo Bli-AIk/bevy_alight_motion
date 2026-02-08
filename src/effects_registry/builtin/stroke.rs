@@ -24,7 +24,7 @@ define_builtin! {
         <size value="2.0" />
     </path-stroke>
 </shape>"##,
-    tests: ["basic_shape.amproj", "basic_shape_ex.amproj"],
+    tests: ["basic/shape/shape.amproj", "basic/shape/ex.amproj"],
     fields: [
         define_field! {
             name: "direction",

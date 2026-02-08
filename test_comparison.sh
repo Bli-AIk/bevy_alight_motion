@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Automated Video Comparison Testing Script
-# Runs visual regression tests for all basic_*, fx_*, and complex_* examples
+# Runs visual regression tests for projects in assets/projects/
 # Checks against thresholds defined in comparison_config.toml
 #
 # Features:
@@ -9,15 +9,22 @@
 # - Sequential rendering tests (GPU doesn't parallelize well)
 # - Configurable max parallelism via PARALLEL_JOBS environment variable
 # - Batch result reporting with detailed summary
-# - Prefix filtering (default: only basic_* examples)
+# - Category filtering (default: basic/ only)
+#
+# Directory structure:
+#   assets/projects/
+#   ├── basic/           # Basic functionality tests
+#   ├── effects/         # Effect-specific tests
+#   ├── complex/         # Complex examples
+#   └── showcase/        # Showcase (excluded from tests)
 #
 # Usage:
-#   ./test_comparison.sh              # Run only basic_* tests (default)
-#   ./test_comparison.sh --all        # Run all tests (basic_*, fx_*, complex_*)
-#   ./test_comparison.sh basic_       # Run only basic_* tests
-#   ./test_comparison.sh fx_          # Run only fx_* tests
-#   ./test_comparison.sh complex_     # Run only complex_* tests
-#   ./test_comparison.sh fx_1         # Run tests matching fx_1*
+#   ./test_comparison.sh              # Run only basic/* tests (default)
+#   ./test_comparison.sh --all        # Run all tests
+#   ./test_comparison.sh basic/       # Run only basic/* tests
+#   ./test_comparison.sh effects/     # Run only effects/* tests
+#   ./test_comparison.sh complex/     # Run only complex/* tests
+#   ./test_comparison.sh effects/stretch  # Run tests matching effects/stretch*
 #   PARALLEL_JOBS=8 ./test_comparison.sh  # More parallel frame extraction jobs
 #
 # Note: Rendering tests run sequentially to avoid GPU resource contention.
@@ -35,21 +42,19 @@ if [ "$1" == "--all" ]; then
 elif [ -n "$1" ]; then
     FILTER_PATTERN="$1"
 else
-    # Default: only run basic_* tests
-    FILTER_PATTERN="basic_"
+    # Default: only run basic/* tests
+    FILTER_PATTERN="basic/"
 fi
 
 # Ensure we are in the correct directory
-if [ -f "assets/am" ] || [ -d "assets/am" ]; then
+if [ -d "assets/projects" ]; then
     BASE_DIR="."
-    ASSETS_DIR="assets/am"
-    DEBUG_DIR="assets/debug"
-elif [ -d "crates/bevy_alight_motion/assets/am" ]; then
+    PROJECTS_DIR="assets/projects"
+elif [ -d "crates/bevy_alight_motion/assets/projects" ]; then
     BASE_DIR="crates/bevy_alight_motion"
-    ASSETS_DIR="crates/bevy_alight_motion/assets/am"
-    DEBUG_DIR="crates/bevy_alight_motion/assets/debug"
+    PROJECTS_DIR="crates/bevy_alight_motion/assets/projects"
 else
-    echo "Error: Cannot find assets/am directory for bevy_alight_motion"
+    echo "Error: Cannot find assets/projects directory for bevy_alight_motion"
     exit 1
 fi
 
@@ -84,25 +89,44 @@ fi
 echo "Using binary: $PLAYER_BIN"
 
 # Get all matching amproj files that have corresponding videos
+# New structure: assets/projects/{category}/{subcategory}/name.amproj + name.mp4
 EXAMPLES=""
-for amproj in "$ASSETS_DIR"/*.amproj; do
-    name=$(basename "$amproj" .amproj)
-    # Check if matches filter pattern (basic_, fx_, complex_)
-    if echo "$name" | grep -qE '^(basic_|fx_|complex_)'; then
-        # Apply prefix filter if not running all
-        if [ "$RUN_ALL" = true ]; then
-            # Check if video exists
-            if [ -f "${DEBUG_DIR}/${name}.mp4" ]; then
-                EXAMPLES="$EXAMPLES $name"
+while IFS= read -r amproj; do
+    # Get the path relative to PROJECTS_DIR (e.g., basic/shape/shape.amproj)
+    rel_path="${amproj#$PROJECTS_DIR/}"
+    # Remove .amproj extension to get the test ID (e.g., basic/shape/shape)
+    test_id="${rel_path%.amproj}"
+    # Get directory and basename
+    dir_path=$(dirname "$amproj")
+    base_name=$(basename "$amproj" .amproj)
+    video_path="${dir_path}/${base_name}.mp4"
+    
+    # Skip showcase and _video_frames
+    if echo "$test_id" | grep -qE '^(showcase/|_video_frames)'; then
+        continue
+    fi
+    
+    # Apply category filter (basic/, effects/, complex/)
+    if [ "$RUN_ALL" = true ]; then
+        if [ -f "$video_path" ]; then
+            EXAMPLES="$EXAMPLES $test_id"
+        fi
+    elif [ -n "$FILTER_PATTERN" ]; then
+        # Filter can be category (basic, effects, complex) or subcategory
+        if echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
+            if [ -f "$video_path" ]; then
+                EXAMPLES="$EXAMPLES $test_id"
             fi
-        elif [ -z "$FILTER_PATTERN" ] || echo "$name" | grep -q "^${FILTER_PATTERN}"; then
-            # Check if video exists
-            if [ -f "${DEBUG_DIR}/${name}.mp4" ]; then
-                EXAMPLES="$EXAMPLES $name"
+        fi
+    else
+        # Default: only run basic/* tests
+        if echo "$test_id" | grep -q "^basic/"; then
+            if [ -f "$video_path" ]; then
+                EXAMPLES="$EXAMPLES $test_id"
             fi
         fi
     fi
-done
+done < <(find "$PROJECTS_DIR" -name "*.amproj" -type f | sort)
 EXAMPLES=$(echo $EXAMPLES | tr ' ' '\n' | sort | tr '\n' ' ')
 
 EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
@@ -124,18 +148,21 @@ echo "========================================"
 echo "Phase 1: Extracting video frames (parallel)"
 echo "========================================"
 
-FRAME_CACHE_DIR="${DEBUG_DIR}/_video_frames"
+FRAME_CACHE_DIR="${PROJECTS_DIR}/_video_frames"
 mkdir -p "$FRAME_CACHE_DIR"
 
 extract_frames_for_video() {
-    local name=$1
-    local video_path="${DEBUG_DIR}/${name}.mp4"
-    local frame_dir="${FRAME_CACHE_DIR}/${name}"
+    local test_id=$1
+    # test_id is like basic/shape/shape, video is at projects/basic/shape/shape.mp4
+    local video_path="${PROJECTS_DIR}/${test_id}.mp4"
+    # Frame cache uses flattened name (replace / with _)
+    local cache_name=$(echo "$test_id" | tr '/' '_')
+    local frame_dir="${FRAME_CACHE_DIR}/${cache_name}"
     local marker_file="${frame_dir}/.extracted"
     
     # Skip if already extracted (cache hit)
     if [ -f "$marker_file" ]; then
-        echo "  [CACHE] $name"
+        echo "  [CACHE] $test_id"
         return 0
     fi
     
@@ -157,11 +184,11 @@ extract_frames_for_video() {
     echo "$fps" > "$marker_file"
     
     local frame_count=$(ls "$frame_dir"/*.png 2>/dev/null | wc -l)
-    echo "  [DONE] $name ($frame_count frames)"
+    echo "  [DONE] $test_id ($frame_count frames)"
 }
 
 export -f extract_frames_for_video
-export DEBUG_DIR FRAME_CACHE_DIR
+export PROJECTS_DIR FRAME_CACHE_DIR
 
 # Run frame extraction in parallel
 echo "Extracting frames with $PARALLEL_JOBS parallel jobs..."
@@ -188,33 +215,35 @@ export MANIFEST_DIR
 
 # Function to run a single test
 run_single_test() {
-    local example=$1
-    local result_file="$RESULTS_DIR/${example}.result"
-    local log_file="$RESULTS_DIR/${example}.log"
+    local test_id=$1
+    # Create result file with flattened name (replace / with _)
+    local flat_name=$(echo "$test_id" | tr '/' '_')
+    local result_file="$RESULTS_DIR/${flat_name}.result"
+    local log_file="$RESULTS_DIR/${flat_name}.log"
     
     # Run directly without virtual framebuffer for consistent results
     # with manual testing. This requires a real display or proper GPU access.
     CARGO_MANIFEST_DIR="$MANIFEST_DIR" \
-        "$PLAYER_BIN" "$example" > "$log_file" 2>&1
+        "$PLAYER_BIN" "$test_id" > "$log_file" 2>&1
     
     local exit_code=$?
     
     # Determine result from log
     if grep -q "RESULT: PASS" "$log_file"; then
-        echo "PASS|$example|" > "$result_file"
-        echo "✅ $example"
+        echo "PASS|$test_id|" > "$result_file"
+        echo "✅ $test_id"
     elif grep -q "RESULT: SKIP" "$log_file"; then
-        echo "SKIP|$example|" > "$result_file"
-        echo "⚠️  $example (SKIP)"
+        echo "SKIP|$test_id|" > "$result_file"
+        echo "⚠️  $test_id (SKIP)"
     elif grep -q "RESULT: CANCELLED" "$log_file"; then
-        echo "CANCELLED|$example|" > "$result_file"
-        echo "⛔ $example (CANCELLED by user)"
+        echo "CANCELLED|$test_id|" > "$result_file"
+        echo "⛔ $test_id (CANCELLED by user)"
     else
         # Extract failure details (both Average Similarity and Per-Frame Pass Rate)
         avg_sim=$(grep "Average Similarity" "$log_file" | head -1)
         frame_rate=$(grep "Per-Frame Pass Rate" "$log_file" | head -1)
-        echo "FAIL|$example|$avg_sim|$frame_rate" > "$result_file"
-        echo "❌ $example (FAIL)"
+        echo "FAIL|$test_id|$avg_sim|$frame_rate" > "$result_file"
+        echo "❌ $test_id (FAIL)"
     fi
 }
 

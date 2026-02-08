@@ -1,7 +1,7 @@
 # 缩放辅助 (Scale Assist)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-08 18:36:46
+> 最近测试时间：2026-02-09 00:16:23
 
 根据选择的轴向自动调整图层尺寸以适应画布。
 
@@ -10,8 +10,8 @@
 - **轴向 (scaleassistaxis)**: ❌ 未实现 (缩放基准轴 (1=宽度, 2=高度))
 
 **关联测试文件：**
-- `fx_6_ex_scaleassist.amproj` ❌
-- `fx_6_scaleassist.amproj` ✅
+- `effects/scale-assist/basic.amproj` ✅
+- `effects/scale-assist/ex.amproj` ❌
 
 ---
 

@@ -1,7 +1,7 @@
 # Stretch Segment
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 UV domain distortion effect that stretches the image along a dividing line. Formula: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 
@@ -13,12 +13,12 @@ UV domain distortion effect that stretches the image along a dividing line. Form
 - **Smooth (smooth)**: ✅ Implemented (Edge smoothness (not yet implemented))
 
 **Related Test Files:**
-- `fx_1_ex2_stretch_segment.amproj` ❌
-- `fx_1_ex3_stretch_segment.amproj` ❌
-- `fx_1_ex4_stretch_segment.amproj` ✅
-- `fx_1_ex5_stretch_segment.amproj` ❌
-- `fx_1_ex_stretch_segment.amproj` ❌
-- `fx_1_stretch_segment.amproj` ❌
+- `effects/stretch-segment/basic.amproj` ❌
+- `effects/stretch-segment/ex.amproj` ❌
+- `effects/stretch-segment/ex2.amproj` ❌
+- `effects/stretch-segment/ex3.amproj` ❌
+- `effects/stretch-segment/ex4.amproj` ✅
+- `effects/stretch-segment/ex5.amproj` ❌
 
 ---
 

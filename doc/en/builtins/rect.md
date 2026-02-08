@@ -1,7 +1,7 @@
 # Rectangle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 18:36:46
+> Last tested: 2026-02-09 00:16:23
 
 Basic rectangle shape, supports SDF and sprite rendering.
 
@@ -10,8 +10,8 @@ Basic rectangle shape, supports SDF and sprite rendering.
 - **Size (size)**: ✅ Supported (Width and height of the shape)
 
 **Related Test Files:**
-- `basic_shape.amproj` ✅
-- `basic_shape_ex.amproj` ✅
+- `basic/shape/shape.amproj` ✅
+- `basic/shape/ex.amproj` ✅
 
 ---
 

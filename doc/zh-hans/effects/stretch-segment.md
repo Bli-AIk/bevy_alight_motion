@@ -1,7 +1,7 @@
 # 拉伸片段 (Stretch Segment)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-08 18:36:46
+> 最近测试时间：2026-02-09 00:16:23
 
 UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 
@@ -13,12 +13,12 @@ UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_w
 - **平滑 (smooth)**: ✅ 已实现 (边缘平滑度（尚未实现）)
 
 **关联测试文件：**
-- `fx_1_ex2_stretch_segment.amproj` ❌
-- `fx_1_ex3_stretch_segment.amproj` ❌
-- `fx_1_ex4_stretch_segment.amproj` ✅
-- `fx_1_ex5_stretch_segment.amproj` ❌
-- `fx_1_ex_stretch_segment.amproj` ❌
-- `fx_1_stretch_segment.amproj` ❌
+- `effects/stretch-segment/basic.amproj` ❌
+- `effects/stretch-segment/ex.amproj` ❌
+- `effects/stretch-segment/ex2.amproj` ❌
+- `effects/stretch-segment/ex3.amproj` ❌
+- `effects/stretch-segment/ex4.amproj` ✅
+- `effects/stretch-segment/ex5.amproj` ❌
 
 ---
 

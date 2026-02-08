@@ -123,7 +123,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut meshes: Res
     commands.spawn(Camera2d);
 
     // Load the showcase AM project (contains the animated flipper)
-    load_am_project(&mut commands, &asset_server, "am/showcase.amproj");
+    load_am_project(&mut commands, &asset_server, "projects/showcase/showcase.amproj");
 
     // Create a circle mesh for balls and store its handle
     let circle_mesh = meshes.add(Circle::new(BALL_RADIUS));

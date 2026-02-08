@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# 自动测试 basic_* 和 fx_* 示例
+# 自动测试 basic/* 和 effects/* 示例
 # 每个示例运行10秒，间隔2秒
 
 cargo build -p bevy_alight_motion
 cd "$(dirname "$0")"
 
-# 获取所有 basic_*.amproj 和 fx_*.amproj 文件
-examples=$(ls assets/am/basic_*.amproj assets/am/fx_*.amproj 2>/dev/null | sed 's|assets/am/||;s|\.amproj||')
+# 获取所有 basic 和 effects 下的 .amproj 文件
+examples=$(find assets/projects/basic assets/projects/effects -name "*.amproj" 2>/dev/null | \
+    sed 's|assets/projects/||;s|\.amproj||' | sort)
 
 for example in $examples; do
     echo "========================================"

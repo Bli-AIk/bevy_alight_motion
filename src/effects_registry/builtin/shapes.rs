@@ -28,7 +28,7 @@ define_builtin! {
     <property name="size" type="vec2" value="100.0,100.0" />
     <fillColor value="#ffff0000" />
 </shape>"##,
-    tests: ["basic_shape.amproj", "basic_shape_ex.amproj"],
+    tests: ["basic/shape/shape.amproj", "basic/shape/ex.amproj"],
     fields: [
         define_field! {
             name: "size",
@@ -67,7 +67,7 @@ pub mod circle {
     <property name="size" type="vec2" value="100.0,100.0" />
     <fillColor value="#ff00ff00" />
 </shape>"##,
-        tests: ["basic_shape.amproj"],
+        tests: ["basic/shape/shape.amproj"],
         fields: [
             define_field! {
                 name: "size",

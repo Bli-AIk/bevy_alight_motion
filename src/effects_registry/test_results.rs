@@ -98,8 +98,10 @@ impl TestResults {
 
     /// 获取某个测试的结果 / Get result for a specific test
     pub fn get_result(&self, test_name: &str) -> Option<&TestResult> {
-        // 尝试带 .amproj 后缀和不带后缀的查找
-        // Try with and without .amproj suffix
+        // test_name 可能是 "basic/shape/shape.amproj" 或 "basic/shape/shape"
+        // 需要移除 .amproj 后缀
+        // test_name can be "basic/shape/shape.amproj" or "basic/shape/shape"
+        // Need to remove .amproj suffix
         let name_without_ext = test_name.trim_end_matches(".amproj");
         self.results
             .get(name_without_ext)

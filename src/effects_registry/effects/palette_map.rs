@@ -24,7 +24,7 @@ define_effect! {
     <property name="shades" type="bool" value="false" />
     <property name="alpha" type="float" value="1.0" />
 </effect>"##,
-    tests: ["fx_5_palette.amproj"],
+    tests: ["effects/palette/basic.amproj"],
     fields: [
         define_field! {
             name: "color1",

@@ -24,12 +24,12 @@ define_effect! {
     <property name="smooth" type="float" value="0.0" />
 </effect>"#,
     tests: [
-        "fx_1_stretch_segment.amproj",
-        "fx_1_ex_stretch_segment.amproj",
-        "fx_1_ex2_stretch_segment.amproj",
-        "fx_1_ex3_stretch_segment.amproj",
-        "fx_1_ex4_stretch_segment.amproj",
-        "fx_1_ex5_stretch_segment.amproj",
+        "effects/stretch-segment/basic.amproj",
+        "effects/stretch-segment/ex.amproj",
+        "effects/stretch-segment/ex2.amproj",
+        "effects/stretch-segment/ex3.amproj",
+        "effects/stretch-segment/ex4.amproj",
+        "effects/stretch-segment/ex5.amproj",
     ],
     fields: [
         define_field! {

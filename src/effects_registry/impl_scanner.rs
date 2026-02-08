@@ -46,9 +46,9 @@ pub struct EffectTestFiles {
 /// 只扫描被 git 追踪的文件，遵守 .gitignore 规则
 /// Only scans git-tracked files, respects .gitignore rules
 pub fn scan_amproj_files(assets_dir: &Path) -> Result<EffectTestFiles, String> {
-    let am_dir = assets_dir.join("am");
-    if !am_dir.exists() {
-        return Err(format!("Directory not found: {}", am_dir.display()));
+    let projects_dir = assets_dir.join("projects");
+    if !projects_dir.exists() {
+        return Err(format!("Directory not found: {}", projects_dir.display()));
     }
 
     let mut effect_map: HashMap<String, HashSet<String>> = HashMap::new();
@@ -56,10 +56,10 @@ pub fn scan_amproj_files(assets_dir: &Path) -> Result<EffectTestFiles, String> {
 
     // 使用 git ls-files 获取被追踪的文件列表
     // Use git ls-files to get tracked files list
-    let tracked_files = get_git_tracked_amproj_files(&am_dir)?;
+    let tracked_files = get_git_tracked_amproj_files(&projects_dir)?;
 
     for filename in tracked_files {
-        let path = am_dir.join(&filename);
+        let path = projects_dir.join(&filename);
         if path.exists() {
             total_files += 1;
 
@@ -99,32 +99,32 @@ pub fn scan_amproj_files(assets_dir: &Path) -> Result<EffectTestFiles, String> {
 
 /// 获取被 git 追踪的 amproj 文件列表
 /// Get list of git-tracked amproj files
-fn get_git_tracked_amproj_files(am_dir: &Path) -> Result<Vec<String>, String> {
+fn get_git_tracked_amproj_files(projects_dir: &Path) -> Result<Vec<String>, String> {
     use std::process::Command;
 
     // 将相对路径转换为绝对路径 / Convert relative path to absolute
-    let am_dir_abs = if am_dir.is_absolute() {
-        am_dir.to_path_buf()
+    let projects_dir_abs = if projects_dir.is_absolute() {
+        projects_dir.to_path_buf()
     } else {
         std::env::current_dir()
             .map_err(|e| format!("Failed to get current dir: {}", e))?
-            .join(am_dir)
+            .join(projects_dir)
     };
 
     // 获取仓库根目录 / Get repository root
-    let repo_root = am_dir_abs
+    let repo_root = projects_dir_abs
         .ancestors()
         .find(|p| p.join(".git").exists())
-        .ok_or_else(|| format!("Not in a git repository: {}", am_dir_abs.display()))?;
+        .ok_or_else(|| format!("Not in a git repository: {}", projects_dir_abs.display()))?;
 
     // 计算相对路径 / Calculate relative path
-    let rel_path = am_dir_abs
+    let rel_path = projects_dir_abs
         .strip_prefix(repo_root)
         .map_err(|_| "Failed to calculate relative path")?;
 
-    // 运行 git ls-files / Run git ls-files
+    // 运行 git ls-files，使用 **/*.amproj 递归匹配 / Run git ls-files with **/*.amproj for recursive match
     let output = Command::new("/usr/bin/git")
-        .args(["ls-files", &format!("{}/*.amproj", rel_path.display())])
+        .args(["ls-files", &format!("{}/**/*.amproj", rel_path.display())])
         .current_dir(repo_root)
         .output()
         .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
@@ -136,14 +136,18 @@ fn get_git_tracked_amproj_files(am_dir: &Path) -> Result<Vec<String>, String> {
         ));
     }
 
+    // 返回相对于 projects_dir 的路径（如 basic/shape/shape.amproj）
+    // Return paths relative to projects_dir (e.g., basic/shape/shape.amproj)
+    let prefix = format!("{}/", rel_path.display());
     let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
-            // 提取文件名 / Extract filename
-            Path::new(line)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
+            // 移除前缀，保留相对路径 / Remove prefix, keep relative path
+            if line.starts_with(&prefix) {
+                Some(line[prefix.len()..].to_string())
+            } else {
+                None
+            }
         })
         .collect();
 
