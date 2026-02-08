@@ -1,21 +1,28 @@
 # Scale Assist
 
-Automatically adjusts a layer's scale to match the canvas dimensions along a specific axis.
+> ⚠️ **This documentation is auto-generated. Do not edit manually.**
+> Last tested: 2026-02-08 18:36:46
 
-- **Axis**: ✅ Supported (Horizontal or Vertical)
-- **Automatic Fit**: ✅ Supported
+Automatically adjusts layer size to fit the canvas based on the selected axis.
 
-**Associated Test Files:**
-- `fx_6_scaleassist.amproj`
+**Support Status**: ⚠️ Partially Supported
+
+- **Axis (scaleassistaxis)**: ❌ Not implemented (Scale reference axis (1=width, 2=height))
+
+**Related Test Files:**
+- `fx_6_ex_scaleassist.amproj` ❌
+- `fx_6_scaleassist.amproj` ✅
 
 ---
 
 <details>
-<summary>Technical Details & Implementation</summary>
+<summary>Technical Details</summary>
 
-### Logic
-Scale Assist calculates the ratio between the layer's source size and the project's target resolution. It then applies this ratio as a scale factor to the chosen axis.
+### XML Example
 
-### Use Case
-Commonly used to ensure background images or UI frames cover the screen correctly regardless of the source asset resolution.
+```xml
+<effect id="com.alightcreative.effects.scaleassist">
+    <property name="scaleassistaxis" type="float" value="1.0" />
+</effect>
+```
 </details>

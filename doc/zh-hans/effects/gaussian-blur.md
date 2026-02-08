@@ -1,21 +1,27 @@
 # 高斯模糊 (Gaussian Blur)
 
-用于柔化图层边缘或营造深度感的平滑像素模糊效果。
+> ⚠️ **此文档由代码自动生成，请勿手动编辑。**
+> 最近测试时间：2026-02-08 18:36:46
 
-- **强度 (Strength)**: ✅ 已支持 (像素级模糊半径)
-- **动画**: ✅ 已支持
+使用多 pass 模糊实现平滑的高斯模糊效果，支持超出原始边界的发光扩散。
+
+**支持状态**: ❌ 不支持
+
+- **模糊强度 (strength)**: ❌ 未实现 (模糊强度像素值)
 
 **关联测试文件：**
-- `fx_2_gaussian_blur.amproj`
+- `fx_2_gaussian_blur.amproj` ⏭️
 
 ---
 
 <details>
 <summary>技术细节与实现</summary>
 
-### 双 Pass 策略
-为了保持性能，我们使用了可分离的高斯滤波器（先进行水平 Pass，再进行垂直 Pass）。这将计算复杂度从 O(N²) 降低到了 O(N)。
+### XML 示例
 
-### 越界渲染
-模糊效果会扩大图层的有效渲染区域，以容纳像素在原始容器边界之外的扩散效果。
+```xml
+<effect id="com.alightcreative.effects.gaussianblur">
+    <property name="strength" type="float" value="0.0" />
+</effect>
+```
 </details>

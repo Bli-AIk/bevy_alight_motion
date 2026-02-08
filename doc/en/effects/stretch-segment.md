@@ -1,30 +1,38 @@
 # Stretch Segment
 
-UV-space deformation that stretches an image along a specified axis.
+> ⚠️ **This documentation is auto-generated. Do not edit manually.**
+> Last tested: 2026-02-08 18:36:46
 
-- **Stretch**: ✅ Supported (Pixel-based stretch)
-- **Angle**: ⚠️ Supported (Minor visual differences)
-- **Offset**: ⚠️ Supported (Split line positioning)
-- **Smooth**: ❌ Not implemented
+UV domain distortion effect that stretches the image along a dividing line. Formula: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 
-**Associated Test Files:**
-- `fx_1_stretch_segment.amproj`
-- `fx_1_ex2_stretch_segment.amproj`
-- `fx_1_ex4_stretch_segment.amproj`
+**Support Status**: ⚠️ Partially Supported
+
+- **Stretch (stretch)**: ✅ Implemented (Stretch amount (pixels))
+- **Angle (angle)**: ✅ Implemented (Dividing line angle (basic support, minor visual differences))
+- **Offset (offset)**: ✅ Implemented (Dividing line position offset (basic support, minor visual differences))
+- **Smooth (smooth)**: ✅ Implemented (Edge smoothness (not yet implemented))
+
+**Related Test Files:**
+- `fx_1_ex2_stretch_segment.amproj` ❌
+- `fx_1_ex3_stretch_segment.amproj` ❌
+- `fx_1_ex4_stretch_segment.amproj` ✅
+- `fx_1_ex5_stretch_segment.amproj` ❌
+- `fx_1_ex_stretch_segment.amproj` ❌
+- `fx_1_stretch_segment.amproj` ❌
 
 ---
 
 <details>
-<summary>Technical Details & Implementation</summary>
+<summary>Technical Details</summary>
 
-### Stretching Formula
-To match AM's behavior, we use a specific divisor for the stretch factor:
-`base_divisor = original_width / 5.76`
-`stretch_factor = 1.0 + stretch_pixels / base_divisor`
+### XML Example
 
-### Shader Implementation
-Implemented in `unified_effect.wgsl`. The vertex shader expands the bounding box, and the fragment shader performs the UV mapping.
-
-### Bounding Box
-Precise AABB calculation is performed on the CPU to ensure the expanded layer isn't culled prematurely.
+```xml
+<effect id="com.alightcreative.effects.stretchsegment">
+    <property name="stretch" type="float" value="0.0" />
+    <property name="angle" type="float" value="0.0" />
+    <property name="offset" type="float" value="0.0" />
+    <property name="smooth" type="float" value="0.0" />
+</effect>
+```
 </details>

@@ -1,23 +1,41 @@
 # Palette Map
 
-Maps image grayscale values to a custom color palette.
+> ⚠️ **This documentation is auto-generated. Do not edit manually.**
+> Last tested: 2026-02-08 18:36:46
 
-- **Colors (1-8)**: ✅ Supported
-- **Count**: ✅ Supported
-- **Shades**: ⚠️ Basic support (Gradient interpolation)
-- **Alpha**: ✅ Supported (Effect intensity)
+Maps image colors to specified palette colors. Supports up to 8 palette colors.
 
-**Associated Test Files:**
-- `fx_5_palette.amproj`
+**Support Status**: ❌ Not Supported
+
+- **Color 1 (color1)**: ✅ Implemented (Palette color 1)
+- **Color 2 (color2)**: ✅ Implemented (Palette color 2)
+- **Color 3 (color3)**: ✅ Implemented (Palette color 3 (optional))
+- **Color 4 (color4)**: ✅ Implemented (Palette color 4 (optional))
+- **Color 5 (color5)**: ✅ Implemented (Palette color 5 (optional))
+- **Color 6 (color6)**: ✅ Implemented (Palette color 6 (optional))
+- **Color 7 (color7)**: ✅ Implemented (Palette color 7 (optional))
+- **Color 8 (color8)**: ✅ Implemented (Palette color 8 (optional))
+- **Color Count (count)**: ❌ Not implemented (Number of colors to use)
+- **Shades Mode (shades)**: ✅ Implemented (Enable shade gradients (basic support, color transition differs slightly from AM))
+- **Alpha (alpha)**: ✅ Implemented (Effect blend strength)
+
+**Related Test Files:**
+- `fx_5_palette.amproj` ❌
 
 ---
 
 <details>
-<summary>Technical Details & Implementation</summary>
+<summary>Technical Details</summary>
 
-### Remapping Logic
-Grayscale intensity (0.0 to 1.0) is used as an index into the provided color array.
+### XML Example
 
-### Shading
-If `Shades` is enabled, we perform linear interpolation between the colors. Currently, there may be slight differences in the gradient ramp compared to AM.
+```xml
+<effect id="com.alightcreative.effects.palettemap">
+    <property name="color1" type="color" value="#ff000000" />
+    <property name="color2" type="color" value="#ffffffff" />
+    <property name="count" type="float" value="2.0" />
+    <property name="shades" type="bool" value="false" />
+    <property name="alpha" type="float" value="1.0" />
+</effect>
+```
 </details>

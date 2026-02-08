@@ -1,0 +1,30 @@
+{
+  "com.alightcreative.effects.gaussianblur": {
+    "implemented_fields": [],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.palettemap": {
+    "implemented_fields": ["alpha", "palette", "shades"],
+    "pattern_fields": ["color*"]
+  },
+  "com.alightcreative.effects.scaleassist": {
+    "implemented_fields": ["axis", "scale", "damp"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.stretchsegment": {
+    "implemented_fields": ["angle", "stretch", "offset", "smooth"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.transform2": {
+    "implemented_fields": ["posx", "posy"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.wipe2": {
+    "implemented_fields": ["start", "end", "angle", "feather"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.replacecolor": {
+    "implemented_fields": ["oldcolor", "newcolor", "threshold", "feather", "alpha", "lockLuminance"],
+    "pattern_fields": []
+  }
+}

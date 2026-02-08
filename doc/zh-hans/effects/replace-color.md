@@ -1,23 +1,37 @@
 # 颜色替换 (Replace Color)
 
-在给定的容差范围内，将指定的源颜色替换为目标颜色。
+> ⚠️ **此文档由代码自动生成，请勿手动编辑。**
+> 最近测试时间：2026-02-08 18:36:46
 
-- **源颜色/目标颜色**: ✅ 已支持
-- **阈值 (Threshold)**: ✅ 已支持 (容差)
-- **羽化 (Feather)**: ✅ 已支持 (边缘柔和)
-- **锁定亮度**: ✅ 已支持
+在给定的容差范围内，将指定的源颜色替换为目标颜色。支持 sRGB 到线性颜色空间转换和动画关键帧。
+
+**支持状态**: ✅ 完全支持
+
+- **旧颜色 (oldcolor)**: ✅ 已实现 (要替换的源颜色)
+- **新颜色 (newcolor)**: ✅ 已实现 (替换后的目标颜色)
+- **阈值 (threshold)**: ✅ 已实现 (颜色匹配容差)
+- **羽化 (feather)**: ✅ 已实现 (边缘过渡柔和度)
+- **透明度 (alpha)**: ✅ 已实现 (效果强度)
+- **锁定亮度 (lockluminance)**: ❌ 未实现 (保持原始像素的亮度)
 
 **关联测试文件：**
-- `fx_8_replace_color.amproj`
+- `fx_8_replace_color.amproj` ✅
 
 ---
 
 <details>
 <summary>技术细节与实现</summary>
 
-### 比较逻辑
-我们在 RGB 颜色空间中计算像素颜色与 `oldcolor` 之间的距离。
+### XML 示例
 
-### 锁定亮度
-启用后，目标颜色的亮度会被调整为与原始像素亮度一致，从而保留纹理和阴影细节。
+```xml
+<effect id="com.alightcreative.replacecolor">
+    <property name="oldcolor" type="color" value="#ffff0000" />
+    <property name="newcolor" type="color" value="#ff00ff00" />
+    <property name="threshold" type="float" value="0.1" />
+    <property name="feather" type="float" value="0.0" />
+    <property name="alpha" type="float" value="1.0" />
+    <property name="lockluminance" type="bool" value="false" />
+</effect>
+```
 </details>

@@ -1,5 +1,9 @@
 /target
 
+# WASM build artifacts (too large for git)
+*.wasm
+doc/public/wasm/
+
 # JetBrains Rider
 *.sln.iml
 # JetBrains Rider / IntelliJ IDEA
@@ -48,3 +52,4 @@ complex_*.mp4
 _video_frames/
 
 reports/
+check.txt

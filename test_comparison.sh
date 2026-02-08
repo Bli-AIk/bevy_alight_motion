@@ -269,6 +269,68 @@ echo "Passed:  $PASSED_COUNT"
 echo "Skipped: $SKIPPED_COUNT"
 echo "Failed:  $FAILED_COUNT"
 
+# Generate JSON results file
+JSON_OUTPUT="${BASE_DIR}/test_results.json"
+echo "{"
+echo "  \"timestamp\": \"$(date -Iseconds)\","
+echo "  \"summary\": {"
+echo "    \"passed\": $PASSED_COUNT,"
+echo "    \"skipped\": $SKIPPED_COUNT,"
+echo "    \"failed\": $FAILED_COUNT"
+echo "  },"
+echo "  \"results\": {"
+
+JSON_ENTRIES=""
+for result_file in "$RESULTS_DIR"/*.result; do
+    if [ -f "$result_file" ]; then
+        IFS='|' read -r status name avg_details frame_details < "$result_file"
+        
+        # Extract similarity value from avg_details if present
+        avg_sim=""
+        if [ -n "$avg_details" ]; then
+            avg_sim=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
+        fi
+        
+        # Convert status to lowercase
+        status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
+        
+        # Build JSON entry
+        entry="    \"$name\": { \"status\": \"$status_lower\""
+        if [ -n "$avg_sim" ]; then
+            entry="$entry, \"avg_similarity\": $avg_sim"
+        fi
+        entry="$entry }"
+        
+        if [ -n "$JSON_ENTRIES" ]; then
+            JSON_ENTRIES="$JSON_ENTRIES,\n$entry"
+        else
+            JSON_ENTRIES="$entry"
+        fi
+    fi
+done
+
+echo -e "$JSON_ENTRIES"
+echo "  }"
+echo "}" > "$JSON_OUTPUT"
+
+# Also write pretty JSON
+{
+    echo "{"
+    echo "  \"timestamp\": \"$(date -Iseconds)\","
+    echo "  \"summary\": {"
+    echo "    \"passed\": $PASSED_COUNT,"
+    echo "    \"skipped\": $SKIPPED_COUNT,"
+    echo "    \"failed\": $FAILED_COUNT"
+    echo "  },"
+    echo "  \"results\": {"
+    echo -e "$JSON_ENTRIES"
+    echo "  }"
+    echo "}"
+} > "$JSON_OUTPUT"
+
+echo ""
+echo "📄 JSON results saved to: $JSON_OUTPUT"
+
 if [ $FAILED_COUNT -gt 0 ]; then
     echo -e "Failed Examples:$FAILED_EXAMPLES"
     exit 1
