@@ -6,6 +6,8 @@
 
 Basic rectangle shape, supports SDF and sprite rendering.
 
+**Support Status**: ⚠️ Partially Supported
+
 - **Size (size)**: ✅ Supported (Width and height of the shape)
 
 **Related Test Files:**
@@ -31,6 +33,4 @@ Basic rectangle shape, supports SDF and sprite rendering.
     <fillColor value="#ffff0000" />
 </shape>
 ```
-
-**Computed Support Status**: ⚠️ Partially Supported
 </details>

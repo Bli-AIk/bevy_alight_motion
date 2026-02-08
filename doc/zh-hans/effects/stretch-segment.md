@@ -6,6 +6,8 @@
 
 UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 
+**支持状态**: ⚠️ 部分支持
+
 - **拉伸 (stretch)**: ✅ 已支持 (拉伸量（像素）)
 - **角度 (angle)**: ⚠️ 基础支持 (分割线角度（基本支持，存在轻微视觉差异）)
 - **偏移 (offset)**: ⚠️ 基础支持 (分割线位置偏移（基本支持，存在轻微视觉差异）)
@@ -34,6 +36,4 @@ UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_w
     <property name="smooth" type="float" value="0.0" />
 </effect>
 ```
-
-**计算的支持状态**: ⚠️ 部分支持
 </details>

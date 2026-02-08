@@ -6,6 +6,8 @@
 
 Provides additional transform controls similar to the base transform properties.
 
+**Support Status**: ❌ Not Supported
+
 - **X Offset (posx)**: ✅ Supported (Additional horizontal offset)
 - **Y Offset (posy)**: ✅ Supported (Additional vertical offset)
 
@@ -22,6 +24,4 @@ Provides additional transform controls similar to the base transform properties.
     <property name="posy" type="float" value="0.0" />
 </effect>
 ```
-
-**Computed Support Status**: ❌ Not Supported
 </details>

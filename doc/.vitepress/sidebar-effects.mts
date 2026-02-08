@@ -28,7 +28,7 @@ export const enEffects = {
 };
 
 export const zhHansBuiltins = {
-  text: '基础功能',
+  text: '图形元素',
   items: [
     { text: '矩形', link: '/zh-hans/builtins/rect' },
     { text: '圆形', link: '/zh-hans/builtins/circle' },
@@ -40,7 +40,7 @@ export const zhHansBuiltins = {
 };
 
 export const enBuiltins = {
-  text: 'Basic Features',
+  text: 'Graphics Elements',
   items: [
     { text: 'Rectangle', link: '/en/builtins/rect' },
     { text: 'Circle', link: '/en/builtins/circle' },

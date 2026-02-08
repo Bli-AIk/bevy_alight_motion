@@ -1,8 +1,8 @@
 ---
-title: Playground
+title: 试玩场
 ---
 
-# 🎮 Playground
+# 🎮 试玩场
 
 <script setup>
 import { onMounted } from 'vue'

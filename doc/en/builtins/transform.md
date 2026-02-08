@@ -6,6 +6,8 @@
 
 Basic transform properties for layers including position, rotation, scale, opacity and anchor. Coordinate system: AM uses top-left origin, Bevy uses center origin, the library converts automatically.
 
+**Support Status**: ✅ Fully Supported
+
 - **Location (location)**: ✅ Supported (Layer position (x, y, z))
 - **Rotation (rotation)**: ✅ Supported (Z-axis rotation angle (degrees))
 - **Scale (scale)**: ✅ Supported (Scale factor (x, y))
@@ -33,6 +35,4 @@ Basic transform properties for layers including position, rotation, scale, opaci
     <opacity value="0.8" />
 </transform>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>

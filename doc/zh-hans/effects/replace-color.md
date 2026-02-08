@@ -6,6 +6,8 @@
 
 在给定的容差范围内，将指定的源颜色替换为目标颜色。支持 sRGB 到线性颜色空间转换和动画关键帧。
 
+**支持状态**: ✅ 完全支持
+
 - **旧颜色 (oldcolor)**: ✅ 已支持 (要替换的源颜色)
 - **新颜色 (newcolor)**: ✅ 已支持 (替换后的目标颜色)
 - **阈值 (threshold)**: ✅ 已支持 (颜色匹配容差)
@@ -33,6 +35,4 @@
     <property name="lockluminance" type="bool" value="false" />
 </effect>
 ```
-
-**计算的支持状态**: ✅ 完全支持
 </details>

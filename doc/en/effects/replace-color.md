@@ -6,6 +6,8 @@
 
 Replaces a source color with a target color within a given tolerance. Supports sRGB to linear color space conversion and animation keyframes.
 
+**Support Status**: ✅ Fully Supported
+
 - **Old Color (oldcolor)**: ✅ Supported (The source color to replace)
 - **New Color (newcolor)**: ✅ Supported (The target color to replace with)
 - **Threshold (threshold)**: ✅ Supported (Color matching tolerance)
@@ -33,6 +35,4 @@ Replaces a source color with a target color within a given tolerance. Supports s
     <property name="lockluminance" type="bool" value="false" />
 </effect>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>

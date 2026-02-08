@@ -6,6 +6,8 @@
 
 Maps image colors to specified palette colors. Supports up to 8 palette colors.
 
+**Support Status**: ✅ Fully Supported
+
 - **Color 1 (color1)**: ✅ Supported (Palette color 1)
 - **Color 2 (color2)**: ✅ Supported (Palette color 2)
 - **Color 3 (color3)**: ✅ Supported (Palette color 3 (optional))
@@ -37,6 +39,4 @@ Maps image colors to specified palette colors. Supports up to 8 palette colors.
     <property name="alpha" type="float" value="1.0" />
 </effect>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>

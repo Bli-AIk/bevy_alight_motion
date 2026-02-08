@@ -6,6 +6,8 @@
 
 Covers rectangular segments from opposite sides of the layer. Use keyframe animation to create wipe transitions.
 
+**Support Status**: ❌ Not Supported
+
 - **Start (start)**: ✅ Supported (Visible range start point (0.0-1.0))
 - **End (end)**: ✅ Supported (Visible range end point (0.0-1.0))
 - **Angle (angle)**: ✅ Supported (Wipe direction angle)
@@ -26,6 +28,4 @@ Covers rectangular segments from opposite sides of the layer. Use keyframe anima
     <property name="feather" type="float" value="0.0" />
 </effect>
 ```
-
-**Computed Support Status**: ❌ Not Supported
 </details>

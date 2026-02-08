@@ -6,6 +6,8 @@
 
 UV domain distortion effect that stretches the image along a dividing line. Formula: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 
+**Support Status**: ⚠️ Partially Supported
+
 - **Stretch (stretch)**: ✅ Supported (Stretch amount (pixels))
 - **Angle (angle)**: ⚠️ Basic support (Dividing line angle (basic support, minor visual differences))
 - **Offset (offset)**: ⚠️ Basic support (Dividing line position offset (basic support, minor visual differences))
@@ -34,6 +36,4 @@ UV domain distortion effect that stretches the image along a dividing line. Form
     <property name="smooth" type="float" value="0.0" />
 </effect>
 ```
-
-**Computed Support Status**: ⚠️ Partially Supported
 </details>

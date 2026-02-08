@@ -96,6 +96,26 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
     };
     writeln!(doc, "\n{}\n", desc).unwrap();
 
+    // 支持状态（显眼位置）/ Support status (prominent position)
+    let status_text = if lang == "zh-hans" {
+        format!(
+            "{} {}",
+            support_level.icon(),
+            support_level.description_zh()
+        )
+    } else {
+        format!(
+            "{} {}",
+            support_level.icon(),
+            support_level.description_en()
+        )
+    };
+    if lang == "zh-hans" {
+        writeln!(doc, "**支持状态**: {}\n", status_text).unwrap();
+    } else {
+        writeln!(doc, "**Support Status**: {}\n", status_text).unwrap();
+    }
+
     // 属性列表（使用新格式）/ Properties list (new format)
     for field in effect.fields {
         write_field_line(&mut doc, field, lang);
@@ -143,26 +163,6 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
         writeln!(doc, "\n### XML Example\n").unwrap();
     }
     writeln!(doc, "```xml\n{}\n```", effect.xml_example).unwrap();
-
-    // 支持级别详情 / Support level details
-    let status_text = if lang == "zh-hans" {
-        format!(
-            "{} {}",
-            support_level.icon(),
-            support_level.description_zh()
-        )
-    } else {
-        format!(
-            "{} {}",
-            support_level.icon(),
-            support_level.description_en()
-        )
-    };
-    if lang == "zh-hans" {
-        writeln!(doc, "\n**计算的支持状态**: {}", status_text).unwrap();
-    } else {
-        writeln!(doc, "\n**Computed Support Status**: {}", status_text).unwrap();
-    }
 
     writeln!(doc, "</details>").unwrap();
 
@@ -279,6 +279,26 @@ pub fn generate_builtin_doc(
     };
     writeln!(doc, "\n{}\n", desc).unwrap();
 
+    // 支持状态（显眼位置）/ Support status (prominent position)
+    let status_text = if lang == "zh-hans" {
+        format!(
+            "{} {}",
+            support_level.icon(),
+            support_level.description_zh()
+        )
+    } else {
+        format!(
+            "{} {}",
+            support_level.icon(),
+            support_level.description_en()
+        )
+    };
+    if lang == "zh-hans" {
+        writeln!(doc, "**支持状态**: {}\n", status_text).unwrap();
+    } else {
+        writeln!(doc, "**Support Status**: {}\n", status_text).unwrap();
+    }
+
     // 属性列表 / Properties list
     for field in builtin.fields {
         write_field_line(&mut doc, field, lang);
@@ -325,25 +345,6 @@ pub fn generate_builtin_doc(
         writeln!(doc, "\n### XML Example\n").unwrap();
     }
     writeln!(doc, "```xml\n{}\n```", builtin.xml_example).unwrap();
-
-    let status_text = if lang == "zh-hans" {
-        format!(
-            "{} {}",
-            support_level.icon(),
-            support_level.description_zh()
-        )
-    } else {
-        format!(
-            "{} {}",
-            support_level.icon(),
-            support_level.description_en()
-        )
-    };
-    if lang == "zh-hans" {
-        writeln!(doc, "\n**计算的支持状态**: {}", status_text).unwrap();
-    } else {
-        writeln!(doc, "\n**Computed Support Status**: {}", status_text).unwrap();
-    }
 
     writeln!(doc, "</details>").unwrap();
 
@@ -733,7 +734,7 @@ pub fn generate_vitepress_sidebar_snippet(
 
     // 中文内置功能
     writeln!(output, "export const zhHansBuiltins = {{").unwrap();
-    writeln!(output, "  text: '基础功能',").unwrap();
+    writeln!(output, "  text: '图形元素',").unwrap();
     writeln!(output, "  items: [").unwrap();
     for (i, builtin) in builtins.iter().enumerate() {
         let comma = if i < builtins.len() - 1 { "," } else { "" };
@@ -750,7 +751,7 @@ pub fn generate_vitepress_sidebar_snippet(
 
     // 英文内置功能
     writeln!(output, "export const enBuiltins = {{").unwrap();
-    writeln!(output, "  text: 'Basic Features',").unwrap();
+    writeln!(output, "  text: 'Graphics Elements',").unwrap();
     writeln!(output, "  items: [").unwrap();
     for (i, builtin) in builtins.iter().enumerate() {
         let comma = if i < builtins.len() - 1 { "," } else { "" };

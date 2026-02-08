@@ -6,6 +6,8 @@
 
 Fills the shape with a solid color. Color format is #AARRGGBB.
 
+**Support Status**: ✅ Fully Supported
+
 - **Fill Color (fillColor)**: ✅ Supported (Fill color value (#AARRGGBB format))
 
 **Related Test Files:**
@@ -23,6 +25,4 @@ Fills the shape with a solid color. Color format is #AARRGGBB.
     <fillColor value="#ffff0000" />
 </shape>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>

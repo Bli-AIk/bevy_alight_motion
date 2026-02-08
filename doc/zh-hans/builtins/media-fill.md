@@ -6,6 +6,8 @@
 
 使用图像纹理填充形状。支持 JPEG 和 PNG 格式。
 
+**支持状态**: ✅ 完全支持
+
 - **填充图像 (fillImage)**: ✅ 已支持 (图像资源 URI (amproj:filename.png))
 
 **关联测试文件：**
@@ -23,6 +25,4 @@
     <property name="size" type="vec2" value="100.0,100.0" />
 </shape>
 ```
-
-**计算的支持状态**: ✅ 完全支持
 </details>

@@ -6,6 +6,8 @@
 
 Multi-pass blur implementation for smooth Gaussian blur effect, supports glow expansion beyond original boundaries.
 
+**Support Status**: ❌ Not Supported
+
 - **Blur Strength (strength)**: ✅ Supported (Blur strength in pixels)
 
 **Related Test Files:**
@@ -23,6 +25,4 @@ Multi-pass blur implementation for smooth Gaussian blur effect, supports glow ex
     <property name="strength" type="float" value="0.0" />
 </effect>
 ```
-
-**Computed Support Status**: ❌ Not Supported
 </details>

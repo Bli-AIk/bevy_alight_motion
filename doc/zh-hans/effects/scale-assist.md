@@ -6,6 +6,8 @@
 
 根据选择的轴向自动调整图层尺寸以适应画布。
 
+**支持状态**: ⚠️ 部分支持
+
 - **轴向 (scaleassistaxis)**: ✅ 已支持 (缩放基准轴 (1=宽度, 2=高度))
 
 **关联测试文件：**
@@ -24,6 +26,4 @@
     <property name="scaleassistaxis" type="float" value="1.0" />
 </effect>
 ```
-
-**计算的支持状态**: ⚠️ 部分支持
 </details>

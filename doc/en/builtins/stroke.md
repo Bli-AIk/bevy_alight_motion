@@ -6,6 +6,8 @@
 
 Shape border stroke. Uses SDF rendering, stroke width stays constant during scale animation.
 
+**Support Status**: ⚠️ Partially Supported
+
 - **Direction (direction)**: ✅ Supported (Stroke direction (centered, inside, outside))
 - **Cap Style (cap)**: ✅ Supported (Line cap style)
 - **Join Style (join)**: ✅ Supported (Line join style (miter, round, bevel))
@@ -31,6 +33,4 @@ Shape border stroke. Uses SDF rendering, stroke width stays constant during scal
     </path-stroke>
 </shape>
 ```
-
-**Computed Support Status**: ⚠️ Partially Supported
 </details>

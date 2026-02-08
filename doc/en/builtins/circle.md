@@ -6,6 +6,8 @@
 
 Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipses.
 
+**Support Status**: ✅ Fully Supported
+
 - **Size (size)**: ✅ Supported (Width and height of the circle (non-uniform values create ellipse))
 
 **Related Test Files:**
@@ -30,6 +32,4 @@ Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipse
     <fillColor value="#ff00ff00" />
 </shape>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>

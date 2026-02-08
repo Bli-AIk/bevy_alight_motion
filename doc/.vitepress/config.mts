@@ -21,8 +21,8 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/introduction' },
+          { text: 'Graphics', link: '/en/builtins/' },
           { text: 'Effects', link: '/en/effects/' },
-          { text: 'Builtins', link: '/en/builtins/' },
           { text: 'Examples', link: '/en/examples/' },
           { text: 'Playground', link: '/en/playground/' }
         ],
@@ -47,7 +47,7 @@ export default defineConfig({
           ],
           '/en/effects/': [
             {
-              text: 'Basic Features',
+              text: 'Concepts',
               items: [
                 { text: 'Transform & Movement', link: '/en/effects/transform' },
                 { text: 'Shapes & Fills', link: '/en/effects/shapes' },
@@ -76,10 +76,10 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh-hans/guide/introduction' },
+          { text: '图形元素', link: '/zh-hans/builtins/' },
           { text: '效果', link: '/zh-hans/effects/' },
-          { text: '基础功能', link: '/zh-hans/builtins/' },
           { text: '示例', link: '/zh-hans/examples/' },
-          { text: 'Playground', link: '/zh-hans/playground/' }
+          { text: '试玩场', link: '/zh-hans/playground/' }
         ],
         sidebar: {
           '/zh-hans/guide/': [
@@ -102,7 +102,7 @@ export default defineConfig({
           ],
           '/zh-hans/effects/': [
             {
-              text: '基础功能',
+              text: '概念总览',
               items: [
                 { text: '变换与移动', link: '/zh-hans/effects/transform' },
                 { text: '形状与填充', link: '/zh-hans/effects/shapes' },

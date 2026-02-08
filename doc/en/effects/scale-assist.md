@@ -6,6 +6,8 @@
 
 Automatically adjusts layer size to fit the canvas based on the selected axis.
 
+**Support Status**: ⚠️ Partially Supported
+
 - **Axis (scaleassistaxis)**: ✅ Supported (Scale reference axis (1=width, 2=height))
 
 **Related Test Files:**
@@ -24,6 +26,4 @@ Automatically adjusts layer size to fit the canvas based on the selected axis.
     <property name="scaleassistaxis" type="float" value="1.0" />
 </effect>
 ```
-
-**Computed Support Status**: ⚠️ Partially Supported
 </details>

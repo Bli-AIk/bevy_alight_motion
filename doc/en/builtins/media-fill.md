@@ -6,6 +6,8 @@
 
 Fills the shape with an image texture. Supports JPEG and PNG formats.
 
+**Support Status**: ✅ Fully Supported
+
 - **Fill Image (fillImage)**: ✅ Supported (Image resource URI (amproj:filename.png))
 
 **Related Test Files:**
@@ -23,6 +25,4 @@ Fills the shape with an image texture. Supports JPEG and PNG formats.
     <property name="size" type="vec2" value="100.0,100.0" />
 </shape>
 ```
-
-**Computed Support Status**: ✅ Fully Supported
 </details>
