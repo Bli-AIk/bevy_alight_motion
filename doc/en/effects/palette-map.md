@@ -1,12 +1,11 @@
 # Palette Map
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2025-02-08 14:00:00
-> ⚠️ **Warning: Test data is stale (over 1 day(s) old). Please re-run tests.**
+> Last tested: 2026-02-08 14:15:04
 
 Maps image colors to specified palette colors. Supports up to 8 palette colors.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Color 1 (color1)**: ✅ Supported (Palette color 1)
 - **Color 2 (color2)**: ✅ Supported (Palette color 2)
@@ -21,7 +20,7 @@ Maps image colors to specified palette colors. Supports up to 8 palette colors.
 - **Alpha (alpha)**: ✅ Supported (Effect blend strength)
 
 **Related Test Files:**
-- `fx_5_palette.amproj` ✅
+- `fx_5_palette.amproj` ❌
 
 ---
 

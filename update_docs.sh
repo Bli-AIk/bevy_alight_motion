@@ -2,7 +2,8 @@
 # update_docs.sh - 自动化测试和文档生成脚本
 # Automated testing and documentation generation script
 
-set -e
+# 注意：不使用 set -e，因为测试脚本在有失败测试时会返回非零退出码
+# Note: Not using set -e because test script returns non-zero on test failures
 
 # 颜色定义 / Color definitions
 RED='\033[0;31m'
