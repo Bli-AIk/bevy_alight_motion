@@ -66,7 +66,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
-import { useData } from 'vitepress'
+import { useData, withBase } from 'vitepress'
 import FileUploader from './FileUploader.vue'
 import ValidationReport from './ValidationReport.vue'
 import { useConsoleCapture } from '../composables/useConsoleCapture'
@@ -124,7 +124,8 @@ const { validationReport, logs, clearLogs } = useConsoleCapture()
 // 检查 WASM 文件是否存在
 const checkWasmExists = async (): Promise<boolean> => {
   try {
-    const response = await fetch('/wasm/bevy_alight_motion.js', { method: 'HEAD' })
+    const wasmPath = withBase('/wasm/bevy_alight_motion.js')
+    const response = await fetch(wasmPath, { method: 'HEAD' })
     return response.ok
   } catch {
     return false
@@ -134,7 +135,7 @@ const checkWasmExists = async (): Promise<boolean> => {
 // 加载 WASM 模块
 const loadWasm = async (): Promise<boolean> => {
   return new Promise((resolve) => {
-    const wasmUrl = '/wasm/bevy_alight_motion.js'
+    const wasmUrl = withBase('/wasm/bevy_alight_motion.js')
     
     const script = document.createElement('script')
     script.type = 'module'
