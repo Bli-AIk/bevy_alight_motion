@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'doc/**'
+      - 'wasm/**'
+      - 'src/**'
+      - 'assets/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -33,6 +36,26 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: doc/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+
+      - name: Build WASM
+        working-directory: wasm
+        run: |
+          export BEVY_ASSET_PATH="$(cd .. && pwd)/assets"
+          cargo build --target wasm32-unknown-unknown --release
+          mkdir -p ../doc/public/wasm
+          wasm-bindgen \
+            --target web \
+            --out-dir ../doc/public/wasm \
+            --out-name bevy_alight_motion \
+            ./target/wasm32-unknown-unknown/release/bevy_alight_motion_wasm.wasm
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
