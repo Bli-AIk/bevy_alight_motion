@@ -1,7 +1,7 @@
 # Replace Color
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-08 14:15:04
+> Last tested: 2026-02-08 18:36:46
 
 Replaces a source color with a target color within a given tolerance. Supports sRGB to linear color space conversion and animation keyframes.
 
