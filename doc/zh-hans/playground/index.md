@@ -32,4 +32,4 @@ onMounted(() => {
 
 ## 支持的特性
 
-详见 [已实现特性列表](/zh-hans/implemented-features)
+详见 [效果列表](/zh-hans/effects/)
