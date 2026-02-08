@@ -1,21 +1,28 @@
 # 缩放辅助 (Scale Assist)
 
-自动调整图层的缩放比例，使其在指定轴向上适配画布尺寸。
+> ⚠️ **此文档由代码自动生成，请勿手动编辑。**
+> 最近测试时间：2026-02-08 18:36:46
 
-- **轴向**: ✅ 已支持 (水平或垂直)
-- **自动适配**: ✅ 已支持
+根据选择的轴向自动调整图层尺寸以适应画布。
+
+**支持状态**: ⚠️ 部分支持
+
+- **轴向 (scaleassistaxis)**: ❌ 未实现 (缩放基准轴 (1=宽度, 2=高度))
 
 **关联测试文件：**
-- `fx_6_scaleassist.amproj`
+- `fx_6_ex_scaleassist.amproj` ❌
+- `fx_6_scaleassist.amproj` ✅
 
 ---
 
 <details>
 <summary>技术细节与实现</summary>
 
-### 实现逻辑
-缩放辅助计算图层原始尺寸与项目目标分辨率之间的比例。然后将该比例作为缩放因子应用到所选的轴向上。
+### XML 示例
 
-### 使用场景
-通常用于确保背景图像或 UI 边框无论原始资源分辨率如何，都能正确覆盖屏幕。
+```xml
+<effect id="com.alightcreative.effects.scaleassist">
+    <property name="scaleassistaxis" type="float" value="1.0" />
+</effect>
+```
 </details>

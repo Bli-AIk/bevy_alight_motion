@@ -1,23 +1,41 @@
 # 调色板映射 (Palette Map)
 
-将图像的灰度值映射到自定义的颜色调色板。
+> ⚠️ **此文档由代码自动生成，请勿手动编辑。**
+> 最近测试时间：2026-02-08 18:36:46
 
-- **颜色 (1-8)**: ✅ 已支持
-- **数量 (Count)**: ✅ 已支持
-- **渐变 (Shades)**: ⚠️ 基础支持 (插值过渡)
-- **强度 (Alpha)**: ✅ 已支持 (效果混合强度)
+将图像颜色映射到指定的调色板颜色。支持最多 8 个调色板颜色。
+
+**支持状态**: ❌ 不支持
+
+- **颜色 1 (color1)**: ✅ 已实现 (调色板颜色 1)
+- **颜色 2 (color2)**: ✅ 已实现 (调色板颜色 2)
+- **颜色 3 (color3)**: ✅ 已实现 (调色板颜色 3（可选）)
+- **颜色 4 (color4)**: ✅ 已实现 (调色板颜色 4（可选）)
+- **颜色 5 (color5)**: ✅ 已实现 (调色板颜色 5（可选）)
+- **颜色 6 (color6)**: ✅ 已实现 (调色板颜色 6（可选）)
+- **颜色 7 (color7)**: ✅ 已实现 (调色板颜色 7（可选）)
+- **颜色 8 (color8)**: ✅ 已实现 (调色板颜色 8（可选）)
+- **颜色数量 (count)**: ❌ 未实现 (使用的颜色数量)
+- **阴影模式 (shades)**: ✅ 已实现 (是否启用阴影渐变（基础支持，颜色过渡算法与 AM 存在细微差异）)
+- **混合强度 (alpha)**: ✅ 已实现 (效果混合强度)
 
 **关联测试文件：**
-- `fx_5_palette.amproj`
+- `fx_5_palette.amproj` ❌
 
 ---
 
 <details>
 <summary>技术细节与实现</summary>
 
-### 映射逻辑
-灰度强度（0.0 到 1.0）被用作索引来访问提供的颜色数组。
+### XML 示例
 
-### 阴影/渐变
-如果启用了 `Shades`，我们会在颜色之间进行线性插值。目前，渐变曲线与 AM 相比可能存在微小差异。
+```xml
+<effect id="com.alightcreative.effects.palettemap">
+    <property name="color1" type="color" value="#ff000000" />
+    <property name="color2" type="color" value="#ffffffff" />
+    <property name="count" type="float" value="2.0" />
+    <property name="shades" type="bool" value="false" />
+    <property name="alpha" type="float" value="1.0" />
+</effect>
+```
 </details>

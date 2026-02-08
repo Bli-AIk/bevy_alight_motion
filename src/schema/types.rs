@@ -48,9 +48,9 @@ pub struct AmScene {
     #[serde(rename = "@bgcolor", default = "default_bgcolor")]
     pub bgcolor: String,
 
-    /// AM version number.
+    /// AM version number. Can be negative for certain builds.
     #[serde(rename = "@amver", default)]
-    pub amver: u32,
+    pub amver: i32,
 
     /// Time remapping strategy.
     #[serde(rename = "@retime", default)]

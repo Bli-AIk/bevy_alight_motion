@@ -1,0 +1,6 @@
+# Build output
+/target
+
+# Cargo.lock is optional for library crates, but this is a binary/cdylib
+# Keep it if you want reproducible builds, ignore if you want latest deps
+# Cargo.lock

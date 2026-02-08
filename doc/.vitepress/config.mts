@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { zhHansEffects, enEffects, zhHansBuiltins, enBuiltins } from './sidebar-effects.mts'
 
 export default defineConfig({
   title: "bevy_alight_motion",
@@ -20,8 +21,10 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/introduction' },
+          { text: 'Graphics', link: '/en/builtins/' },
           { text: 'Effects', link: '/en/effects/' },
-          { text: 'Examples', link: '/en/examples/' }
+          { text: 'Examples', link: '/en/examples/' },
+          { text: 'Playground', link: '/en/playground/' }
         ],
         sidebar: {
           '/en/guide/': [
@@ -44,7 +47,7 @@ export default defineConfig({
           ],
           '/en/effects/': [
             {
-              text: 'Basic Features',
+              text: 'Concepts',
               items: [
                 { text: 'Transform & Movement', link: '/en/effects/transform' },
                 { text: 'Shapes & Fills', link: '/en/effects/shapes' },
@@ -52,24 +55,15 @@ export default defineConfig({
                 { text: 'Easings', link: '/en/effects/easings' }
               ]
             },
-            {
-              text: 'Advanced Effects',
-              items: [
-                { text: 'Wipe', link: '/en/effects/wipe' },
-                { text: 'Gaussian Blur', link: '/en/effects/gaussian-blur' },
-                { text: 'Stretch Segment', link: '/en/effects/stretch-segment' },
-                { text: 'Palette Map', link: '/en/effects/palette-map' },
-                { text: 'Replace Color', link: '/en/effects/replace-color' },
-                { text: 'Scale Assist', link: '/en/effects/scale-assist' }
-              ]
-            },
+            enEffects,
             {
               text: 'Masking',
               items: [
                 { text: 'Layer Masks', link: '/en/effects/masking' }
               ]
             }
-          ]
+          ],
+          '/en/builtins/': enBuiltins
         }
       }
     },
@@ -80,8 +74,10 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh-hans/guide/introduction' },
+          { text: '图形元素', link: '/zh-hans/builtins/' },
           { text: '效果', link: '/zh-hans/effects/' },
-          { text: '示例', link: '/zh-hans/examples/' }
+          { text: '示例', link: '/zh-hans/examples/' },
+          { text: '试玩场', link: '/zh-hans/playground/' }
         ],
         sidebar: {
           '/zh-hans/guide/': [
@@ -104,7 +100,7 @@ export default defineConfig({
           ],
           '/zh-hans/effects/': [
             {
-              text: '基础功能',
+              text: '概念总览',
               items: [
                 { text: '变换与移动', link: '/zh-hans/effects/transform' },
                 { text: '形状与填充', link: '/zh-hans/effects/shapes' },
@@ -112,24 +108,15 @@ export default defineConfig({
                 { text: '缓动曲线', link: '/zh-hans/effects/easings' }
               ]
             },
-            {
-              text: '高级效果',
-              items: [
-                { text: '擦拭 (Wipe)', link: '/zh-hans/effects/wipe' },
-                { text: '高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
-                { text: '拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
-                { text: '调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
-                { text: '颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
-                { text: '缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' }
-              ]
-            },
+            zhHansEffects,
             {
               text: '遮罩',
               items: [
                 { text: '图层遮罩', link: '/zh-hans/effects/masking' }
               ]
             }
-          ]
+          ],
+          '/zh-hans/builtins/': zhHansBuiltins
         }
       }
     }
@@ -157,7 +144,7 @@ export default defineConfig({
       }
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-repo/bevy_alight_motion' }
+      { icon: 'github', link: 'https://github.com/Bli-AIk/bevy_alight_motion' }
     ],
     footer: {
       message: 'Released under the MIT License.',

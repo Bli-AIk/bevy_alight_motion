@@ -4,7 +4,7 @@
 
 ```toml
 [dependencies]
-bevy_alight_motion = { git = "https://github.com/your-repo/bevy_alight_motion" }
+bevy_alight_motion = { git = "https://github.com/Bli-AIk/bevy_alight_motion" }
 ```
 
 ## 系统依赖 (Linux)

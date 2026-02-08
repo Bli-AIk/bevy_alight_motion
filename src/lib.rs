@@ -40,6 +40,7 @@
 
 pub mod animation;
 pub mod effects;
+pub mod effects_registry;
 pub mod error;
 pub mod gaussian_blur;
 pub mod loader;
@@ -49,6 +50,7 @@ pub mod scene;
 pub mod schema;
 pub mod sdf;
 pub mod sdf_material;
+pub mod validation;
 
 /// Prelude module for convenient imports.
 pub mod prelude {
