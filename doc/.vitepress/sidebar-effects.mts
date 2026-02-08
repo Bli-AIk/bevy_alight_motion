@@ -4,49 +4,49 @@
 export const zhHansEffects = {
   text: '高级效果',
   items: [
-    { text: '变换 (Transform2)', link: '/zh-hans/effects/transform2' },
-    { text: '擦拭 (Wipe2)', link: '/zh-hans/effects/wipe2' },
-    { text: '拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
-    { text: '高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
-    { text: '调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
-    { text: '颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
-    { text: '缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' }
+    { text: '<span style="color:#ef4444">●</span> 变换 (Transform2)', link: '/zh-hans/effects/transform2' },
+    { text: '<span style="color:#ef4444">●</span> 擦拭 (Wipe2)', link: '/zh-hans/effects/wipe2' },
+    { text: '<span style="color:#eab308">●</span> 拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
+    { text: '<span style="color:#ef4444">●</span> 高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
+    { text: '<span style="color:#ef4444">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
+    { text: '<span style="color:#22c55e">●</span> 颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
+    { text: '<span style="color:#eab308">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' }
   ]
 };
 
 export const enEffects = {
   text: 'Advanced Effects',
   items: [
-    { text: 'Transform2', link: '/en/effects/transform2' },
-    { text: 'Wipe2', link: '/en/effects/wipe2' },
-    { text: 'Stretch Segment', link: '/en/effects/stretch-segment' },
-    { text: 'Gaussian Blur', link: '/en/effects/gaussian-blur' },
-    { text: 'Palette Map', link: '/en/effects/palette-map' },
-    { text: 'Replace Color', link: '/en/effects/replace-color' },
-    { text: 'Scale Assist', link: '/en/effects/scale-assist' }
+    { text: '<span style="color:#ef4444">●</span> Transform2', link: '/en/effects/transform2' },
+    { text: '<span style="color:#ef4444">●</span> Wipe2', link: '/en/effects/wipe2' },
+    { text: '<span style="color:#eab308">●</span> Stretch Segment', link: '/en/effects/stretch-segment' },
+    { text: '<span style="color:#ef4444">●</span> Gaussian Blur', link: '/en/effects/gaussian-blur' },
+    { text: '<span style="color:#ef4444">●</span> Palette Map', link: '/en/effects/palette-map' },
+    { text: '<span style="color:#22c55e">●</span> Replace Color', link: '/en/effects/replace-color' },
+    { text: '<span style="color:#eab308">●</span> Scale Assist', link: '/en/effects/scale-assist' }
   ]
 };
 
 export const zhHansBuiltins = {
   text: '图形元素',
   items: [
-    { text: '矩形', link: '/zh-hans/builtins/rect' },
-    { text: '圆形', link: '/zh-hans/builtins/circle' },
-    { text: '颜色填充', link: '/zh-hans/builtins/color-fill' },
-    { text: '媒体填充', link: '/zh-hans/builtins/media-fill' },
-    { text: '描边', link: '/zh-hans/builtins/stroke' },
-    { text: '变换', link: '/zh-hans/builtins/transform' }
+    { text: '<span style="color:#22c55e">●</span> 矩形', link: '/zh-hans/builtins/rect' },
+    { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' },
+    { text: '<span style="color:#22c55e">●</span> 颜色填充', link: '/zh-hans/builtins/color-fill' },
+    { text: '<span style="color:#22c55e">●</span> 媒体填充', link: '/zh-hans/builtins/media-fill' },
+    { text: '<span style="color:#22c55e">●</span> 描边', link: '/zh-hans/builtins/stroke' },
+    { text: '<span style="color:#22c55e">●</span> 变换', link: '/zh-hans/builtins/transform' }
   ]
 };
 
 export const enBuiltins = {
   text: 'Graphics Elements',
   items: [
-    { text: 'Rectangle', link: '/en/builtins/rect' },
-    { text: 'Circle', link: '/en/builtins/circle' },
-    { text: 'Color Fill', link: '/en/builtins/color-fill' },
-    { text: 'Media Fill', link: '/en/builtins/media-fill' },
-    { text: 'Stroke', link: '/en/builtins/stroke' },
-    { text: 'Transform', link: '/en/builtins/transform' }
+    { text: '<span style="color:#22c55e">●</span> Rectangle', link: '/en/builtins/rect' },
+    { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' },
+    { text: '<span style="color:#22c55e">●</span> Color Fill', link: '/en/builtins/color-fill' },
+    { text: '<span style="color:#22c55e">●</span> Media Fill', link: '/en/builtins/media-fill' },
+    { text: '<span style="color:#22c55e">●</span> Stroke', link: '/en/builtins/stroke' },
+    { text: '<span style="color:#22c55e">●</span> Transform', link: '/en/builtins/transform' }
   ]
 };

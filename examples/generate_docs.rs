@@ -162,7 +162,7 @@ fn main() {
             println!("\n{}", "=".repeat(60));
             println!(
                 "{}",
-                doc_generator::generate_vitepress_sidebar_snippet(effects, builtins)
+                doc_generator::generate_vitepress_sidebar_snippet(effects, builtins, &config)
             );
         }
         Err(e) => {
