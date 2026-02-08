@@ -219,37 +219,34 @@ mod tests {
         // All pass -> Full
         assert_eq!(
             results.compute_support_level(&["test_a", "test_b"]),
-            SupportLevel::Full
+            Some(SupportLevel::Full)
         );
 
         // Mixed -> Partial
         assert_eq!(
             results.compute_support_level(&["test_a", "test_c"]),
-            SupportLevel::Partial
+            Some(SupportLevel::Partial)
         );
 
         // Has fail -> still Partial if some pass
         assert_eq!(
             results.compute_support_level(&["test_a", "test_d"]),
-            SupportLevel::Partial
+            Some(SupportLevel::Partial)
         );
 
         // All skip -> Unsupported
         assert_eq!(
             results.compute_support_level(&["test_c"]),
-            SupportLevel::Unsupported
+            Some(SupportLevel::Unsupported)
         );
 
         // All fail -> Unsupported
         assert_eq!(
             results.compute_support_level(&["test_d"]),
-            SupportLevel::Unsupported
+            Some(SupportLevel::Unsupported)
         );
 
-        // Empty -> Unsupported
-        assert_eq!(
-            results.compute_support_level(&[]),
-            SupportLevel::Unsupported
-        );
+        // Empty -> None (无法从空列表判断)
+        assert_eq!(results.compute_support_level(&[]), None);
     }
 }

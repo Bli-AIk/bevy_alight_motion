@@ -191,9 +191,7 @@ fn extract_effects_from_amproj(amproj_path: &Path) -> Result<Vec<String>, String
 
 /// 打印效果测试文件关联结果 / Print effect test files mapping results
 pub fn print_effect_test_files(mapping: &EffectTestFiles) {
-    println!(
-        "=== 效果测试文件关联 / Effect Test Files Mapping ===\n"
-    );
+    println!("=== 效果测试文件关联 / Effect Test Files Mapping ===\n");
     println!(
         "共扫描 {} 个 amproj 文件 / Scanned {} amproj files\n",
         mapping.total_files_scanned, mapping.total_files_scanned
@@ -203,7 +201,12 @@ pub fn print_effect_test_files(mapping: &EffectTestFiles) {
     sorted.sort_by(|a, b| a.0.cmp(b.0));
 
     for (effect_id, files) in sorted {
-        println!("📦 {} ({} 个文件 / {} files)", effect_id, files.len(), files.len());
+        println!(
+            "📦 {} ({} 个文件 / {} files)",
+            effect_id,
+            files.len(),
+            files.len()
+        );
         for file in files {
             println!("   - {}", file);
         }
@@ -261,38 +264,43 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
             // 检测模式匹配（如 name if name.starts_with("color")）
             // Detect pattern matches (e.g., name if name.starts_with("color"))
             if trimmed.contains("starts_with(\"")
-                && let Some(start) = trimmed.find("starts_with(\"") {
-                    let rest = &trimmed[start + 13..];
-                    if let Some(end) = rest.find('"') {
-                        let pattern = rest[..end].to_string();
-                        if let Some(ref effect_id) = current_effect_id
-                            && let Some(effect) = effects.get_mut(effect_id) {
-                                let pattern_desc = format!("{}*", pattern);
-                                if !effect.pattern_fields.contains(&pattern_desc) {
-                                    effect.pattern_fields.push(pattern_desc);
-                                }
-                            }
+                && let Some(start) = trimmed.find("starts_with(\"")
+            {
+                let rest = &trimmed[start + 13..];
+                if let Some(end) = rest.find('"') {
+                    let pattern = rest[..end].to_string();
+                    if let Some(ref effect_id) = current_effect_id
+                        && let Some(effect) = effects.get_mut(effect_id)
+                    {
+                        let pattern_desc = format!("{}*", pattern);
+                        if !effect.pattern_fields.contains(&pattern_desc) {
+                            effect.pattern_fields.push(pattern_desc);
+                        }
                     }
                 }
+            }
 
             // 检测 match 分支中的字段名 / Detect field names in match arms
             // 格式: "fieldname" => { ... }
             // 但跳过非字段名的字符串（如 "true", 颜色值等）
-            if trimmed.contains("=>") && !trimmed.contains("if ")
+            if trimmed.contains("=>")
+                && !trimmed.contains("if ")
                 && let Some(start) = trimmed.find('"')
-                    && let Some(end) = trimmed[start + 1..].find('"') {
-                        let field_name = trimmed[start + 1..start + 1 + end].to_string();
+                && let Some(end) = trimmed[start + 1..].find('"')
+            {
+                let field_name = trimmed[start + 1..start + 1 + end].to_string();
 
-                        // 验证是否为有效的字段名 / Validate if it's a valid field name
-                        // 有效字段名：小写字母开头，只包含字母、数字和下划线
-                        if is_valid_field_name(&field_name)
-                            && let Some(ref effect_id) = current_effect_id
-                                && let Some(effect) = effects.get_mut(effect_id)
-                                    && !effect.implemented_fields.contains(&field_name) {
-                                        effect.implemented_fields.push(field_name);
-                                        effect.source_lines.push(line_num);
-                                    }
-                    }
+                // 验证是否为有效的字段名 / Validate if it's a valid field name
+                // 有效字段名：小写字母开头，只包含字母、数字和下划线
+                if is_valid_field_name(&field_name)
+                    && let Some(ref effect_id) = current_effect_id
+                    && let Some(effect) = effects.get_mut(effect_id)
+                    && !effect.implemented_fields.contains(&field_name)
+                {
+                    effect.implemented_fields.push(field_name);
+                    effect.source_lines.push(line_num);
+                }
+            }
 
             // 退出 match 块 / Exit match block
             if brace_depth <= 0 {

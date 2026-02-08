@@ -204,9 +204,10 @@ fn is_field_implemented(
             // Check pattern match (e.g., color* matches color1, color2, etc.)
             for pattern in &impl_info.pattern_fields {
                 if let Some(prefix) = pattern.strip_suffix('*')
-                    && field_name.starts_with(prefix) {
-                        return true;
-                    }
+                    && field_name.starts_with(prefix)
+                {
+                    return true;
+                }
             }
             // 有扫描结果但字段未找到，说明未实现
             // Has scan results but field not found, means not implemented
@@ -848,7 +849,11 @@ pub fn generate_vitepress_sidebar_snippet(
             continue;
         }
 
-        let cat_comma = if cat_idx < categories.len() - 1 { "," } else { "" };
+        let cat_comma = if cat_idx < categories.len() - 1 {
+            ","
+        } else {
+            ""
+        };
         writeln!(output, "  {{").unwrap();
         writeln!(output, "    text: '{}',", category.display_name_zh()).unwrap();
         writeln!(output, "    items: [").unwrap();
@@ -880,7 +885,11 @@ pub fn generate_vitepress_sidebar_snippet(
             continue;
         }
 
-        let cat_comma = if cat_idx < categories.len() - 1 { "," } else { "" };
+        let cat_comma = if cat_idx < categories.len() - 1 {
+            ","
+        } else {
+            ""
+        };
         writeln!(output, "  {{").unwrap();
         writeln!(output, "    text: '{}',", category.display_name_en()).unwrap();
         writeln!(output, "    items: [").unwrap();
@@ -917,39 +926,38 @@ fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> 
     };
 
     // 1. 优先根据测试结果计算 / First try to compute from test results
-    if let Some(results) = config.test_results {
-        if let Some(level) = results.compute_support_level(&test_files) {
-            return level;
-        }
+    if let Some(level) = config
+        .test_results
+        .and_then(|r| r.compute_support_level(&test_files))
+    {
+        return level;
     }
 
     // 2. 没有测试结果时，根据代码实现状态判断 / Fall back to implementation status
-    if let Some(impl_status) = config.impl_status {
-        if let Some(impl_info) = impl_status.get(effect.id) {
-            // 有实现的字段或模式 / Has implemented fields or patterns
-            if !impl_info.implemented_fields.is_empty() || !impl_info.pattern_fields.is_empty() {
-                // 检查是否实现了所有定义的字段 / Check if all defined fields are implemented
-                let total_fields = effect.fields.len();
-                let implemented_count = effect
-                    .fields
-                    .iter()
-                    .filter(|f| {
-                        impl_info.implemented_fields.iter().any(|s| s == f.name)
-                            || impl_info
-                                .pattern_fields
-                                .iter()
-                                .any(|p: &String| f.name.starts_with(p.trim_end_matches('*')))
-                    })
-                    .count();
+    if let Some(impl_info) = config.impl_status.and_then(|s| s.get(effect.id)) {
+        // 有实现的字段或模式 / Has implemented fields or patterns
+        if !impl_info.implemented_fields.is_empty() || !impl_info.pattern_fields.is_empty() {
+            // 检查是否实现了所有定义的字段 / Check if all defined fields are implemented
+            let total_fields = effect.fields.len();
+            let implemented_count = effect
+                .fields
+                .iter()
+                .filter(|f| {
+                    impl_info.implemented_fields.iter().any(|s| s == f.name)
+                        || impl_info
+                            .pattern_fields
+                            .iter()
+                            .any(|p: &String| f.name.starts_with(p.trim_end_matches('*')))
+                })
+                .count();
 
-                return if implemented_count == total_fields && total_fields > 0 {
-                    SupportLevel::Full
-                } else if implemented_count > 0 {
-                    SupportLevel::Partial
-                } else {
-                    SupportLevel::Unsupported
-                };
-            }
+            return if implemented_count == total_fields && total_fields > 0 {
+                SupportLevel::Full
+            } else if implemented_count > 0 {
+                SupportLevel::Partial
+            } else {
+                SupportLevel::Unsupported
+            };
         }
     }
 
@@ -959,11 +967,12 @@ fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> 
 
 /// 获取内置功能的支持级别 / Get builtin support level
 fn get_builtin_support_level(builtin: &BuiltinDef, config: &DocGeneratorConfig) -> SupportLevel {
-    if let Some(results) = config.test_results {
-        // 内置功能使用定义中的测试文件 / Builtins use test files from definition
-        if let Some(level) = results.compute_support_level(builtin.test_files) {
-            return level;
-        }
+    // 内置功能使用定义中的测试文件 / Builtins use test files from definition
+    if let Some(level) = config
+        .test_results
+        .and_then(|r| r.compute_support_level(builtin.test_files))
+    {
+        return level;
     }
     // 回退到定义中的默认值 / Fall back to definition default
     builtin.support_level
