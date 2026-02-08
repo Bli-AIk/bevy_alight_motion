@@ -54,3 +54,7 @@ path = "examples/interactive_bg.rs"
 [[example]]
 name = "bouncing_ball"
 path = "examples/bouncing_ball.rs"
+
+[[example]]
+name = "generate_docs"
+path = "examples/generate_docs.rs"

@@ -40,6 +40,7 @@
 
 pub mod animation;
 pub mod effects;
+pub mod effects_registry;
 pub mod error;
 pub mod gaussian_blur;
 pub mod loader;

@@ -10,7 +10,11 @@
 //! - Partially supported effects (works but with some limitations)
 //! - Unsupported effects that will be skipped
 //! - Unsupported layer types (Audio, Video, Camera)
+//!
+//! 效果定义现在来自 effects_registry 模块（单一数据源）。
+//! Effect definitions now come from effects_registry module (single source of truth).
 
+use crate::effects_registry::{self, types::SupportLevel};
 use crate::schema::{AmEffect, AmLayer, AmScene};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -18,66 +22,9 @@ use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use owo_colors::OwoColorize;
 
-/// Effect support level
-/// 效果支持级别
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub enum EffectSupportLevel {
-    /// Fully supported
-    Full,
-    /// Partially supported (some features may not work)
-    Partial,
-    /// Not supported at all
-    Unsupported,
-}
-
-/// Effect definition with support level
-pub struct EffectDef {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub level: EffectSupportLevel,
-}
-
-/// All known effects and their support levels
-/// 所有已知效果及其支持级别
-pub const KNOWN_EFFECTS: &[EffectDef] = &[
-    // Fully supported effects
-    EffectDef {
-        id: "com.alightcreative.effects.transform2",
-        name: "Transform2 (位置偏移)",
-        level: EffectSupportLevel::Full,
-    },
-    EffectDef {
-        id: "com.alightcreative.effects.wipe2",
-        name: "Wipe2 (擦除效果)",
-        level: EffectSupportLevel::Full,
-    },
-    EffectDef {
-        id: "com.alightcreative.replacecolor",
-        name: "ReplaceColor (颜色替换)",
-        level: EffectSupportLevel::Full,
-    },
-    // Partially supported effects
-    EffectDef {
-        id: "com.alightcreative.effects.stretchsegment",
-        name: "StretchSegment (拉伸分割)",
-        level: EffectSupportLevel::Partial,
-    },
-    EffectDef {
-        id: "com.alightcreative.effects.gaussianblur",
-        name: "GaussianBlur (高斯模糊)",
-        level: EffectSupportLevel::Partial,
-    },
-    EffectDef {
-        id: "com.alightcreative.effects.palettemap",
-        name: "PaletteMap (调色板映射)",
-        level: EffectSupportLevel::Partial,
-    },
-    EffectDef {
-        id: "com.alightcreative.effects.scaleassist",
-        name: "ScaleAssist (缩放辅助)",
-        level: EffectSupportLevel::Partial,
-    },
-];
+/// Effect support level (re-exported for backward compatibility)
+/// 效果支持级别（为向后兼容而重新导出）
+pub use crate::effects_registry::types::SupportLevel as EffectSupportLevel;
 
 /// Validation report containing information about supported and unsupported features
 /// 验证报告，包含支持和不支持的特性信息
@@ -115,7 +62,7 @@ pub struct EffectUsage {
     /// Number of layers using this effect
     pub usage_count: u32,
     /// Support level
-    pub level: EffectSupportLevel,
+    pub level: SupportLevel,
 }
 
 /// Information about an unsupported effect
@@ -175,21 +122,23 @@ impl ValidationReport {
     /// 验证 AM 场景并生成报告
     pub fn validate(scene: &AmScene) -> Self {
         let mut report = Self::default();
-        // Create a map of effect ID -> EffectDef for quick lookup
-        let effect_defs: HashMap<&str, &EffectDef> =
-            KNOWN_EFFECTS.iter().map(|e| (e.id, e)).collect();
+        // Create a map of effect ID -> EffectDef for quick lookup using effects_registry
+        // 使用 effects_registry 创建效果 ID -> EffectDef 的映射
+        let all_effects = effects_registry::all_effects();
+        let effect_defs: HashMap<&str, &effects_registry::EffectDef> =
+            all_effects.iter().map(|e| (e.id, *e)).collect();
         let mut effect_usage_map: HashMap<String, u32> = HashMap::new();
 
         report.validate_layers_recursive(&scene.layers, &effect_defs, &mut effect_usage_map);
 
         // Build supported effects list with usage counts
-        for effect_def in KNOWN_EFFECTS {
+        for effect_def in all_effects {
             if let Some(&count) = effect_usage_map.get(effect_def.id) {
                 report.supported_effects_used.push(EffectUsage {
                     effect_id: effect_def.id.to_string(),
-                    display_name: effect_def.name.to_string(),
+                    display_name: effect_def.display_name_zh.to_string(),
                     usage_count: count,
-                    level: effect_def.level,
+                    level: effect_def.support_level,
                 });
             }
         }
@@ -201,7 +150,7 @@ impl ValidationReport {
     fn validate_layers_recursive(
         &mut self,
         layers: &[AmLayer],
-        effect_defs: &HashMap<&str, &EffectDef>,
+        effect_defs: &HashMap<&str, &effects_registry::EffectDef>,
         effect_usage_map: &mut HashMap<String, u32>,
     ) {
         for layer in layers {
@@ -305,7 +254,7 @@ impl ValidationReport {
         effects: &[AmEffect],
         layer_label: &str,
         layer_id: u64,
-        effect_defs: &HashMap<&str, &EffectDef>,
+        effect_defs: &HashMap<&str, &effects_registry::EffectDef>,
         effect_usage_map: &mut HashMap<String, u32>,
     ) {
         for effect in effects {
@@ -369,12 +318,12 @@ impl ValidationReport {
             let full_count = self
                 .supported_effects_used
                 .iter()
-                .filter(|e| e.level == EffectSupportLevel::Full)
+                .filter(|e| e.level == SupportLevel::Full)
                 .count();
             let partial_count = self
                 .supported_effects_used
                 .iter()
-                .filter(|e| e.level == EffectSupportLevel::Partial)
+                .filter(|e| e.level == SupportLevel::Partial)
                 .count();
 
             println!(
@@ -386,7 +335,7 @@ impl ValidationReport {
 
             for effect in &self.supported_effects_used {
                 match effect.level {
-                    EffectSupportLevel::Full => {
+                    SupportLevel::Full => {
                         println!(
                             "  {} {} - {} usage(s)",
                             "✓".green(),
@@ -394,7 +343,7 @@ impl ValidationReport {
                             effect.usage_count
                         );
                     }
-                    EffectSupportLevel::Partial => {
+                    SupportLevel::Partial => {
                         println!(
                             "  {} {} - {} usage(s) {}",
                             "⚠".yellow(),
@@ -403,7 +352,7 @@ impl ValidationReport {
                             "(partial support)".dimmed()
                         );
                     }
-                    EffectSupportLevel::Unsupported => {
+                    SupportLevel::Unsupported => {
                         // This shouldn't happen in supported_effects_used
                     }
                 }
@@ -475,7 +424,7 @@ impl ValidationReport {
             let partial_count = self
                 .supported_effects_used
                 .iter()
-                .filter(|e| e.level == EffectSupportLevel::Partial)
+                .filter(|e| e.level == SupportLevel::Partial)
                 .count();
             if partial_count > 0 {
                 println!(
@@ -553,12 +502,12 @@ impl ValidationReport {
         let full_count = self
             .supported_effects_used
             .iter()
-            .filter(|e| e.level == EffectSupportLevel::Full)
+            .filter(|e| e.level == SupportLevel::Full)
             .count();
         let partial_count = self
             .supported_effects_used
             .iter()
-            .filter(|e| e.level == EffectSupportLevel::Partial)
+            .filter(|e| e.level == SupportLevel::Partial)
             .count();
 
         if self.supported_effects_used.is_empty() {
@@ -572,12 +521,12 @@ impl ValidationReport {
                 .into(),
             );
             for effect in &self.supported_effects_used {
-                let icon = if effect.level == EffectSupportLevel::Full {
+                let icon = if effect.level == SupportLevel::Full {
                     "✓"
                 } else {
                     "⚠"
                 };
-                let suffix = if effect.level == EffectSupportLevel::Partial {
+                let suffix = if effect.level == SupportLevel::Partial {
                     " (partial support)"
                 } else {
                     ""
