@@ -129,6 +129,16 @@ pub struct AmAnimated {
     pub replace_alpha: AmAnimatedFloat,
     /// Replace color effect: lock luminance
     pub replace_lock_luminance: bool,
+    /// Repeat effect: number of copies (0 = no effect)
+    pub repeat_count: AmAnimatedFloat,
+    /// Repeat effect: X,Y offset per copy (pixels)
+    pub repeat_offset: AmAnimatedVec2,
+    /// Repeat effect: rotation angle per copy (degrees)
+    pub repeat_angle: AmAnimatedFloat,
+    /// Repeat effect: scale multiplier per copy
+    pub repeat_scale: AmAnimatedFloat,
+    /// Repeat effect: alpha multiplier per copy
+    pub repeat_alpha: AmAnimatedFloat,
 }
 
 impl AmAnimated {

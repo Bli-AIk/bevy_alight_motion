@@ -1054,10 +1054,13 @@ mod video_comparison_systems {
         std::fs::create_dir_all(&report_dir).expect("Failed to create report dir");
         state.report_dir = report_dir;
 
-        // Extract project name from path
+        // Extract project name from path - use relative path for config lookup
+        // e.g., "projects/effects/repeat/basic.amproj" -> "effects/repeat/basic"
         let project_name = std::path::Path::new(&project_file.0)
-            .file_stem()
-            .and_then(|s| s.to_str())
+            .strip_prefix("projects/")
+            .ok()
+            .and_then(|p| p.to_str())
+            .map(|s| s.strip_suffix(".amproj").unwrap_or(s))
             .unwrap_or("unknown")
             .to_string();
         state.project_name = project_name.clone();

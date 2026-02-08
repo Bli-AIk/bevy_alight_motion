@@ -45,18 +45,20 @@ pub(crate) fn add_visual_components(
     is_embed_content: bool,    // True if this is content inside an embed
     has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
     has_scale_assist: bool, // True if layer has scale_assist effect (needs UnifiedEffectMaterial for dynamic sizing)
+    has_repeat: bool,       // True if layer has repeat effect (needs UnifiedEffectMaterial)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}",
         label,
         id,
         std::mem::discriminant(spec),
         is_embed_content,
-        has_scale_assist
+        has_scale_assist,
+        has_repeat
     );
 
     // Determine which effects are needed
@@ -75,7 +77,8 @@ pub(crate) fn add_visual_components(
         || needs_palette
         || needs_replace_color
         || is_embed_content
-        || has_scale_assist;
+        || has_scale_assist
+        || has_repeat;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -308,6 +311,8 @@ pub(crate) fn add_visual_components(
                 replace_old_color: Vec4::ZERO,
                 replace_new_color: Vec4::ZERO,
                 replace_color_params: Vec4::ZERO,
+                repeat_params1: Vec4::ZERO,
+                repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
             },
             texture: Some(texture),
         };

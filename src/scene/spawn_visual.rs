@@ -35,6 +35,7 @@ pub(crate) fn spawn_image(
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
+    let repeat_effect = extract_repeat_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let palette_map = extract_palette_map_effect(&image.effects);
 
@@ -120,6 +121,11 @@ pub(crate) fn spawn_image(
                 replace_feather: replace_color.feather,
                 replace_alpha: replace_color.alpha,
                 replace_lock_luminance: replace_color.lock_luminance,
+                repeat_count: repeat_effect.count,
+                repeat_offset: repeat_effect.offset,
+                repeat_angle: repeat_effect.angle,
+                repeat_scale: repeat_effect.scale,
+                repeat_alpha: repeat_effect.alpha,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -350,6 +356,11 @@ pub(crate) fn spawn_text(
             replace_feather: AmAnimatedFloat::default(),
             replace_alpha: AmAnimatedFloat::default(),
             replace_lock_luminance: false,
+            repeat_count: AmAnimatedFloat::default(),
+            repeat_offset: AmAnimatedVec2::default(),
+            repeat_angle: AmAnimatedFloat::default(),
+            repeat_scale: AmAnimatedFloat::default(),
+            repeat_alpha: AmAnimatedFloat::default(),
         },
         transform,
         GlobalTransform::default(),

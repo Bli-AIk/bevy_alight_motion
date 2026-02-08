@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedFloat, AmEffect};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect};
 
 pub(crate) fn extract_effect_animations(
     effects: &[AmEffect],
@@ -394,6 +394,102 @@ pub(crate) fn extract_scale_assist_effect(effects: &[AmEffect]) -> ScaleAssistPa
                             params.damp.keyframes = prop.keyframes.clone();
                         } else if let Ok(v) = prop.value.parse::<f32>() {
                             params.damp.value = Some(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+/// Repeat effect parameters
+/// Creates multiple copies with cumulative transforms
+#[derive(Debug, Clone, Default)]
+pub struct RepeatParams {
+    /// Number of copies (0 = no effect)
+    pub count: AmAnimatedFloat,
+    /// Time offset between copies (not yet implemented)
+    pub time: AmAnimatedFloat,
+    /// X,Y offset per copy (pixels)
+    pub offset: AmAnimatedVec2,
+    /// Rotation angle per copy (degrees)
+    pub angle: AmAnimatedFloat,
+    /// Scale multiplier per copy (1.0 = same size)
+    pub scale: AmAnimatedFloat,
+    /// Alpha multiplier per copy (1.0 = same opacity)
+    pub alpha: AmAnimatedFloat,
+}
+
+impl RepeatParams {
+    /// Check if this has any repeat effect parameters set
+    /// 检查是否有任何重复效果参数设置
+    #[allow(dead_code)]
+    pub fn has_effect(&self) -> bool {
+        self.count.value.is_some_and(|v| v > 0.0) || !self.count.keyframes.is_empty()
+    }
+}
+
+/// Extract repeat effect parameters from effects.
+pub(crate) fn extract_repeat_effect(effects: &[AmEffect]) -> RepeatParams {
+    let mut params = RepeatParams::default();
+    // Defaults
+    params.scale.value = Some(1.0);
+    params.alpha.value = Some(1.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.repeat" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "count" => {
+                        if !prop.keyframes.is_empty() {
+                            params.count.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.count.value = Some(v);
+                        }
+                    }
+                    "time" => {
+                        if !prop.keyframes.is_empty() {
+                            params.time.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.time.value = Some(v);
+                        }
+                    }
+                    "offset" => {
+                        if !prop.keyframes.is_empty() {
+                            params.offset.keyframes = prop.keyframes.clone();
+                        } else {
+                            // Parse "x,y" format
+                            let parts: Vec<&str> = prop.value.split(',').collect();
+                            if parts.len() == 2
+                                && let Ok(x) = parts[0].trim().parse::<f32>()
+                                && let Ok(y) = parts[1].trim().parse::<f32>()
+                            {
+                                params.offset.value = Some([x, y]);
+                            }
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "scale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.scale.value = Some(v);
+                        }
+                    }
+                    "alpha" => {
+                        if !prop.keyframes.is_empty() {
+                            params.alpha.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.alpha.value = Some(v);
                         }
                     }
                     _ => {}

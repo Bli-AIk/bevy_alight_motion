@@ -1,7 +1,7 @@
 # Effects List
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 00:16:23
+> Last tested: 2026-02-09 02:47:39
 
 | Effect | Status | Description |
 |--------|--------|-------------|
@@ -12,3 +12,4 @@
 | [Palette Map](./palette-map.md) | ❌ | Maps image colors to specified palette colors. Supports u... |
 | [Replace Color](./replace-color.md) | ✅ | Replaces a source color with a target color within a give... |
 | [Scale Assist](./scale-assist.md) | ⚠️ | Automatically adjusts layer size to fit the canvas based ... |
+| [Repeat](./repeat.md) | ✅ | Creates multiple copies of the layer with cumulative offs... |

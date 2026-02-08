@@ -44,6 +44,7 @@ pub(crate) fn collect_shape(
     let palette_map = extract_palette_map_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
     let replace_color = extract_replace_color_effect(&shape.effects);
+    let repeat_effect = extract_repeat_effect(&shape.effects);
     if scale_assist.axis != 0 {
         bevy::log::info!(
             "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
@@ -217,6 +218,11 @@ pub(crate) fn collect_shape(
             replace_feather: replace_color.feather,
             replace_alpha: replace_color.alpha,
             replace_lock_luminance: replace_color.lock_luminance,
+            repeat_count: repeat_effect.count,
+            repeat_offset: repeat_effect.offset,
+            repeat_angle: repeat_effect.angle,
+            repeat_scale: repeat_effect.scale,
+            repeat_alpha: repeat_effect.alpha,
         },
         spec,
         z_index: z,
@@ -254,6 +260,7 @@ pub(crate) fn collect_null(
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
+    let repeat_effect = extract_repeat_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -311,6 +318,11 @@ pub(crate) fn collect_null(
             replace_feather: replace_color.feather,
             replace_alpha: replace_color.alpha,
             replace_lock_luminance: replace_color.lock_luminance,
+            repeat_count: repeat_effect.count,
+            repeat_offset: repeat_effect.offset,
+            repeat_angle: repeat_effect.angle,
+            repeat_scale: repeat_effect.scale,
+            repeat_alpha: repeat_effect.alpha,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -472,6 +484,11 @@ pub(crate) fn collect_embed_scene(
             replace_feather: AmAnimatedFloat::default(),
             replace_alpha: AmAnimatedFloat::default(),
             replace_lock_luminance: false,
+            repeat_count: AmAnimatedFloat::default(),
+            repeat_offset: AmAnimatedVec2::default(),
+            repeat_angle: AmAnimatedFloat::default(),
+            repeat_scale: AmAnimatedFloat::default(),
+            repeat_alpha: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -616,6 +633,11 @@ pub(crate) fn collect_text(
             replace_feather: AmAnimatedFloat::default(),
             replace_alpha: AmAnimatedFloat::default(),
             replace_lock_luminance: false,
+            repeat_count: AmAnimatedFloat::default(),
+            repeat_offset: AmAnimatedVec2::default(),
+            repeat_angle: AmAnimatedFloat::default(),
+            repeat_scale: AmAnimatedFloat::default(),
+            repeat_alpha: AmAnimatedFloat::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -652,6 +674,7 @@ pub(crate) fn collect_image(
     let palette_map = extract_palette_map_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
+    let repeat_effect = extract_repeat_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -716,6 +739,11 @@ pub(crate) fn collect_image(
             replace_feather: replace_color.feather,
             replace_alpha: replace_color.alpha,
             replace_lock_luminance: replace_color.lock_luminance,
+            repeat_count: repeat_effect.count,
+            repeat_offset: repeat_effect.offset,
+            repeat_angle: repeat_effect.angle,
+            repeat_scale: repeat_effect.scale,
+            repeat_alpha: repeat_effect.alpha,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

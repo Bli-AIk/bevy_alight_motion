@@ -75,6 +75,12 @@ pub struct UnifiedEffectUniform {
 
     /// Replace color params: (threshold, feather, alpha, 0)
     pub replace_color_params: Vec4,
+
+    /// Repeat effect params: (count, offset_x, offset_y, angle_deg)
+    pub repeat_params1: Vec4,
+
+    /// Repeat effect params: (scale, alpha, 0, 0)
+    pub repeat_params2: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -209,6 +215,8 @@ impl Default for UnifiedEffectUniform {
             replace_old_color: Vec4::ZERO,
             replace_new_color: Vec4::ZERO,
             replace_color_params: Vec4::ZERO,
+            repeat_params1: Vec4::ZERO, // (count, offset_x, offset_y, angle)
+            repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0), // (scale, alpha, 0, 0)
         }
     }
 }

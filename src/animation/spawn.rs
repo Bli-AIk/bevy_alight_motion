@@ -854,8 +854,10 @@ fn spawn_layer_entity(
             layer.containing_embed_id != 0, // is_embed_content - force effect material for bounds clipping
             !layer.animated.scale.keyframes.is_empty(), // has_scale_animation - needs bounds clipping
             layer.animated.scale_assist_axis != 0, // has_scale_assist - needs UnifiedEffectMaterial for dynamic sizing
-            global_time as u64,                    // current playback time for mask initialization
-            initial_replace_color,                 // replace color params
+            layer.animated.repeat_count.value.is_some_and(|v| v > 0.0)
+                || !layer.animated.repeat_count.keyframes.is_empty(), // has_repeat - needs UnifiedEffectMaterial
+            global_time as u64,    // current playback time for mask initialization
+            initial_replace_color, // replace color params
         );
     } else {
         bevy::log::trace!(

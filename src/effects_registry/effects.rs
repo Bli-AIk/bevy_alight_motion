@@ -7,6 +7,7 @@
 
 pub mod gaussian_blur;
 pub mod palette_map;
+pub mod repeat;
 pub mod replace_color;
 pub mod scale_assist;
 pub mod stretch_segment;
@@ -25,6 +26,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &palette_map::EFFECT,
         &replace_color::EFFECT,
         &scale_assist::EFFECT,
+        &repeat::EFFECT,
     ]
 }
 

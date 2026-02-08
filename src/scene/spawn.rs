@@ -211,6 +211,7 @@ pub(crate) fn spawn_shape(
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
+    let repeat_effect = extract_repeat_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -405,6 +406,11 @@ pub(crate) fn spawn_shape(
                 replace_feather: replace_color.feather,
                 replace_alpha: replace_color.alpha,
                 replace_lock_luminance: replace_color.lock_luminance,
+                repeat_count: repeat_effect.count,
+                repeat_offset: repeat_effect.offset,
+                repeat_angle: repeat_effect.angle,
+                repeat_scale: repeat_effect.scale,
+                repeat_alpha: repeat_effect.alpha,
             },
             layer_spec,
             transform,
@@ -442,6 +448,7 @@ pub(crate) fn spawn_null(
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
+    let repeat_effect = extract_repeat_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -513,6 +520,11 @@ pub(crate) fn spawn_null(
                 replace_feather: replace_color.feather,
                 replace_alpha: replace_color.alpha,
                 replace_lock_luminance: replace_color.lock_luminance,
+                repeat_count: repeat_effect.count,
+                repeat_offset: repeat_effect.offset,
+                repeat_angle: repeat_effect.angle,
+                repeat_scale: repeat_effect.scale,
+                repeat_alpha: repeat_effect.alpha,
             },
             AmLayerSpec::Null,
             transform,
@@ -626,6 +638,11 @@ pub(crate) fn spawn_embed_scene(
                 replace_feather: AmAnimatedFloat::default(),
                 replace_alpha: AmAnimatedFloat::default(),
                 replace_lock_luminance: false,
+                repeat_count: AmAnimatedFloat::default(),
+                repeat_offset: AmAnimatedVec2::default(),
+                repeat_angle: AmAnimatedFloat::default(),
+                repeat_scale: AmAnimatedFloat::default(),
+                repeat_alpha: AmAnimatedFloat::default(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

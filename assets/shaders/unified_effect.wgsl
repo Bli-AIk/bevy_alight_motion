@@ -39,6 +39,8 @@ struct UnifiedEffectUniform {
     replace_old_color: vec4<f32>,  // (r, g, b, a)
     replace_new_color: vec4<f32>,  // (r, g, b, a)
     replace_color_params: vec4<f32>,// (threshold, feather, alpha, 0)
+    repeat_params1: vec4<f32>,     // (count, offset_x, offset_y, angle_deg)
+    repeat_params2: vec4<f32>,     // (scale, alpha, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -472,6 +474,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let palette_enabled = uniforms.palette_flags.x > 0.5;
     let replace_color_enabled = uniforms.replace_color_flags.x > 0.5;
     
+    // Extract repeat effect params
+    let repeat_count = i32(uniforms.repeat_params1.x);
+    let repeat_offset = vec2<f32>(uniforms.repeat_params1.y, uniforms.repeat_params1.z);
+    let repeat_angle = uniforms.repeat_params1.w * 3.14159265 / 180.0; // degrees to radians
+    let repeat_scale = uniforms.repeat_params2.x;
+    let repeat_alpha = uniforms.repeat_params2.y;
+    let repeat_enabled = repeat_count > 0;
+    
     var sample_uv = mesh.uv;
     
     // Apply stretch segment effect if enabled (before blur)
@@ -487,10 +497,92 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
-    // Sample texture - with or without blur
+    // Sample texture - with or without blur, with or without repeat
     var tex_color: vec4<f32>;
     
-    if blur_enabled {
+    if repeat_enabled {
+        // Repeat effect: render multiple copies from back to front
+        // Each copy has cumulative offset, rotation, scale, and alpha
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        
+        // Convert UV to pixel space for transformation
+        let center = vec2<f32>(0.5, 0.5);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        
+        // Accumulate color from all copies (back to front)
+        var accumulated_color = vec4<f32>(0.0);
+        
+        // Start from the farthest copy (highest index) and work backwards
+        // AM's count means total number of copies, so render copies 0 to count-1
+        // When count=7, render copies 0,1,2,3,4,5,6 (7 total)
+        for (var i = repeat_count - 1; i >= 0; i = i - 1) {
+            let fi = f32(i);
+            
+            // Calculate cumulative transform for this copy
+            let cumulative_offset = repeat_offset * fi;
+            // Negate angle because AM uses opposite rotation direction
+            let cumulative_angle = -repeat_angle * fi;
+            let cumulative_scale = pow(repeat_scale, fi);
+            let cumulative_alpha = pow(repeat_alpha, fi);
+            
+            // Skip copies with negligible alpha
+            if cumulative_alpha < 0.001 {
+                continue;
+            }
+            
+            // Transform: first un-offset, then un-rotate, then un-scale
+            // This gives us the source UV for this copy
+            // For copy at offset O, a pixel at position P was sourced from P - O
+            var transformed_coord = pixel_coord;
+            
+            // Reverse offset (subtract the offset to find source position)
+            // Y flipped because AM uses Y-down, Bevy uses Y-up
+            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            
+            // Reverse rotation around center
+            if abs(cumulative_angle) > 0.001 {
+                let cos_a = cos(-cumulative_angle);
+                let sin_a = sin(-cumulative_angle);
+                transformed_coord = vec2<f32>(
+                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
+                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+                );
+            }
+            
+            // Reverse scale around center
+            if abs(cumulative_scale) > 0.001 {
+                transformed_coord = transformed_coord / cumulative_scale;
+            }
+            
+            // Convert back to UV and check bounds
+            // For shapes, valid source region is the original texture area [-half_w, half_w] x [-half_h, half_h]
+            let half_w = orig_width * 0.5;
+            let half_h = orig_height * 0.5;
+            
+            // Check if transformed coord is within the original shape bounds
+            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
+               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
+                // Convert to UV [0,1]
+                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                var copy_color: vec4<f32>;
+                if blur_enabled && uniforms.blur_params.x > 0.5 {
+                    copy_color = apply_blur(copy_uv);
+                } else {
+                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                }
+                
+                // Apply cumulative alpha
+                copy_color.a *= cumulative_alpha;
+                
+                // Blend using standard alpha compositing (back to front)
+                // result = src + dst * (1 - src.alpha)
+                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+            }
+        }
+        
+        tex_color = accumulated_color;
+    } else if blur_enabled {
         let blur_radius = uniforms.blur_params.x;
         if blur_radius > 0.5 {
             tex_color = apply_blur(sample_uv);

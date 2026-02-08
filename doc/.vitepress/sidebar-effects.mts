@@ -10,7 +10,8 @@ export const zhHansEffects = {
     { text: '<span style="color:#ef4444">●</span> 高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
     { text: '<span style="color:#ef4444">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> 颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
-    { text: '<span style="color:#eab308">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' }
+    { text: '<span style="color:#eab308">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
+    { text: '<span style="color:#22c55e">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' }
   ]
 };
 
@@ -23,7 +24,8 @@ export const enEffects = {
     { text: '<span style="color:#ef4444">●</span> Gaussian Blur', link: '/en/effects/gaussian-blur' },
     { text: '<span style="color:#ef4444">●</span> Palette Map', link: '/en/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> Replace Color', link: '/en/effects/replace-color' },
-    { text: '<span style="color:#eab308">●</span> Scale Assist', link: '/en/effects/scale-assist' }
+    { text: '<span style="color:#eab308">●</span> Scale Assist', link: '/en/effects/scale-assist' },
+    { text: '<span style="color:#22c55e">●</span> Repeat', link: '/en/effects/repeat' }
   ]
 };
 
