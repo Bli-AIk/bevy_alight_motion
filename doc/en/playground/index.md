@@ -32,4 +32,4 @@ Here you can upload Alight Motion project files (`.amproj`) and preview the rend
 
 ## Supported Features
 
-See [Implemented Features](/en/implemented-features) for details
+See [Effects](/en/effects/) for details
