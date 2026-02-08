@@ -42,23 +42,8 @@ impl Default for DocGeneratorConfig<'_> {
 pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGeneratorConfig) -> String {
     let mut doc = String::new();
 
-    // 获取测试文件列表（优先使用自动扫描）/ Get test files (prefer auto-scanned)
-    let test_files_for_level: Vec<&str> = if let Some(effect_test_files) = config.effect_test_files {
-        if let Some(files) = effect_test_files.effect_test_map.get(effect.id) {
-            files.iter().map(|s| s.as_str()).collect()
-        } else {
-            effect.test_files.to_vec()
-        }
-    } else {
-        effect.test_files.to_vec()
-    };
-
     // 计算支持级别 / Compute support level
-    let support_level = if let Some(results) = config.test_results {
-        results.compute_support_level(&test_files_for_level)
-    } else {
-        effect.support_level
-    };
+    let support_level = get_effect_support_level(effect, config);
 
     // 标题 / Title - 中文名通常已包含英文，直接使用
     let title = if lang == "zh-hans" {
@@ -327,11 +312,7 @@ pub fn generate_builtin_doc(
     let mut doc = String::new();
 
     // 计算支持级别 / Compute support level
-    let support_level = if let Some(results) = config.test_results {
-        results.compute_support_level(builtin.test_files)
-    } else {
-        builtin.support_level
-    };
+    let support_level = get_builtin_support_level(builtin, config);
 
     // 标题 / Title - 中文名通常已包含英文，直接使用
     let title = if lang == "zh-hans" {
@@ -519,11 +500,7 @@ pub fn generate_effects_index(
     }
 
     for effect in effects {
-        let support_level = if let Some(results) = config.test_results {
-            results.compute_support_level(effect.test_files)
-        } else {
-            effect.support_level
-        };
+        let support_level = get_effect_support_level(effect, config);
 
         let name = if lang == "zh-hans" {
             effect.display_name_zh.to_string()
@@ -611,11 +588,7 @@ pub fn generate_builtins_index(
     }
 
     for builtin in builtins {
-        let support_level = if let Some(results) = config.test_results {
-            results.compute_support_level(builtin.test_files)
-        } else {
-            builtin.support_level
-        };
+        let support_level = get_builtin_support_level(builtin, config);
 
         let name = if lang == "zh-hans" {
             builtin.display_name_zh.to_string()
@@ -743,11 +716,7 @@ pub fn get_support_stats(effects: &[&EffectDef], config: &DocGeneratorConfig) ->
     let mut stats = SupportStats::default();
 
     for effect in effects {
-        let support_level = if let Some(results) = config.test_results {
-            results.compute_support_level(effect.test_files)
-        } else {
-            effect.support_level
-        };
+        let support_level = get_effect_support_level(effect, config);
 
         match support_level {
             SupportLevel::Full => stats.full_count += 1,
@@ -947,18 +916,55 @@ fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> 
         effect.test_files.to_vec()
     };
 
+    // 1. 优先根据测试结果计算 / First try to compute from test results
     if let Some(results) = config.test_results {
-        results.compute_support_level(&test_files)
-    } else {
-        effect.support_level
+        if let Some(level) = results.compute_support_level(&test_files) {
+            return level;
+        }
     }
+
+    // 2. 没有测试结果时，根据代码实现状态判断 / Fall back to implementation status
+    if let Some(impl_status) = config.impl_status {
+        if let Some(impl_info) = impl_status.get(effect.id) {
+            // 有实现的字段或模式 / Has implemented fields or patterns
+            if !impl_info.implemented_fields.is_empty() || !impl_info.pattern_fields.is_empty() {
+                // 检查是否实现了所有定义的字段 / Check if all defined fields are implemented
+                let total_fields = effect.fields.len();
+                let implemented_count = effect
+                    .fields
+                    .iter()
+                    .filter(|f| {
+                        impl_info.implemented_fields.iter().any(|s| s == f.name)
+                            || impl_info
+                                .pattern_fields
+                                .iter()
+                                .any(|p: &String| f.name.starts_with(p.trim_end_matches('*')))
+                    })
+                    .count();
+
+                return if implemented_count == total_fields && total_fields > 0 {
+                    SupportLevel::Full
+                } else if implemented_count > 0 {
+                    SupportLevel::Partial
+                } else {
+                    SupportLevel::Unsupported
+                };
+            }
+        }
+    }
+
+    // 3. 无法判断时使用定义中的默认值 / Use default from definition
+    effect.support_level
 }
 
 /// 获取内置功能的支持级别 / Get builtin support level
 fn get_builtin_support_level(builtin: &BuiltinDef, config: &DocGeneratorConfig) -> SupportLevel {
     if let Some(results) = config.test_results {
-        results.compute_support_level(builtin.test_files)
-    } else {
-        builtin.support_level
+        // 内置功能使用定义中的测试文件 / Builtins use test files from definition
+        if let Some(level) = results.compute_support_level(builtin.test_files) {
+            return level;
+        }
     }
+    // 回退到定义中的默认值 / Fall back to definition default
+    builtin.support_level
 }

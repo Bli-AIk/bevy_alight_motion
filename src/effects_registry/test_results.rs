@@ -107,9 +107,12 @@ impl TestResults {
     }
 
     /// 根据关联的测试文件计算支持级别 / Compute support level based on associated test files
-    pub fn compute_support_level(&self, test_files: &[&str]) -> SupportLevel {
+    ///
+    /// 返回 None 表示无法从测试结果判断（测试文件为空或没有相关测试）
+    /// Returns None when unable to determine from test results (empty test files or no related tests)
+    pub fn compute_support_level(&self, test_files: &[&str]) -> Option<SupportLevel> {
         if test_files.is_empty() {
-            return SupportLevel::Unsupported;
+            return None; // 无测试文件，返回 None 让调用方回退到其他判断方式
         }
 
         let mut pass_count = 0;
@@ -133,7 +136,7 @@ impl TestResults {
 
         let total = test_files.len();
 
-        if pass_count == total {
+        Some(if pass_count == total {
             // 所有测试通过 / All tests passed
             SupportLevel::Full
         } else if pass_count > 0 {
@@ -145,7 +148,7 @@ impl TestResults {
         } else {
             // 全部跳过或未测试 / All skipped or not tested
             SupportLevel::Unsupported
-        }
+        })
     }
 }
 

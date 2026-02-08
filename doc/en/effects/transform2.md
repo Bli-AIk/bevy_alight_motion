@@ -5,7 +5,7 @@
 
 Provides additional transform controls similar to the base transform properties.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ⚠️ Partially Supported
 
 - **X Offset (posx)**: ✅ Implemented (Additional horizontal offset)
 - **Y Offset (posy)**: ✅ Implemented (Additional vertical offset)

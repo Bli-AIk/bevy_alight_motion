@@ -5,7 +5,7 @@
 
 Covers rectangular segments from opposite sides of the layer. Use keyframe animation to create wipe transitions.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Start (start)**: ✅ Implemented (Visible range start point (0.0-1.0))
 - **End (end)**: ✅ Implemented (Visible range end point (0.0-1.0))

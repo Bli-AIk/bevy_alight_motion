@@ -4,8 +4,8 @@
 export const zhHansEffects = {
   text: '高级效果',
   items: [
-    { text: '<span style="color:#ef4444">●</span> 变换 (Transform2)', link: '/zh-hans/effects/transform2' },
-    { text: '<span style="color:#ef4444">●</span> 擦拭 (Wipe2)', link: '/zh-hans/effects/wipe2' },
+    { text: '<span style="color:#eab308">●</span> 变换 (Transform2)', link: '/zh-hans/effects/transform2' },
+    { text: '<span style="color:#22c55e">●</span> 擦拭 (Wipe2)', link: '/zh-hans/effects/wipe2' },
     { text: '<span style="color:#eab308">●</span> 拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
     { text: '<span style="color:#ef4444">●</span> 高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
     { text: '<span style="color:#ef4444">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
@@ -17,8 +17,8 @@ export const zhHansEffects = {
 export const enEffects = {
   text: 'Advanced Effects',
   items: [
-    { text: '<span style="color:#ef4444">●</span> Transform2', link: '/en/effects/transform2' },
-    { text: '<span style="color:#ef4444">●</span> Wipe2', link: '/en/effects/wipe2' },
+    { text: '<span style="color:#eab308">●</span> Transform2', link: '/en/effects/transform2' },
+    { text: '<span style="color:#22c55e">●</span> Wipe2', link: '/en/effects/wipe2' },
     { text: '<span style="color:#eab308">●</span> Stretch Segment', link: '/en/effects/stretch-segment' },
     { text: '<span style="color:#ef4444">●</span> Gaussian Blur', link: '/en/effects/gaussian-blur' },
     { text: '<span style="color:#ef4444">●</span> Palette Map', link: '/en/effects/palette-map' },
