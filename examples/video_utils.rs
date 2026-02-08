@@ -19,7 +19,7 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
         // project_path is like "projects/basic/shape/shape.amproj"
         // video should be at "projects/basic/shape/shape.mp4"
         let base_path = Path::new(path).with_extension("mp4");
-        
+
         // Try both possible asset root directories
         let possible_roots = ["crates/bevy_alight_motion/assets", "assets"];
         for root in &possible_roots {
@@ -29,7 +29,7 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
                 return Some(video_file);
             }
         }
-        
+
         println!(
             "[VIDEO UTILS] No matching video for '{}', falling back to latest",
             path
@@ -38,18 +38,25 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
 
     // Fall back to finding the latest video file in the projects directory
     let mut latest_file: Option<(PathBuf, SystemTime)> = None;
-    
-    let possible_paths = ["crates/bevy_alight_motion/assets/projects", "assets/projects"];
+
+    let possible_paths = [
+        "crates/bevy_alight_motion/assets/projects",
+        "assets/projects",
+    ];
     let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
-    
+
     for projects_path in &possible_paths {
         let base_path = Path::new(projects_path);
         if !base_path.exists() {
             continue;
         }
-        
+
         // Recursively search for video files
-        fn search_videos(dir: &Path, extensions: &[&str], latest: &mut Option<(PathBuf, SystemTime)>) {
+        fn search_videos(
+            dir: &Path,
+            extensions: &[&str],
+            latest: &mut Option<(PathBuf, SystemTime)>,
+        ) {
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     if let Ok(file_type) = entry.file_type() {
@@ -70,7 +77,7 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
                 }
             }
         }
-        
+
         search_videos(base_path, &extensions, &mut latest_file);
         if latest_file.is_some() {
             break;

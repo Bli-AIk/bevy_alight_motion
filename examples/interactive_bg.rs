@@ -42,7 +42,10 @@ struct InteractiveElement {
 /// Get the project file based on CLI argument.
 fn get_project_file() -> String {
     let args: Vec<String> = std::env::args().collect();
-    let project_name = args.get(1).map(|s| s.as_str()).unwrap_or("basic/shape/shape");
+    let project_name = args
+        .get(1)
+        .map(|s| s.as_str())
+        .unwrap_or("basic/shape/shape");
     format!("projects/{}.amproj", project_name)
 }
 
