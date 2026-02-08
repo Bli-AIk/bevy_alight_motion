@@ -11,7 +11,7 @@ use crate::effects_registry::types::FieldType;
 
 define_effect! {
     id: "com.alightcreative.replacecolor",
-    short_name: "replacecolor",
+    short_name: "replace-color",
     zh: "颜色替换 (Replace Color)",
     en: "Replace Color",
     desc_zh: "在给定的容差范围内，将指定的源颜色替换为目标颜色。支持 sRGB 到线性颜色空间转换和动画关键帧。",

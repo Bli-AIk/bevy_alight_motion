@@ -11,7 +11,7 @@ use crate::effects_registry::types::FieldType;
 
 define_effect! {
     id: "com.alightcreative.effects.stretchsegment",
-    short_name: "stretchsegment",
+    short_name: "stretch-segment",
     zh: "拉伸片段 (Stretch Segment)",
     en: "Stretch Segment",
     desc_zh: "UV 域变形效果，沿分割线拉伸图像。拉伸公式: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))",

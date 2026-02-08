@@ -11,7 +11,7 @@ use crate::effects_registry::types::FieldType;
 
 define_effect! {
     id: "com.alightcreative.effects.scaleassist",
-    short_name: "scaleassist",
+    short_name: "scale-assist",
     zh: "缩放辅助 (Scale Assist)",
     en: "Scale Assist",
     desc_zh: "根据选择的轴向自动调整图层尺寸以适应画布。",

@@ -11,7 +11,7 @@ use crate::effects_registry::types::FieldType;
 
 define_effect! {
     id: "com.alightcreative.effects.palettemap",
-    short_name: "palettemap",
+    short_name: "palette-map",
     zh: "调色板映射 (Palette Map)",
     en: "Palette Map",
     desc_zh: "将图像颜色映射到指定的调色板颜色。支持最多 8 个调色板颜色。",

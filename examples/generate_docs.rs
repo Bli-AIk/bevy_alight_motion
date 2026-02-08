@@ -89,6 +89,13 @@ fn main() {
             println!("    - 部分支持 / Partial support: {}", stats.partial_count);
             println!("    - 不支持 / Unsupported: {}", stats.unsupported_count);
             println!("  内置功能数量 / Builtins: {}", builtins.len());
+
+            // 输出 VitePress 侧边栏配置
+            println!("\n{}", "=".repeat(60));
+            println!(
+                "{}",
+                doc_generator::generate_vitepress_sidebar_snippet(effects, builtins)
+            );
         }
         Err(e) => {
             eprintln!("❌ 文档生成失败 / Documentation generation failed: {}", e);

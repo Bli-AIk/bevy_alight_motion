@@ -11,7 +11,7 @@ use crate::effects_registry::types::FieldType;
 
 define_effect! {
     id: "com.alightcreative.effects.gaussianblur",
-    short_name: "gaussianblur",
+    short_name: "gaussian-blur",
     zh: "高斯模糊 (Gaussian Blur)",
     en: "Gaussian Blur",
     desc_zh: "使用多 pass 模糊实现平滑的高斯模糊效果，支持超出原始边界的发光扩散。",

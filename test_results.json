@@ -1,0 +1,30 @@
+{
+  "timestamp": "2025-02-08T14:00:00+08:00",
+  "summary": {
+    "passed": 15,
+    "skipped": 3,
+    "failed": 2
+  },
+  "results": {
+    "basic_shape": { "status": "pass", "avg_similarity": 0.99 },
+    "basic_pivot": { "status": "pass", "avg_similarity": 0.98 },
+    "basic_bezier": { "status": "pass", "avg_similarity": 0.99 },
+    "basic_cutoff": { "status": "pass", "avg_similarity": 0.97 },
+    "basic_mask_square": { "status": "pass", "avg_similarity": 0.98 },
+    "basic_mask_circle": { "status": "pass", "avg_similarity": 0.98 },
+    "basic_group_mask": { "status": "pass", "avg_similarity": 0.98 },
+    "basic_child_mask": { "status": "pass", "avg_similarity": 0.98 },
+    "fx_1_stretch_segment": { "status": "pass", "avg_similarity": 0.96 },
+    "fx_1_ex2_stretch_segment": { "status": "pass", "avg_similarity": 0.95 },
+    "fx_2_gaussian_blur": { "status": "skip" },
+    "fx_3_grid": { "status": "skip" },
+    "fx_4_pixelate": { "status": "skip" },
+    "fx_5_palette": { "status": "pass", "avg_similarity": 0.94 },
+    "fx_6_scaleassist": { "status": "pass", "avg_similarity": 0.97 },
+    "fx_7_threshold": { "status": "fail", "avg_similarity": 0.82 },
+    "fx_8_replace_color": { "status": "pass", "avg_similarity": 0.98 },
+    "complex_examples_2_ex1": { "status": "pass", "avg_similarity": 0.95 },
+    "complex_examples_2_ex2": { "status": "pass", "avg_similarity": 0.94 },
+    "complex_turn_9_ex": { "status": "fail", "avg_similarity": 0.85 }
+  }
+}

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { zhHansEffects, enEffects, zhHansBuiltins, enBuiltins } from './sidebar-effects.mts'
 
 export default defineConfig({
   title: "bevy_alight_motion",
@@ -21,6 +22,7 @@ export default defineConfig({
         nav: [
           { text: 'Guide', link: '/en/guide/introduction' },
           { text: 'Effects', link: '/en/effects/' },
+          { text: 'Builtins', link: '/en/builtins/' },
           { text: 'Examples', link: '/en/examples/' },
           { text: 'Playground', link: '/en/playground/' }
         ],
@@ -53,23 +55,16 @@ export default defineConfig({
                 { text: 'Easings', link: '/en/effects/easings' }
               ]
             },
-            {
-              text: 'Advanced Effects',
-              items: [
-                { text: 'Wipe', link: '/en/effects/wipe' },
-                { text: 'Gaussian Blur', link: '/en/effects/gaussian-blur' },
-                { text: 'Stretch Segment', link: '/en/effects/stretch-segment' },
-                { text: 'Palette Map', link: '/en/effects/palette-map' },
-                { text: 'Replace Color', link: '/en/effects/replace-color' },
-                { text: 'Scale Assist', link: '/en/effects/scale-assist' }
-              ]
-            },
+            enEffects,
             {
               text: 'Masking',
               items: [
                 { text: 'Layer Masks', link: '/en/effects/masking' }
               ]
             }
+          ],
+          '/en/builtins/': [
+            enBuiltins
           ]
         }
       }
@@ -82,6 +77,7 @@ export default defineConfig({
         nav: [
           { text: '指南', link: '/zh-hans/guide/introduction' },
           { text: '效果', link: '/zh-hans/effects/' },
+          { text: '基础功能', link: '/zh-hans/builtins/' },
           { text: '示例', link: '/zh-hans/examples/' },
           { text: 'Playground', link: '/zh-hans/playground/' }
         ],
@@ -114,23 +110,16 @@ export default defineConfig({
                 { text: '缓动曲线', link: '/zh-hans/effects/easings' }
               ]
             },
-            {
-              text: '高级效果',
-              items: [
-                { text: '擦拭 (Wipe)', link: '/zh-hans/effects/wipe' },
-                { text: '高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
-                { text: '拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
-                { text: '调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
-                { text: '颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
-                { text: '缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' }
-              ]
-            },
+            zhHansEffects,
             {
               text: '遮罩',
               items: [
                 { text: '图层遮罩', link: '/zh-hans/effects/masking' }
               ]
             }
+          ],
+          '/zh-hans/builtins/': [
+            zhHansBuiltins
           ]
         }
       }
