@@ -68,7 +68,10 @@ use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 /// Get the project file based on CLI argument.
 fn get_project_file() -> String {
     let args: Vec<String> = std::env::args().collect();
-    let project_name = args.get(1).map(|s| s.as_str()).unwrap_or("complex/misc/simple_gb");
+    let project_name = args
+        .get(1)
+        .map(|s| s.as_str())
+        .unwrap_or("complex/misc/simple_gb");
 
     // Shortcuts for common projects
     let path = match project_name {
