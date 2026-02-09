@@ -1,9 +1,5 @@
 /target
 
-# WASM build artifacts (too large for git)
-*.wasm
-doc/public/wasm/
-
 # JetBrains Rider
 *.sln.iml
 # JetBrains Rider / IntelliJ IDEA
