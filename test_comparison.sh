@@ -298,18 +298,11 @@ echo "Passed:  $PASSED_COUNT"
 echo "Skipped: $SKIPPED_COUNT"
 echo "Failed:  $FAILED_COUNT"
 
-# Generate JSON results file
+# Generate JSON results file (merge with existing results)
 JSON_OUTPUT="${BASE_DIR}/test_results.json"
-echo "{"
-echo "  \"timestamp\": \"$(date -Iseconds)\","
-echo "  \"summary\": {"
-echo "    \"passed\": $PASSED_COUNT,"
-echo "    \"skipped\": $SKIPPED_COUNT,"
-echo "    \"failed\": $FAILED_COUNT"
-echo "  },"
-echo "  \"results\": {"
 
-JSON_ENTRIES=""
+# Build new results as JSON entries
+NEW_RESULTS=""
 for result_file in "$RESULTS_DIR"/*.result; do
     if [ -f "$result_file" ]; then
         IFS='|' read -r status name avg_details frame_details < "$result_file"
@@ -324,38 +317,68 @@ for result_file in "$RESULTS_DIR"/*.result; do
         status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
         
         # Build JSON entry
-        entry="    \"$name\": { \"status\": \"$status_lower\""
+        entry="\"$name\": { \"status\": \"$status_lower\""
         if [ -n "$avg_sim" ]; then
             entry="$entry, \"avg_similarity\": $avg_sim"
         fi
         entry="$entry }"
         
-        if [ -n "$JSON_ENTRIES" ]; then
-            JSON_ENTRIES="$JSON_ENTRIES,\n$entry"
+        if [ -n "$NEW_RESULTS" ]; then
+            NEW_RESULTS="$NEW_RESULTS, $entry"
         else
-            JSON_ENTRIES="$entry"
+            NEW_RESULTS="$entry"
         fi
     fi
 done
 
-echo -e "$JSON_ENTRIES"
-echo "  }"
-echo "}" > "$JSON_OUTPUT"
+# Merge with existing results using Python (preserves old results, updates with new)
+python3 << EOF
+import json
+import os
+from datetime import datetime
 
-# Also write pretty JSON
-{
-    echo "{"
-    echo "  \"timestamp\": \"$(date -Iseconds)\","
-    echo "  \"summary\": {"
-    echo "    \"passed\": $PASSED_COUNT,"
-    echo "    \"skipped\": $SKIPPED_COUNT,"
-    echo "    \"failed\": $FAILED_COUNT"
-    echo "  },"
-    echo "  \"results\": {"
-    echo -e "$JSON_ENTRIES"
-    echo "  }"
-    echo "}"
-} > "$JSON_OUTPUT"
+json_output = "$JSON_OUTPUT"
+new_results_json = '{$NEW_RESULTS}'
+
+# Parse new results
+new_results = json.loads('{' + new_results_json + '}') if new_results_json.strip() else {}
+
+# Load existing results if file exists
+existing_results = {}
+if os.path.exists(json_output):
+    try:
+        with open(json_output, 'r') as f:
+            existing_data = json.load(f)
+            existing_results = existing_data.get('results', {})
+    except (json.JSONDecodeError, IOError):
+        pass  # Start fresh if file is corrupted
+
+# Merge: existing results + new results (new overwrites old for same keys)
+merged_results = {**existing_results, **new_results}
+
+# Recalculate summary from merged results
+passed = sum(1 for r in merged_results.values() if r.get('status') == 'pass')
+failed = sum(1 for r in merged_results.values() if r.get('status') == 'fail')
+skipped = sum(1 for r in merged_results.values() if r.get('status') in ('skip', 'cancelled'))
+
+# Build final JSON
+output = {
+    "timestamp": datetime.now().astimezone().isoformat(),
+    "summary": {
+        "passed": passed,
+        "skipped": skipped,
+        "failed": failed
+    },
+    "results": dict(sorted(merged_results.items()))
+}
+
+# Write output
+with open(json_output, 'w') as f:
+    json.dump(output, f, indent=2)
+
+print(f"Merged {len(new_results)} new results with {len(existing_results)} existing results")
+print(f"Total: {len(merged_results)} results ({passed} passed, {failed} failed, {skipped} skipped)")
+EOF
 
 echo ""
 echo "📄 JSON results saved to: $JSON_OUTPUT"
