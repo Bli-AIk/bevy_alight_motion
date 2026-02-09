@@ -41,6 +41,12 @@ struct UnifiedEffectUniform {
     replace_color_params: vec4<f32>,// (threshold, feather, alpha, 0)
     repeat_params1: vec4<f32>,     // (count, offset_x, offset_y, angle_deg)
     repeat_params2: vec4<f32>,     // (scale, alpha, 0, 0)
+    // Linear repeat effect
+    linear_repeat_params1: vec4<f32>,  // (count, position_x, position_y, angle_deg)
+    linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
+    linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
+    linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
+    linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -482,6 +488,27 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let repeat_alpha = uniforms.repeat_params2.y;
     let repeat_enabled = repeat_count > 0;
     
+    // Extract linear repeat effect params
+    // Use round for count to get integer copy counts
+    let linear_repeat_count = i32(round(uniforms.linear_repeat_params1.x));
+    let linear_repeat_position = vec2<f32>(uniforms.linear_repeat_params1.y, uniforms.linear_repeat_params1.z);
+    let linear_repeat_angle_deg = uniforms.linear_repeat_params1.w;
+    let linear_repeat_offset = vec2<f32>(uniforms.linear_repeat_params2.x, uniforms.linear_repeat_params2.y);
+    let linear_repeat_scale = uniforms.linear_repeat_params2.z;
+    let linear_repeat_alpha = uniforms.linear_repeat_params2.w;
+    let linear_repeat_start = uniforms.linear_repeat_params3.x;
+    let linear_repeat_end = uniforms.linear_repeat_params3.y;
+    let linear_repeat_phase = uniforms.linear_repeat_params3.z;
+    let linear_repeat_overlap = uniforms.linear_repeat_params3.w;
+    let linear_repeat_ease_in = uniforms.linear_repeat_params4.x;
+    let linear_repeat_ease_out = uniforms.linear_repeat_params4.y;
+    let linear_repeat_blend = uniforms.linear_repeat_params4.z;
+    let linear_repeat_shape_invert_alt = i32(uniforms.linear_repeat_params4.w);
+    let linear_repeat_shape = linear_repeat_shape_invert_alt / 100;
+    let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
+    let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
+    let linear_repeat_enabled = linear_repeat_count > 0;
+    
     var sample_uv = mesh.uv;
     
     // Apply stretch segment effect if enabled (before blur)
@@ -577,6 +604,158 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 
                 // Blend using standard alpha compositing (back to front)
                 // result = src + dst * (1 - src.alpha)
+                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+            }
+        }
+        
+        tex_color = accumulated_color;
+    } else if linear_repeat_enabled {
+        // Linear repeat effect: render multiple copies arranged in a line
+        // Each copy has position, offset, rotation, scale, and alpha
+        // The line distribution is controlled by start/end and easing
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        
+        // Convert UV to pixel space for transformation
+        let center = vec2<f32>(0.5, 0.5);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        
+        // Accumulate color from all copies (back to front)
+        var accumulated_color = vec4<f32>(0.0);
+        
+        // Convert angle to radians (negate for AM's opposite rotation direction)
+        let angle_rad = -linear_repeat_angle_deg * 3.14159265 / 180.0;
+        
+        // Total copies to render
+        let total_copies = linear_repeat_count;
+        
+        // Calculate spacing as position / (count - 1)
+        // Keep Y in AM coords; flip will be applied when transforming
+        var spacing: vec2<f32>;
+        if total_copies > 1 {
+            spacing = vec2<f32>(linear_repeat_position.x, linear_repeat_position.y) / f32(total_copies - 1);
+        } else {
+            spacing = vec2<f32>(0.0, 0.0);
+        }
+        
+        // Start from the farthest copy (highest index) and work backwards
+        for (var i = total_copies - 1; i >= 0; i = i - 1) {
+            let fi = f32(i);
+            
+            // Calculate normalized position for this copy (0 to 1)
+            var normalized_pos: f32;
+            if total_copies > 1 {
+                normalized_pos = fi / f32(total_copies - 1);
+            } else {
+                normalized_pos = 0.0;
+            }
+            
+            // Apply phase shift (wraps around)
+            normalized_pos = fract(normalized_pos + linear_repeat_phase);
+            
+            // Check if copy is within start/end range
+            if normalized_pos < linear_repeat_start || normalized_pos > linear_repeat_end {
+                continue;
+            }
+            
+            // Apply easing to distribution
+            var eased_pos = normalized_pos;
+            if linear_repeat_ease_in > 0.001 || linear_repeat_ease_out > 0.001 {
+                // Simple quadratic easing
+                if linear_repeat_ease_in > 0.001 && eased_pos < 0.5 {
+                    let t = eased_pos * 2.0;
+                    eased_pos = t * t * linear_repeat_ease_in + t * (1.0 - linear_repeat_ease_in);
+                    eased_pos = eased_pos * 0.5;
+                }
+                if linear_repeat_ease_out > 0.001 && eased_pos > 0.5 {
+                    let t = (eased_pos - 0.5) * 2.0;
+                    let t_inv = 1.0 - t;
+                    eased_pos = 1.0 - t_inv * t_inv * linear_repeat_ease_out - t_inv * (1.0 - linear_repeat_ease_out);
+                    eased_pos = 0.5 + eased_pos * 0.5;
+                }
+            }
+            
+            // Calculate cumulative transform for this copy
+            // In linear repeat:
+            // - position defines the total span from copy 0 to copy (count-1)
+            // - offset is a constant shift applied only to COPIES (not original)
+            // spacing = position / (count - 1)
+            let position_offset = spacing * fi;
+            let constant_offset = vec2<f32>(linear_repeat_offset.x, linear_repeat_offset.y);
+            var cumulative_offset: vec2<f32>;
+            if i == 0 {
+                // Original stays at position determined by spacing only
+                cumulative_offset = position_offset;
+            } else {
+                // Copies get spacing + constant offset
+                cumulative_offset = position_offset + constant_offset;
+            }
+            let cumulative_angle = angle_rad * fi;
+            let cumulative_scale = pow(linear_repeat_scale, fi);
+            let cumulative_alpha = pow(linear_repeat_alpha, fi);
+            
+            // Skip copies with negligible alpha
+            if cumulative_alpha < 0.001 {
+                continue;
+            }
+            
+            // Transform: first un-offset, then un-rotate, then un-scale
+            var transformed_coord = pixel_coord;
+            
+            // Reverse offset (subtract the offset to find source position)
+            // Y flipped because AM uses Y-down, shader pixel_coord uses Y-up convention
+            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            
+            // Reverse rotation around center
+            if abs(cumulative_angle) > 0.001 {
+                let cos_a = cos(-cumulative_angle);
+                let sin_a = sin(-cumulative_angle);
+                transformed_coord = vec2<f32>(
+                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
+                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+                );
+            }
+            
+            // Reverse scale around center
+            if abs(cumulative_scale) > 0.001 {
+                transformed_coord = transformed_coord / cumulative_scale;
+            }
+            
+            // Convert back to UV and check bounds
+            let half_w = orig_width * 0.5;
+            let half_h = orig_height * 0.5;
+            
+            // Check if transformed coord is within the original shape bounds
+            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
+               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
+                // Convert to UV [0,1]
+                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                var copy_color: vec4<f32>;
+                if blur_enabled && uniforms.blur_params.x > 0.5 {
+                    copy_color = apply_blur(copy_uv);
+                } else {
+                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                }
+                
+                // Apply fill color blending
+                if linear_repeat_blend > 0.001 {
+                    var should_blend = true;
+                    // If color_alt_copies is enabled, only blend every other copy
+                    if linear_repeat_color_alt {
+                        should_blend = i % 2 == 1;
+                    }
+                    if should_blend {
+                        let blend_amount = min(linear_repeat_blend, 1.0);
+                        copy_color.r = mix(copy_color.r, uniforms.linear_repeat_fill_color.r, blend_amount);
+                        copy_color.g = mix(copy_color.g, uniforms.linear_repeat_fill_color.g, blend_amount);
+                        copy_color.b = mix(copy_color.b, uniforms.linear_repeat_fill_color.b, blend_amount);
+                    }
+                }
+                
+                // Apply cumulative alpha
+                copy_color.a *= cumulative_alpha;
+                
+                // Blend using standard alpha compositing (back to front)
                 accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
             }
         }

@@ -212,6 +212,7 @@ pub(crate) fn spawn_shape(
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
     let repeat_effect = extract_repeat_effect(&shape.effects);
+    let linear_repeat_effect = extract_linear_repeat_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -411,6 +412,24 @@ pub(crate) fn spawn_shape(
                 repeat_angle: repeat_effect.angle,
                 repeat_scale: repeat_effect.scale,
                 repeat_alpha: repeat_effect.alpha,
+                // Linear repeat effect
+                linear_repeat_count: linear_repeat_effect.count,
+                linear_repeat_position: linear_repeat_effect.position,
+                linear_repeat_offset: linear_repeat_effect.offset,
+                linear_repeat_angle: linear_repeat_effect.angle,
+                linear_repeat_scale: linear_repeat_effect.scale,
+                linear_repeat_alpha: linear_repeat_effect.alpha,
+                linear_repeat_fill_color: linear_repeat_effect.fill_color,
+                linear_repeat_blend: linear_repeat_effect.blend,
+                linear_repeat_color_alt_copies: linear_repeat_effect.color_alt_copies,
+                linear_repeat_start: linear_repeat_effect.start,
+                linear_repeat_end: linear_repeat_effect.end,
+                linear_repeat_phase: linear_repeat_effect.phase,
+                linear_repeat_ease_in: linear_repeat_effect.ease_in,
+                linear_repeat_ease_out: linear_repeat_effect.ease_out,
+                linear_repeat_overlap: linear_repeat_effect.overlap,
+                linear_repeat_shape: linear_repeat_effect.shape,
+                linear_repeat_invert: linear_repeat_effect.invert,
             },
             layer_spec,
             transform,
@@ -449,6 +468,7 @@ pub(crate) fn spawn_null(
     let scale_assist = extract_scale_assist_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
     let repeat_effect = extract_repeat_effect(&null.effects);
+    let linear_repeat_effect = extract_linear_repeat_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -525,6 +545,24 @@ pub(crate) fn spawn_null(
                 repeat_angle: repeat_effect.angle,
                 repeat_scale: repeat_effect.scale,
                 repeat_alpha: repeat_effect.alpha,
+                // Linear repeat effect
+                linear_repeat_count: linear_repeat_effect.count,
+                linear_repeat_position: linear_repeat_effect.position,
+                linear_repeat_offset: linear_repeat_effect.offset,
+                linear_repeat_angle: linear_repeat_effect.angle,
+                linear_repeat_scale: linear_repeat_effect.scale,
+                linear_repeat_alpha: linear_repeat_effect.alpha,
+                linear_repeat_fill_color: linear_repeat_effect.fill_color,
+                linear_repeat_blend: linear_repeat_effect.blend,
+                linear_repeat_color_alt_copies: linear_repeat_effect.color_alt_copies,
+                linear_repeat_start: linear_repeat_effect.start,
+                linear_repeat_end: linear_repeat_effect.end,
+                linear_repeat_phase: linear_repeat_effect.phase,
+                linear_repeat_ease_in: linear_repeat_effect.ease_in,
+                linear_repeat_ease_out: linear_repeat_effect.ease_out,
+                linear_repeat_overlap: linear_repeat_effect.overlap,
+                linear_repeat_shape: linear_repeat_effect.shape,
+                linear_repeat_invert: linear_repeat_effect.invert,
             },
             AmLayerSpec::Null,
             transform,
@@ -643,6 +681,27 @@ pub(crate) fn spawn_embed_scene(
                 repeat_angle: AmAnimatedFloat::default(),
                 repeat_scale: AmAnimatedFloat::default(),
                 repeat_alpha: AmAnimatedFloat::default(),
+                // Linear repeat effect
+                linear_repeat_count: AmAnimatedFloat::default(),
+                linear_repeat_position: AmAnimatedVec2::default(),
+                linear_repeat_offset: AmAnimatedVec2::default(),
+                linear_repeat_angle: AmAnimatedFloat::default(),
+                linear_repeat_scale: AmAnimatedFloat::default(),
+                linear_repeat_alpha: AmAnimatedFloat::default(),
+                linear_repeat_fill_color: crate::schema::AmAnimatedColor::default(),
+                linear_repeat_blend: AmAnimatedFloat::default(),
+                linear_repeat_color_alt_copies: false,
+                linear_repeat_start: AmAnimatedFloat::default(),
+                linear_repeat_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                linear_repeat_phase: AmAnimatedFloat::default(),
+                linear_repeat_ease_in: AmAnimatedFloat::default(),
+                linear_repeat_ease_out: AmAnimatedFloat::default(),
+                linear_repeat_overlap: AmAnimatedFloat::default(),
+                linear_repeat_shape: 0,
+                linear_repeat_invert: false,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

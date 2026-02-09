@@ -95,6 +95,14 @@ frame_threshold = 0.90
 max_failed_rate = 0.25
 min_frame_similarity = 0.40
 
+# Linear repeat - complex effect with timing differences during count transitions
+# 线性重复 - 复杂效果，计数过渡期间存在时序差异
+[overrides."effects/linear-repeat/basic"]
+avg_threshold = 0.65
+frame_threshold = 0.50
+max_failed_rate = 0.95
+min_frame_similarity = 0.30
+
 # Gaussian blur - not implemented
 [overrides."effects/gaussian-blur/basic"]
 skip = true

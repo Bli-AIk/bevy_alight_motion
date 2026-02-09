@@ -139,6 +139,41 @@ pub struct AmAnimated {
     pub repeat_scale: AmAnimatedFloat,
     /// Repeat effect: alpha multiplier per copy
     pub repeat_alpha: AmAnimatedFloat,
+    // Linear Repeat effect (com.alightcreative.effects.repeat.line)
+    /// Linear repeat effect: number of copies
+    pub linear_repeat_count: AmAnimatedFloat,
+    /// Linear repeat effect: position offset for the repeat line (pixels)
+    pub linear_repeat_position: AmAnimatedVec2,
+    /// Linear repeat effect: additional offset per copy (pixels)
+    pub linear_repeat_offset: AmAnimatedVec2,
+    /// Linear repeat effect: rotation angle per copy (degrees)
+    pub linear_repeat_angle: AmAnimatedFloat,
+    /// Linear repeat effect: scale multiplier per copy
+    pub linear_repeat_scale: AmAnimatedFloat,
+    /// Linear repeat effect: alpha multiplier per copy
+    pub linear_repeat_alpha: AmAnimatedFloat,
+    /// Linear repeat effect: fill color for copies (animated)
+    pub linear_repeat_fill_color: crate::schema::AmAnimatedColor,
+    /// Linear repeat effect: color blend factor
+    pub linear_repeat_blend: AmAnimatedFloat,
+    /// Linear repeat effect: color alt copies flag
+    pub linear_repeat_color_alt_copies: bool,
+    /// Linear repeat effect: start of visible range (0.0-1.0)
+    pub linear_repeat_start: AmAnimatedFloat,
+    /// Linear repeat effect: end of visible range (0.0-1.0)
+    pub linear_repeat_end: AmAnimatedFloat,
+    /// Linear repeat effect: phase shift
+    pub linear_repeat_phase: AmAnimatedFloat,
+    /// Linear repeat effect: ease-in factor
+    pub linear_repeat_ease_in: AmAnimatedFloat,
+    /// Linear repeat effect: ease-out factor
+    pub linear_repeat_ease_out: AmAnimatedFloat,
+    /// Linear repeat effect: overlap factor
+    pub linear_repeat_overlap: AmAnimatedFloat,
+    /// Linear repeat effect: distribution shape (0 = linear)
+    pub linear_repeat_shape: i32,
+    /// Linear repeat effect: invert flag
+    pub linear_repeat_invert: bool,
 }
 
 impl AmAnimated {

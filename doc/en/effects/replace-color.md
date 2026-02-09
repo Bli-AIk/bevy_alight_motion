@@ -1,11 +1,11 @@
 # Replace Color
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 02:47:39
+> Last tested: 2026-02-09 14:03:39
 
 Replaces a source color with a target color within a given tolerance. Supports sRGB to linear color space conversion and animation keyframes.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Old Color (oldcolor)**: ✅ Implemented (The source color to replace)
 - **New Color (newcolor)**: ✅ Implemented (The target color to replace with)
@@ -15,7 +15,7 @@ Replaces a source color with a target color within a given tolerance. Supports s
 - **Lock Luminance (lockluminance)**: ❌ Not implemented (Preserve original pixel luminance)
 
 **Related Test Files:**
-- `effects/replace-color/basic.amproj` ✅
+- `effects/replace-color/basic.amproj`
 
 ---
 

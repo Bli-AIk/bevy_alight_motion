@@ -6,6 +6,7 @@
 //! 所有效果定义的入口模块。
 
 pub mod gaussian_blur;
+pub mod linear_repeat;
 pub mod palette_map;
 pub mod repeat;
 pub mod replace_color;
@@ -27,6 +28,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &replace_color::EFFECT,
         &scale_assist::EFFECT,
         &repeat::EFFECT,
+        &linear_repeat::EFFECT,
     ]
 }
 

@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect};
+use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmAnimatedVec2, AmEffect};
 
 pub(crate) fn extract_effect_animations(
     effects: &[AmEffect],
@@ -490,6 +490,225 @@ pub(crate) fn extract_repeat_effect(effects: &[AmEffect]) -> RepeatParams {
                             params.alpha.keyframes = prop.keyframes.clone();
                         } else if let Ok(v) = prop.value.parse::<f32>() {
                             params.alpha.value = Some(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+/// Linear Repeat effect parameters
+/// Creates multiple copies arranged in a line with advanced distribution controls
+/// 线性重复效果参数
+/// 创建沿线排列的多个副本，具有高级分布控制
+#[derive(Debug, Clone, Default)]
+pub struct LinearRepeatParams {
+    /// Number of copies (0 = no effect)
+    pub count: AmAnimatedFloat,
+    /// Position offset for the repeat line (pixels)
+    pub position: AmAnimatedVec2,
+    /// Additional offset per copy (pixels)
+    pub offset: AmAnimatedVec2,
+    /// Rotation angle per copy (degrees)
+    pub angle: AmAnimatedFloat,
+    /// Scale multiplier per copy (1.0 = same size)
+    pub scale: AmAnimatedFloat,
+    /// Alpha multiplier per copy (1.0 = same opacity)
+    pub alpha: AmAnimatedFloat,
+    /// Fill color for copies (animated)
+    pub fill_color: AmAnimatedColor,
+    /// Color blend factor (0 = original, 1+ = blend to fill_color)
+    pub blend: AmAnimatedFloat,
+    /// Whether to alternate colors between copies
+    pub color_alt_copies: bool,
+    /// Start of visible range (0.0-1.0)
+    pub start: AmAnimatedFloat,
+    /// End of visible range (0.0-1.0)
+    pub end: AmAnimatedFloat,
+    /// Phase shift for distribution
+    pub phase: AmAnimatedFloat,
+    /// Ease-in factor for distribution
+    pub ease_in: AmAnimatedFloat,
+    /// Ease-out factor for distribution
+    pub ease_out: AmAnimatedFloat,
+    /// Overlap factor between copies
+    pub overlap: AmAnimatedFloat,
+    /// Distribution shape (0 = linear)
+    pub shape: i32,
+    /// Whether to invert the effect
+    pub invert: bool,
+    /// Whether to randomize copy order
+    pub random_order: bool,
+    /// Random seed
+    pub seed: f32,
+}
+
+impl LinearRepeatParams {
+    // No methods needed currently - kept for potential future use
+}
+
+/// Extract linear repeat effect parameters from effects.
+/// 从效果中提取线性重复效果参数
+pub(crate) fn extract_linear_repeat_effect(effects: &[AmEffect]) -> LinearRepeatParams {
+    let mut params = LinearRepeatParams::default();
+    // Defaults
+    params.scale.value = Some(1.0);
+    params.alpha.value = Some(1.0);
+    params.end.value = Some(1.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.repeat.line" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "count" => {
+                        if !prop.keyframes.is_empty() {
+                            params.count.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.count.value = Some(v);
+                        }
+                    }
+                    "position" => {
+                        if !prop.keyframes.is_empty() {
+                            params.position.keyframes = prop.keyframes.clone();
+                        } else {
+                            let parts: Vec<&str> = prop.value.split(',').collect();
+                            if parts.len() == 2
+                                && let Ok(x) = parts[0].trim().parse::<f32>()
+                                && let Ok(y) = parts[1].trim().parse::<f32>()
+                            {
+                                params.position.value = Some([x, y]);
+                            }
+                        }
+                    }
+                    "offset" => {
+                        if !prop.keyframes.is_empty() {
+                            params.offset.keyframes = prop.keyframes.clone();
+                        } else {
+                            let parts: Vec<&str> = prop.value.split(',').collect();
+                            if parts.len() == 2
+                                && let Ok(x) = parts[0].trim().parse::<f32>()
+                                && let Ok(y) = parts[1].trim().parse::<f32>()
+                            {
+                                params.offset.value = Some([x, y]);
+                            }
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "scale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.scale.value = Some(v);
+                        }
+                    }
+                    "alpha" => {
+                        if !prop.keyframes.is_empty() {
+                            params.alpha.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.alpha.value = Some(v);
+                        }
+                    }
+                    "fillColor" => {
+                        if !prop.keyframes.is_empty() {
+                            params.fill_color.keyframes = prop
+                                .keyframes
+                                .iter()
+                                .filter_map(|kf| {
+                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
+                                        Some(crate::schema::AmKeyframe {
+                                            time: kf.time,
+                                            value: format!(
+                                                "{},{},{},{}",
+                                                color[0], color[1], color[2], color[3]
+                                            ),
+                                            easing: kf.easing.clone(),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                            params.fill_color.value =
+                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
+                        }
+                    }
+                    "blend" => {
+                        if !prop.keyframes.is_empty() {
+                            params.blend.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.blend.value = Some(v);
+                        }
+                    }
+                    "colorAltCopies" => {
+                        params.color_alt_copies = prop.value == "true";
+                    }
+                    "start" => {
+                        if !prop.keyframes.is_empty() {
+                            params.start.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.start.value = Some(v);
+                        }
+                    }
+                    "end" => {
+                        if !prop.keyframes.is_empty() {
+                            params.end.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.end.value = Some(v);
+                        }
+                    }
+                    "phase" => {
+                        if !prop.keyframes.is_empty() {
+                            params.phase.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.phase.value = Some(v);
+                        }
+                    }
+                    "easeIn" => {
+                        if !prop.keyframes.is_empty() {
+                            params.ease_in.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.ease_in.value = Some(v);
+                        }
+                    }
+                    "easeOut" => {
+                        if !prop.keyframes.is_empty() {
+                            params.ease_out.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.ease_out.value = Some(v);
+                        }
+                    }
+                    "overlap" => {
+                        if !prop.keyframes.is_empty() {
+                            params.overlap.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.overlap.value = Some(v);
+                        }
+                    }
+                    "shape" => {
+                        if let Ok(v) = prop.value.parse::<i32>() {
+                            params.shape = v;
+                        }
+                    }
+                    "invert" => {
+                        params.invert = prop.value == "true";
+                    }
+                    "randomOrder" => {
+                        params.random_order = prop.value == "true";
+                    }
+                    "seed" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.seed = v;
                         }
                     }
                     _ => {}

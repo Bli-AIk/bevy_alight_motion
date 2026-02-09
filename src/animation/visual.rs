@@ -313,6 +313,12 @@ pub(crate) fn add_visual_components(
                 replace_color_params: Vec4::ZERO,
                 repeat_params1: Vec4::ZERO,
                 repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
+                // Linear repeat defaults
+                linear_repeat_params1: Vec4::ZERO,
+                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                linear_repeat_params4: Vec4::ZERO,
+                linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             },
             texture: Some(texture),
         };

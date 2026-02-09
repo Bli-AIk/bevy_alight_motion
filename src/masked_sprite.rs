@@ -81,6 +81,22 @@ pub struct UnifiedEffectUniform {
 
     /// Repeat effect params: (scale, alpha, 0, 0)
     pub repeat_params2: Vec4,
+
+    /// Linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub linear_repeat_params1: Vec4,
+
+    /// Linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub linear_repeat_params2: Vec4,
+
+    /// Linear repeat params3: (start, end, phase, overlap)
+    pub linear_repeat_params3: Vec4,
+
+    /// Linear repeat params4: (ease_in, ease_out, blend, shape_invert_alt)
+    /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
+    pub linear_repeat_params4: Vec4,
+
+    /// Linear repeat fill color (r, g, b, a)
+    pub linear_repeat_fill_color: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -217,6 +233,12 @@ impl Default for UnifiedEffectUniform {
             replace_color_params: Vec4::ZERO,
             repeat_params1: Vec4::ZERO, // (count, offset_x, offset_y, angle)
             repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0), // (scale, alpha, 0, 0)
+            // Linear repeat defaults
+            linear_repeat_params1: Vec4::ZERO, // (count, position_x, position_y, angle)
+            linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0), // (offset_x, offset_y, scale, alpha)
+            linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0), // (start, end, phase, overlap)
+            linear_repeat_params4: Vec4::ZERO, // (ease_in, ease_out, blend, shape_invert_alt)
+            linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
 }

@@ -1066,6 +1066,197 @@ pub fn animate_unified_effect_system(
                 material.uniform_data.repeat_params1 = Vec4::ZERO;
                 material.uniform_data.repeat_params2 = Vec4::new(1.0, 1.0, 0.0, 0.0);
             }
+
+            // Update linear repeat effect if present
+            let has_linear_repeat = animated.linear_repeat_count.value.is_some_and(|v| v > 0.0)
+                || animated
+                    .linear_repeat_count
+                    .keyframes
+                    .iter()
+                    .any(|kf| kf.value.parse::<f32>().unwrap_or(0.0) > 0.0);
+            if has_linear_repeat {
+                let count =
+                    interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0);
+                let position = super::interpolation::interpolate_vec2(
+                    &animated.linear_repeat_position,
+                    layer_time,
+                )
+                .unwrap_or([0.0, 0.0]);
+                let offset = super::interpolation::interpolate_vec2(
+                    &animated.linear_repeat_offset,
+                    layer_time,
+                )
+                .unwrap_or([0.0, 0.0]);
+                let angle =
+                    interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
+                let scale =
+                    interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
+                let alpha =
+                    interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
+                let fill_color = super::interpolation::interpolate_color(
+                    &animated.linear_repeat_fill_color,
+                    layer_time,
+                )
+                .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
+                let blend =
+                    interpolate_float(&animated.linear_repeat_blend, layer_time).unwrap_or(0.0);
+                let start =
+                    interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
+                let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
+                let phase =
+                    interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
+                let ease_in =
+                    interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
+                let ease_out =
+                    interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
+                let overlap =
+                    interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
+
+                // Pack shape, invert, and color_alt_copies into a single int
+                let shape_invert_alt = animated.linear_repeat_shape * 100
+                    + if animated.linear_repeat_invert { 10 } else { 0 }
+                    + if animated.linear_repeat_color_alt_copies {
+                        1
+                    } else {
+                        0
+                    };
+
+                bevy::log::debug!(
+                    "[LinearRepeat] layer={} time={:.2} count={:.1} position=({:.1},{:.1}) offset=({:.1},{:.1}) angle={:.1} scale={:.2} alpha={:.2}",
+                    animated.layer_id,
+                    layer_time,
+                    count,
+                    position[0],
+                    position[1],
+                    offset[0],
+                    offset[1],
+                    angle,
+                    scale,
+                    alpha
+                );
+
+                // Use round for count to get integer copy counts
+                let count_rounded = count.round();
+                material.uniform_data.linear_repeat_params1 =
+                    Vec4::new(count_rounded, position[0], position[1], angle);
+                material.uniform_data.linear_repeat_params2 =
+                    Vec4::new(offset[0], offset[1], scale, alpha);
+                material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
+                material.uniform_data.linear_repeat_params4 =
+                    Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
+                material.uniform_data.linear_repeat_fill_color = fill_color;
+
+                // Calculate mesh expansion needed to show all copies
+                let n = (count_rounded as i32 - 1).max(0);
+                let angle_rad = angle.to_radians();
+
+                let mut min_x = -orig_width / 2.0;
+                let mut max_x = orig_width / 2.0;
+                let mut min_y = -orig_height / 2.0;
+                let mut max_y = orig_height / 2.0;
+
+                // Calculate spacing = position / (count - 1) for linear repeat
+                // Keep Y in AM coords; shader works in UV space which is also Y-down
+                let spacing_x = if n > 0 { position[0] / n as f32 } else { 0.0 };
+                let spacing_y = if n > 0 { position[1] / n as f32 } else { 0.0 };
+
+                for i in 0..=n {
+                    let fi = i as f32;
+                    // All copies get spacing*i + offset
+                    let am_offset_x = spacing_x * fi + offset[0];
+                    let am_offset_y = spacing_y * fi + offset[1];
+                    // Convert to Bevy world coords for mesh bounds (flip Y)
+                    let cum_offset_x = am_offset_x;
+                    let cum_offset_y = -am_offset_y;
+                    let cum_scale = scale.powf(fi);
+                    let cum_angle = angle_rad * fi;
+
+                    let half_w = orig_width / 2.0 * cum_scale;
+                    let half_h = orig_height / 2.0 * cum_scale;
+
+                    let corners = [
+                        (-half_w, -half_h),
+                        (half_w, -half_h),
+                        (half_w, half_h),
+                        (-half_w, half_h),
+                    ];
+
+                    let cos_a = cum_angle.cos();
+                    let sin_a = cum_angle.sin();
+                    for (cx, cy) in corners {
+                        let rx = cx * cos_a - cy * sin_a + cum_offset_x;
+                        let ry = cx * sin_a + cy * cos_a + cum_offset_y;
+                        min_x = min_x.min(rx);
+                        max_x = max_x.max(rx);
+                        min_y = min_y.min(ry);
+                        max_y = max_y.max(ry);
+                    }
+                }
+
+                // Add padding for safety
+                let padding = 10.0;
+                min_x -= padding;
+                max_x += padding;
+                min_y -= padding;
+                max_y += padding;
+
+                // Calculate new mesh dimensions
+                let new_width = max_x - min_x;
+                let new_height = max_y - min_y;
+
+                // Update original_size uniform so shader knows the original shape dimensions
+                // x,y = original shape size (for pixel coordinate calculation)
+                // z,w = expanded mesh size (for reference)
+                material.uniform_data.original_size =
+                    Vec4::new(orig_width, orig_height, new_width, new_height);
+
+                let uv_min_x = min_x / orig_width + 0.5;
+                let uv_max_x = max_x / orig_width + 0.5;
+                let uv_min_y = min_y / orig_height + 0.5;
+                let uv_max_y = max_y / orig_height + 0.5;
+
+                let vertices = vec![
+                    [min_x, min_y, 0.0],
+                    [max_x, min_y, 0.0],
+                    [max_x, max_y, 0.0],
+                    [min_x, max_y, 0.0],
+                ];
+                let normals = vec![
+                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, 1.0],
+                ];
+                let uvs = vec![
+                    [uv_min_x, uv_min_y],
+                    [uv_max_x, uv_min_y],
+                    [uv_max_x, uv_max_y],
+                    [uv_min_x, uv_max_y],
+                ];
+                let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+                let mut new_mesh = Mesh::new(
+                    bevy::mesh::PrimitiveTopology::TriangleList,
+                    bevy::asset::RenderAssetUsages::RENDER_WORLD
+                        | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                );
+                new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+
+                let new_mesh_handle = meshes.add(new_mesh);
+                commands
+                    .entity(entity)
+                    .insert(bevy::mesh::Mesh2d(new_mesh_handle));
+            } else {
+                // Reset linear repeat params when effect is disabled
+                material.uniform_data.linear_repeat_params1 = Vec4::ZERO;
+                material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+                material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+                material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+                material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+            }
         }
     }
 }
