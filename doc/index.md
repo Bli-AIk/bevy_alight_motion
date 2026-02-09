@@ -14,6 +14,23 @@ hero:
       link: /en/examples/
 ---
 
+<script setup>
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  // 检测用户语言并重定向到相应的语言版本
+  const lang = navigator.language || navigator.userLanguage
+  const isZhHans = lang.startsWith('zh')
+  const basePath = '/bevy_alight_motion'
+  const targetPath = isZhHans ? `${basePath}/zh-hans/` : `${basePath}/en/`
+  
+  // 只在根路径时重定向，避免循环
+  if (window.location.pathname === basePath + '/' || window.location.pathname === basePath) {
+    window.location.replace(targetPath)
+  }
+})
+</script>
+
 <!-- Single, centered install box -->
 <div class="install-widget">
   <span class="install-cmd">cargo add bevy_alight_motion</span>
