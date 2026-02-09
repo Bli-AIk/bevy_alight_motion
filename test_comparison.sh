@@ -338,10 +338,13 @@ import os
 from datetime import datetime
 
 json_output = "$JSON_OUTPUT"
-new_results_json = '{$NEW_RESULTS}'
+new_results_json = '''{$NEW_RESULTS}'''
 
 # Parse new results
-new_results = json.loads('{' + new_results_json + '}') if new_results_json.strip() else {}
+try:
+    new_results = json.loads(new_results_json) if new_results_json.strip() and new_results_json.strip() != '{}' else {}
+except json.JSONDecodeError:
+    new_results = {}
 
 # Load existing results if file exists
 existing_results = {}

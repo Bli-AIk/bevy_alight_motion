@@ -1,7 +1,7 @@
 # Transform
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 23:01:34
+> Last tested: 2026-02-10 00:07:53
 
 Basic transform properties for layers including position, rotation, scale, opacity and anchor. Coordinate system: AM uses top-left origin, Bevy uses center origin, the library converts automatically.
 
