@@ -294,8 +294,8 @@ pub fn animate_transform_system(
         // Apply swing effect (oscillating rotation)
         // Swing uses freq (Hz), a1 (min angle), a2 (max angle), phase, and type (waveform)
         // Note: swing uses local_time for layer-relative oscillation
-        if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time) {
-            if swing_freq > 0.0 {
+        if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time)
+            && swing_freq > 0.0 {
                 let swing_a1 = interpolate_float(&animated.swing_a1, layer_time).unwrap_or(0.0);
                 let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
                 let swing_phase =
@@ -323,7 +323,7 @@ pub fn animate_transform_system(
                         // Simplified using modulo:
                         let x = oscillation_phase / (2.0 * std::f32::consts::PI);
                         let t = (x - (x + 0.5).floor()).abs();
-                        (4.0 * t - 1.0)
+                        4.0 * t - 1.0
                     }
                     _ => oscillation_phase.sin(), // Default to sine
                 };
@@ -338,7 +338,6 @@ pub fn animate_transform_system(
                 // Negate for Bevy's coordinate system (like base rotation)
                 final_rotation -= swing_angle;
             }
-        }
 
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
