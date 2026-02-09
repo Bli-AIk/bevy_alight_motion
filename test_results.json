@@ -1,62 +1,192 @@
 {
-  "timestamp": "2026-02-09T00:16:23+08:00",
+  "timestamp": "2026-02-10T00:57:52.378038+08:00",
   "summary": {
-    "passed": 24,
-    "skipped": 0,
-    "failed": 28
+    "passed": 35,
+    "skipped": 3,
+    "failed": 17
   },
   "results": {
-    "basic/bezier/bezier": { "status": "pass" },
-    "basic/bezier/ex": { "status": "pass" },
-    "basic/bounce/box": { "status": "fail", "avg_similarity": 0.8842 },
-    "basic/cutoff/cutoff": { "status": "pass" },
-    "basic/frame/frame": { "status": "pass" },
-    "basic/gradient/gradient": { "status": "fail", "avg_similarity": 0.8212 },
-    "basic/group/cutoff": { "status": "pass" },
-    "basic/group/mask": { "status": "pass" },
-    "basic/group/multi-level/basic": { "status": "pass" },
-    "basic/group/multi-level/ex2": { "status": "pass" },
-    "basic/group/multi-level/ex": { "status": "pass" },
-    "basic/group/resolution/basic": { "status": "fail", "avg_similarity": 0.9576 },
-    "basic/group/resolution/ex2": { "status": "fail", "avg_similarity": 0.9370 },
-    "basic/group/resolution/ex": { "status": "pass" },
-    "basic/mask/child": { "status": "pass" },
-    "basic/mask/circle": { "status": "pass" },
-    "basic/mask/square-ex": { "status": "fail", "avg_similarity": 0.9294 },
-    "basic/mask/square": { "status": "pass" },
-    "basic/pivot/pivot": { "status": "pass" },
-    "basic/shape/ex": { "status": "pass" },
-    "basic/shape/shape": { "status": "pass" },
-    "basic/tween/multi": { "status": "fail", "avg_similarity": 0.7798 },
-    "complex/examples/2_ex1": { "status": "fail", "avg_similarity": 0.8625 },
-    "complex/examples/2_ex2": { "status": "fail", "avg_similarity": 0.5983 },
-    "complex/examples/2_ex3": { "status": "pass" },
-    "complex/examples/2_ex4": { "status": "pass" },
-    "complex/examples/2_ex": { "status": "fail", "avg_similarity": 0.9565 },
-    "complex/examples/3_ex1": { "status": "fail", "avg_similarity": 0.8838 },
-    "complex/examples/3_ex2_1": { "status": "fail", "avg_similarity": 0.9527 },
-    "complex/examples/3_ex2": { "status": "fail", "avg_similarity": 0.9474 },
-    "complex/examples/3_ex3": { "status": "fail", "avg_similarity": 0.9636 },
-    "complex/examples/3_ex": { "status": "fail", "avg_similarity": 0.8710 },
-    "complex/misc/simple_gb": { "status": "fail", "avg_similarity": 0.9447 },
-    "complex/turn/13_ex": { "status": "pass" },
-    "complex/turn/9_ex1": { "status": "pass" },
-    "complex/turn/9_ex2": { "status": "fail", "avg_similarity": 0.9680 },
-    "complex/turn/9_ex": { "status": "pass" },
-    "complex/turn/9": { "status": "fail", "avg_similarity": 0.3153 },
-    "effects/gaussian-blur/basic": { "status": "fail", "avg_similarity": 0.9307 },
-    "effects/grid/basic": { "status": "fail", "avg_similarity": 0.9218 },
-    "effects/palette/basic": { "status": "fail", "avg_similarity": 0.9758 },
-    "effects/pixelate/basic": { "status": "fail", "avg_similarity": 0.9197 },
-    "effects/replace-color/basic": { "status": "pass" },
-    "effects/scale-assist/basic": { "status": "pass" },
-    "effects/scale-assist/ex": { "status": "fail", "avg_similarity": 0.9680 },
-    "effects/stretch-segment/basic": { "status": "fail", "avg_similarity": 0.9613 },
-    "effects/stretch-segment/ex2": { "status": "fail", "avg_similarity": 0.9618 },
-    "effects/stretch-segment/ex3": { "status": "fail", "avg_similarity": 0.9264 },
-    "effects/stretch-segment/ex4": { "status": "pass" },
-    "effects/stretch-segment/ex5": { "status": "fail", "avg_similarity": 0.9774 },
-    "effects/stretch-segment/ex": { "status": "fail", "avg_similarity": 0.9051 },
-    "effects/threshold/basic": { "status": "fail", "avg_similarity": 0.8812 }
+    "basic/bezier/bezier": {
+      "status": "pass"
+    },
+    "basic/bezier/ex": {
+      "status": "pass"
+    },
+    "basic/bounce/box": {
+      "status": "pass"
+    },
+    "basic/cutoff/cutoff": {
+      "status": "pass"
+    },
+    "basic/frame/frame": {
+      "status": "pass"
+    },
+    "basic/gradient/gradient": {
+      "status": "skip"
+    },
+    "basic/group/cutoff": {
+      "status": "pass"
+    },
+    "basic/group/mask": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/basic": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/ex": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/ex2": {
+      "status": "pass"
+    },
+    "basic/group/resolution/basic": {
+      "status": "pass"
+    },
+    "basic/group/resolution/ex": {
+      "status": "pass"
+    },
+    "basic/group/resolution/ex2": {
+      "status": "pass"
+    },
+    "basic/mask/child": {
+      "status": "pass"
+    },
+    "basic/mask/circle": {
+      "status": "pass"
+    },
+    "basic/mask/square": {
+      "status": "pass"
+    },
+    "basic/mask/square-ex": {
+      "status": "pass"
+    },
+    "basic/pivot/pivot": {
+      "status": "pass"
+    },
+    "basic/shape/ex": {
+      "status": "pass"
+    },
+    "basic/shape/shape": {
+      "status": "pass"
+    },
+    "basic/tween/multi": {
+      "status": "fail",
+      "avg_similarity": 0.7798
+    },
+    "complex/examples/2_ex": {
+      "status": "fail",
+      "avg_similarity": 0.9461
+    },
+    "complex/examples/2_ex1": {
+      "status": "pass"
+    },
+    "complex/examples/2_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.993
+    },
+    "complex/examples/2_ex3": {
+      "status": "fail",
+      "avg_similarity": 0.8665
+    },
+    "complex/examples/2_ex4": {
+      "status": "pass"
+    },
+    "complex/examples/3_ex": {
+      "status": "fail",
+      "avg_similarity": 0.871
+    },
+    "complex/examples/3_ex1": {
+      "status": "fail",
+      "avg_similarity": 0.8566
+    },
+    "complex/examples/3_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.9474
+    },
+    "complex/examples/3_ex2_1": {
+      "status": "fail",
+      "avg_similarity": 0.9527
+    },
+    "complex/examples/3_ex3": {
+      "status": "fail",
+      "avg_similarity": 0.9636
+    },
+    "complex/misc/simple_gb": {
+      "status": "fail",
+      "avg_similarity": 0.9447
+    },
+    "complex/turn/13_ex": {
+      "status": "pass"
+    },
+    "complex/turn/9": {
+      "status": "fail",
+      "avg_similarity": 0.315
+    },
+    "complex/turn/9_ex": {
+      "status": "pass"
+    },
+    "complex/turn/9_ex1": {
+      "status": "pass"
+    },
+    "complex/turn/9_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.9663
+    },
+    "effects/gaussian-blur/basic": {
+      "status": "skip"
+    },
+    "effects/grid/basic": {
+      "status": "fail",
+      "avg_similarity": 0.9192
+    },
+    "effects/linear-repeat/basic": {
+      "status": "fail",
+      "avg_similarity": 0.6706
+    },
+    "effects/palette/basic": {
+      "status": "fail",
+      "avg_similarity": 0.9002
+    },
+    "effects/pixelate/basic": {
+      "status": "skip"
+    },
+    "effects/repeat/basic": {
+      "status": "pass"
+    },
+    "effects/replace-color/basic": {
+      "status": "pass"
+    },
+    "effects/scale-assist/basic": {
+      "status": "pass"
+    },
+    "effects/scale-assist/ex": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/basic": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/ex": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/ex2": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/ex3": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/ex4": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/ex5": {
+      "status": "pass"
+    },
+    "effects/swing/basic": {
+      "status": "fail",
+      "avg_similarity": 0.9236
+    },
+    "effects/threshold/basic": {
+      "status": "fail",
+      "avg_similarity": 0.9241
+    }
   }
 }

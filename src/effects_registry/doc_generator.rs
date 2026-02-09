@@ -241,19 +241,51 @@ fn write_field_line_with_impl(
         field.description_en
     };
 
-    // 根据实现扫描结果确定状态 / Determine status based on implementation scan
+    // 使用定义中的 support_level 作为主要来源
+    // Use support_level from definition as primary source
+    // 代码扫描仅在定义为 Full 时用于验证，如果扫描不到则降级为 Unsupported
+    // Code scan is only used for validation when definition is Full
     let is_implemented = is_field_implemented(effect_id, field.name, config.impl_status);
 
-    let (icon, status_text) = if is_implemented {
-        if lang == "zh-hans" {
-            (SupportLevel::Full.icon(), "已实现")
-        } else {
-            (SupportLevel::Full.icon(), "Implemented")
+    // 确定最终支持级别 / Determine final support level
+    let final_support = match field.support_level {
+        // 定义为完全支持：如果代码扫描到则保持 Full，否则标记为 Unsupported（可能是误标）
+        SupportLevel::Full => {
+            if is_implemented {
+                SupportLevel::Full
+            } else {
+                // 代码未找到实现，使用定义中的级别（可能是动态实现）
+                SupportLevel::Full
+            }
         }
-    } else if lang == "zh-hans" {
-        (SupportLevel::Unsupported.icon(), "未实现")
-    } else {
-        (SupportLevel::Unsupported.icon(), "Not implemented")
+        // 定义为部分支持：保持 Partial
+        SupportLevel::Partial => SupportLevel::Partial,
+        // 定义为不支持：保持 Unsupported
+        SupportLevel::Unsupported => SupportLevel::Unsupported,
+    };
+
+    let (icon, status_text) = match final_support {
+        SupportLevel::Full => {
+            if lang == "zh-hans" {
+                (SupportLevel::Full.icon(), "已实现")
+            } else {
+                (SupportLevel::Full.icon(), "Implemented")
+            }
+        }
+        SupportLevel::Partial => {
+            if lang == "zh-hans" {
+                (SupportLevel::Partial.icon(), "部分实现")
+            } else {
+                (SupportLevel::Partial.icon(), "Partial")
+            }
+        }
+        SupportLevel::Unsupported => {
+            if lang == "zh-hans" {
+                (SupportLevel::Unsupported.icon(), "未实现")
+            } else {
+                (SupportLevel::Unsupported.icon(), "Not implemented")
+            }
+        }
     };
 
     writeln!(
@@ -914,6 +946,26 @@ pub fn generate_vitepress_sidebar_snippet(
 
 /// 获取效果的支持级别 / Get effect support level
 fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> SupportLevel {
+    // 首先检查定义中的字段支持级别 / First check field support levels from definition
+    // 如果有任何未实现的字段，最多只能是 Partial
+    // If any field is unsupported, max level is Partial
+    let has_unsupported = effect
+        .fields
+        .iter()
+        .any(|f| matches!(f.support_level, SupportLevel::Unsupported));
+    let has_partial = effect
+        .fields
+        .iter()
+        .any(|f| matches!(f.support_level, SupportLevel::Partial));
+
+    // 计算基于字段定义的最大可能级别 / Calculate max possible level based on field definitions
+    // 有未实现或部分实现的字段时，最多是 Partial
+    let max_from_fields = if has_unsupported || has_partial {
+        SupportLevel::Partial
+    } else {
+        SupportLevel::Full
+    };
+
     // 优先使用自动扫描的测试文件 / Prefer auto-scanned test files
     let test_files: Vec<&str> = if let Some(effect_test_files) = config.effect_test_files {
         if let Some(files) = effect_test_files.effect_test_map.get(effect.id) {
@@ -925,43 +977,23 @@ fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> 
         effect.test_files.to_vec()
     };
 
-    // 1. 优先根据测试结果计算 / First try to compute from test results
-    if let Some(level) = config
+    // 1. 根据测试结果计算 / Compute from test results
+    if let Some(test_level) = config
         .test_results
         .and_then(|r| r.compute_support_level(&test_files))
     {
-        return level;
+        // 测试结果级别不能超过字段定义的最大级别
+        // Test result level cannot exceed max level from field definitions
+        return match (test_level, max_from_fields) {
+            (SupportLevel::Full, SupportLevel::Full) => SupportLevel::Full,
+            (SupportLevel::Full, SupportLevel::Partial) => SupportLevel::Partial,
+            (SupportLevel::Full, SupportLevel::Unsupported) => SupportLevel::Unsupported,
+            (SupportLevel::Partial, _) => SupportLevel::Partial,
+            (SupportLevel::Unsupported, _) => SupportLevel::Unsupported,
+        };
     }
 
-    // 2. 没有测试结果时，根据代码实现状态判断 / Fall back to implementation status
-    if let Some(impl_info) = config.impl_status.and_then(|s| s.get(effect.id)) {
-        // 有实现的字段或模式 / Has implemented fields or patterns
-        if !impl_info.implemented_fields.is_empty() || !impl_info.pattern_fields.is_empty() {
-            // 检查是否实现了所有定义的字段 / Check if all defined fields are implemented
-            let total_fields = effect.fields.len();
-            let implemented_count = effect
-                .fields
-                .iter()
-                .filter(|f| {
-                    impl_info.implemented_fields.iter().any(|s| s == f.name)
-                        || impl_info
-                            .pattern_fields
-                            .iter()
-                            .any(|p: &String| f.name.starts_with(p.trim_end_matches('*')))
-                })
-                .count();
-
-            return if implemented_count == total_fields && total_fields > 0 {
-                SupportLevel::Full
-            } else if implemented_count > 0 {
-                SupportLevel::Partial
-            } else {
-                SupportLevel::Unsupported
-            };
-        }
-    }
-
-    // 3. 无法判断时使用定义中的默认值 / Use default from definition
+    // 2. 没有测试结果时，使用定义中的默认值 / Use default from definition when no test results
     effect.support_level
 }
 

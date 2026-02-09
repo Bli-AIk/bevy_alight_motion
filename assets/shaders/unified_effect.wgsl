@@ -39,6 +39,25 @@ struct UnifiedEffectUniform {
     replace_old_color: vec4<f32>,  // (r, g, b, a)
     replace_new_color: vec4<f32>,  // (r, g, b, a)
     replace_color_params: vec4<f32>,// (threshold, feather, alpha, 0)
+    repeat_params1: vec4<f32>,     // (count, offset_x, offset_y, angle_deg)
+    repeat_params2: vec4<f32>,     // (scale, alpha, 0, 0)
+    // Linear repeat effect
+    linear_repeat_params1: vec4<f32>,  // (count, position_x, position_y, angle_deg)
+    linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
+    linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
+    linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
+    linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
+    // Threshold effect
+    threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
+    // Grid effect
+    grid_flags: vec4<f32>,             // (enabled, punchout, screen_space, 0)
+    grid_params1: vec4<f32>,           // (pos_x, pos_y, spacing, width)
+    grid_params2: vec4<f32>,           // (smoothing, 0, 0, 0)
+    grid_color: vec4<f32>,             // (r, g, b, a)
+    // Pixelate effect
+    pixelate_flags: vec4<f32>,         // (enabled, screen_space, 0, 0)
+    pixelate_params1: vec4<f32>,       // (size, stretch_x, stretch_y, angle)
+    pixelate_params2: vec4<f32>,       // (vignette, threshold, saturation, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -358,19 +377,7 @@ fn get_palette_color(index: i32) -> vec4<f32> {
 // are preferred for pixels with moderate luminance
 fn color_distance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     let diff = c1 - c2;
-    let dist = dot(diff, diff);
-    
-    // Calculate luminance of input color
-    let input_lum = dot(c1, vec3<f32>(0.299, 0.587, 0.114));
-    
-    // If palette color is very dark (black), add penalty for bright inputs
-    // This biases the algorithm toward selecting non-black colors for brighter pixels
-    let palette_lum = dot(c2, vec3<f32>(0.299, 0.587, 0.114));
-    if palette_lum < 0.01 && input_lum > 0.03 {
-        return dist + input_lum * 2.5; // Add penalty proportional to input brightness
-    }
-    
-    return dist;
+    return dot(diff, diff);
 }
 
 // Apply palette map effect - quantize color to nearest palette color
@@ -472,6 +479,35 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let palette_enabled = uniforms.palette_flags.x > 0.5;
     let replace_color_enabled = uniforms.replace_color_flags.x > 0.5;
     
+    // Extract repeat effect params
+    let repeat_count = i32(uniforms.repeat_params1.x);
+    let repeat_offset = vec2<f32>(uniforms.repeat_params1.y, uniforms.repeat_params1.z);
+    let repeat_angle = uniforms.repeat_params1.w * 3.14159265 / 180.0; // degrees to radians
+    let repeat_scale = uniforms.repeat_params2.x;
+    let repeat_alpha = uniforms.repeat_params2.y;
+    let repeat_enabled = repeat_count > 0;
+    
+    // Extract linear repeat effect params
+    // Use round for count to get integer copy counts
+    let linear_repeat_count = i32(round(uniforms.linear_repeat_params1.x));
+    let linear_repeat_position = vec2<f32>(uniforms.linear_repeat_params1.y, uniforms.linear_repeat_params1.z);
+    let linear_repeat_angle_deg = uniforms.linear_repeat_params1.w;
+    let linear_repeat_offset = vec2<f32>(uniforms.linear_repeat_params2.x, uniforms.linear_repeat_params2.y);
+    let linear_repeat_scale = uniforms.linear_repeat_params2.z;
+    let linear_repeat_alpha = uniforms.linear_repeat_params2.w;
+    let linear_repeat_start = uniforms.linear_repeat_params3.x;
+    let linear_repeat_end = uniforms.linear_repeat_params3.y;
+    let linear_repeat_phase = uniforms.linear_repeat_params3.z;
+    let linear_repeat_overlap = uniforms.linear_repeat_params3.w;
+    let linear_repeat_ease_in = uniforms.linear_repeat_params4.x;
+    let linear_repeat_ease_out = uniforms.linear_repeat_params4.y;
+    let linear_repeat_blend = uniforms.linear_repeat_params4.z;
+    let linear_repeat_shape_invert_alt = i32(uniforms.linear_repeat_params4.w);
+    let linear_repeat_shape = linear_repeat_shape_invert_alt / 100;
+    let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
+    let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
+    let linear_repeat_enabled = linear_repeat_count > 0;
+    
     var sample_uv = mesh.uv;
     
     // Apply stretch segment effect if enabled (before blur)
@@ -487,10 +523,244 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
-    // Sample texture - with or without blur
+    // Sample texture - with or without blur, with or without repeat
     var tex_color: vec4<f32>;
     
-    if blur_enabled {
+    if repeat_enabled {
+        // Repeat effect: render multiple copies from back to front
+        // Each copy has cumulative offset, rotation, scale, and alpha
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        
+        // Convert UV to pixel space for transformation
+        let center = vec2<f32>(0.5, 0.5);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        
+        // Accumulate color from all copies (back to front)
+        var accumulated_color = vec4<f32>(0.0);
+        
+        // Start from the farthest copy (highest index) and work backwards
+        // AM's count means total number of copies, so render copies 0 to count-1
+        // When count=7, render copies 0,1,2,3,4,5,6 (7 total)
+        for (var i = repeat_count - 1; i >= 0; i = i - 1) {
+            let fi = f32(i);
+            
+            // Calculate cumulative transform for this copy
+            let cumulative_offset = repeat_offset * fi;
+            // Negate angle because AM uses opposite rotation direction
+            let cumulative_angle = -repeat_angle * fi;
+            let cumulative_scale = pow(repeat_scale, fi);
+            let cumulative_alpha = pow(repeat_alpha, fi);
+            
+            // Skip copies with negligible alpha
+            if cumulative_alpha < 0.001 {
+                continue;
+            }
+            
+            // Transform: first un-offset, then un-rotate, then un-scale
+            // This gives us the source UV for this copy
+            // For copy at offset O, a pixel at position P was sourced from P - O
+            var transformed_coord = pixel_coord;
+            
+            // Reverse offset (subtract the offset to find source position)
+            // Y flipped because AM uses Y-down, Bevy uses Y-up
+            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            
+            // Reverse rotation around center
+            if abs(cumulative_angle) > 0.001 {
+                let cos_a = cos(-cumulative_angle);
+                let sin_a = sin(-cumulative_angle);
+                transformed_coord = vec2<f32>(
+                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
+                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+                );
+            }
+            
+            // Reverse scale around center
+            if abs(cumulative_scale) > 0.001 {
+                transformed_coord = transformed_coord / cumulative_scale;
+            }
+            
+            // Convert back to UV and check bounds
+            // For shapes, valid source region is the original texture area [-half_w, half_w] x [-half_h, half_h]
+            let half_w = orig_width * 0.5;
+            let half_h = orig_height * 0.5;
+            
+            // Check if transformed coord is within the original shape bounds
+            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
+               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
+                // Convert to UV [0,1]
+                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                var copy_color: vec4<f32>;
+                if blur_enabled && uniforms.blur_params.x > 0.5 {
+                    copy_color = apply_blur(copy_uv);
+                } else {
+                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                }
+                
+                // Apply cumulative alpha
+                copy_color.a *= cumulative_alpha;
+                
+                // Blend using standard alpha compositing (back to front)
+                // result = src + dst * (1 - src.alpha)
+                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+            }
+        }
+        
+        tex_color = accumulated_color;
+    } else if linear_repeat_enabled {
+        // Linear repeat effect: render multiple copies arranged in a line
+        // Each copy has position, offset, rotation, scale, and alpha
+        // The line distribution is controlled by start/end and easing
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        
+        // Convert UV to pixel space for transformation
+        let center = vec2<f32>(0.5, 0.5);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        
+        // Accumulate color from all copies (back to front)
+        var accumulated_color = vec4<f32>(0.0);
+        
+        // Convert angle to radians (negate for AM's opposite rotation direction)
+        let angle_rad = -linear_repeat_angle_deg * 3.14159265 / 180.0;
+        
+        // Total copies to render
+        let total_copies = linear_repeat_count;
+        
+        // Calculate spacing as position / (count - 1)
+        // Keep Y in AM coords; flip will be applied when transforming
+        var spacing: vec2<f32>;
+        if total_copies > 1 {
+            spacing = vec2<f32>(linear_repeat_position.x, linear_repeat_position.y) / f32(total_copies - 1);
+        } else {
+            spacing = vec2<f32>(0.0, 0.0);
+        }
+        
+        // Start from the farthest copy (highest index) and work backwards
+        for (var i = total_copies - 1; i >= 0; i = i - 1) {
+            let fi = f32(i);
+            
+            // Calculate normalized position for this copy (0 to 1)
+            var normalized_pos: f32;
+            if total_copies > 1 {
+                normalized_pos = fi / f32(total_copies - 1);
+            } else {
+                normalized_pos = 0.0;
+            }
+            
+            // Apply phase shift (wraps around)
+            normalized_pos = fract(normalized_pos + linear_repeat_phase);
+            
+            // Check if copy is within start/end range
+            if normalized_pos < linear_repeat_start || normalized_pos > linear_repeat_end {
+                continue;
+            }
+            
+            // Apply easing to distribution
+            var eased_pos = normalized_pos;
+            if linear_repeat_ease_in > 0.001 || linear_repeat_ease_out > 0.001 {
+                // Simple quadratic easing
+                if linear_repeat_ease_in > 0.001 && eased_pos < 0.5 {
+                    let t = eased_pos * 2.0;
+                    eased_pos = t * t * linear_repeat_ease_in + t * (1.0 - linear_repeat_ease_in);
+                    eased_pos = eased_pos * 0.5;
+                }
+                if linear_repeat_ease_out > 0.001 && eased_pos > 0.5 {
+                    let t = (eased_pos - 0.5) * 2.0;
+                    let t_inv = 1.0 - t;
+                    eased_pos = 1.0 - t_inv * t_inv * linear_repeat_ease_out - t_inv * (1.0 - linear_repeat_ease_out);
+                    eased_pos = 0.5 + eased_pos * 0.5;
+                }
+            }
+            
+            // Calculate cumulative transform for this copy
+            // In linear repeat:
+            // - position defines the total span from copy 0 to copy (count-1)
+            // - offset is a constant shift applied only to COPIES (not original)
+            // spacing = position / (count - 1)
+            let position_offset = spacing * fi;
+            let constant_offset = vec2<f32>(linear_repeat_offset.x, linear_repeat_offset.y);
+            var cumulative_offset: vec2<f32>;
+            if i == 0 {
+                // Original stays at position determined by spacing only
+                cumulative_offset = position_offset;
+            } else {
+                // Copies get spacing + constant offset
+                cumulative_offset = position_offset + constant_offset;
+            }
+            let cumulative_angle = angle_rad * fi;
+            let cumulative_scale = pow(linear_repeat_scale, fi);
+            let cumulative_alpha = pow(linear_repeat_alpha, fi);
+            
+            // Skip copies with negligible alpha
+            if cumulative_alpha < 0.001 {
+                continue;
+            }
+            
+            // Transform: first un-offset, then un-rotate, then un-scale
+            var transformed_coord = pixel_coord;
+            
+            // Reverse offset (subtract the offset to find source position)
+            // Y flipped because AM uses Y-down, shader pixel_coord uses Y-up convention
+            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            
+            // Reverse rotation around center
+            if abs(cumulative_angle) > 0.001 {
+                let cos_a = cos(-cumulative_angle);
+                let sin_a = sin(-cumulative_angle);
+                transformed_coord = vec2<f32>(
+                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
+                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+                );
+            }
+            
+            // Reverse scale around center
+            if abs(cumulative_scale) > 0.001 {
+                transformed_coord = transformed_coord / cumulative_scale;
+            }
+            
+            // Convert back to UV and check bounds
+            let half_w = orig_width * 0.5;
+            let half_h = orig_height * 0.5;
+            
+            // Check if transformed coord is within the original shape bounds
+            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
+               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
+                // Convert to UV [0,1]
+                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                var copy_color: vec4<f32>;
+                if blur_enabled && uniforms.blur_params.x > 0.5 {
+                    copy_color = apply_blur(copy_uv);
+                } else {
+                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                }
+                
+                // Apply fill color blending
+                if linear_repeat_blend > 0.001 {
+                    var should_blend = true;
+                    // If color_alt_copies is enabled, only blend every other copy
+                    if linear_repeat_color_alt {
+                        should_blend = i % 2 == 1;
+                    }
+                    if should_blend {
+                        let blend_amount = min(linear_repeat_blend, 1.0);
+                        copy_color.r = mix(copy_color.r, uniforms.linear_repeat_fill_color.r, blend_amount);
+                        copy_color.g = mix(copy_color.g, uniforms.linear_repeat_fill_color.g, blend_amount);
+                        copy_color.b = mix(copy_color.b, uniforms.linear_repeat_fill_color.b, blend_amount);
+                    }
+                }
+                
+                // Apply cumulative alpha
+                copy_color.a *= cumulative_alpha;
+                
+                // Blend using standard alpha compositing (back to front)
+                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+            }
+        }
+        
+        tex_color = accumulated_color;
+    } else if blur_enabled {
         let blur_radius = uniforms.blur_params.x;
         if blur_radius > 0.5 {
             tex_color = apply_blur(sample_uv);
@@ -512,6 +782,85 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let quantized_color = apply_palette_map(tex_color);
         // Blend between original and quantized based on palette alpha
         tex_color = mix(tex_color, quantized_color, palette_alpha);
+    }
+    
+    // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
+    let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
+    if threshold_enabled {
+        let threshold_value = uniforms.threshold_params.x;
+        let threshold_feather = uniforms.threshold_params.y;
+        let threshold_invert = uniforms.threshold_params.z > 0.5;
+        
+        // Calculate luminance using standard weights
+        let luminance = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+        
+        // Apply threshold with optional feather
+        var bw_value: f32;
+        if threshold_feather > 0.001 {
+            // Smooth transition using smoothstep
+            bw_value = smoothstep(threshold_value - threshold_feather * 0.5, 
+                                  threshold_value + threshold_feather * 0.5, 
+                                  luminance);
+        } else {
+            // Sharp threshold
+            bw_value = select(0.0, 1.0, luminance >= threshold_value);
+        }
+        
+        // Apply invert if enabled
+        if threshold_invert {
+            bw_value = 1.0 - bw_value;
+        }
+        
+        // Set RGB to the threshold result, preserve alpha
+        tex_color = vec4<f32>(bw_value, bw_value, bw_value, tex_color.a);
+    }
+    
+    // Apply grid effect if enabled
+    let grid_enabled = uniforms.grid_flags.x > 0.5;
+    if grid_enabled {
+        let grid_punchout = uniforms.grid_flags.y > 0.5;
+        let grid_screen_space = uniforms.grid_flags.z > 0.5;
+        let grid_pos = uniforms.grid_params1.xy;
+        let grid_spacing = uniforms.grid_params1.z;
+        let grid_width = uniforms.grid_params1.w;
+        let grid_smoothing = uniforms.grid_params2.x;
+        let grid_color = uniforms.grid_color;
+        
+        // Calculate grid coordinates
+        var grid_uv: vec2<f32>;
+        if grid_screen_space {
+            grid_uv = mesh.world_position.xy + grid_pos;
+        } else {
+            grid_uv = mesh.uv * uniforms.original_size.xy + grid_pos;
+        }
+        
+        // Calculate grid pattern
+        let cell_size = grid_spacing * 100.0; // Scale spacing to reasonable pixel values
+        let line_width = grid_width * cell_size * 0.5;
+        
+        // Calculate distance to nearest grid line
+        let grid_coord = fract(grid_uv / cell_size) * cell_size;
+        let dist_x = min(grid_coord.x, cell_size - grid_coord.x);
+        let dist_y = min(grid_coord.y, cell_size - grid_coord.y);
+        let dist_to_line = min(dist_x, dist_y);
+        
+        // Calculate line intensity with optional smoothing
+        var line_intensity: f32;
+        if grid_smoothing > 0.001 {
+            let smooth_width = line_width * grid_smoothing;
+            line_intensity = 1.0 - smoothstep(line_width - smooth_width, line_width, dist_to_line);
+        } else {
+            line_intensity = select(0.0, 1.0, dist_to_line < line_width);
+        }
+        
+        // Apply grid effect
+        if grid_punchout {
+            // Punchout mode: cut out grid lines (make transparent)
+            tex_color.a *= (1.0 - line_intensity);
+        } else {
+            // Overlay mode: blend grid color with texture
+            tex_color = mix(tex_color, grid_color, line_intensity * grid_color.a);
+        }
     }
     
     // Apply mask clipping if any mask is enabled

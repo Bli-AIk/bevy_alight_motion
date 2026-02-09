@@ -6,10 +6,16 @@
 //! 所有效果定义的入口模块。
 
 pub mod gaussian_blur;
+pub mod grid;
+pub mod linear_repeat;
 pub mod palette_map;
+pub mod pixelate;
+pub mod repeat;
 pub mod replace_color;
 pub mod scale_assist;
 pub mod stretch_segment;
+pub mod swing;
+pub mod threshold;
 pub mod transform2;
 pub mod wipe2;
 
@@ -22,9 +28,15 @@ pub fn all() -> &'static [&'static EffectDef] {
         &wipe2::EFFECT,
         &stretch_segment::EFFECT,
         &gaussian_blur::EFFECT,
+        &grid::EFFECT,
+        &threshold::EFFECT,
         &palette_map::EFFECT,
         &replace_color::EFFECT,
         &scale_assist::EFFECT,
+        &pixelate::EFFECT,
+        &repeat::EFFECT,
+        &linear_repeat::EFFECT,
+        &swing::EFFECT,
     ]
 }
 

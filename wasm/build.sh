@@ -15,9 +15,16 @@ echo "🔧 Building bevy_alight_motion WASM (单线程/WebGL2 模式)..."
 # Ensure wasm target is installed
 rustup target add wasm32-unknown-unknown
 
-# 设置 assets 路径供 bevy_embedded_assets 使用
-export BEVY_ASSET_PATH="$(cd .. && pwd)/assets"
-echo "📁 Asset path: $BEVY_ASSET_PATH"
+# 创建临时目录，仅包含 shaders（WASM playground 不需要 projects 等测试资产）
+# Create temp directory with only shaders (WASM playground doesn't need test assets)
+WASM_ASSETS_DIR=$(mktemp -d)
+trap "rm -rf $WASM_ASSETS_DIR" EXIT
+cp -r ../assets/shaders "$WASM_ASSETS_DIR/"
+
+# 设置 assets 路径供 bevy_embedded_assets 使用（仅 shaders）
+export BEVY_ASSET_PATH="$WASM_ASSETS_DIR"
+echo "📁 Asset path: $BEVY_ASSET_PATH (shaders only, ~80KB)"
+echo "   Original assets: $(du -sh ../assets | cut -f1) (excluded to reduce WASM size)"
 
 # Build in release mode for smaller size
 # 注意：Cargo.toml 已配置 webgl2 feature，避免多线程依赖

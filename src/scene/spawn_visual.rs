@@ -35,6 +35,11 @@ pub(crate) fn spawn_image(
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
+    let repeat_effect = extract_repeat_effect(&image.effects);
+    let linear_repeat_effect = extract_linear_repeat_effect(&image.effects);
+    let swing_effect = extract_swing_effect(&image.effects);
+    let threshold_effect = extract_threshold_effect(&image.effects);
+    let grid_effect = extract_grid_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let palette_map = extract_palette_map_effect(&image.effects);
 
@@ -120,6 +125,48 @@ pub(crate) fn spawn_image(
                 replace_feather: replace_color.feather,
                 replace_alpha: replace_color.alpha,
                 replace_lock_luminance: replace_color.lock_luminance,
+                repeat_count: repeat_effect.count,
+                repeat_offset: repeat_effect.offset,
+                repeat_angle: repeat_effect.angle,
+                repeat_scale: repeat_effect.scale,
+                repeat_alpha: repeat_effect.alpha,
+                // Linear repeat effect
+                linear_repeat_count: linear_repeat_effect.count,
+                linear_repeat_position: linear_repeat_effect.position,
+                linear_repeat_offset: linear_repeat_effect.offset,
+                linear_repeat_angle: linear_repeat_effect.angle,
+                linear_repeat_scale: linear_repeat_effect.scale,
+                linear_repeat_alpha: linear_repeat_effect.alpha,
+                linear_repeat_fill_color: linear_repeat_effect.fill_color,
+                linear_repeat_blend: linear_repeat_effect.blend,
+                linear_repeat_color_alt_copies: linear_repeat_effect.color_alt_copies,
+                linear_repeat_start: linear_repeat_effect.start,
+                linear_repeat_end: linear_repeat_effect.end,
+                linear_repeat_phase: linear_repeat_effect.phase,
+                linear_repeat_ease_in: linear_repeat_effect.ease_in,
+                linear_repeat_ease_out: linear_repeat_effect.ease_out,
+                linear_repeat_overlap: linear_repeat_effect.overlap,
+                linear_repeat_shape: linear_repeat_effect.shape,
+                linear_repeat_invert: linear_repeat_effect.invert,
+                // Swing effect
+                swing_freq: swing_effect.freq,
+                swing_a1: swing_effect.a1,
+                swing_a2: swing_effect.a2,
+                swing_phase: swing_effect.phase,
+                swing_type: swing_effect.swing_type,
+                // Threshold effect
+                threshold_value: threshold_effect.threshold,
+                threshold_feather: threshold_effect.feather,
+                threshold_invert: threshold_effect.invert,
+                threshold_blend_mode: threshold_effect.blend_mode,
+                // Grid effect
+                grid_position: grid_effect.position,
+                grid_spacing: grid_effect.spacing,
+                grid_width: grid_effect.width,
+                grid_color: grid_effect.color,
+                grid_punchout: grid_effect.punchout,
+                grid_smoothing: grid_effect.smoothing,
+                grid_screen_space: grid_effect.screen_space,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -350,6 +397,57 @@ pub(crate) fn spawn_text(
             replace_feather: AmAnimatedFloat::default(),
             replace_alpha: AmAnimatedFloat::default(),
             replace_lock_luminance: false,
+            repeat_count: AmAnimatedFloat::default(),
+            repeat_offset: AmAnimatedVec2::default(),
+            repeat_angle: AmAnimatedFloat::default(),
+            repeat_scale: AmAnimatedFloat::default(),
+            repeat_alpha: AmAnimatedFloat::default(),
+            // Linear repeat effect (defaults)
+            linear_repeat_count: AmAnimatedFloat::default(),
+            linear_repeat_position: AmAnimatedVec2::default(),
+            linear_repeat_offset: AmAnimatedVec2::default(),
+            linear_repeat_angle: AmAnimatedFloat::default(),
+            linear_repeat_scale: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            linear_repeat_alpha: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            linear_repeat_fill_color: crate::schema::AmAnimatedColor::default(),
+            linear_repeat_blend: AmAnimatedFloat::default(),
+            linear_repeat_color_alt_copies: false,
+            linear_repeat_start: AmAnimatedFloat::default(),
+            linear_repeat_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            linear_repeat_phase: AmAnimatedFloat::default(),
+            linear_repeat_ease_in: AmAnimatedFloat::default(),
+            linear_repeat_ease_out: AmAnimatedFloat::default(),
+            linear_repeat_overlap: AmAnimatedFloat::default(),
+            linear_repeat_shape: 0,
+            linear_repeat_invert: false,
+            // Swing effect (defaults for text)
+            swing_freq: AmAnimatedFloat::default(),
+            swing_a1: AmAnimatedFloat::default(),
+            swing_a2: AmAnimatedFloat::default(),
+            swing_phase: AmAnimatedFloat::default(),
+            swing_type: 0,
+            // Threshold effect (defaults for text)
+            threshold_value: AmAnimatedFloat::default(),
+            threshold_feather: AmAnimatedFloat::default(),
+            threshold_invert: false,
+            threshold_blend_mode: 0,
+            // Grid effect (defaults for text)
+            grid_position: AmAnimatedVec2::default(),
+            grid_spacing: AmAnimatedFloat::default(),
+            grid_width: AmAnimatedFloat::default(),
+            grid_color: crate::schema::AmAnimatedColor::default(),
+            grid_punchout: false,
+            grid_smoothing: AmAnimatedFloat::default(),
+            grid_screen_space: false,
         },
         transform,
         GlobalTransform::default(),

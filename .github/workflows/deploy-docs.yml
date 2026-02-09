@@ -36,29 +36,36 @@ jobs:
           cache: npm
           cache-dependency-path: doc/package-lock.json
 
-      # 只在发布新版本时构建 WASM
-      - name: Setup Rust (for WASM build)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Install wasm-bindgen-cli
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: cargo install wasm-bindgen-cli
-
-      - name: Build WASM
-        if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: wasm
+      # WASM 文件已预编译并提交到代码库，无需 CI 构建
+      # 本地构建命令: cd wasm && ./build.sh
+      - name: Check WASM files exist and freshness
         run: |
-          export BEVY_ASSET_PATH="$(cd .. && pwd)/assets"
-          cargo build --target wasm32-unknown-unknown --release
-          mkdir -p ../doc/public/wasm
-          wasm-bindgen \
-            --target web \
-            --out-dir ../doc/public/wasm \
-            --out-name bevy_alight_motion \
-            ./target/wasm32-unknown-unknown/release/bevy_alight_motion_wasm.wasm
+          WASM_FILE="doc/public/wasm/bevy_alight_motion_bg.wasm"
+          MAX_AGE_DAYS=7  # WASM 超过此天数视为过旧
+          
+          if [ ! -f "$WASM_FILE" ]; then
+            echo "❌ WASM files not found in doc/public/wasm/"
+            echo "   Run 'cd wasm && ./build.sh' locally and commit the output"
+            exit 1
+          fi
+          
+          echo "✅ WASM files found"
+          ls -lh doc/public/wasm/
+          
+          # 检查 WASM 文件的最后修改时间（基于 git commit 时间）
+          WASM_COMMIT_DATE=$(git log -1 --format="%ct" -- "$WASM_FILE" 2>/dev/null || echo "0")
+          CURRENT_DATE=$(date +%s)
+          AGE_DAYS=$(( (CURRENT_DATE - WASM_COMMIT_DATE) / 86400 ))
+          
+          if [ "$WASM_COMMIT_DATE" = "0" ]; then
+            echo "⚠️ WASM file not tracked by git (new file?)"
+          elif [ "$AGE_DAYS" -gt "$MAX_AGE_DAYS" ]; then
+            echo "❌ WASM file is $AGE_DAYS days old (max: $MAX_AGE_DAYS days)"
+            echo "   Run 'cd wasm && ./build.sh' locally and commit the output"
+            exit 1
+          else
+            echo "✅ WASM file is $AGE_DAYS days old (within $MAX_AGE_DAYS day limit)"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
