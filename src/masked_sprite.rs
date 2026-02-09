@@ -253,6 +253,7 @@ impl UnifiedEffectMaterial {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set_grid(
         &mut self,
         enabled: bool,
@@ -276,6 +277,7 @@ impl UnifiedEffectMaterial {
         self.uniform_data.grid_color = color;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set_pixelate(
         &mut self,
         enabled: bool,

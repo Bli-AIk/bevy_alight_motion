@@ -959,9 +959,8 @@ fn get_effect_support_level(effect: &EffectDef, config: &DocGeneratorConfig) -> 
         .any(|f| matches!(f.support_level, SupportLevel::Partial));
 
     // 计算基于字段定义的最大可能级别 / Calculate max possible level based on field definitions
-    let max_from_fields = if has_unsupported {
-        SupportLevel::Partial
-    } else if has_partial {
+    // 有未实现或部分实现的字段时，最多是 Partial
+    let max_from_fields = if has_unsupported || has_partial {
         SupportLevel::Partial
     } else {
         SupportLevel::Full

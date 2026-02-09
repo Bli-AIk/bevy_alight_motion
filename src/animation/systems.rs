@@ -295,49 +295,48 @@ pub fn animate_transform_system(
         // Swing uses freq (Hz), a1 (min angle), a2 (max angle), phase, and type (waveform)
         // Note: swing uses local_time for layer-relative oscillation
         if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time)
-            && swing_freq > 0.0 {
-                let swing_a1 = interpolate_float(&animated.swing_a1, layer_time).unwrap_or(0.0);
-                let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
-                let swing_phase =
-                    interpolate_float(&animated.swing_phase, layer_time).unwrap_or(0.0);
+            && swing_freq > 0.0
+        {
+            let swing_a1 = interpolate_float(&animated.swing_a1, layer_time).unwrap_or(0.0);
+            let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
+            let swing_phase = interpolate_float(&animated.swing_phase, layer_time).unwrap_or(0.0);
 
-                // Calculate time in seconds for oscillation
-                // Use local_time for layer-relative oscillation
-                let time_sec = local_time / 1000.0;
+            // Calculate time in seconds for oscillation
+            // Use local_time for layer-relative oscillation
+            let time_sec = local_time / 1000.0;
 
-                // Calculate oscillation phase (2π * freq * time + phase)
-                // Phase is in degrees, convert to radians
-                let phase_rad = swing_phase.to_radians();
-                let oscillation_phase =
-                    2.0 * std::f32::consts::PI * swing_freq * time_sec + phase_rad;
+            // Calculate oscillation phase (2π * freq * time + phase)
+            // Phase is in degrees, convert to radians
+            let phase_rad = swing_phase.to_radians();
+            let oscillation_phase = 2.0 * std::f32::consts::PI * swing_freq * time_sec + phase_rad;
 
-                // Apply waveform based on type
-                // type=0: sine wave (smooth oscillation)
-                // type=1: triangle wave
-                let wave_value = match animated.swing_type {
-                    0 => oscillation_phase.sin(),
-                    1 => {
-                        // Triangle wave that matches sine at key points:
-                        // phase=0: 0, phase=π/2: 1, phase=π: 0, phase=3π/2: -1
-                        // Formula: 2 * abs(2 * (x/2π - floor(x/2π + 0.5))) - 1
-                        // Simplified using modulo:
-                        let x = oscillation_phase / (2.0 * std::f32::consts::PI);
-                        let t = (x - (x + 0.5).floor()).abs();
-                        4.0 * t - 1.0
-                    }
-                    _ => oscillation_phase.sin(), // Default to sine
-                };
+            // Apply waveform based on type
+            // type=0: sine wave (smooth oscillation)
+            // type=1: triangle wave
+            let wave_value = match animated.swing_type {
+                0 => oscillation_phase.sin(),
+                1 => {
+                    // Triangle wave that matches sine at key points:
+                    // phase=0: 0, phase=π/2: 1, phase=π: 0, phase=3π/2: -1
+                    // Formula: 2 * abs(2 * (x/2π - floor(x/2π + 0.5))) - 1
+                    // Simplified using modulo:
+                    let x = oscillation_phase / (2.0 * std::f32::consts::PI);
+                    let t = (x - (x + 0.5).floor()).abs();
+                    4.0 * t - 1.0
+                }
+                _ => oscillation_phase.sin(), // Default to sine
+            };
 
-                // Map wave_value (-1..1) to angle range (a1..a2)
-                // When wave_value = -1: angle = a1
-                // When wave_value = 1: angle = a2
-                let swing_angle =
-                    (swing_a1 + swing_a2) / 2.0 + (swing_a2 - swing_a1) / 2.0 * wave_value;
+            // Map wave_value (-1..1) to angle range (a1..a2)
+            // When wave_value = -1: angle = a1
+            // When wave_value = 1: angle = a2
+            let swing_angle =
+                (swing_a1 + swing_a2) / 2.0 + (swing_a2 - swing_a1) / 2.0 * wave_value;
 
-                // Add swing angle to base rotation (swing is additive)
-                // Negate for Bevy's coordinate system (like base rotation)
-                final_rotation -= swing_angle;
-            }
+            // Add swing angle to base rotation (swing is additive)
+            // Negate for Bevy's coordinate system (like base rotation)
+            final_rotation -= swing_angle;
+        }
 
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 

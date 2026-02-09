@@ -524,6 +524,7 @@ pub struct SwingParams {
 impl SwingParams {
     /// Check if this has any swing effect parameters set
     /// 检查是否设置了任何摇摆效果参数
+    #[allow(dead_code)]
     pub fn has_effect(&self) -> bool {
         self.freq.value.is_some()
             || !self.freq.keyframes.is_empty()
@@ -621,6 +622,7 @@ pub struct ThresholdParams {
 impl ThresholdParams {
     /// Check if this has any threshold effect parameters set
     /// 检查是否设置了任何阈值效果参数
+    #[allow(dead_code)]
     pub fn has_effect(&self) -> bool {
         self.threshold.value.is_some() || !self.threshold.keyframes.is_empty()
     }
@@ -703,6 +705,7 @@ pub struct GridParams {
 impl GridParams {
     /// Check if this has any grid effect parameters set
     /// 检查是否设置了任何网格效果参数
+    #[allow(dead_code)]
     pub fn has_effect(&self) -> bool {
         self.spacing.value.is_some() || !self.spacing.keyframes.is_empty()
     }
