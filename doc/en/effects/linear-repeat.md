@@ -1,7 +1,7 @@
 # Linear Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Creates copies of the layer arranged in a line with advanced controls for position, offset, rotation, scale, alpha, and color blending.
 
@@ -16,16 +16,16 @@ Creates copies of the layer arranged in a line with advanced controls for positi
 - **Fill Color (fillColor)**: ✅ Implemented (Fill color for color blending)
 - **Blend (blend)**: ✅ Implemented (Amount of fill color blending)
 - **Alternate Colors (colorAltCopies)**: ✅ Implemented (Whether to alternate color application)
-- **Start (start)**: ✅ Implemented (Start point of distribution (0-1))
-- **End (end)**: ✅ Implemented (End point of distribution (0-1))
-- **Phase (phase)**: ✅ Implemented (Phase shift for distribution)
-- **Ease In (easeIn)**: ✅ Implemented (Ease-in factor for distribution)
-- **Ease Out (easeOut)**: ✅ Implemented (Ease-out factor for distribution)
-- **Overlap (overlap)**: ✅ Implemented (Overlap factor between copies)
-- **Shape (shape)**: ✅ Implemented (Distribution shape (0=linear))
-- **Invert (invert)**: ✅ Implemented (Whether to invert the effect)
-- **Random Order (randomOrder)**: ✅ Implemented (Whether to randomize copy order)
-- **Seed (seed)**: ✅ Implemented (Random seed)
+- **Start (start)**: ⚠️ Partial (Start point of distribution (0-1))
+- **End (end)**: ⚠️ Partial (End point of distribution (0-1))
+- **Phase (phase)**: ⚠️ Partial (Phase shift for distribution)
+- **Ease In (easeIn)**: ⚠️ Partial (Ease-in factor for distribution)
+- **Ease Out (easeOut)**: ⚠️ Partial (Ease-out factor for distribution)
+- **Overlap (overlap)**: ❌ Not implemented (Overlap factor between copies)
+- **Shape (shape)**: ⚠️ Partial (Distribution shape (0=linear))
+- **Invert (invert)**: ❌ Not implemented (Whether to invert the effect)
+- **Random Order (randomOrder)**: ❌ Not implemented (Whether to randomize copy order)
+- **Seed (seed)**: ❌ Not implemented (Random seed)
 
 **Related Test Files:**
 - `effects/linear-repeat/basic.amproj` ❌

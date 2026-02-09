@@ -1,11 +1,11 @@
 # Grid
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Overlays a grid pattern on the layer or punches it out.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Position (position)**: ✅ Implemented (Grid offset position)
 - **Spacing (spacing)**: ✅ Implemented (Space between grid lines)
@@ -16,7 +16,7 @@ Overlays a grid pattern on the layer or punches it out.
 - **Screen Space (screenSpace)**: ✅ Implemented (Use screen coordinates instead of layer coordinates)
 
 **Related Test Files:**
-- `effects/grid/basic.amproj` ✅
+- `effects/grid/basic.amproj` ❌
 
 ---
 

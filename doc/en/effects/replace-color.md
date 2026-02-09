@@ -1,7 +1,7 @@
 # Replace Color
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Replaces a source color with a target color within a given tolerance. Supports sRGB to linear color space conversion and animation keyframes.
 
@@ -12,7 +12,7 @@ Replaces a source color with a target color within a given tolerance. Supports s
 - **Threshold (threshold)**: ✅ Implemented (Color matching tolerance)
 - **Feather (feather)**: ✅ Implemented (Edge transition softness)
 - **Alpha (alpha)**: ✅ Implemented (Effect strength)
-- **Lock Luminance (lockluminance)**: ❌ Not implemented (Preserve original pixel luminance)
+- **Lock Luminance (lockluminance)**: ✅ Implemented (Preserve original pixel luminance)
 
 **Related Test Files:**
 - `effects/replace-color/basic.amproj` ✅

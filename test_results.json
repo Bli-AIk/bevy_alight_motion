@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-10T00:19:13.145888+08:00",
+  "timestamp": "2026-02-10T00:57:52.378038+08:00",
   "summary": {
-    "passed": 34,
+    "passed": 35,
     "skipped": 3,
-    "failed": 2
+    "failed": 17
   },
   "results": {
     "basic/bezier/bezier": {
@@ -73,18 +73,79 @@
       "status": "fail",
       "avg_similarity": 0.7798
     },
+    "complex/examples/2_ex": {
+      "status": "fail",
+      "avg_similarity": 0.9461
+    },
+    "complex/examples/2_ex1": {
+      "status": "pass"
+    },
+    "complex/examples/2_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.993
+    },
+    "complex/examples/2_ex3": {
+      "status": "fail",
+      "avg_similarity": 0.8665
+    },
+    "complex/examples/2_ex4": {
+      "status": "pass"
+    },
+    "complex/examples/3_ex": {
+      "status": "fail",
+      "avg_similarity": 0.871
+    },
+    "complex/examples/3_ex1": {
+      "status": "fail",
+      "avg_similarity": 0.8566
+    },
+    "complex/examples/3_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.9474
+    },
+    "complex/examples/3_ex2_1": {
+      "status": "fail",
+      "avg_similarity": 0.9527
+    },
+    "complex/examples/3_ex3": {
+      "status": "fail",
+      "avg_similarity": 0.9636
+    },
+    "complex/misc/simple_gb": {
+      "status": "fail",
+      "avg_similarity": 0.9447
+    },
+    "complex/turn/13_ex": {
+      "status": "pass"
+    },
+    "complex/turn/9": {
+      "status": "fail",
+      "avg_similarity": 0.315
+    },
+    "complex/turn/9_ex": {
+      "status": "pass"
+    },
+    "complex/turn/9_ex1": {
+      "status": "pass"
+    },
+    "complex/turn/9_ex2": {
+      "status": "fail",
+      "avg_similarity": 0.9663
+    },
     "effects/gaussian-blur/basic": {
       "status": "skip"
     },
     "effects/grid/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9192
     },
     "effects/linear-repeat/basic": {
       "status": "fail",
       "avg_similarity": 0.6706
     },
     "effects/palette/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9002
     },
     "effects/pixelate/basic": {
       "status": "skip"
@@ -120,10 +181,12 @@
       "status": "pass"
     },
     "effects/swing/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9236
     },
     "effects/threshold/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9241
     }
   }
 }

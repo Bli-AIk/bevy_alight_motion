@@ -1,14 +1,14 @@
 # Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Creates multiple copies of the layer with cumulative offset, rotation, scale, and alpha transforms.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ⚠️ Partially Supported
 
 - **Count (count)**: ✅ Implemented (Number of copies to create)
-- **Time Offset (time)**: ✅ Implemented (Time offset between copies (not yet implemented))
+- **Time Offset (time)**: ❌ Not implemented (Time offset between copies (not yet implemented))
 - **Offset (offset)**: ✅ Implemented (X,Y offset per copy (pixels))
 - **Angle (angle)**: ✅ Implemented (Rotation angle per copy (degrees))
 - **Scale (scale)**: ✅ Implemented (Scale multiplier per copy)

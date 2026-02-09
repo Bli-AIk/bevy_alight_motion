@@ -1,17 +1,17 @@
 # Pixelate
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Reduces image resolution to create a pixelated effect.
 
 **Support Status**: ⚠️ Partially Supported
 
-- **Size (size)**: ❌ Not implemented (Pixel size (1-100))
-- **Stretch (stretch)**: ❌ Not implemented (Pixel stretch ratio)
-- **Angle (angle)**: ❌ Not implemented (Pixel grid rotation angle)
-- **Vignette (vignette)**: ❌ Not implemented (Vignette strength (partial support))
-- **Screen Space (screenSpace)**: ❌ Not implemented (Whether to use screen space coordinates (partial support))
+- **Size (size)**: ✅ Implemented (Pixel size (1-100))
+- **Stretch (stretch)**: ✅ Implemented (Pixel stretch ratio)
+- **Angle (angle)**: ✅ Implemented (Pixel grid rotation angle)
+- **Vignette (vignette)**: ⚠️ Partial (Vignette strength (partial support))
+- **Screen Space (screenSpace)**: ⚠️ Partial (Whether to use screen space coordinates (partial support))
 
 **Related Test Files:**
 - `basic/bounce/box.amproj` ✅

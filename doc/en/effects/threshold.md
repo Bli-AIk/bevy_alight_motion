@@ -1,19 +1,19 @@
 # Threshold
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:19:13
+> Last tested: 2026-02-10 00:57:52
 
 Converts the image to a high-contrast image with only black and white.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Threshold (threshold)**: ✅ Implemented (Luminance cutoff)
 - **Feather (feather)**: ✅ Implemented (Edge softness)
 - **Invert (invert)**: ✅ Implemented (Invert the effect)
-- **Blend Mode (blendMode)**: ✅ Implemented (Blend mode)
+- **Blend Mode (blendMode)**: ⚠️ Partial (Blend mode)
 
 **Related Test Files:**
-- `effects/threshold/basic.amproj` ✅
+- `effects/threshold/basic.amproj` ❌
 
 ---
 
