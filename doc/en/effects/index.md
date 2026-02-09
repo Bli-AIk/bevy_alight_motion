@@ -1,7 +1,7 @@
 # Effects List
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 | Effect | Status | Description |
 |--------|--------|-------------|
@@ -14,7 +14,7 @@
 | [Palette Map](./palette-map.md) | ✅ | Maps image colors to specified palette colors. Supports u... |
 | [Replace Color](./replace-color.md) | ✅ | Replaces a source color with a target color within a give... |
 | [Scale Assist](./scale-assist.md) | ✅ | Automatically adjusts layer size to fit the canvas based ... |
-| [Pixelate](./pixelate.md) | ❌ | Reduces image resolution to create a pixelated effect. |
+| [Pixelate](./pixelate.md) | ⚠️ | Reduces image resolution to create a pixelated effect. |
 | [Repeat](./repeat.md) | ✅ | Creates multiple copies of the layer with cumulative offs... |
 | [Linear Repeat](./linear-repeat.md) | ❌ | Creates copies of the layer arranged in a line with advan... |
 | [Swing](./swing2.md) | ✅ | Makes the layer swing back and forth with specified frequ... |

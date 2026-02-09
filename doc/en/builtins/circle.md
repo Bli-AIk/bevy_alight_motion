@@ -1,16 +1,16 @@
 # Circle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipses.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Size (size)**: ✅ Supported (Width and height of the circle (non-uniform values create ellipse))
 
 **Related Test Files:**
-- `basic/shape/shape.amproj`
+- `basic/shape/shape.amproj` ✅
 
 ---
 

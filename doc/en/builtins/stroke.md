@@ -1,11 +1,11 @@
 # Stroke
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Shape border stroke. Uses SDF rendering, stroke width stays constant during scale animation.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Direction (direction)**: ✅ Supported (Stroke direction (centered, inside, outside))
 - **Cap Style (cap)**: ✅ Supported (Line cap style)
@@ -14,8 +14,8 @@ Shape border stroke. Uses SDF rendering, stroke width stays constant during scal
 - **Width (size)**: ✅ Supported (Stroke width (pixels))
 
 **Related Test Files:**
-- `basic/shape/shape.amproj`
-- `basic/shape/ex.amproj`
+- `basic/shape/shape.amproj` ✅
+- `basic/shape/ex.amproj` ✅
 
 ---
 

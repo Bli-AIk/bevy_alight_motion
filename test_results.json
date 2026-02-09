@@ -1,11 +1,78 @@
 {
-  "timestamp": "2026-02-10T00:07:53.777129+08:00",
+  "timestamp": "2026-02-10T00:19:13.145888+08:00",
   "summary": {
-    "passed": 14,
-    "skipped": 2,
-    "failed": 1
+    "passed": 34,
+    "skipped": 3,
+    "failed": 2
   },
   "results": {
+    "basic/bezier/bezier": {
+      "status": "pass"
+    },
+    "basic/bezier/ex": {
+      "status": "pass"
+    },
+    "basic/bounce/box": {
+      "status": "pass"
+    },
+    "basic/cutoff/cutoff": {
+      "status": "pass"
+    },
+    "basic/frame/frame": {
+      "status": "pass"
+    },
+    "basic/gradient/gradient": {
+      "status": "skip"
+    },
+    "basic/group/cutoff": {
+      "status": "pass"
+    },
+    "basic/group/mask": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/basic": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/ex": {
+      "status": "pass"
+    },
+    "basic/group/multi-level/ex2": {
+      "status": "pass"
+    },
+    "basic/group/resolution/basic": {
+      "status": "pass"
+    },
+    "basic/group/resolution/ex": {
+      "status": "pass"
+    },
+    "basic/group/resolution/ex2": {
+      "status": "pass"
+    },
+    "basic/mask/child": {
+      "status": "pass"
+    },
+    "basic/mask/circle": {
+      "status": "pass"
+    },
+    "basic/mask/square": {
+      "status": "pass"
+    },
+    "basic/mask/square-ex": {
+      "status": "pass"
+    },
+    "basic/pivot/pivot": {
+      "status": "pass"
+    },
+    "basic/shape/ex": {
+      "status": "pass"
+    },
+    "basic/shape/shape": {
+      "status": "pass"
+    },
+    "basic/tween/multi": {
+      "status": "fail",
+      "avg_similarity": 0.7798
+    },
     "effects/gaussian-blur/basic": {
       "status": "skip"
     },

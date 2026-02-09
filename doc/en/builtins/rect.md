@@ -1,17 +1,17 @@
 # Rectangle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Basic rectangle shape, supports SDF and sprite rendering.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Size (size)**: ✅ Supported (Width and height of the shape)
 
 **Related Test Files:**
-- `basic/shape/shape.amproj`
-- `basic/shape/ex.amproj`
+- `basic/shape/shape.amproj` ✅
+- `basic/shape/ex.amproj` ✅
 
 ---
 

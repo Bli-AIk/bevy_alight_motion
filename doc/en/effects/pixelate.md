@@ -1,11 +1,11 @@
 # Pixelate
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Reduces image resolution to create a pixelated effect.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ⚠️ Partially Supported
 
 - **Size (size)**: ❌ Not implemented (Pixel size (1-100))
 - **Stretch (stretch)**: ❌ Not implemented (Pixel stretch ratio)
@@ -14,10 +14,10 @@ Reduces image resolution to create a pixelated effect.
 - **Screen Space (screenSpace)**: ❌ Not implemented (Whether to use screen space coordinates (partial support))
 
 **Related Test Files:**
-- `basic/bounce/box.amproj`
-- `basic/mask/child.amproj`
-- `basic/mask/circle.amproj`
-- `basic/shape/ex.amproj`
+- `basic/bounce/box.amproj` ✅
+- `basic/mask/child.amproj` ✅
+- `basic/mask/circle.amproj` ✅
+- `basic/shape/ex.amproj` ✅
 - `effects/pixelate/basic.amproj` ⏭️
 
 ---

@@ -1,16 +1,16 @@
 # Color Fill
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Fills the shape with a solid color. Color format is #AARRGGBB.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Fill Color (fillColor)**: ✅ Supported (Fill color value (#AARRGGBB format))
 
 **Related Test Files:**
-- `basic/shape/shape.amproj`
+- `basic/shape/shape.amproj` ✅
 
 ---
 

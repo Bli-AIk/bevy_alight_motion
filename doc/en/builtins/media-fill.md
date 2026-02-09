@@ -1,16 +1,16 @@
 # Media Fill
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-10 00:07:53
+> Last tested: 2026-02-10 00:19:13
 
 Fills the shape with an image texture. Supports JPEG and PNG formats.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Fill Image (fillImage)**: ✅ Supported (Image resource URI (amproj:filename.png))
 
 **Related Test Files:**
-- `basic/shape/shape.amproj`
+- `basic/shape/shape.amproj` ✅
 
 ---
 

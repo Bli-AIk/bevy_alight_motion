@@ -13,7 +13,7 @@ export const zhHansEffects = {
     { text: '<span style="color:#22c55e">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> 颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
     { text: '<span style="color:#22c55e">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
-    { text: '<span style="color:#ef4444">●</span> 像素化 (Pixelate)', link: '/zh-hans/effects/pixelate' },
+    { text: '<span style="color:#eab308">●</span> 像素化 (Pixelate)', link: '/zh-hans/effects/pixelate' },
     { text: '<span style="color:#22c55e">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' },
     { text: '<span style="color:#ef4444">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
     { text: '<span style="color:#22c55e">●</span> 摇摆 (Swing)', link: '/zh-hans/effects/swing2' }
@@ -32,7 +32,7 @@ export const enEffects = {
     { text: '<span style="color:#22c55e">●</span> Palette Map', link: '/en/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> Replace Color', link: '/en/effects/replace-color' },
     { text: '<span style="color:#22c55e">●</span> Scale Assist', link: '/en/effects/scale-assist' },
-    { text: '<span style="color:#ef4444">●</span> Pixelate', link: '/en/effects/pixelate' },
+    { text: '<span style="color:#eab308">●</span> Pixelate', link: '/en/effects/pixelate' },
     { text: '<span style="color:#22c55e">●</span> Repeat', link: '/en/effects/repeat' },
     { text: '<span style="color:#ef4444">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
     { text: '<span style="color:#22c55e">●</span> Swing', link: '/en/effects/swing2' }
@@ -43,22 +43,22 @@ export const zhHansBuiltins = [
   {
     text: '基本属性',
     items: [
-      { text: '<span style="color:#ef4444">●</span> 描边', link: '/zh-hans/builtins/stroke' },
-      { text: '<span style="color:#ef4444">●</span> 变换', link: '/zh-hans/builtins/transform' }
+      { text: '<span style="color:#22c55e">●</span> 描边', link: '/zh-hans/builtins/stroke' },
+      { text: '<span style="color:#22c55e">●</span> 变换', link: '/zh-hans/builtins/transform' }
     ]
   },
   {
     text: '基本形状',
     items: [
-      { text: '<span style="color:#ef4444">●</span> 矩形', link: '/zh-hans/builtins/rect' },
-      { text: '<span style="color:#ef4444">●</span> 圆形', link: '/zh-hans/builtins/circle' }
+      { text: '<span style="color:#22c55e">●</span> 矩形', link: '/zh-hans/builtins/rect' },
+      { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' }
     ]
   },
   {
     text: '填充',
     items: [
-      { text: '<span style="color:#ef4444">●</span> 颜色填充', link: '/zh-hans/builtins/color-fill' },
-      { text: '<span style="color:#ef4444">●</span> 媒体填充', link: '/zh-hans/builtins/media-fill' }
+      { text: '<span style="color:#22c55e">●</span> 颜色填充', link: '/zh-hans/builtins/color-fill' },
+      { text: '<span style="color:#22c55e">●</span> 媒体填充', link: '/zh-hans/builtins/media-fill' }
     ]
   }
 ];
@@ -67,22 +67,22 @@ export const enBuiltins = [
   {
     text: 'Properties',
     items: [
-      { text: '<span style="color:#ef4444">●</span> Stroke', link: '/en/builtins/stroke' },
-      { text: '<span style="color:#ef4444">●</span> Transform', link: '/en/builtins/transform' }
+      { text: '<span style="color:#22c55e">●</span> Stroke', link: '/en/builtins/stroke' },
+      { text: '<span style="color:#22c55e">●</span> Transform', link: '/en/builtins/transform' }
     ]
   },
   {
     text: 'Basic Shapes',
     items: [
-      { text: '<span style="color:#ef4444">●</span> Rectangle', link: '/en/builtins/rect' },
-      { text: '<span style="color:#ef4444">●</span> Circle', link: '/en/builtins/circle' }
+      { text: '<span style="color:#22c55e">●</span> Rectangle', link: '/en/builtins/rect' },
+      { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' }
     ]
   },
   {
     text: 'Fills',
     items: [
-      { text: '<span style="color:#ef4444">●</span> Color Fill', link: '/en/builtins/color-fill' },
-      { text: '<span style="color:#ef4444">●</span> Media Fill', link: '/en/builtins/media-fill' }
+      { text: '<span style="color:#22c55e">●</span> Color Fill', link: '/en/builtins/color-fill' },
+      { text: '<span style="color:#22c55e">●</span> Media Fill', link: '/en/builtins/media-fill' }
     ]
   }
 ];
