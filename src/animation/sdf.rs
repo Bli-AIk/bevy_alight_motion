@@ -510,7 +510,7 @@ pub fn animate_sdf_scale_system(
             // Constants derived from empirical analysis of AM reference videos
             // scale divisor = scale_param^SCALE_POWER
             // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-            const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+            const SCALE_POWER: f32 = 1.71; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
             const DAMP_COEFF: f32 = 2.75;
             const DAMP_POWER: f32 = 1.93;
 

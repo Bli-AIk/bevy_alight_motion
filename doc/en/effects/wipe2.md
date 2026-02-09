@@ -1,7 +1,7 @@
 # Wipe2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 00:16:23
+> Last tested: 2026-02-10 00:57:52
 
 Covers rectangular segments from opposite sides of the layer. Use keyframe animation to create wipe transitions.
 
@@ -10,7 +10,7 @@ Covers rectangular segments from opposite sides of the layer. Use keyframe anima
 - **Start (start)**: ✅ Implemented (Visible range start point (0.0-1.0))
 - **End (end)**: ✅ Implemented (Visible range end point (0.0-1.0))
 - **Angle (angle)**: ✅ Implemented (Wipe direction angle)
-- **Feather (feather)**: ✅ Implemented (Edge softness (basic support, not yet calibrated))
+- **Feather (feather)**: ⚠️ Partial (Edge softness (basic support, not yet calibrated))
 
 ---
 

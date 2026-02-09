@@ -1,17 +1,17 @@
 # Scale Assist
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 00:16:23
+> Last tested: 2026-02-10 00:57:52
 
 Automatically adjusts layer size to fit the canvas based on the selected axis.
 
-**Support Status**: ⚠️ Partially Supported
+**Support Status**: ✅ Fully Supported
 
-- **Axis (scaleassistaxis)**: ❌ Not implemented (Scale reference axis (1=width, 2=height))
+- **Axis (scaleassistaxis)**: ✅ Implemented (Scale reference axis (1=width, 2=height))
 
 **Related Test Files:**
 - `effects/scale-assist/basic.amproj` ✅
-- `effects/scale-assist/ex.amproj` ❌
+- `effects/scale-assist/ex.amproj` ✅
 
 ---
 

@@ -1,16 +1,16 @@
 # Transform2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 00:16:23
+> Last tested: 2026-02-10 00:57:52
 
 Provides additional transform controls similar to the base transform properties.
 
-**Support Status**: ⚠️ Partially Supported
+**Support Status**: ✅ Fully Supported
 
 - **X Offset (posx)**: ✅ Implemented (Additional horizontal offset)
 - **Y Offset (posy)**: ✅ Implemented (Additional vertical offset)
-- **Z Offset (posz)**: ❌ Not implemented (Scale multiplier (Z axis offset simulation))
-- **Angle (angle)**: ❌ Not implemented (Additional rotation angle (degrees))
+- **Z Offset (posz)**: ✅ Implemented (Scale multiplier (Z axis offset simulation))
+- **Angle (angle)**: ✅ Implemented (Additional rotation angle (degrees))
 - **X Invert (xinv)**: ❌ Not implemented (Horizontal flip)
 - **Y Invert (yinv)**: ❌ Not implemented (Vertical flip)
 - **Z Invert (zinv)**: ❌ Not implemented (Scale inversion)
