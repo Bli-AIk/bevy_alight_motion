@@ -1,11 +1,11 @@
 # Linear Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 14:03:39
+> Last tested: 2026-02-09 23:01:34
 
 Creates copies of the layer arranged in a line with advanced controls for position, offset, rotation, scale, alpha, and color blending.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Count (count)**: ✅ Implemented (Number of copies to create)
 - **Position (position)**: ✅ Implemented (Total displacement from first to last copy)
@@ -28,7 +28,7 @@ Creates copies of the layer arranged in a line with advanced controls for positi
 - **Seed (seed)**: ✅ Implemented (Random seed)
 
 **Related Test Files:**
-- `effects/linear-repeat/basic.amproj` ✅
+- `effects/linear-repeat/basic.amproj` ⏭️
 
 ---
 

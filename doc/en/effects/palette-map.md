@@ -1,11 +1,11 @@
 # Palette Map
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 14:03:39
+> Last tested: 2026-02-09 23:01:34
 
 Maps image colors to specified palette colors. Supports up to 8 palette colors.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Color 1 (color1)**: ✅ Implemented (Palette color 1)
 - **Color 2 (color2)**: ✅ Implemented (Palette color 2)
@@ -20,7 +20,7 @@ Maps image colors to specified palette colors. Supports up to 8 palette colors.
 - **Alpha (alpha)**: ✅ Implemented (Effect blend strength)
 
 **Related Test Files:**
-- `effects/palette/basic.amproj`
+- `effects/palette/basic.amproj` ✅
 
 ---
 

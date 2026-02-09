@@ -1,7 +1,7 @@
 # Color Fill
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 14:03:39
+> Last tested: 2026-02-09 23:01:34
 
 Fills the shape with a solid color. Color format is #AARRGGBB.
 

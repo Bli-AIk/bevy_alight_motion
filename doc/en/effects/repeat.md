@@ -1,11 +1,11 @@
 # Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-09 14:03:39
+> Last tested: 2026-02-09 23:01:34
 
 Creates multiple copies of the layer with cumulative offset, rotation, scale, and alpha transforms.
 
-**Support Status**: ❌ Not Supported
+**Support Status**: ✅ Fully Supported
 
 - **Count (count)**: ✅ Implemented (Number of copies to create)
 - **Time Offset (time)**: ✅ Implemented (Time offset between copies (not yet implemented))
@@ -15,7 +15,7 @@ Creates multiple copies of the layer with cumulative offset, rotation, scale, an
 - **Alpha (alpha)**: ✅ Implemented (Alpha multiplier per copy)
 
 **Related Test Files:**
-- `effects/repeat/basic.amproj`
+- `effects/repeat/basic.amproj` ✅
 
 ---
 
