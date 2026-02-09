@@ -1,11 +1,27 @@
 {
-  "timestamp": "2026-02-09T14:03:39+08:00",
+  "timestamp": "2026-02-09T23:01:34+08:00",
   "summary": {
-    "passed": 1,
-    "skipped": 0,
+    "passed": 14,
+    "skipped": 3,
     "failed": 0
   },
   "results": {
-    "effects/linear-repeat/basic": { "status": "pass" }
+    "effects/gaussian-blur/basic": { "status": "skip" },
+    "effects/grid/basic": { "status": "pass" },
+    "effects/linear-repeat/basic": { "status": "skip" },
+    "effects/palette/basic": { "status": "pass" },
+    "effects/pixelate/basic": { "status": "skip" },
+    "effects/repeat/basic": { "status": "pass" },
+    "effects/replace-color/basic": { "status": "pass" },
+    "effects/scale-assist/basic": { "status": "pass" },
+    "effects/scale-assist/ex": { "status": "pass" },
+    "effects/stretch-segment/basic": { "status": "pass" },
+    "effects/stretch-segment/ex2": { "status": "pass" },
+    "effects/stretch-segment/ex3": { "status": "pass" },
+    "effects/stretch-segment/ex4": { "status": "pass" },
+    "effects/stretch-segment/ex5": { "status": "pass" },
+    "effects/stretch-segment/ex": { "status": "pass" },
+    "effects/swing/basic": { "status": "pass" },
+    "effects/threshold/basic": { "status": "pass" }
   }
 }

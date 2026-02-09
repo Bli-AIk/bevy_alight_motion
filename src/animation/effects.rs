@@ -438,7 +438,7 @@ pub fn animate_unified_effect_system(
             // Constants derived from empirical analysis of AM reference videos
             // scale divisor = scale_param^SCALE_POWER
             // damp factor = damp^(1 + DAMP_COEFF*(damp-1)^DAMP_POWER)
-            const SCALE_POWER: f32 = 1.7067; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
+            const SCALE_POWER: f32 = 1.71; // = ln(2) / ln(1.501), makes scale_y=0.5 when scale_param=1.501
             const DAMP_COEFF: f32 = 2.75;
             const DAMP_POWER: f32 = 1.93;
 
@@ -918,6 +918,68 @@ pub fn animate_unified_effect_system(
                     feather,
                     alpha,
                     animated.replace_lock_luminance,
+                );
+            }
+
+            // Update threshold effect if present
+            let has_threshold = animated.threshold_value.value.is_some()
+                || !animated.threshold_value.keyframes.is_empty();
+            bevy::log::info!(
+                "[Threshold Check] layer={} has_threshold={} value={:?} keyframes={}",
+                animated.layer_id,
+                has_threshold,
+                animated.threshold_value.value,
+                animated.threshold_value.keyframes.len()
+            );
+            if has_threshold {
+                let threshold =
+                    interpolate_float(&animated.threshold_value, layer_time).unwrap_or(0.5);
+                let feather =
+                    interpolate_float(&animated.threshold_feather, layer_time).unwrap_or(0.0);
+
+                bevy::log::debug!(
+                    "[Threshold] layer={} time={:.2} threshold={:.3} feather={:.3} invert={}",
+                    animated.layer_id,
+                    layer_time,
+                    threshold,
+                    feather,
+                    animated.threshold_invert
+                );
+
+                material.set_threshold(
+                    true,
+                    threshold,
+                    feather,
+                    animated.threshold_invert,
+                    animated.threshold_blend_mode,
+                );
+            }
+
+            // Update grid effect if present
+            let has_grid = animated.grid_spacing.value.is_some()
+                || !animated.grid_spacing.keyframes.is_empty();
+            if has_grid {
+                let position =
+                    super::interpolation::interpolate_vec2(&animated.grid_position, layer_time)
+                        .unwrap_or([0.0, 0.0]);
+                let spacing = interpolate_float(&animated.grid_spacing, layer_time).unwrap_or(0.1);
+                let width = interpolate_float(&animated.grid_width, layer_time).unwrap_or(0.02);
+                let smoothing =
+                    interpolate_float(&animated.grid_smoothing, layer_time).unwrap_or(0.0);
+                let color =
+                    super::interpolation::interpolate_color(&animated.grid_color, layer_time)
+                        .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
+
+                material.set_grid(
+                    true,
+                    animated.grid_punchout,
+                    animated.grid_screen_space,
+                    position[0],
+                    position[1],
+                    spacing,
+                    width,
+                    smoothing,
+                    color,
                 );
             }
 

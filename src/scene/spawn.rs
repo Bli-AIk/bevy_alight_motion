@@ -213,6 +213,9 @@ pub(crate) fn spawn_shape(
     let scale_assist = extract_scale_assist_effect(&shape.effects);
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let linear_repeat_effect = extract_linear_repeat_effect(&shape.effects);
+    let swing_effect = extract_swing_effect(&shape.effects);
+    let threshold_effect = extract_threshold_effect(&shape.effects);
+    let grid_effect = extract_grid_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -430,6 +433,25 @@ pub(crate) fn spawn_shape(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                // Swing effect
+                swing_freq: swing_effect.freq,
+                swing_a1: swing_effect.a1,
+                swing_a2: swing_effect.a2,
+                swing_phase: swing_effect.phase,
+                swing_type: swing_effect.swing_type,
+                // Threshold effect
+                threshold_value: threshold_effect.threshold,
+                threshold_feather: threshold_effect.feather,
+                threshold_invert: threshold_effect.invert,
+                threshold_blend_mode: threshold_effect.blend_mode,
+                // Grid effect
+                grid_position: grid_effect.position,
+                grid_spacing: grid_effect.spacing,
+                grid_width: grid_effect.width,
+                grid_color: grid_effect.color,
+                grid_punchout: grid_effect.punchout,
+                grid_smoothing: grid_effect.smoothing,
+                grid_screen_space: grid_effect.screen_space,
             },
             layer_spec,
             transform,
@@ -469,6 +491,9 @@ pub(crate) fn spawn_null(
     let replace_color = extract_replace_color_effect(&null.effects);
     let repeat_effect = extract_repeat_effect(&null.effects);
     let linear_repeat_effect = extract_linear_repeat_effect(&null.effects);
+    let swing_effect = extract_swing_effect(&null.effects);
+    let threshold_effect = extract_threshold_effect(&null.effects);
+    let grid_effect = extract_grid_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -563,6 +588,25 @@ pub(crate) fn spawn_null(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                // Swing effect
+                swing_freq: swing_effect.freq,
+                swing_a1: swing_effect.a1,
+                swing_a2: swing_effect.a2,
+                swing_phase: swing_effect.phase,
+                swing_type: swing_effect.swing_type,
+                // Threshold effect
+                threshold_value: threshold_effect.threshold,
+                threshold_feather: threshold_effect.feather,
+                threshold_invert: threshold_effect.invert,
+                threshold_blend_mode: threshold_effect.blend_mode,
+                // Grid effect
+                grid_position: grid_effect.position,
+                grid_spacing: grid_effect.spacing,
+                grid_width: grid_effect.width,
+                grid_color: grid_effect.color,
+                grid_punchout: grid_effect.punchout,
+                grid_smoothing: grid_effect.smoothing,
+                grid_screen_space: grid_effect.screen_space,
             },
             AmLayerSpec::Null,
             transform,
@@ -702,6 +746,25 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_overlap: AmAnimatedFloat::default(),
                 linear_repeat_shape: 0,
                 linear_repeat_invert: false,
+                // Swing effect (defaults for embed scene)
+                swing_freq: AmAnimatedFloat::default(),
+                swing_a1: AmAnimatedFloat::default(),
+                swing_a2: AmAnimatedFloat::default(),
+                swing_phase: AmAnimatedFloat::default(),
+                swing_type: 0,
+                // Threshold effect (defaults for embed scene)
+                threshold_value: AmAnimatedFloat::default(),
+                threshold_feather: AmAnimatedFloat::default(),
+                threshold_invert: false,
+                threshold_blend_mode: 0,
+                // Grid effect (defaults for embed scene)
+                grid_position: AmAnimatedVec2::default(),
+                grid_spacing: AmAnimatedFloat::default(),
+                grid_width: AmAnimatedFloat::default(),
+                grid_color: crate::schema::AmAnimatedColor::default(),
+                grid_punchout: false,
+                grid_smoothing: AmAnimatedFloat::default(),
+                grid_screen_space: false,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

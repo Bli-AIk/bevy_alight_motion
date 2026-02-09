@@ -46,19 +46,23 @@ pub(crate) fn add_visual_components(
     has_scale_animation: bool, // True if embed has scale animation (needs bounds clipping)
     has_scale_assist: bool, // True if layer has scale_assist effect (needs UnifiedEffectMaterial for dynamic sizing)
     has_repeat: bool,       // True if layer has repeat effect (needs UnifiedEffectMaterial)
+    has_threshold: bool,    // True if layer has threshold effect (needs UnifiedEffectMaterial)
+    has_grid: bool,         // True if layer has grid effect (needs UnifiedEffectMaterial)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}",
         label,
         id,
         std::mem::discriminant(spec),
         is_embed_content,
         has_scale_assist,
-        has_repeat
+        has_repeat,
+        has_threshold,
+        has_grid
     );
 
     // Determine which effects are needed
@@ -78,7 +82,9 @@ pub(crate) fn add_visual_components(
         || needs_replace_color
         || is_embed_content
         || has_scale_assist
-        || has_repeat;
+        || has_repeat
+        || has_threshold
+        || has_grid;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -291,34 +297,11 @@ pub(crate) fn add_visual_components(
                 color: Vec4::new(color.red, color.green, color.blue, color.alpha),
                 effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
                 mask_params: initial_mask_params,
-                wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
-                stretch_params: Vec4::ZERO,
                 original_size: Vec4::new(width, height, mesh_width, mesh_height),
                 mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
-                blur_params: Vec4::ZERO,
-                palette_flags: Vec4::ZERO,
-                palette_color1: Vec4::ZERO,
-                palette_color2: Vec4::ZERO,
-                palette_color3: Vec4::ZERO,
-                palette_color4: Vec4::ZERO,
-                palette_color5: Vec4::ZERO,
-                palette_color6: Vec4::ZERO,
-                palette_color7: Vec4::ZERO,
-                palette_color8: Vec4::ZERO,
                 mask2_params: initial_mask2_params,
                 mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
-                replace_color_flags: Vec4::ZERO,
-                replace_old_color: Vec4::ZERO,
-                replace_new_color: Vec4::ZERO,
-                replace_color_params: Vec4::ZERO,
-                repeat_params1: Vec4::ZERO,
-                repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
-                // Linear repeat defaults
-                linear_repeat_params1: Vec4::ZERO,
-                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
-                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
-                linear_repeat_params4: Vec4::ZERO,
-                linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                ..default()
             },
             texture: Some(texture),
         };

@@ -174,6 +174,41 @@ pub struct AmAnimated {
     pub linear_repeat_shape: i32,
     /// Linear repeat effect: invert flag
     pub linear_repeat_invert: bool,
+    // Swing effect (com.alightcreative.effects.swing2)
+    /// Swing effect: oscillation frequency (per second)
+    pub swing_freq: AmAnimatedFloat,
+    /// Swing effect: minimum angle (degrees)
+    pub swing_a1: AmAnimatedFloat,
+    /// Swing effect: maximum angle (degrees)
+    pub swing_a2: AmAnimatedFloat,
+    /// Swing effect: phase offset (0.0-1.0)
+    pub swing_phase: AmAnimatedFloat,
+    /// Swing effect: swing type (0 = sine, 1 = triangle)
+    pub swing_type: i32,
+    // Threshold effect (com.alightcreative.effects.threshold)
+    /// Threshold effect: threshold value (0.0-1.0)
+    pub threshold_value: AmAnimatedFloat,
+    /// Threshold effect: feather/softness (0.0-1.0)
+    pub threshold_feather: AmAnimatedFloat,
+    /// Threshold effect: invert flag
+    pub threshold_invert: bool,
+    /// Threshold effect: blend mode
+    pub threshold_blend_mode: i32,
+    // Grid effect (com.alightcreative.effects.grid2)
+    /// Grid effect: position offset
+    pub grid_position: AmAnimatedVec2,
+    /// Grid effect: spacing (0.0-1.0)
+    pub grid_spacing: AmAnimatedFloat,
+    /// Grid effect: line width (0.0-1.0)
+    pub grid_width: AmAnimatedFloat,
+    /// Grid effect: color
+    pub grid_color: crate::schema::AmAnimatedColor,
+    /// Grid effect: punchout mode
+    pub grid_punchout: bool,
+    /// Grid effect: smoothing
+    pub grid_smoothing: AmAnimatedFloat,
+    /// Grid effect: screen space mode
+    pub grid_screen_space: bool,
 }
 
 impl AmAnimated {

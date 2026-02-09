@@ -47,6 +47,17 @@ struct UnifiedEffectUniform {
     linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
     linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
+    // Threshold effect
+    threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
+    // Grid effect
+    grid_flags: vec4<f32>,             // (enabled, punchout, screen_space, 0)
+    grid_params1: vec4<f32>,           // (pos_x, pos_y, spacing, width)
+    grid_params2: vec4<f32>,           // (smoothing, 0, 0, 0)
+    grid_color: vec4<f32>,             // (r, g, b, a)
+    // Pixelate effect
+    pixelate_flags: vec4<f32>,         // (enabled, screen_space, 0, 0)
+    pixelate_params1: vec4<f32>,       // (size, stretch_x, stretch_y, angle)
+    pixelate_params2: vec4<f32>,       // (vignette, threshold, saturation, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -366,19 +377,7 @@ fn get_palette_color(index: i32) -> vec4<f32> {
 // are preferred for pixels with moderate luminance
 fn color_distance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     let diff = c1 - c2;
-    let dist = dot(diff, diff);
-    
-    // Calculate luminance of input color
-    let input_lum = dot(c1, vec3<f32>(0.299, 0.587, 0.114));
-    
-    // If palette color is very dark (black), add penalty for bright inputs
-    // This biases the algorithm toward selecting non-black colors for brighter pixels
-    let palette_lum = dot(c2, vec3<f32>(0.299, 0.587, 0.114));
-    if palette_lum < 0.01 && input_lum > 0.03 {
-        return dist + input_lum * 2.5; // Add penalty proportional to input brightness
-    }
-    
-    return dist;
+    return dot(diff, diff);
 }
 
 // Apply palette map effect - quantize color to nearest palette color
@@ -783,6 +782,85 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let quantized_color = apply_palette_map(tex_color);
         // Blend between original and quantized based on palette alpha
         tex_color = mix(tex_color, quantized_color, palette_alpha);
+    }
+    
+    // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
+    let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
+    if threshold_enabled {
+        let threshold_value = uniforms.threshold_params.x;
+        let threshold_feather = uniforms.threshold_params.y;
+        let threshold_invert = uniforms.threshold_params.z > 0.5;
+        
+        // Calculate luminance using standard weights
+        let luminance = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+        
+        // Apply threshold with optional feather
+        var bw_value: f32;
+        if threshold_feather > 0.001 {
+            // Smooth transition using smoothstep
+            bw_value = smoothstep(threshold_value - threshold_feather * 0.5, 
+                                  threshold_value + threshold_feather * 0.5, 
+                                  luminance);
+        } else {
+            // Sharp threshold
+            bw_value = select(0.0, 1.0, luminance >= threshold_value);
+        }
+        
+        // Apply invert if enabled
+        if threshold_invert {
+            bw_value = 1.0 - bw_value;
+        }
+        
+        // Set RGB to the threshold result, preserve alpha
+        tex_color = vec4<f32>(bw_value, bw_value, bw_value, tex_color.a);
+    }
+    
+    // Apply grid effect if enabled
+    let grid_enabled = uniforms.grid_flags.x > 0.5;
+    if grid_enabled {
+        let grid_punchout = uniforms.grid_flags.y > 0.5;
+        let grid_screen_space = uniforms.grid_flags.z > 0.5;
+        let grid_pos = uniforms.grid_params1.xy;
+        let grid_spacing = uniforms.grid_params1.z;
+        let grid_width = uniforms.grid_params1.w;
+        let grid_smoothing = uniforms.grid_params2.x;
+        let grid_color = uniforms.grid_color;
+        
+        // Calculate grid coordinates
+        var grid_uv: vec2<f32>;
+        if grid_screen_space {
+            grid_uv = mesh.world_position.xy + grid_pos;
+        } else {
+            grid_uv = mesh.uv * uniforms.original_size.xy + grid_pos;
+        }
+        
+        // Calculate grid pattern
+        let cell_size = grid_spacing * 100.0; // Scale spacing to reasonable pixel values
+        let line_width = grid_width * cell_size * 0.5;
+        
+        // Calculate distance to nearest grid line
+        let grid_coord = fract(grid_uv / cell_size) * cell_size;
+        let dist_x = min(grid_coord.x, cell_size - grid_coord.x);
+        let dist_y = min(grid_coord.y, cell_size - grid_coord.y);
+        let dist_to_line = min(dist_x, dist_y);
+        
+        // Calculate line intensity with optional smoothing
+        var line_intensity: f32;
+        if grid_smoothing > 0.001 {
+            let smooth_width = line_width * grid_smoothing;
+            line_intensity = 1.0 - smoothstep(line_width - smooth_width, line_width, dist_to_line);
+        } else {
+            line_intensity = select(0.0, 1.0, dist_to_line < line_width);
+        }
+        
+        // Apply grid effect
+        if grid_punchout {
+            // Punchout mode: cut out grid lines (make transparent)
+            tex_color.a *= (1.0 - line_intensity);
+        } else {
+            // Overlay mode: blend grid color with texture
+            tex_color = mix(tex_color, grid_color, line_intensity * grid_color.a);
+        }
     }
     
     // Apply mask clipping if any mask is enabled

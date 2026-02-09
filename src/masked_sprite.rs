@@ -97,15 +97,33 @@ pub struct UnifiedEffectUniform {
 
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
+
+    /// Threshold effect params: (threshold, feather, invert, blendMode)
+    pub threshold_params: Vec4,
+
+    /// Grid flags: (enabled, punchout, screen_space, 0)
+    pub grid_flags: Vec4,
+
+    /// Grid params1: (pos_x, pos_y, spacing, width)
+    pub grid_params1: Vec4,
+
+    /// Grid params2: (smoothing, 0, 0, 0)
+    pub grid_params2: Vec4,
+
+    /// Grid color (r, g, b, a)
+    pub grid_color: Vec4,
+
+    /// Pixelate flags: (enabled, screen_space, 0, 0)
+    pub pixelate_flags: Vec4,
+
+    /// Pixelate params1: (size, stretch_x, stretch_y, angle)
+    pub pixelate_params1: Vec4,
+
+    /// Pixelate params2: (vignette, threshold, saturation, 0)
+    pub pixelate_params2: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
-///
-/// Effect flags control which effects are active:
-/// - `effect_flags.x > 0.5`: Mask enabled
-/// - `effect_flags.y > 0.5`: Wipe enabled
-/// - `effect_flags.z > 0.5`: Stretch segment enabled
-/// - `effect_flags.w > 0.5`: Blur enabled
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 pub struct UnifiedEffectMaterial {
     /// All uniform data packed into a single binding
@@ -134,162 +152,60 @@ impl UnifiedEffectMaterial {
         self.uniform_data.color = Vec4::new(color.red, color.green, color.blue, color.alpha);
     }
 
-    /// Get effect_flags
     pub fn effect_flags(&self) -> Vec4 {
         self.uniform_data.effect_flags
     }
 
-    /// Get mask_params
     pub fn mask_params(&self) -> Vec4 {
         self.uniform_data.mask_params
     }
 
-    /// Get wipe_params
     pub fn wipe_params(&self) -> Vec4 {
         self.uniform_data.wipe_params
     }
 
-    /// Get stretch_params
     pub fn stretch_params(&self) -> Vec4 {
         self.uniform_data.stretch_params
     }
 
-    /// Get original_size
     pub fn original_size(&self) -> Vec4 {
         self.uniform_data.original_size
     }
 
-    /// Get mesh_offset
     pub fn mesh_offset(&self) -> Vec4 {
         self.uniform_data.mesh_offset
     }
 
-    /// Get blur_params
     pub fn blur_params(&self) -> Vec4 {
         self.uniform_data.blur_params
     }
 
-    /// Get palette_flags
     pub fn palette_flags(&self) -> Vec4 {
         self.uniform_data.palette_flags
     }
 
-    /// Get mask2_params
     pub fn mask2_params(&self) -> Vec4 {
         self.uniform_data.mask2_params
     }
 
-    /// Get mask2_flags
     pub fn mask2_flags(&self) -> Vec4 {
         self.uniform_data.mask2_flags
     }
 
-    /// Get replace_color_flags
     pub fn replace_color_flags(&self) -> Vec4 {
         self.uniform_data.replace_color_flags
     }
 
-    /// Get replace_old_color
     pub fn replace_old_color(&self) -> Vec4 {
         self.uniform_data.replace_old_color
     }
 
-    /// Get replace_new_color
     pub fn replace_new_color(&self) -> Vec4 {
         self.uniform_data.replace_new_color
     }
 
-    /// Get replace_color_params
     pub fn replace_color_params(&self) -> Vec4 {
         self.uniform_data.replace_color_params
-    }
-}
-
-impl Default for UnifiedEffectUniform {
-    fn default() -> Self {
-        Self {
-            color: Vec4::new(1.0, 1.0, 1.0, 1.0), // WHITE
-            effect_flags: Vec4::ZERO,
-            mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // No clip
-            wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),         // Full visible
-            stretch_params: Vec4::ZERO,
-            original_size: Vec4::new(100.0, 100.0, 100.0, 100.0),
-            mesh_offset: Vec4::ZERO,
-            blur_params: Vec4::ZERO,
-            palette_flags: Vec4::ZERO,
-            palette_color1: Vec4::ZERO,
-            palette_color2: Vec4::ZERO,
-            palette_color3: Vec4::ZERO,
-            palette_color4: Vec4::ZERO,
-            palette_color5: Vec4::ZERO,
-            palette_color6: Vec4::ZERO,
-            palette_color7: Vec4::ZERO,
-            palette_color8: Vec4::ZERO,
-            mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // No clip
-            mask2_flags: Vec4::ZERO,
-            replace_color_flags: Vec4::ZERO,
-            replace_old_color: Vec4::ZERO,
-            replace_new_color: Vec4::ZERO,
-            replace_color_params: Vec4::ZERO,
-            repeat_params1: Vec4::ZERO, // (count, offset_x, offset_y, angle)
-            repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0), // (scale, alpha, 0, 0)
-            // Linear repeat defaults
-            linear_repeat_params1: Vec4::ZERO, // (count, position_x, position_y, angle)
-            linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0), // (offset_x, offset_y, scale, alpha)
-            linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0), // (start, end, phase, overlap)
-            linear_repeat_params4: Vec4::ZERO, // (ease_in, ease_out, blend, shape_invert_alt)
-            linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-        }
-    }
-}
-
-impl UnifiedEffectMaterial {
-    pub fn new(texture: Handle<Image>, width: f32, height: f32) -> Self {
-        Self {
-            uniform_data: UnifiedEffectUniform {
-                original_size: Vec4::new(width, height, width, height),
-                ..default()
-            },
-            texture: Some(texture),
-        }
-    }
-
-    pub fn with_mask(mut self, cx: f32, cy: f32, hw: f32, hh: f32) -> Self {
-        self.uniform_data.effect_flags.x = 1.0;
-        self.uniform_data.mask_params = Vec4::new(cx, cy, hw, hh);
-        self
-    }
-
-    pub fn with_wipe(mut self, start: f32, end: f32, angle: f32, feather: f32) -> Self {
-        self.uniform_data.effect_flags.y = 1.0;
-        self.uniform_data.wipe_params = Vec4::new(start, end, angle, feather);
-        self
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn with_stretch_segment(
-        mut self,
-        angle: f32,
-        stretch_px: f32,
-        offset_px: f32,
-        smooth: f32,
-        mesh_w: f32,
-        mesh_h: f32,
-        off_x: f32,
-        off_y: f32,
-    ) -> Self {
-        self.uniform_data.effect_flags.z = 1.0;
-        self.uniform_data.stretch_params = Vec4::new(angle, stretch_px, offset_px, smooth);
-        self.uniform_data.original_size.z = mesh_w;
-        self.uniform_data.original_size.w = mesh_h;
-        self.uniform_data.mesh_offset = Vec4::new(off_x, off_y, 0.0, 0.0);
-        self
-    }
-
-    pub fn with_blur(mut self, strength: f32) -> Self {
-        self.uniform_data.effect_flags.w = 1.0;
-        self.uniform_data.blur_params = Vec4::new(strength, 0.0, 0.0, 0.0);
-        self
     }
 
     pub fn set_mask_enabled(&mut self, enabled: bool) {
@@ -308,32 +224,6 @@ impl UnifiedEffectMaterial {
         self.uniform_data.effect_flags.w = if enabled { 1.0 } else { 0.0 };
     }
 
-    /// Set palette map effect parameters
-    #[allow(clippy::too_many_arguments)]
-    pub fn with_palette_map(
-        mut self,
-        count: u8,
-        shades: bool,
-        alpha: f32,
-        colors: &[Vec4; 8],
-    ) -> Self {
-        self.uniform_data.palette_flags = Vec4::new(
-            1.0,                            // enabled
-            count as f32,                   // count (1-8)
-            if shades { 1.0 } else { 0.0 }, // shades
-            alpha,                          // alpha (effect strength)
-        );
-        self.uniform_data.palette_color1 = colors[0];
-        self.uniform_data.palette_color2 = colors[1];
-        self.uniform_data.palette_color3 = colors[2];
-        self.uniform_data.palette_color4 = colors[3];
-        self.uniform_data.palette_color5 = colors[4];
-        self.uniform_data.palette_color6 = colors[5];
-        self.uniform_data.palette_color7 = colors[6];
-        self.uniform_data.palette_color8 = colors[7];
-        self
-    }
-
     pub fn set_palette_enabled(&mut self, enabled: bool) {
         self.uniform_data.palette_flags.x = if enabled { 1.0 } else { 0.0 };
     }
@@ -342,7 +232,72 @@ impl UnifiedEffectMaterial {
         self.uniform_data.palette_flags.w = alpha;
     }
 
-    /// Set replace color effect parameters
+    pub fn is_palette_enabled(&self) -> bool {
+        self.uniform_data.palette_flags.x > 0.5
+    }
+
+    pub fn set_threshold(
+        &mut self,
+        enabled: bool,
+        threshold: f32,
+        feather: f32,
+        invert: bool,
+        blend_mode: i32,
+    ) {
+        self.uniform_data.replace_color_flags.z = if enabled { 1.0 } else { 0.0 };
+        self.uniform_data.threshold_params = Vec4::new(
+            threshold,
+            feather,
+            if invert { 1.0 } else { 0.0 },
+            blend_mode as f32,
+        );
+    }
+
+    pub fn set_grid(
+        &mut self,
+        enabled: bool,
+        punchout: bool,
+        screen_space: bool,
+        pos_x: f32,
+        pos_y: f32,
+        spacing: f32,
+        width: f32,
+        smoothing: f32,
+        color: Vec4,
+    ) {
+        self.uniform_data.grid_flags = Vec4::new(
+            if enabled { 1.0 } else { 0.0 },
+            if punchout { 1.0 } else { 0.0 },
+            if screen_space { 1.0 } else { 0.0 },
+            0.0,
+        );
+        self.uniform_data.grid_params1 = Vec4::new(pos_x, pos_y, spacing, width);
+        self.uniform_data.grid_params2 = Vec4::new(smoothing, 0.0, 0.0, 0.0);
+        self.uniform_data.grid_color = color;
+    }
+
+    pub fn set_pixelate(
+        &mut self,
+        enabled: bool,
+        screen_space: bool,
+        size: f32,
+        stretch_x: f32,
+        stretch_y: f32,
+        angle: f32,
+        vignette: f32,
+        threshold: f32,
+        saturation: f32,
+    ) {
+        self.uniform_data.pixelate_flags = Vec4::new(
+            if enabled { 1.0 } else { 0.0 },
+            if screen_space { 1.0 } else { 0.0 },
+            0.0,
+            0.0,
+        );
+        self.uniform_data.pixelate_params1 = Vec4::new(size, stretch_x, stretch_y, angle);
+        self.uniform_data.pixelate_params2 = Vec4::new(vignette, threshold, saturation, 0.0);
+    }
+
     pub fn set_replace_color(
         &mut self,
         old_color: Vec4,
@@ -358,29 +313,50 @@ impl UnifiedEffectMaterial {
         self.uniform_data.replace_new_color = new_color;
         self.uniform_data.replace_color_params = Vec4::new(threshold, feather, alpha, 0.0);
     }
+}
 
-    pub fn set_replace_color_enabled(&mut self, enabled: bool) {
-        self.uniform_data.replace_color_flags.x = if enabled { 1.0 } else { 0.0 };
-    }
-
-    pub fn is_replace_color_enabled(&self) -> bool {
-        self.uniform_data.replace_color_flags.x > 0.5
-    }
-
-    pub fn is_mask_enabled(&self) -> bool {
-        self.uniform_data.effect_flags.x > 0.5
-    }
-    pub fn is_wipe_enabled(&self) -> bool {
-        self.uniform_data.effect_flags.y > 0.5
-    }
-    pub fn is_stretch_enabled(&self) -> bool {
-        self.uniform_data.effect_flags.z > 0.5
-    }
-    pub fn is_blur_enabled(&self) -> bool {
-        self.uniform_data.effect_flags.w > 0.5
-    }
-    pub fn is_palette_enabled(&self) -> bool {
-        self.uniform_data.palette_flags.x > 0.5
+impl Default for UnifiedEffectUniform {
+    fn default() -> Self {
+        Self {
+            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            effect_flags: Vec4::ZERO,
+            mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            wipe_params: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            stretch_params: Vec4::ZERO,
+            original_size: Vec4::new(100.0, 100.0, 100.0, 100.0),
+            mesh_offset: Vec4::ZERO,
+            blur_params: Vec4::ZERO,
+            palette_flags: Vec4::ZERO,
+            palette_color1: Vec4::ZERO,
+            palette_color2: Vec4::ZERO,
+            palette_color3: Vec4::ZERO,
+            palette_color4: Vec4::ZERO,
+            palette_color5: Vec4::ZERO,
+            palette_color6: Vec4::ZERO,
+            palette_color7: Vec4::ZERO,
+            palette_color8: Vec4::ZERO,
+            mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            mask2_flags: Vec4::ZERO,
+            replace_color_flags: Vec4::ZERO,
+            replace_old_color: Vec4::ZERO,
+            replace_new_color: Vec4::ZERO,
+            replace_color_params: Vec4::ZERO,
+            repeat_params1: Vec4::ZERO,
+            repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
+            linear_repeat_params1: Vec4::ZERO,
+            linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            linear_repeat_params4: Vec4::ZERO,
+            linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            threshold_params: Vec4::ZERO,
+            grid_flags: Vec4::ZERO,
+            grid_params1: Vec4::ZERO,
+            grid_params2: Vec4::ZERO,
+            grid_color: Vec4::new(0.0, 0.0, 0.0, 1.0),
+            pixelate_flags: Vec4::ZERO,
+            pixelate_params1: Vec4::ZERO,
+            pixelate_params2: Vec4::ZERO,
+        }
     }
 }
 
@@ -388,12 +364,10 @@ impl Material2d for UnifiedEffectMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/unified_effect.wgsl".into()
     }
-
     fn alpha_mode(&self) -> AlphaMode2d {
         AlphaMode2d::Blend
     }
 }
 
-/// Marker for entities using the unified effect material
 #[derive(Component, Default)]
 pub struct UnifiedEffectMarker;
