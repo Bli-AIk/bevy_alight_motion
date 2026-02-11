@@ -29,6 +29,13 @@
 * 通过 ECS 组件实现可自定义的播放控制。
 * (计划中) 支持更多的形状类型和特效。
 
+## Bevy 版本支持
+
+| `bevy` | `bevy_alight_motion` |
+|--------|----------------------|
+| 0.18   | 0.3.0                |
+| 0.17   | < 0.3.0              |
+
 ## 如何使用
 
 1. **添加依赖** 到你的 `Cargo.toml`:
@@ -93,13 +100,13 @@
 
 本项目使用了以下 crate:
 
-| Crate                                           | 版本     | 描述              |
-|-------------------------------------------------|--------|-----------------|
-| [bevy](https://crates.io/crates/bevy)           | 0.17.2 | 游戏引擎            |
-| [quick-xml](https://crates.io/crates/quick-xml) | 0.37   | 高性能 XML 解析/序列化库 |
-| [serde](https://crates.io/crates/serde)         | 1.0    | 序列化/反序列化框架      |
-| [zip](https://crates.io/crates/zip)             | 2.2    | ZIP 归档读写库       |
-| [thiserror](https://crates.io/crates/thiserror) | 2.0    | 错误派生宏           |
+| Crate                                           | 版本   | 描述              |
+|-------------------------------------------------|------|-----------------|
+| [bevy](https://crates.io/crates/bevy)           | 0.18 | 游戏引擎            |
+| [quick-xml](https://crates.io/crates/quick-xml) | 0.37 | 高性能 XML 解析/序列化库 |
+| [serde](https://crates.io/crates/serde)         | 1.0  | 序列化/反序列化框架      |
+| [zip](https://crates.io/crates/zip)             | 2.2  | ZIP 归档读写库       |
+| [thiserror](https://crates.io/crates/thiserror) | 2.0  | 错误派生宏           |
 
 ## 贡献者
 

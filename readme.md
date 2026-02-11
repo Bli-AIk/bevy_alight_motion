@@ -31,6 +31,13 @@ In the future, it may also support more complex effects and shaders exported fro
 * Customizable playback control via ECS components.
 * (Planned) Support for more shape types and effects.
 
+## Bevy Version Support
+
+| `bevy` | `bevy_alight_motion` |
+|--------|----------------------|
+| 0.18   | 0.3.0                |
+| 0.17   | < 0.3.0              |
+
 ## How to Use
 
 1. **Add Dependency** to your `Cargo.toml`:
@@ -97,7 +104,7 @@ This project uses the following crates:
 
 | Crate                                           | Version | Description                                 |
 |-------------------------------------------------|---------|---------------------------------------------|
-| [bevy](https://crates.io/crates/bevy)           | 0.17.2  | Game engine                                 |
+| [bevy](https://crates.io/crates/bevy)           | 0.18    | Game engine                                 |
 | [quick-xml](https://crates.io/crates/quick-xml) | 0.37    | High-performance XML pull-parser/serializer |
 | [serde](https://crates.io/crates/serde)         | 1.0     | Serialization/deserialization framework     |
 | [zip](https://crates.io/crates/zip)             | 2.2     | ZIP archive reading/writing                 |
