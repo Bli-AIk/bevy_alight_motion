@@ -10,7 +10,14 @@ description = "Bevy plugin for loading and playing Alight Motion project files"
 exclude = [
     "target/*",
     ".github/*",
-    "*.mp4"
+    "*.mp4",
+    "doc/*",
+    "dev/*",
+    "logs/*",
+    "reports/*",
+    "wasm/*",
+    "debug_comparison/*",
+    "assets/projects/*",
 ]
 autoexamples = false
 
