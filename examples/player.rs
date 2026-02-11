@@ -92,7 +92,7 @@ fn main() {
     // In comparison mode, try to match video resolution
     #[cfg(feature = "video-comparison")]
     {
-        if let Some(video_path) = video_utils::find_debug_video(Some(&project_file)) {
+        if let Some(_video_path) = video_utils::find_debug_video(Some(&project_file)) {
             // ...
             println!("Comparison mode: Using default resolution for now. Ensure video matches.");
         }
@@ -227,7 +227,7 @@ fn debug_sprites(
     #[cfg(not(feature = "video-comparison"))]
     for (marker, transform, global_transform, _sprite) in query.iter() {
         let global_z = global_transform.translation().z;
-        bevy::log::trace!(
+        trace!(
             "[SpawnDebug] Sprite added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2})",
             marker.label,
             transform.translation.x,
@@ -263,7 +263,7 @@ fn debug_unified_effects(
         } else {
             (0.0, 0.0)
         };
-        bevy::log::trace!(
+        trace!(
             "[SpawnDebug] UnifiedEffect added: '{}' at local=({:.1},{:.1},{:.4}) global=({:.1},{:.1},{:.4}) scale=({:.2},{:.2}) mesh_offset=({:.2},{:.2})",
             marker.label,
             transform.translation.x,
@@ -322,9 +322,12 @@ fn debug_position_changes(
 fn debug_sdf_shapes(
     query: Query<
         (&Name, &Transform, &GlobalTransform),
-        Added<bevy::prelude::MeshMaterial2d<bevy_alight_motion::sdf_material::SdfMaterial>>,
+        Added<MeshMaterial2d<bevy_alight_motion::sdf_material::SdfMaterial>>,
     >,
 ) {
+    #[cfg(feature = "video-comparison")]
+    let _ = &query;
+
     #[cfg(not(feature = "video-comparison"))]
     for (name, transform, global_transform) in query.iter() {
         let local_z = transform.translation.z;
@@ -593,7 +596,7 @@ fn toggle_mask_debug(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut settings: ResMut<MaskDebugSettings>,
     mut commands: Commands,
-    mask_query: Query<&bevy_alight_motion::scene::AmMaskInfo, Without<MaskDebugVisual>>,
+    mask_query: Query<&AmMaskInfo, Without<MaskDebugVisual>>,
     debug_visual_query: Query<Entity, With<MaskDebugVisual>>,
 ) {
     #[cfg(not(feature = "video-comparison"))]
@@ -1046,10 +1049,7 @@ mod video_comparison_systems {
         0.05
     }
 
-    pub fn setup_comparison(
-        mut state: ResMut<ComparisonState>,
-        project_file: Res<super::ProjectFile>,
-    ) {
+    pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<ProjectFile>) {
         // Prepare report dir
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1208,7 +1208,7 @@ mod video_comparison_systems {
             // then we need to wait for the scene to be rendered.
             playback.force_stopped = true;
             state.render_wait_frames = 2; // Wait 2 frames: 1 for lifecycle to run, 1 for render
-            bevy::log::debug!(
+            debug!(
                 "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames=2",
                 time_ms
             );
@@ -1222,14 +1222,14 @@ mod video_comparison_systems {
                 // Still waiting - allow lifecycle to run (force_stopped=false)
                 // but don't proceed to screenshot yet
                 playback.force_stopped = false;
-                bevy::log::debug!(
+                debug!(
                     "[PAUSED] render_wait_frames={} (allowing lifecycle)",
                     state.render_wait_frames
                 );
             } else {
                 // Wait complete - keep force_stopped=true for screenshot capture
                 playback.force_stopped = true;
-                bevy::log::debug!("[PAUSED] render_wait_frames=0 (ready for screenshot)");
+                debug!("[PAUSED] render_wait_frames=0 (ready for screenshot)");
             }
             return;
         }
@@ -1254,7 +1254,7 @@ mod video_comparison_systems {
             | TestStage::WaitingForScreenshot
             | TestStage::Comparing => {
                 playback.force_stopped = true;
-                bevy::log::debug!("[PAUSED] stage={:?} force_stopped=true", state.stage);
+                debug!("[PAUSED] stage={:?} force_stopped=true", state.stage);
             }
             // In WaitingForRender, lifecycle should be managed by render_wait_frames
             // If we get here with render_wait_frames=0, it means we're waiting for comparison_loop
@@ -1275,7 +1275,7 @@ mod video_comparison_systems {
         _time: Res<Time>,
         mut exit: MessageWriter<AppExit>,
         // Query to check if project is loaded
-        project_query: Query<&bevy_alight_motion::scene::AmProjectRoot>,
+        project_query: Query<&AmProjectRoot>,
     ) {
         // Use frame-based waiting instead of time-based for determinism
         // Wait at least 3 frames to ensure:
