@@ -1,11 +1,4 @@
-#![allow(
-    clippy::collapsible_if,
-    dead_code,
-    unused_variables,
-    unused_imports,
-    unused_mut,
-    deprecated
-)]
+#![allow(clippy::collapsible_if, deprecated)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
 //!
@@ -227,6 +220,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: R
 }
 
 /// Debug system to print sprite info once
+#[allow(unused_variables)]
 fn debug_sprites(
     query: Query<(&AmLayerMarker, &Transform, &GlobalTransform, &Sprite), Added<Sprite>>,
 ) {
@@ -249,6 +243,7 @@ fn debug_sprites(
 }
 
 /// Debug system to print UnifiedEffect sprite info once
+#[allow(unused_variables)]
 fn debug_unified_effects(
     query: Query<
         (
@@ -286,6 +281,7 @@ fn debug_unified_effects(
 }
 
 /// Debug system to track position changes per frame
+#[allow(unused_variables)]
 fn debug_position_changes(
     playback: Res<AmPlayback>,
     query: Query<
@@ -340,6 +336,7 @@ fn debug_sdf_shapes(
     }
 }
 
+#[allow(unused_variables, unused_mut)]
 fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: ResMut<AmPlayback>) {
     // Disable manual input in comparison mode
     #[cfg(not(feature = "video-comparison"))]
@@ -582,6 +579,7 @@ fn find_latest_debug_image() -> Option<String> {
 /// Resource to control mask debug visualization
 #[derive(Resource, Default)]
 struct MaskDebugSettings {
+    #[allow(dead_code)]
     show_masks: bool,
 }
 
@@ -590,6 +588,7 @@ struct MaskDebugSettings {
 struct MaskDebugVisual;
 
 /// Toggle mask debug visualization with the M key
+#[allow(unused_variables, unused_mut)]
 fn toggle_mask_debug(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut settings: ResMut<MaskDebugSettings>,
@@ -694,6 +693,7 @@ mod video_debug_systems {
         /// Video frame rate
         pub fps: f32,
         /// Time of last frame update
+        #[allow(dead_code)]
         pub last_frame_time: f32,
         /// Total duration in seconds
         pub duration: f32,
@@ -702,6 +702,7 @@ mod video_debug_systems {
         /// Whether frames have been loaded into Bevy
         pub frames_loaded: bool,
         /// Whether all frames are ready (fully loaded)
+        #[allow(dead_code)]
         pub frames_ready: bool,
     }
 
@@ -937,6 +938,8 @@ use video_debug_systems::*;
 mod video_comparison_systems {
     use super::*;
     use crate::video_utils;
+    use bevy::app::AppExit;
+    use bevy::ecs::message::MessageWriter;
     use bevy::render::view::screenshot::{Screenshot, save_to_disk};
     use bevy::window::PrimaryWindow;
     use owo_colors::OwoColorize;
@@ -952,6 +955,7 @@ mod video_comparison_systems {
         pub temp_dir: Option<PathBuf>,
         pub stage: TestStage,
         pub wait_frames: u32, // Wait frame count instead of timer for stability
+        #[allow(dead_code)]
         pub total_diff: f64,
         pub frame_scores: Vec<f32>,
         pub report_dir: PathBuf,
@@ -977,6 +981,7 @@ mod video_comparison_systems {
         WaitingForScreenshot, // Wait one frame for screenshot to be executed
         Comparing,
         Finished,
+        #[allow(dead_code)]
         Cancelled, // User closed the window
     }
 
@@ -1268,7 +1273,7 @@ mod video_comparison_systems {
         mut commands: Commands,
         _window_query: Query<Entity, With<PrimaryWindow>>,
         _time: Res<Time>,
-        mut exit: EventWriter<AppExit>,
+        mut exit: MessageWriter<AppExit>,
         // Query to check if project is loaded
         project_query: Query<&bevy_alight_motion::scene::AmProjectRoot>,
     ) {
