@@ -351,11 +351,12 @@ pub fn setup_embed_scene_rtt_system(
                 },
                 Camera2d,
                 Camera {
-                    target: RenderTarget::Image(render_texture_handle.clone().into()),
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: -(render_layer as isize), // Render before main camera
                     ..default()
                 },
+                // In Bevy 0.18, RenderTarget is a separate component
+                RenderTarget::Image(render_texture_handle.clone().into()),
                 // Fixed scaling mode so projection area matches RTT texture size exactly
                 Projection::Orthographic(OrthographicProjection {
                     scaling_mode: ScalingMode::Fixed {
