@@ -47,7 +47,7 @@ pub struct AmProject {
 }
 
 /// Loader for .amproj and .xml AM files.
-#[derive(Default)]
+#[derive(Default, bevy::prelude::TypePath)]
 pub struct AlightMotionLoader;
 
 impl AssetLoader for AlightMotionLoader {
@@ -64,8 +64,12 @@ impl AssetLoader for AlightMotionLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
 
-        let path = load_context.path();
-        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let path = load_context.path().clone();
+        let path_ref = path.path();
+        let extension = path_ref
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("");
 
         match extension.to_lowercase().as_str() {
             "amproj" => load_amproj(&bytes, load_context).await,

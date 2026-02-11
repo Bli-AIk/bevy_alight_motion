@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 bevy_alight_motion = { path = ".." }
 # 使用 webgl2 + 单线程模式，兼容 GitHub Pages (无需 COOP/COEP 头)
-bevy = { version = "0.17.2", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     # 核心功能
     "bevy_core_pipeline",
     "bevy_render",
@@ -31,8 +31,8 @@ bevy = { version = "0.17.2", default-features = false, features = [
     "webgl2",
 ]}
 # 嵌入式资产：在编译时将 assets 目录嵌入 WASM 文件
-# Bevy 0.17 对应 bevy_embedded_assets 0.14
-bevy_embedded_assets = "0.14"
+# Bevy 0.18 对应 bevy_embedded_assets 0.15
+bevy_embedded_assets = "0.15"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
