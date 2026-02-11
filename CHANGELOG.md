@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.2.0...v0.3.0) - 2026-02-11
+
+### Added
+
+- [**breaking**] upgrade to bevy 0.18
+- implement repeat, linear-repeat and other visual effects ([#19](https://github.com/Bli-AIk/bevy_alight_motion/pull/19))
+
+### Documentation
+
+- *(readme)* update Bevy version support and dependencies
+- *(bevy_alight_motion)* add language auto-redirect to docs index
+
+### Miscellaneous Tasks
+
+- *(bevy_alight_motion)* update .gitignore path for assets
+
+### Refactor
+
+- *(player)* update imports and fix feature flag logic
+- *(examples)* update player.rs
+
 ## [0.2.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.1.1...v0.2.0) - 2026-02-08
 
 ### Added
