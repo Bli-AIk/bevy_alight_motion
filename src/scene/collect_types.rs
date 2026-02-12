@@ -49,6 +49,7 @@ pub(crate) fn collect_shape(
     let swing_effect = extract_swing_effect(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
+    let pixelate_effect = extract_pixelate_effect(&shape.effects);
     if scale_assist.axis != 0 {
         bevy::log::info!(
             "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
@@ -264,6 +265,14 @@ pub(crate) fn collect_shape(
             grid_punchout: grid_effect.punchout,
             grid_smoothing: grid_effect.smoothing,
             grid_screen_space: grid_effect.screen_space,
+            // Pixelate effect
+            pixelate_size: pixelate_effect.size,
+            pixelate_stretch: pixelate_effect.stretch,
+            pixelate_angle: pixelate_effect.angle,
+            pixelate_vignette: pixelate_effect.vignette,
+            pixelate_threshold: pixelate_effect.threshold,
+            pixelate_saturation: pixelate_effect.saturation,
+            pixelate_screen_space: pixelate_effect.screen_space,
         },
         spec,
         z_index: z,
@@ -306,6 +315,7 @@ pub(crate) fn collect_null(
     let swing_effect = extract_swing_effect(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
+    let pixelate_effect = extract_pixelate_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -405,6 +415,14 @@ pub(crate) fn collect_null(
             grid_punchout: grid_effect.punchout,
             grid_smoothing: grid_effect.smoothing,
             grid_screen_space: grid_effect.screen_space,
+            // Pixelate effect
+            pixelate_size: pixelate_effect.size,
+            pixelate_stretch: pixelate_effect.stretch,
+            pixelate_angle: pixelate_effect.angle,
+            pixelate_vignette: pixelate_effect.vignette,
+            pixelate_threshold: pixelate_effect.threshold,
+            pixelate_saturation: pixelate_effect.saturation,
+            pixelate_screen_space: pixelate_effect.screen_space,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -617,6 +635,14 @@ pub(crate) fn collect_embed_scene(
             grid_punchout: false,
             grid_smoothing: AmAnimatedFloat::default(),
             grid_screen_space: false,
+            // Pixelate effect (defaults for embed)
+            pixelate_size: AmAnimatedFloat::default(),
+            pixelate_stretch: AmAnimatedVec2::default(),
+            pixelate_angle: AmAnimatedFloat::default(),
+            pixelate_vignette: AmAnimatedFloat::default(),
+            pixelate_threshold: AmAnimatedFloat::default(),
+            pixelate_saturation: AmAnimatedFloat::default(),
+            pixelate_screen_space: false,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -812,6 +838,14 @@ pub(crate) fn collect_text(
             grid_punchout: false,
             grid_smoothing: AmAnimatedFloat::default(),
             grid_screen_space: false,
+            // Pixelate effect (defaults for text)
+            pixelate_size: AmAnimatedFloat::default(),
+            pixelate_stretch: AmAnimatedVec2::default(),
+            pixelate_angle: AmAnimatedFloat::default(),
+            pixelate_vignette: AmAnimatedFloat::default(),
+            pixelate_threshold: AmAnimatedFloat::default(),
+            pixelate_saturation: AmAnimatedFloat::default(),
+            pixelate_screen_space: false,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -853,6 +887,7 @@ pub(crate) fn collect_image(
     let swing_effect = extract_swing_effect(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
+    let pixelate_effect = extract_pixelate_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -959,6 +994,14 @@ pub(crate) fn collect_image(
             grid_punchout: grid_effect.punchout,
             grid_smoothing: grid_effect.smoothing,
             grid_screen_space: grid_effect.screen_space,
+            // Pixelate effect
+            pixelate_size: pixelate_effect.size,
+            pixelate_stretch: pixelate_effect.stretch,
+            pixelate_angle: pixelate_effect.angle,
+            pixelate_vignette: pixelate_effect.vignette,
+            pixelate_threshold: pixelate_effect.threshold,
+            pixelate_saturation: pixelate_effect.saturation,
+            pixelate_screen_space: pixelate_effect.screen_space,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

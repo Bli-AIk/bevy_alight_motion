@@ -87,14 +87,21 @@ fn main() {
     println!("Loading project: {}", project_file);
 
     // Default resolution
-    let resolution = Vec2::new(1280.0, 960.0);
+    let mut resolution = Vec2::new(1280.0, 960.0);
 
     // In comparison mode, try to match video resolution
     #[cfg(feature = "video-comparison")]
     {
-        if let Some(_video_path) = video_utils::find_debug_video(Some(&project_file)) {
-            // ...
-            println!("Comparison mode: Using default resolution for now. Ensure video matches.");
+        if let Some(video_path) = video_utils::find_debug_video(Some(&project_file)) {
+            if let Some((width, height)) = video_utils::get_video_resolution(&video_path) {
+                resolution = Vec2::new(width as f32, height as f32);
+                println!(
+                    "Comparison mode: Using video resolution {}x{}",
+                    width, height
+                );
+            } else {
+                println!("Comparison mode: Could not read video resolution, using default.");
+            }
         }
     }
 

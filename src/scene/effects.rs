@@ -1018,3 +1018,116 @@ pub(crate) fn extract_linear_repeat_effect(effects: &[AmEffect]) -> LinearRepeat
 
     params
 }
+
+/// Pixelate effect parameters
+/// Reduces image resolution to create a pixelated effect
+/// 像素化效果参数
+/// 降低图像分辨率以创建像素化效果
+#[derive(Debug, Clone, Default)]
+pub struct PixelateParams {
+    /// Pixel block size (larger = more pixelated)
+    /// 像素块大小（越大越像素化）
+    pub size: AmAnimatedFloat,
+    /// Stretch factor for X and Y axes
+    /// X和Y轴的拉伸系数
+    pub stretch: AmAnimatedVec2,
+    /// Rotation angle of the pixel grid (degrees)
+    /// 像素网格的旋转角度（度）
+    pub angle: AmAnimatedFloat,
+    /// Vignette darkening effect (0 = none, 1 = full)
+    /// 暗角效果（0 = 无，1 = 完全）
+    pub vignette: AmAnimatedFloat,
+    /// Threshold for color posterization
+    /// 颜色色调分离的阈值
+    pub threshold: AmAnimatedFloat,
+    /// Saturation adjustment (1 = normal)
+    /// 饱和度调整（1 = 正常）
+    pub saturation: AmAnimatedFloat,
+    /// Use screen-space coordinates
+    /// 使用屏幕空间坐标
+    pub screen_space: bool,
+}
+
+impl PixelateParams {
+    /// Check if this has any pixelate effect parameters set
+    /// 检查是否设置了任何像素化效果参数
+    #[allow(dead_code)]
+    pub fn has_effect(&self) -> bool {
+        self.size.value.is_some() || !self.size.keyframes.is_empty()
+    }
+}
+
+/// Extract pixelate effect parameters from effects.
+/// 从效果中提取像素化效果参数
+pub(crate) fn extract_pixelate_effect(effects: &[AmEffect]) -> PixelateParams {
+    let mut params = PixelateParams::default();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.pixelate2" {
+            // Effect found - set default values that may be overridden
+            params.size.value = Some(10.0); // Default pixel size
+            params.stretch.value = Some([1.0, 1.0]);
+            params.threshold.value = Some(0.5);
+            params.saturation.value = Some(1.0);
+
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "size" => {
+                        if !prop.keyframes.is_empty() {
+                            params.size.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.size.value = Some(v);
+                        }
+                    }
+                    "stretch" => {
+                        if !prop.keyframes.is_empty() {
+                            params.stretch.keyframes = prop.keyframes.clone();
+                        } else {
+                            let parts: Vec<&str> = prop.value.split(',').collect();
+                            if parts.len() == 2
+                                && let Ok(x) = parts[0].trim().parse::<f32>()
+                                && let Ok(y) = parts[1].trim().parse::<f32>()
+                            {
+                                params.stretch.value = Some([x, y]);
+                            }
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "vignette" => {
+                        if !prop.keyframes.is_empty() {
+                            params.vignette.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.vignette.value = Some(v);
+                        }
+                    }
+                    "threshold" => {
+                        if !prop.keyframes.is_empty() {
+                            params.threshold.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.threshold.value = Some(v);
+                        }
+                    }
+                    "saturation" => {
+                        if !prop.keyframes.is_empty() {
+                            params.saturation.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.saturation.value = Some(v);
+                        }
+                    }
+                    "screenSpace" => {
+                        params.screen_space = prop.value == "true";
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}

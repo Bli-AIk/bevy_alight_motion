@@ -508,6 +508,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
     let linear_repeat_enabled = linear_repeat_count > 0;
     
+    // Extract pixelate effect params
+    let pixelate_enabled = uniforms.pixelate_flags.x > 0.5;
+    let pixelate_screen_space = uniforms.pixelate_flags.y > 0.5;
+    let pixelate_size = uniforms.pixelate_params1.x;
+    let pixelate_stretch = vec2<f32>(uniforms.pixelate_params1.y, uniforms.pixelate_params1.z);
+    let pixelate_angle = uniforms.pixelate_params1.w * 3.14159265 / 180.0; // degrees to radians
+    let pixelate_vignette = uniforms.pixelate_params2.x;
+    let pixelate_threshold = uniforms.pixelate_params2.y;
+    let pixelate_saturation = uniforms.pixelate_params2.z;
+    
     var sample_uv = mesh.uv;
     
     // Apply stretch segment effect if enabled (before blur)
@@ -520,6 +530,53 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             discard;
         }
         // Clamp to valid range for texture sampling
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    }
+    
+    // Apply pixelate effect if enabled
+    // Pixelate snaps UV coordinates to a grid, making each "pixel" sample from the center
+    if pixelate_enabled {
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        
+        // Calculate effective pixel size with stretch
+        let pixel_size_x = pixelate_size * pixelate_stretch.x;
+        let pixel_size_y = pixelate_size * pixelate_stretch.y;
+        
+        // Convert UV to pixel coordinates
+        var pixel_coord: vec2<f32>;
+        if pixelate_screen_space {
+            pixel_coord = mesh.world_position.xy;
+        } else {
+            pixel_coord = sample_uv * vec2<f32>(orig_width, orig_height);
+        }
+        
+        // Apply angle rotation if needed
+        if abs(pixelate_angle) > 0.001 {
+            let center = vec2<f32>(orig_width * 0.5, orig_height * 0.5);
+            pixel_coord = pixel_coord - center;
+            pixel_coord = rotate_vec(pixel_coord, -pixelate_angle);
+            pixel_coord = pixel_coord + center;
+        }
+        
+        // Snap to pixel grid - floor to get cell, then add 0.5 to sample center
+        let cell_x = floor(pixel_coord.x / pixel_size_x);
+        let cell_y = floor(pixel_coord.y / pixel_size_y);
+        var snapped_coord = vec2<f32>(
+            (cell_x + 0.5) * pixel_size_x,
+            (cell_y + 0.5) * pixel_size_y
+        );
+        
+        // Reverse angle rotation
+        if abs(pixelate_angle) > 0.001 {
+            let center = vec2<f32>(orig_width * 0.5, orig_height * 0.5);
+            snapped_coord = snapped_coord - center;
+            snapped_coord = rotate_vec(snapped_coord, pixelate_angle);
+            snapped_coord = snapped_coord + center;
+        }
+        
+        // Convert back to UV
+        sample_uv = snapped_coord / vec2<f32>(orig_width, orig_height);
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
@@ -769,6 +826,35 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+    
+    // Apply pixelate post-effects if enabled (vignette, saturation, threshold)
+    if pixelate_enabled {
+        // Vignette: darken edges based on distance from center
+        if pixelate_vignette > 0.001 {
+            let center = vec2<f32>(0.5, 0.5);
+            let dist = length(sample_uv - center) * 2.0; // 0 at center, ~1.4 at corners
+            let vignette_factor = 1.0 - pixelate_vignette * dist * dist;
+            tex_color.r *= max(vignette_factor, 0.0);
+            tex_color.g *= max(vignette_factor, 0.0);
+            tex_color.b *= max(vignette_factor, 0.0);
+        }
+        
+        // Saturation adjustment
+        if abs(pixelate_saturation - 1.0) > 0.001 {
+            let luminance = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            let gray = vec3<f32>(luminance, luminance, luminance);
+            tex_color = vec4<f32>(mix(gray, tex_color.rgb, pixelate_saturation), tex_color.a);
+        }
+        
+        // Threshold/posterization: quantize color levels
+        // threshold 0.5 = 2 levels (black/white), threshold 0.25 = 4 levels, etc.
+        if pixelate_threshold > 0.001 && pixelate_threshold < 1.0 {
+            let levels = 1.0 / pixelate_threshold;
+            tex_color.r = floor(tex_color.r * levels + 0.5) / levels;
+            tex_color.g = floor(tex_color.g * levels + 0.5) / levels;
+            tex_color.b = floor(tex_color.b * levels + 0.5) / levels;
+        }
     }
     
     // Apply replace color effect if enabled (before palette map)

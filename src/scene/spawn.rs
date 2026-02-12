@@ -216,6 +216,7 @@ pub(crate) fn spawn_shape(
     let swing_effect = extract_swing_effect(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
+    let pixelate_effect = extract_pixelate_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -452,6 +453,14 @@ pub(crate) fn spawn_shape(
                 grid_punchout: grid_effect.punchout,
                 grid_smoothing: grid_effect.smoothing,
                 grid_screen_space: grid_effect.screen_space,
+                // Pixelate effect
+                pixelate_size: pixelate_effect.size,
+                pixelate_stretch: pixelate_effect.stretch,
+                pixelate_angle: pixelate_effect.angle,
+                pixelate_vignette: pixelate_effect.vignette,
+                pixelate_threshold: pixelate_effect.threshold,
+                pixelate_saturation: pixelate_effect.saturation,
+                pixelate_screen_space: pixelate_effect.screen_space,
             },
             layer_spec,
             transform,
@@ -494,6 +503,7 @@ pub(crate) fn spawn_null(
     let swing_effect = extract_swing_effect(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
+    let pixelate_effect = extract_pixelate_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -607,6 +617,14 @@ pub(crate) fn spawn_null(
                 grid_punchout: grid_effect.punchout,
                 grid_smoothing: grid_effect.smoothing,
                 grid_screen_space: grid_effect.screen_space,
+                // Pixelate effect
+                pixelate_size: pixelate_effect.size,
+                pixelate_stretch: pixelate_effect.stretch,
+                pixelate_angle: pixelate_effect.angle,
+                pixelate_vignette: pixelate_effect.vignette,
+                pixelate_threshold: pixelate_effect.threshold,
+                pixelate_saturation: pixelate_effect.saturation,
+                pixelate_screen_space: pixelate_effect.screen_space,
             },
             AmLayerSpec::Null,
             transform,
@@ -765,6 +783,14 @@ pub(crate) fn spawn_embed_scene(
                 grid_punchout: false,
                 grid_smoothing: AmAnimatedFloat::default(),
                 grid_screen_space: false,
+                // Pixelate effect (defaults for embed scene)
+                pixelate_size: AmAnimatedFloat::default(),
+                pixelate_stretch: AmAnimatedVec2::default(),
+                pixelate_angle: AmAnimatedFloat::default(),
+                pixelate_vignette: AmAnimatedFloat::default(),
+                pixelate_threshold: AmAnimatedFloat::default(),
+                pixelate_saturation: AmAnimatedFloat::default(),
+                pixelate_screen_space: false,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

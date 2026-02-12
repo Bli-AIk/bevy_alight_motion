@@ -1,7 +1,7 @@
 # Linear Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-11 20:33:01
+> Last tested: 2026-02-13 03:10:13
 
 Creates copies of the layer arranged in a line with advanced controls for position, offset, rotation, scale, alpha, and color blending.
 
