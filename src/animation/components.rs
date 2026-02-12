@@ -209,6 +209,21 @@ pub struct AmAnimated {
     pub grid_smoothing: AmAnimatedFloat,
     /// Grid effect: screen space mode
     pub grid_screen_space: bool,
+    // Pixelate effect (com.alightcreative.effects.pixelate2)
+    /// Pixelate effect: pixel block size
+    pub pixelate_size: AmAnimatedFloat,
+    /// Pixelate effect: stretch factor (x, y)
+    pub pixelate_stretch: AmAnimatedVec2,
+    /// Pixelate effect: rotation angle (degrees)
+    pub pixelate_angle: AmAnimatedFloat,
+    /// Pixelate effect: vignette darkening
+    pub pixelate_vignette: AmAnimatedFloat,
+    /// Pixelate effect: threshold for color posterization
+    pub pixelate_threshold: AmAnimatedFloat,
+    /// Pixelate effect: saturation adjustment
+    pub pixelate_saturation: AmAnimatedFloat,
+    /// Pixelate effect: use screen space coordinates
+    pub pixelate_screen_space: bool,
 }
 
 impl AmAnimated {

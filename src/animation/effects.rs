@@ -983,6 +983,45 @@ pub fn animate_unified_effect_system(
                 );
             }
 
+            // Update pixelate effect if present
+            let has_pixelate = animated.pixelate_size.value.is_some()
+                || !animated.pixelate_size.keyframes.is_empty();
+            if has_pixelate {
+                let size = interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
+                let stretch =
+                    super::interpolation::interpolate_vec2(&animated.pixelate_stretch, layer_time)
+                        .unwrap_or([1.0, 1.0]);
+                let angle = interpolate_float(&animated.pixelate_angle, layer_time).unwrap_or(0.0);
+                let vignette =
+                    interpolate_float(&animated.pixelate_vignette, layer_time).unwrap_or(0.0);
+                let threshold =
+                    interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.5);
+                let saturation =
+                    interpolate_float(&animated.pixelate_saturation, layer_time).unwrap_or(1.0);
+
+                bevy::log::debug!(
+                    "[Pixelate] layer={} time={:.2} size={:.1} stretch=({:.2},{:.2}) angle={:.1}",
+                    animated.layer_id,
+                    layer_time,
+                    size,
+                    stretch[0],
+                    stretch[1],
+                    angle
+                );
+
+                material.set_pixelate(
+                    true,
+                    animated.pixelate_screen_space,
+                    size,
+                    stretch[0],
+                    stretch[1],
+                    angle,
+                    vignette,
+                    threshold,
+                    saturation,
+                );
+            }
+
             // Update repeat effect if present
             let has_repeat = animated.repeat_count.value.is_some_and(|v| v > 0.0)
                 || animated

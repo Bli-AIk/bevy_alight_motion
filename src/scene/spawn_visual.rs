@@ -40,6 +40,7 @@ pub(crate) fn spawn_image(
     let swing_effect = extract_swing_effect(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
+    let pixelate_effect = extract_pixelate_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let palette_map = extract_palette_map_effect(&image.effects);
 
@@ -167,6 +168,14 @@ pub(crate) fn spawn_image(
                 grid_punchout: grid_effect.punchout,
                 grid_smoothing: grid_effect.smoothing,
                 grid_screen_space: grid_effect.screen_space,
+                // Pixelate effect
+                pixelate_size: pixelate_effect.size,
+                pixelate_stretch: pixelate_effect.stretch,
+                pixelate_angle: pixelate_effect.angle,
+                pixelate_vignette: pixelate_effect.vignette,
+                pixelate_threshold: pixelate_effect.threshold,
+                pixelate_saturation: pixelate_effect.saturation,
+                pixelate_screen_space: pixelate_effect.screen_space,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -448,6 +457,14 @@ pub(crate) fn spawn_text(
             grid_punchout: false,
             grid_smoothing: AmAnimatedFloat::default(),
             grid_screen_space: false,
+            // Pixelate effect (defaults for text)
+            pixelate_size: AmAnimatedFloat::default(),
+            pixelate_stretch: AmAnimatedVec2::default(),
+            pixelate_angle: AmAnimatedFloat::default(),
+            pixelate_vignette: AmAnimatedFloat::default(),
+            pixelate_threshold: AmAnimatedFloat::default(),
+            pixelate_saturation: AmAnimatedFloat::default(),
+            pixelate_screen_space: false,
         },
         transform,
         GlobalTransform::default(),

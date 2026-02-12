@@ -128,6 +128,33 @@ pub fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
     Some((fps, duration))
 }
 
+/// Get video resolution (width, height) from video file using ffprobe
+pub fn get_video_resolution(video_path: &PathBuf) -> Option<(u32, u32)> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0:s=x",
+        ])
+        .arg(video_path)
+        .output()
+        .ok()?;
+
+    let resolution_str = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = resolution_str.trim().split('x').collect();
+    if parts.len() == 2 {
+        let width: u32 = parts[0].parse().ok()?;
+        let height: u32 = parts[1].parse().ok()?;
+        return Some((width, height));
+    }
+    None
+}
+
 /// Parse FPS from ffprobe output
 fn parse_fps(s: &str) -> Option<f32> {
     if s.contains('/') {
