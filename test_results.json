@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-13T03:18:01.355369+08:00",
+  "timestamp": "2026-02-13T18:30:49.355317+08:00",
   "summary": {
     "passed": 39,
     "skipped": 3,
@@ -190,7 +190,7 @@
     },
     "private/USER_71/2_ex": {
       "status": "fail",
-      "avg_similarity": 0.9461
+      "avg_similarity": 0.9462
     },
     "private/USER_71/2_ex1": {
       "status": "fail",
@@ -213,11 +213,11 @@
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8566
+      "avg_similarity": 0.8564
     },
     "private/USER_71/3_ex2": {
       "status": "fail",
-      "avg_similarity": 0.9474
+      "avg_similarity": 0.9463
     },
     "private/USER_71/3_ex2_1": {
       "status": "fail",
@@ -225,7 +225,7 @@
     },
     "private/USER_71/3_ex3": {
       "status": "fail",
-      "avg_similarity": 0.9636
+      "avg_similarity": 0.9631
     },
     "private/USER_chen_pi/13_ex": {
       "status": "pass"

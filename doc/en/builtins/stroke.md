@@ -1,7 +1,7 @@
 # Stroke
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-13 03:10:13
+> Last tested: 2026-02-13 18:30:49
 
 Shape border stroke. Uses SDF rendering, stroke width stays constant during scale animation.
 
