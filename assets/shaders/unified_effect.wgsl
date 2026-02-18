@@ -468,6 +468,127 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(result_rgb, input_color.a);
 }
 
+// Cubic Bezier interpolation for AM-compatible easing
+// Based on AM's CubicBezierEasing implementation
+// p1, p2: control points for the bezier curve (p0=0, p3=1)
+fn cubic_bezier_sample(t: f32, p1: f32, p2: f32) -> f32 {
+    // Simple cubic bezier: B(t) = 3(1-t)²t·p1 + 3(1-t)t²·p2 + t³
+    let inv_t = 1.0 - t;
+    let inv_t2 = inv_t * inv_t;
+    let t2 = t * t;
+    return 3.0 * inv_t2 * t * p1 + 3.0 * inv_t * t2 * p2 + t2 * t;
+}
+
+// AM-compatible easing curve interpolation
+// ease_in, ease_out: -1 to 1 range from AM parameters
+fn apply_am_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {
+    if abs(ease_in) < 0.001 && abs(ease_out) < 0.001 {
+        return progress;
+    }
+    // AM's bezier control points calculation:
+    // p1x = max(ease_in/2, 0), p1y = max(-ease_in/2, 0)
+    // p2x = 1 - max(ease_out/2, 0), p2y = 1 - max(-ease_out/2, 0)
+    // We use a simplified 1D bezier since we only need y(t) where x progression is linear
+    let p1y = max(-ease_in * 0.5, 0.0);
+    let p2y = 1.0 - max(-ease_out * 0.5, 0.0);
+    return cubic_bezier_sample(progress, p1y, p2y);
+}
+
+// Calculate linear repeat progress for a single copy index
+// Returns (baseProgress, interpProgress) matching AM's repeatWithEasing algorithm
+fn calc_linear_repeat_progress(
+    index: i32,
+    count: i32,
+    start: f32,
+    end: f32,
+    phase: f32,
+    overlap: f32,
+    shape: i32,
+    invert: bool,
+    ease_in: f32,
+    ease_out: f32
+) -> vec2<f32> {
+    let fi = f32(index);
+    let fcount = f32(count);
+    
+    // AM algorithm: overlap_value = overlap + 1.0
+    let overlap_value = overlap + 1.0;
+    // denominator = (2 * overlap_value) + count - 1
+    let denominator = (2.0 * overlap_value) + fcount - 1.0;
+    // step_width = 1.0 / denominator
+    let step_width = 1.0 / denominator;
+    // half_width = step_width * overlap_value
+    let half_width = step_width * overlap_value;
+    
+    // base_position = ((index + overlap_value) / denominator) + phase
+    let base_position = ((fi + overlap_value) / denominator) + phase;
+    // center_pos = base_position + half_width / 2
+    let center_pos = base_position + half_width * 0.5;
+    
+    // Calculate base progress (i / (count - 1))
+    var base_progress: f32;
+    if count > 1 {
+        base_progress = fi / (fcount - 1.0);
+    } else {
+        base_progress = 0.0;
+    }
+    
+    // Calculate interpolation progress based on shape
+    var interp_progress: f32;
+    
+    // Shape constants: 0=RAMP, 1=SQUARE, 2=SMOOTH, 3=TRIANGLE
+    if shape == 1 {
+        // SQUARE shape
+        let in_fade = clamp((base_position - start) / half_width, 0.0, 1.0);
+        let out_fade = clamp((end - base_position) / half_width, 0.0, 1.0);
+        if start < end {
+            interp_progress = min(in_fade, out_fade);
+        } else {
+            interp_progress = 1.0 - max(in_fade, out_fade);
+        }
+    } else if shape == 2 {
+        // SMOOTH shape (Gaussian)
+        if center_pos >= start && center_pos <= end {
+            let x = (center_pos - start) / (end - start);
+            let centered = (x - 0.5) * 2.0 * 3.14159265;
+            interp_progress = exp(-centered * centered * 0.5);
+        } else {
+            interp_progress = 0.0;
+        }
+    } else if shape == 3 {
+        // TRIANGLE shape
+        if center_pos >= start && center_pos <= end {
+            let x = (center_pos - start) / (end - start);
+            if x < 0.5 {
+                interp_progress = x * 2.0;
+            } else {
+                interp_progress = (1.0 - x) * 2.0;
+            }
+        } else {
+            interp_progress = 0.0;
+        }
+    } else {
+        // RAMP shape (default, shape == 0)
+        let range = max(end - start, 0.001);
+        interp_progress = (center_pos - start) / range;
+    }
+    
+    // Apply easing
+    if abs(ease_in) > 0.001 || abs(ease_out) > 0.001 {
+        interp_progress = apply_am_easing(clamp(interp_progress, 0.0, 1.0), ease_in, ease_out);
+    }
+    
+    // Apply invert
+    if invert {
+        interp_progress = 1.0 - interp_progress;
+    }
+    
+    // Clamp final progress
+    interp_progress = clamp(interp_progress, 0.0, 1.0);
+    
+    return vec2<f32>(base_progress, interp_progress);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
@@ -506,6 +627,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_shape = linear_repeat_shape_invert_alt / 100;
     let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
     let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
+    // Linear repeat activation states:
+    // - count < 0: effect not activated, render original
+    // - count == 0: effect activated but count=0, render nothing (hide)
+    // - count > 0: effect activated, render count copies
+    let linear_repeat_activated = linear_repeat_count >= 0;
     let linear_repeat_enabled = linear_repeat_count > 0;
     
     // Extract pixelate effect params
@@ -582,6 +708,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // Sample texture - with or without blur, with or without repeat
     var tex_color: vec4<f32>;
+    var linear_repeat_color_applied = false; // Flag to skip final uniforms.color multiplication
     
     if repeat_enabled {
         // Repeat effect: render multiple copies from back to front
@@ -667,8 +794,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = accumulated_color;
     } else if linear_repeat_enabled {
         // Linear repeat effect: render multiple copies arranged in a line
-        // Each copy has position, offset, rotation, scale, and alpha
-        // The line distribution is controlled by start/end and easing
+        // Algorithm matches AM's repeatWithEasing implementation exactly
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
         
@@ -679,87 +805,64 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // Accumulate color from all copies (back to front)
         var accumulated_color = vec4<f32>(0.0);
         
-        // Convert angle to radians (negate for AM's opposite rotation direction)
-        let angle_rad = -linear_repeat_angle_deg * 3.14159265 / 180.0;
-        
         // Total copies to render
         let total_copies = linear_repeat_count;
         
-        // Calculate spacing as position / (count - 1)
-        // Keep Y in AM coords; flip will be applied when transforming
-        var spacing: vec2<f32>;
-        if total_copies > 1 {
-            spacing = vec2<f32>(linear_repeat_position.x, linear_repeat_position.y) / f32(total_copies - 1);
-        } else {
-            spacing = vec2<f32>(0.0, 0.0);
-        }
-        
         // Start from the farthest copy (highest index) and work backwards
         for (var i = total_copies - 1; i >= 0; i = i - 1) {
-            let fi = f32(i);
+            // Calculate progress using AM algorithm
+            let progress = calc_linear_repeat_progress(
+                i,
+                total_copies,
+                linear_repeat_start,
+                linear_repeat_end,
+                linear_repeat_phase,
+                linear_repeat_overlap,
+                linear_repeat_shape,
+                linear_repeat_invert,
+                linear_repeat_ease_in,
+                linear_repeat_ease_out
+            );
+            let base_progress = progress.x;
+            let interp_progress = progress.y;
             
-            // Calculate normalized position for this copy (0 to 1)
-            var normalized_pos: f32;
-            if total_copies > 1 {
-                normalized_pos = fi / f32(total_copies - 1);
-            } else {
-                normalized_pos = 0.0;
-            }
+            // Note: We don't skip copies based on interp_progress alone
+            // because alpha = mix(1.0, alpha_param, interp_progress)
+            // so even with interp_progress=0, alpha can be 1.0 if alpha_param=1.0
             
-            // Apply phase shift (wraps around)
-            normalized_pos = fract(normalized_pos + linear_repeat_phase);
+            // AM transform calculation:
+            // translation = position * baseProgress + offset * interpProgress
+            // scale = mix(1.0, scale_param, interpProgress)
+            // rotation = angle * interpProgress
+            // alpha = mix(1.0, alpha_param, interpProgress)  <-- NOT alpha_param * interpProgress!
+            let position_displacement = linear_repeat_position * base_progress;
+            let offset_displacement = linear_repeat_offset * interp_progress;
+            let total_displacement = position_displacement + offset_displacement;
             
-            // Check if copy is within start/end range
-            if normalized_pos < linear_repeat_start || normalized_pos > linear_repeat_end {
+            // Scale: mix(1.0, scale_param, interp_progress)
+            let copy_scale = 1.0 + (linear_repeat_scale - 1.0) * interp_progress;
+            
+            // Rotation: angle * interpProgress (convert to radians, negate for AM convention)
+            let copy_angle_rad = -linear_repeat_angle_deg * 3.14159265 / 180.0 * interp_progress;
+            
+            // Alpha: mix(1.0, alpha_param, interpProgress) - NOT multiplication!
+            let copy_alpha = 1.0 + (linear_repeat_alpha - 1.0) * interp_progress;
+            
+            // Skip copies with negligible alpha or scale
+            if copy_alpha < 0.001 || abs(copy_scale) < 0.001 {
                 continue;
             }
             
-            // Apply easing to distribution
-            var eased_pos = normalized_pos;
-            if linear_repeat_ease_in > 0.001 || linear_repeat_ease_out > 0.001 {
-                // Simple quadratic easing
-                if linear_repeat_ease_in > 0.001 && eased_pos < 0.5 {
-                    let t = eased_pos * 2.0;
-                    eased_pos = t * t * linear_repeat_ease_in + t * (1.0 - linear_repeat_ease_in);
-                    eased_pos = eased_pos * 0.5;
-                }
-                if linear_repeat_ease_out > 0.001 && eased_pos > 0.5 {
-                    let t = (eased_pos - 0.5) * 2.0;
-                    let t_inv = 1.0 - t;
-                    eased_pos = 1.0 - t_inv * t_inv * linear_repeat_ease_out - t_inv * (1.0 - linear_repeat_ease_out);
-                    eased_pos = 0.5 + eased_pos * 0.5;
-                }
-            }
-            
-            // Calculate cumulative transform for this copy
-            // In linear repeat:
-            // - position defines the total span from copy 0 to copy (count-1)
-            // - offset is a constant shift applied to ALL copies (including copy 0)
-            // spacing = position / (count - 1)
-            let position_offset = spacing * fi;
-            let constant_offset = vec2<f32>(linear_repeat_offset.x, linear_repeat_offset.y);
-            // All copies get the same constant offset
-            let cumulative_offset = position_offset + constant_offset;
-            let cumulative_angle = angle_rad * fi;
-            let cumulative_scale = pow(linear_repeat_scale, fi);
-            let cumulative_alpha = pow(linear_repeat_alpha, fi);
-            
-            // Skip copies with negligible alpha
-            if cumulative_alpha < 0.001 {
-                continue;
-            }
-            
-            // Transform: first un-offset, then un-rotate, then un-scale
+            // Transform: inverse transform to find source position
             var transformed_coord = pixel_coord;
             
-            // Reverse offset (subtract the offset to find source position)
-            // Y flipped because AM uses Y-down, shader pixel_coord uses Y-up convention
-            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            // Reverse translation (Y flipped for coordinate system)
+            transformed_coord = transformed_coord - vec2<f32>(total_displacement.x, -total_displacement.y);
             
             // Reverse rotation around center
-            if abs(cumulative_angle) > 0.001 {
-                let cos_a = cos(-cumulative_angle);
-                let sin_a = sin(-cumulative_angle);
+            if abs(copy_angle_rad) > 0.001 {
+                let cos_a = cos(-copy_angle_rad);
+                let sin_a = sin(-copy_angle_rad);
                 transformed_coord = vec2<f32>(
                     transformed_coord.x * cos_a - transformed_coord.y * sin_a,
                     transformed_coord.x * sin_a + transformed_coord.y * cos_a
@@ -767,9 +870,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             }
             
             // Reverse scale around center
-            if abs(cumulative_scale) > 0.001 {
-                transformed_coord = transformed_coord / cumulative_scale;
-            }
+            transformed_coord = transformed_coord / copy_scale;
             
             // Convert back to UV and check bounds
             let half_w = orig_width * 0.5;
@@ -787,23 +888,52 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     copy_color = textureSample(base_texture, base_sampler, copy_uv);
                 }
                 
-                // Apply fill color blending
+                // AM color blending algorithm (computeRepeatBlend):
+                // baseColor = layer's fillColor (uniforms.color)
+                // blendColor = effect's fillColor parameter
+                // blend <= 0: use baseColor for all copies
+                // blend 0-1: start = base, end = mix(base, fill, blend)
+                // blend > 1: start = mix(base, fill, blend-1), end = fill
+                // Final color = mix(start, end, interpProgress)
+                
+                // For linear-repeat, we replace the texture color with the computed color
+                // The base color is uniforms.color (layer's fill color)
+                let base_rgb = uniforms.color.rgb;
+                let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
+                
+                var final_rgb = base_rgb; // Default to base color
+                
                 if linear_repeat_blend > 0.001 {
                     var should_blend = true;
-                    // If color_alt_copies is enabled, only blend every other copy
-                    if linear_repeat_color_alt {
-                        should_blend = i % 2 == 1;
+                    // AM logic: if colorAltCopies && index % 2 == 1, use original fillColor (skip blend)
+                    if linear_repeat_color_alt && (i % 2 == 1) {
+                        should_blend = false;
                     }
                     if should_blend {
-                        let blend_amount = min(linear_repeat_blend, 1.0);
-                        copy_color.r = mix(copy_color.r, uniforms.linear_repeat_fill_color.r, blend_amount);
-                        copy_color.g = mix(copy_color.g, uniforms.linear_repeat_fill_color.g, blend_amount);
-                        copy_color.b = mix(copy_color.b, uniforms.linear_repeat_fill_color.b, blend_amount);
+                        var start_color = base_rgb;
+                        var end_color: vec3<f32>;
+                        
+                        if linear_repeat_blend <= 1.0 {
+                            // blend 0-1: start = base, end = mix(base, fill, blend)
+                            end_color = mix(base_rgb, fill_rgb, linear_repeat_blend);
+                        } else {
+                            // blend > 1: start = mix(base, fill, blend-1), end = fill
+                            start_color = mix(base_rgb, fill_rgb, linear_repeat_blend - 1.0);
+                            end_color = fill_rgb;
+                        }
+                        // Final color = mix(start, end, interpProgress)
+                        final_rgb = mix(start_color, end_color, interp_progress);
                     }
                 }
                 
-                // Apply cumulative alpha
-                copy_color.a *= cumulative_alpha;
+                // Replace color but keep alpha from texture
+                copy_color = vec4<f32>(final_rgb, copy_color.a);
+                
+                // Mark that we've applied color (to skip final uniforms.color multiplication)
+                // We do this by encoding in a flag that will be checked later
+                
+                // Apply copy alpha
+                copy_color.a *= copy_alpha;
                 
                 // Blend using standard alpha compositing (back to front)
                 accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
@@ -811,6 +941,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         
         tex_color = accumulated_color;
+        linear_repeat_color_applied = true; // We've already applied uniforms.color in the blend
+    } else if linear_repeat_activated && !linear_repeat_enabled {
+        // Linear repeat is activated but count=0: render nothing (hide element)
+        tex_color = vec4<f32>(0.0);
     } else if blur_enabled {
         let blur_radius = uniforms.blur_params.x;
         if blur_radius > 0.5 {
@@ -965,7 +1099,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     
     // Apply color tint and wipe alpha
-    var final_color = tex_color * uniforms.color;
+    // Skip color multiplication for linear-repeat since we already applied the color blend
+    var final_color: vec4<f32>;
+    if linear_repeat_color_applied {
+        // Just apply the alpha from uniforms.color, not the RGB
+        final_color = vec4<f32>(tex_color.rgb, tex_color.a * uniforms.color.a);
+    } else {
+        final_color = tex_color * uniforms.color;
+    }
     final_color.a *= wipe_alpha;
     
     if final_color.a < 0.001 {

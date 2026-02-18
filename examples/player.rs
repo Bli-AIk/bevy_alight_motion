@@ -1419,7 +1419,7 @@ mod video_comparison_systems {
                 let ref_path = &state.frame_paths[frame_idx];
 
                 // Debug: log actual paths being compared for frame 30 and copy ref frame
-                if frame_idx == 30 {
+                if frame_idx == 30 || frame_idx == 38 || frame_idx == 39 || frame_idx == 40 {
                     println!(
                         "[COMPARE DEBUG] Frame {}: shot={:?}, ref={:?}",
                         frame_idx,
@@ -1427,9 +1427,8 @@ mod video_comparison_systems {
                         ref_path.file_name()
                     );
                     // Copy reference frame to report dir for inspection
-                    let ref_copy_path = state.report_dir.join("ref_000030.png");
+                    let ref_copy_path = state.report_dir.join(format!("ref_{:06}.png", frame_idx));
                     let _ = std::fs::copy(ref_path, &ref_copy_path);
-                    println!("[COMPARE DEBUG] Copied ref to {:?}", ref_copy_path);
                 }
 
                 let ref_img = image::open(ref_path)

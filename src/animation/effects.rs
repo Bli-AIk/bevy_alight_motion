@@ -1210,11 +1210,18 @@ pub fn animate_unified_effect_system(
                     interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
                 let alpha =
                     interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
-                let fill_color = super::interpolation::interpolate_color(
+                let fill_color_srgb = super::interpolation::interpolate_color(
                     &animated.linear_repeat_fill_color,
                     layer_time,
                 )
                 .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
+                // Convert sRGB to Linear to match uniforms.color
+                let fill_color = Vec4::new(
+                    fill_color_srgb.x.powf(2.2),
+                    fill_color_srgb.y.powf(2.2),
+                    fill_color_srgb.z.powf(2.2),
+                    fill_color_srgb.w, // alpha stays the same
+                );
                 let blend =
                     interpolate_float(&animated.linear_repeat_blend, layer_time).unwrap_or(0.0);
                 let start =
@@ -1238,6 +1245,21 @@ pub fn animate_unified_effect_system(
                         0
                     };
 
+                // Use round for count to get integer copy counts
+                let count_rounded = count.round();
+
+                // Debug: log count calculation for specific time ranges
+                // Frame 39 corresponds to layer_time around 0.062-0.065
+                if layer_time > 0.060 && layer_time < 0.070 {
+                    bevy::log::info!(
+                        "[LinearRepeat DEBUG] layer={} layer_time={:.6} count_raw={:.4} count_rounded={:.0}",
+                        animated.layer_id,
+                        layer_time,
+                        count,
+                        count_rounded
+                    );
+                }
+
                 bevy::log::debug!(
                     "[LinearRepeat] layer={} time={:.2} count={:.1} position=({:.1},{:.1}) offset=({:.1},{:.1}) angle={:.1} scale={:.2} alpha={:.2}",
                     animated.layer_id,
@@ -1252,8 +1274,49 @@ pub fn animate_unified_effect_system(
                     alpha
                 );
 
-                // Use round for count to get integer copy counts
-                let count_rounded = count.round();
+                // Debug for frame 42 region (layer_time ~0.068)
+                if layer_time > 0.065 && layer_time < 0.075 {
+                    bevy::log::info!(
+                        "[LinearRepeat FRAME42 DEBUG] layer={} layer_time={:.4} count={:.1} position=({:.1},{:.1})",
+                        animated.layer_id,
+                        layer_time,
+                        count,
+                        position[0],
+                        position[1]
+                    );
+                }
+
+                // Debug for frame 454 region (layer_time ~0.728)
+                if layer_time > 0.725 && layer_time < 0.735 {
+                    bevy::log::info!(
+                        "[LinearRepeat FRAME454 DEBUG] layer={} layer_time={:.4} count={:.0} position=({:.1},{:.1}) offset=({:.1},{:.1}) phase={:.2} easeIn={:.2} easeOut={:.2}",
+                        animated.layer_id,
+                        layer_time,
+                        count,
+                        position[0],
+                        position[1],
+                        offset[0],
+                        offset[1],
+                        phase,
+                        ease_in,
+                        ease_out
+                    );
+                }
+
+                // Debug blend and fill_color for frame 250 region (layer_time ~0.40)
+                if layer_time > 0.39 && layer_time < 0.42 {
+                    bevy::log::info!(
+                        "[LinearRepeat BLEND DEBUG] layer={} layer_time={:.4} blend={:.2} fill_color=({:.3},{:.3},{:.3},{:.3})",
+                        animated.layer_id,
+                        layer_time,
+                        blend,
+                        fill_color.x,
+                        fill_color.y,
+                        fill_color.z,
+                        fill_color.w
+                    );
+                }
+
                 material.uniform_data.linear_repeat_params1 =
                     Vec4::new(count_rounded, position[0], position[1], angle);
                 material.uniform_data.linear_repeat_params2 =
@@ -1263,8 +1326,9 @@ pub fn animate_unified_effect_system(
                     Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
                 material.uniform_data.linear_repeat_fill_color = fill_color;
 
-                // Calculate mesh expansion needed to show all copies
-                let n = (count_rounded as i32 - 1).max(0);
+                // Calculate mesh expansion using AM's repeatWithEasing algorithm
+                // This must match the shader's calculation exactly
+                let n = count_rounded as i32;
                 let angle_rad = angle.to_radians();
 
                 let mut min_x = -orig_width / 2.0;
@@ -1272,21 +1336,37 @@ pub fn animate_unified_effect_system(
                 let mut min_y = -orig_height / 2.0;
                 let mut max_y = orig_height / 2.0;
 
-                // Calculate spacing = position / (count - 1) for linear repeat
-                // Keep Y in AM coords; shader works in UV space which is also Y-down
-                let spacing_x = if n > 0 { position[0] / n as f32 } else { 0.0 };
-                let spacing_y = if n > 0 { position[1] / n as f32 } else { 0.0 };
+                // AM algorithm constants (from RepeatEasingKt.java)
+                let overlap_value = overlap + 1.0;
+                let denominator = (2.0 * overlap_value) + (n as f32) - 1.0;
+                let step_width = if denominator > 0.001 {
+                    1.0 / denominator
+                } else {
+                    1.0
+                };
+                let half_width = step_width * overlap_value;
 
-                for i in 0..=n {
+                for i in 0..n {
                     let fi = i as f32;
-                    // All copies get spacing*i + offset
-                    let am_offset_x = spacing_x * fi + offset[0];
-                    let am_offset_y = spacing_y * fi + offset[1];
-                    // Convert to Bevy world coords for mesh bounds (flip Y)
+
+                    // Base progress = i / (count - 1), same as shader
+                    let base_progress = if n > 1 { fi / (n as f32 - 1.0) } else { 0.0 };
+
+                    // For interp_progress, use max possible value (1.0) for bounding box calculation
+                    // This ensures we capture the maximum extent of all copies
+                    let interp_progress = 1.0;
+
+                    // Position = position * base_progress + offset * interp_progress
+                    let am_offset_x = position[0] * base_progress + offset[0] * interp_progress;
+                    let am_offset_y = position[1] * base_progress + offset[1] * interp_progress;
+
+                    // Convert to Bevy world coords (flip Y)
                     let cum_offset_x = am_offset_x;
                     let cum_offset_y = -am_offset_y;
-                    let cum_scale = scale.powf(fi);
-                    let cum_angle = angle_rad * fi;
+
+                    // Scale and angle using AM's mix formula
+                    let cum_scale = 1.0 + (scale - 1.0) * interp_progress;
+                    let cum_angle = angle_rad * interp_progress;
 
                     let half_w = orig_width / 2.0 * cum_scale;
                     let half_h = orig_height / 2.0 * cum_scale;
@@ -1310,8 +1390,10 @@ pub fn animate_unified_effect_system(
                     }
                 }
 
-                // Add padding for safety
-                let padding = 10.0;
+                // Add padding for safety - larger padding to handle edge cases
+                // Also scale padding by the maximum possible scale factor
+                let max_scale = scale.abs().max(1.0);
+                let padding = 20.0 * max_scale + offset[0].abs() + offset[1].abs();
                 min_x -= padding;
                 max_x += padding;
                 min_y -= padding;
@@ -1368,7 +1450,8 @@ pub fn animate_unified_effect_system(
                     .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 // Reset linear repeat params when effect is disabled
-                material.uniform_data.linear_repeat_params1 = Vec4::ZERO;
+                // Use count=-1.0 to indicate "not activated" (distinguishes from count=0 which means "activated but hide")
+                material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
                 material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
                 material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
                 material.uniform_data.linear_repeat_params4 = Vec4::ZERO;

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-18T11:21:58.648860+08:00",
+  "timestamp": "2026-02-18T20:37:41.416646+08:00",
   "summary": {
     "passed": 40,
     "skipped": 3,
@@ -141,7 +141,7 @@
     },
     "effects/linear-repeat/basic": {
       "status": "fail",
-      "avg_similarity": 0.6666
+      "avg_similarity": 0.9443
     },
     "effects/palette/basic": {
       "status": "fail",
