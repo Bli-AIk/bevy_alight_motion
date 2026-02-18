@@ -8,6 +8,7 @@
 //! 核心动画系统，用于变换、不透明度和播放控制。
 //! 包含 animate_transform_system、animate_opacity_system、advance_playback_system 等。
 
+use bevy::math::EulerRot;
 use bevy::prelude::*;
 
 use crate::scene::AmLayerMarker;
@@ -348,6 +349,30 @@ pub fn animate_transform_system(
             let sign_x = actual_scale[0].signum();
             let sign_y = actual_scale[1].signum();
             transform.scale = Vec3::new(sign_x, sign_y, 1.0);
+        }
+    }
+}
+
+/// DEBUG: System to print GlobalTransform for debugging parent-child transforms
+pub fn debug_global_transform_system(
+    playback: Res<AmPlayback>,
+    query: Query<(&AmAnimated, &GlobalTransform, &AmLayerMarker)>,
+) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static PRINTED: AtomicBool = AtomicBool::new(false);
+
+    // Only print once when time is around frame 10 (to ensure transforms propagated)
+    let frame = (playback.current_time_ms / 16.667).round() as u32;
+    if frame == 10 && !PRINTED.swap(true, Ordering::Relaxed) {
+        for (animated, global_transform, marker) in query.iter() {
+            let (_scale, rot, trans) = global_transform.to_scale_rotation_translation();
+            let rot_deg = rot.to_euler(EulerRot::ZYX).0.to_degrees();
+            if marker.label.contains("空") || marker.label.contains("Image_1699715690143") {
+                info!(
+                    "[DEBUG_GLOBAL] '{}' (id={}): global_pos=({:.1},{:.1}), rot={:.1}°, has_parent={}",
+                    marker.label, animated.layer_id, trans.x, trans.y, rot_deg, animated.has_parent
+                );
+            }
         }
     }
 }

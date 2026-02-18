@@ -320,6 +320,27 @@ pub(crate) fn process_pending_layers(
             actual_parent
         );
 
+        // DEBUG: Print transform info for parent-child analysis
+        if layer.label.contains("空") || layer.label.contains("Image_1699715690143") {
+            bevy::log::info!(
+                "[DEBUG_TRANSFORM] '{}' (id={}, parent={}): local_pos=({:.1},{:.1}), rot={:.1}°, scale=({:.2},{:.2}), has_parent={}",
+                layer.label,
+                layer.id,
+                layer.parent,
+                layer.transform.translation.x,
+                layer.transform.translation.y,
+                layer
+                    .transform
+                    .rotation
+                    .to_euler(bevy::math::EulerRot::ZYX)
+                    .0
+                    .to_degrees(),
+                layer.transform.scale.x,
+                layer.transform.scale.y,
+                layer.animated.has_parent
+            );
+        }
+
         pending.spawned_entities.insert(layer.id, entity);
     }
 }

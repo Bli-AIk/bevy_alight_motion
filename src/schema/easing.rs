@@ -21,15 +21,15 @@ pub enum Easing {
     /// Reverse bounce easing (ease-in-bounce).
     /// Used when the animation starts slow and ends with a bounce.
     ReverseBounce { p1: f32, p2: f32 },
-    /// Cyclic easing (sinusoidal oscillation).
+    /// Cyclic easing (oscillation).
     /// Creates a wave-like motion with multiple oscillations between keyframes.
-    /// Parameters: period (cycle length), phase, amplitude, p4, p5
+    /// Parameters: step_length, sharpness, skew, decay, reserved
     Cyclic {
-        period: f32,
-        phase: f32,
-        amplitude: f32,
-        p4: f32,
-        p5: f32,
+        step_length: f32,
+        sharpness: f32,
+        skew: f32,
+        decay: f32,
+        reserved: f32,
     },
 }
 
@@ -74,17 +74,20 @@ impl Easing {
                 Easing::Bounce { p1, p2 }
             }
             Some("cyclic") => {
-                let period = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.1);
-                let phase = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                let amplitude = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.5);
-                let p4 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                let p5 = parts.get(5).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let step_length = parts
+                    .get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.2857143);
+                let sharpness = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let skew = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.5);
+                let decay = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let reserved = parts.get(5).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 Easing::Cyclic {
-                    period,
-                    phase,
-                    amplitude,
-                    p4,
-                    p5,
+                    step_length,
+                    sharpness,
+                    skew,
+                    decay,
+                    reserved,
                 }
             }
             _ => Easing::Linear,
@@ -103,11 +106,12 @@ impl Easing {
             Easing::Bounce { p1, p2 } => am_bounce(t, *p1, *p2),
             Easing::ReverseBounce { p1, p2 } => am_reverse_bounce(t, *p1, *p2),
             Easing::Cyclic {
-                period,
-                phase,
-                amplitude,
-                ..
-            } => am_cyclic(t, *period, *phase, *amplitude),
+                step_length,
+                sharpness,
+                skew,
+                decay,
+                reserved,
+            } => am_cyclic(t, *step_length, *sharpness, *skew, *decay, *reserved),
         }
     }
 }
@@ -139,142 +143,178 @@ fn ease_in_bounce(x: f32) -> f32 {
 
 /// AM-style bounce with configurable parameters.
 ///
-/// The bounce curve shows multiple bounces with slow amplitude decay.
-/// p1 controls the first touch timing, p2 controls amplitude retention.
-fn am_bounce(t: f32, p1: f32, p2: f32) -> f32 {
-    if t <= 0.0 {
-        return 0.0;
-    }
-    if t >= 1.0 {
+/// Implementation based on AM source code (BounceEasing.java).
+/// p1 = firstStepLength: controls the duration of the first bounce cycle
+/// p2 = bounciness: controls amplitude decay and period shrinking per bounce
+fn am_bounce(t: f32, first_step_length: f32, bounciness: f32) -> f32 {
+    // Edge cases
+    if first_step_length == 0.0 {
         return 1.0;
     }
 
-    // From analysis: first_touch ≈ p1/2, period ≈ p1
-    // p2 is amplitude retention per bounce (~0.96 = slow decay)
-    let first_touch = p1 * 0.47; // Calibrated from video data
-    let period = p1 * 0.93; // Calibrated from video data
-    let n_bounces = 5;
-    let amplitude_retention = p2;
+    // AM shifts t by half the first step length
+    let adjusted_t = t + (first_step_length / 2.0);
 
-    // First descent
-    if t < first_touch {
-        let progress = t / first_touch;
-        return progress * progress;
+    let mut period_start = 0.0_f32;
+    let mut current_period = first_step_length;
+    let mut amplitude = 1.0_f32;
+
+    loop {
+        let period_end = period_start + current_period;
+
+        if adjusted_t <= period_end {
+            // We're in this bounce cycle
+            // Check if we've gone past the animation range
+            let check_point = (current_period / 3.0) + period_start;
+            if check_point > (first_step_length / 2.0) + 1.0
+                || (current_period < 0.1 && period_end > (first_step_length / 2.0) + 1.0)
+            {
+                return 1.0;
+            }
+
+            // Calculate parabola within this cycle
+            // local_progress goes from 0 to 1 within the cycle
+            let local_progress = (adjusted_t - period_start) / current_period;
+            // Transform to [-1, 1] range centered at 0.5
+            let centered = (local_progress - 0.5) * 2.0;
+            // Squared parabola: 0 at edges, 1 at center
+            let parabola = centered.abs().powi(2);
+            // Apply amplitude and return
+            // When parabola=0 (center), return 1-amplitude (lowest point of bounce)
+            // When parabola=1 (edges), return 1.0 (target value)
+            return (parabola * amplitude) + (1.0 - amplitude);
+        }
+
+        // Move to next bounce cycle
+        current_period *= bounciness;
+        amplitude *= bounciness;
+
+        if amplitude < 0.005 {
+            return 1.0;
+        }
+
+        period_start = period_end;
     }
-
-    // After first touch: bouncing
-    let time_after = t - first_touch;
-
-    // Which bounce cycle?
-    let cycle = (time_after / period) as i32;
-    if cycle >= n_bounces {
-        return 1.0;
-    }
-
-    let local_t = (time_after - cycle as f32 * period) / period;
-
-    // Amplitude with slow decay
-    let amplitude = amplitude_retention.powi(cycle);
-
-    // Parabola: at local_t=0 and 1, we're at bottom; at 0.5, we're at peak
-    let bounce_height = 4.0 * local_t * (1.0 - local_t) * amplitude;
-
-    1.0 - bounce_height
 }
 
 /// AM-style reverse bounce (ease-in-bounce) with configurable parameters.
 ///
-/// In AM, "reverse bounce" is an ease-in-bounce behavior where the animation
-/// starts slow, stays near the initial value for most of the duration, then
-/// accelerates rapidly toward the end with a bounce effect.
-/// This is the time-reversed version of ease-out-bounce.
-fn am_reverse_bounce(t: f32, _p1: f32, _p2: f32) -> f32 {
-    // ease_in_bounce = 1 - ease_out_bounce(1 - t)
-    // This keeps the value close to start for longer, then rapidly approaches end
-    1.0 - ease_out_bounce(1.0 - t)
+/// In AM, "reverse bounce" uses ReversedEasing which applies:
+/// interpolate(t) = 1 - base.interpolate(1 - t)
+fn am_reverse_bounce(t: f32, p1: f32, p2: f32) -> f32 {
+    1.0 - am_bounce(1.0 - t, p1, p2)
 }
 
-/// AM-style cyclic easing with sinusoidal oscillation.
+/// AM-style cyclic easing.
 ///
-/// Creates a wave-like motion that oscillates around a center point.
-/// Based on reference video analysis: the cyclic easing produces pure
-/// sinusoidal oscillation independent of linear interpolation progress.
-///
-/// period: length of one cycle in t-space (0.0856 = ~11.7 cycles)
-/// phase: center offset factor (affects where oscillation is centered)
-/// amplitude: oscillation amplitude (0.5 = ±0.5 around center)
-///
-/// Derived formula from video frame analysis:
-/// eased_t = center + amplitude * sin(2π * cycles * t + φ)
-///
-/// Where:
-/// - center = 0.5 + phase / 3.0 (empirically derived)
-/// - cycles = 1.0 / period
-/// - φ = -π/2 radians (-90°) initial phase offset
-///   This starts the wave at its minimum (valley)
-///
-/// This produces:
-/// - Pure sinusoidal oscillation around the center
-/// - At t=0: eased_t = center - amplitude (wave valley)
-/// - At t=0.25/cycles: eased_t = center (midpoint, rising)
-/// - At t=0.5/cycles: eased_t = center + amplitude (wave peak)
-fn am_cyclic(t: f32, period: f32, phase: f32, amplitude: f32) -> f32 {
-    // Prevent division by zero
-    let safe_period = period.max(0.001);
+/// Implementation based on AM source code (CyclicEasing.java).
+/// Parameters:
+/// - step_length: period of one oscillation cycle (in t-space, 0-1)
+/// - sharpness: blend between cosine (0) and saw/triangle (1) wave
+/// - skew: shifts the peak position within each cycle (0-1, 0.5 = centered)
+/// - decay: how much the oscillation trends toward linear (0 = pure oscillation, 1 = pure linear)
+/// - reserved: unused
+fn am_cyclic(
+    t: f32,
+    step_length: f32,
+    sharpness: f32,
+    skew: f32,
+    decay: f32,
+    _reserved: f32,
+) -> f32 {
+    let safe_step = step_length.max(0.001);
 
-    // Number of cycles over the keyframe span
-    let cycles = 1.0 / safe_period;
+    // Helper: percentage within current step
+    let pct_in_step = (t % safe_step) / safe_step;
 
-    // Center of oscillation, offset by phase parameter
-    // Empirically derived: phase/3 gives the correct center offset
-    let center = 0.5 + phase / 3.0;
+    // Helper: cosine interpolation within step
+    let cos_interp = 1.0 - ((((t / safe_step) * std::f32::consts::PI * 2.0).cos() + 1.0) / 2.0);
 
-    // Initial phase offset: -π/2 starts at wave valley
-    let phi = -std::f32::consts::FRAC_PI_2;
+    // Helper: saw/triangle interpolation within step
+    let saw_interp = 1.0 - ((pct_in_step - 0.5).abs() * 2.0);
 
-    // Angle for sine oscillation
-    let angle = 2.0 * std::f32::consts::PI * cycles * t + phi;
+    // Helper: skew interpolation - adjusts t based on skew parameter
+    let skew_factor = if pct_in_step < skew {
+        (0.5 * pct_in_step) / skew
+    } else if pct_in_step > skew {
+        0.5 + ((pct_in_step - skew) / (1.0 - skew)) / 2.0
+    } else {
+        0.5
+    };
+    let skew_t = (t - (pct_in_step * safe_step)) + (safe_step * skew_factor);
 
-    // Cyclic easing: pure sinusoidal oscillation around center
-    center + amplitude * angle.sin()
+    // Apply skew to both cos and saw interpolations
+    let skew_pct = (skew_t % safe_step) / safe_step;
+    let skew_cos = 1.0 - ((((skew_t / safe_step) * std::f32::consts::PI * 2.0).cos() + 1.0) / 2.0);
+    let skew_saw = 1.0 - ((skew_pct - 0.5).abs() * 2.0);
+
+    // Mix between cosine and saw based on sharpness
+    let mut mix = skew_cos * (1.0 - sharpness) + skew_saw * sharpness;
+
+    // Handle edge cases near t=1
+    let step_start = t - (t % safe_step);
+    if (safe_step / 4.0) + step_start > 1.0 {
+        mix = 0.0;
+    } else if (safe_step / 2.0) + step_start < 1.0
+        && step_start + ((safe_step * 3.0) / 4.0) > 1.0
+        && pct_in_step > skew
+    {
+        mix = 1.0;
+    }
+
+    // Apply decay: blend between oscillation and linear progress
+    (mix * (1.0 - (t * decay))) + (t * decay)
 }
 
 /// Solve cubic bezier curve: find Y for given X.
 /// Control points are (0,0), (x1,y1), (x2,y2), (1,1).
+///
+/// Implementation based on AM source code (CubicBezierEasing.java).
+/// AM clamps the X control points: p1x <= 0.95, p2x >= 0.05
 fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
-    // Apply AM-specific x-coordinate correction ONLY when:
-    // - x1 is close to 1.0 (within 0.1)
-    // - x2 is close to 0.0 (within 0.1)
-    //
-    // For these "extreme" curves, AM uses slightly different x-coordinates:
-    //   x1_corrected = x1 * 0.95
-    //   x2_corrected = x2 * 0.95 + 0.05
-    //
-    // This was derived from video frame analysis comparing AM's actual output
-    // with standard CSS cubic-bezier behavior.
-    let (x1_corr, x2_corr) = if (x1 - 1.0).abs() < 0.1 && x2.abs() < 0.1 {
-        (x1 * 0.95, x2 * 0.95 + 0.05)
-    } else {
-        (x1, x2)
-    };
+    // AM's approach: clamp x control points to avoid numerical instability
+    let x1_corr = x1.min(0.95);
+    let x2_corr = x2.max(0.05);
 
-    // Find t for given x using Newton's method
-    let mut t = x;
-    for _ in 0..8 {
-        let x_t = bezier_component(t, x1_corr, x2_corr);
-        let dx = x - x_t;
-        if dx.abs() < 1e-6 {
-            break;
-        }
-        let dx_dt = bezier_derivative(t, x1_corr, x2_corr);
-        if dx_dt.abs() < 1e-6 {
-            break;
-        }
-        t += dx / dx_dt;
-        t = t.clamp(0.0, 1.0);
+    // Handle negative x values (extrapolation)
+    if x < 0.0 {
+        // Use linear extrapolation based on initial slope
+        let slope = (bezier_y_at_t(0.01, y1, y2) - bezier_y_at_t(0.0, y1, y2)) / 0.01;
+        return x * slope;
     }
 
-    bezier_component(t, y1, y2)
+    // Find t for given x using Newton's method
+    // AM uses more iterations for values near edges
+    let iterations = if x < 0.05 || x > 0.95 { 24 } else { 8 };
+
+    let mut t = x;
+    let mut last_slope = 1000.0_f32;
+
+    for i in 0..iterations {
+        let slope = bezier_derivative(t, x1_corr, x2_corr);
+        if slope == 0.0 {
+            break;
+        }
+
+        // AM's early termination: if slope change is very small after initial iterations
+        if i > 2
+            && (slope - last_slope).abs() < 0.01 / (if x < 0.05 || x > 0.95 { 3.0 } else { 1.0 })
+        {
+            break;
+        }
+
+        let x_t = bezier_component(t, x1_corr, x2_corr);
+        t -= (x_t - x) / slope;
+
+        last_slope = slope;
+    }
+
+    bezier_y_at_t(t, y1, y2)
+}
+
+/// Evaluate Y component of bezier at parameter t (same as bezier_component but for clarity)
+fn bezier_y_at_t(t: f32, p1: f32, p2: f32) -> f32 {
+    bezier_component(t, p1, p2)
 }
 
 /// Evaluate one component of a cubic bezier at parameter t.
