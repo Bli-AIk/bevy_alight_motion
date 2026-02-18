@@ -67,6 +67,14 @@ pub fn spawn_sdf_visual(
     };
 
     bevy::log::trace!("[SDF] Spawning {} with join='{}'", shape_type, stroke_join);
+    bevy::log::debug!(
+        "[SDF] '{}': fill={:?}, stroke={:?}, stroke_width={}, no_fill={}",
+        marker.label,
+        fill,
+        stroke,
+        stroke_width,
+        no_fill
+    );
 
     // Get base stroke alpha for animation
     let base_stroke_alpha = stroke.to_srgba().alpha;

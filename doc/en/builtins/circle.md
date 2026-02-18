@@ -1,7 +1,7 @@
 # Circle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-13 18:30:49
+> Last tested: 2026-02-18 10:29:09
 
 Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipses.
 
