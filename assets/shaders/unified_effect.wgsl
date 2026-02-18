@@ -468,15 +468,83 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(result_rgb, input_color.a);
 }
 
-// Cubic Bezier interpolation for AM-compatible easing
-// Based on AM's CubicBezierEasing implementation
-// p1, p2: control points for the bezier curve (p0=0, p3=1)
-fn cubic_bezier_sample(t: f32, p1: f32, p2: f32) -> f32 {
-    // Simple cubic bezier: B(t) = 3(1-t)²t·p1 + 3(1-t)t²·p2 + t³
-    let inv_t = 1.0 - t;
-    let inv_t2 = inv_t * inv_t;
-    let t2 = t * t;
-    return 3.0 * inv_t2 * t * p1 + 3.0 * inv_t * t2 * p2 + t2 * t;
+// AM-compatible 2D cubic bezier easing
+// Based on AM's CubicBezierEasing implementation with Newton-Raphson iteration
+
+// Helper: a coefficient for bezier calculation
+fn bezier_a(a1: f32, a2: f32) -> f32 {
+    return (1.0 - (a2 * 3.0)) + (a1 * 3.0);
+}
+
+// Helper: b coefficient for bezier calculation  
+fn bezier_b(a1: f32, a2: f32) -> f32 {
+    return (a2 * 3.0) - (a1 * 6.0);
+}
+
+// Helper: c coefficient for bezier calculation
+fn bezier_c(a1: f32) -> f32 {
+    return a1 * 3.0;
+}
+
+// Calculate bezier value at parameter t
+fn calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
+    return ((((bezier_a(a1, a2) * t) + bezier_b(a1, a2)) * t) + bezier_c(a1)) * t;
+}
+
+// Calculate bezier slope at parameter t
+fn get_slope(t: f32, a1: f32, a2: f32) -> f32 {
+    return (bezier_a(a1, a2) * 3.0 * t * t) + (bezier_b(a1, a2) * 2.0 * t) + bezier_c(a1);
+}
+
+// Find t parameter for given x value using Newton-Raphson iteration
+fn get_t_for_x(x: f32, p1x: f32, p2x: f32) -> f32 {
+    // Clamp p1x and p2x like AM does
+    let p1x_clamped = min(p1x, 0.95);
+    let p2x_clamped = max(p2x, 0.05);
+    
+    // Determine iteration count based on x position
+    var iterations: i32;
+    if x < 0.05 || x > 0.95 {
+        iterations = 24; // 3 * 8
+    } else {
+        iterations = 8;  // 1 * 8
+    }
+    
+    var guess = x;
+    var prev_slope = 1000.0;
+    
+    for (var i = 0; i < iterations; i++) {
+        let slope = get_slope(guess, p1x_clamped, p2x_clamped);
+        if abs(slope) < 0.0001 {
+            return guess;
+        }
+        // Early termination if slope change is small
+        if i > 2 && abs(slope - prev_slope) < 0.005 {
+            return guess;
+        }
+        guess = guess - (calc_bezier(guess, p1x_clamped, p2x_clamped) - x) / slope;
+        prev_slope = slope;
+    }
+    
+    return guess;
+}
+
+// 2D cubic bezier interpolation matching AM's CubicBezierEasing.interpolate()
+fn cubic_bezier_2d(t: f32, p1x: f32, p1y: f32, p2x: f32, p2y: f32) -> f32 {
+    // Linear case
+    if abs(p1x - p1y) < 0.001 && abs(p2x - p2y) < 0.001 {
+        return t;
+    }
+    
+    // Handle negative t (extrapolation)
+    if t < 0.0 {
+        let y_at_001 = calc_bezier(get_t_for_x(0.01, p1x, p2x), p1y, p2y);
+        let y_at_0 = calc_bezier(get_t_for_x(0.0, p1x, p2x), p1y, p2y);
+        return t * ((y_at_001 - y_at_0) / 0.01);
+    }
+    
+    // Normal case: find t for x, then compute y
+    return calc_bezier(get_t_for_x(t, p1x, p2x), p1y, p2y);
 }
 
 // AM-compatible easing curve interpolation
@@ -485,13 +553,15 @@ fn apply_am_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {
     if abs(ease_in) < 0.001 && abs(ease_out) < 0.001 {
         return progress;
     }
-    // AM's bezier control points calculation:
+    // AM's bezier control points calculation from RepeatEasingKt:
     // p1x = max(ease_in/2, 0), p1y = max(-ease_in/2, 0)
     // p2x = 1 - max(ease_out/2, 0), p2y = 1 - max(-ease_out/2, 0)
-    // We use a simplified 1D bezier since we only need y(t) where x progression is linear
+    let p1x = max(ease_in * 0.5, 0.0);
     let p1y = max(-ease_in * 0.5, 0.0);
+    let p2x = 1.0 - max(ease_out * 0.5, 0.0);
     let p2y = 1.0 - max(-ease_out * 0.5, 0.0);
-    return cubic_bezier_sample(progress, p1y, p2y);
+    
+    return cubic_bezier_2d(progress, p1x, p1y, p2x, p2y);
 }
 
 // Calculate linear repeat progress for a single copy index

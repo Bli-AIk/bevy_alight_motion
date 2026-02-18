@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-18T20:58:08.136132+08:00",
+  "timestamp": "2026-02-18T21:06:08.210074+08:00",
   "summary": {
-    "passed": 40,
+    "passed": 41,
     "skipped": 3,
-    "failed": 32
+    "failed": 31
   },
   "results": {
     "basic/bezier/bezier": {
@@ -140,8 +140,7 @@
       "avg_similarity": 0.9192
     },
     "effects/linear-repeat/basic": {
-      "status": "fail",
-      "avg_similarity": 0.9443
+      "status": "pass"
     },
     "effects/palette/basic": {
       "status": "fail",
