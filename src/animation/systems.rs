@@ -318,11 +318,8 @@ pub fn animate_transform_system(
                 1 => {
                     // Triangle wave that matches sine at key points:
                     // phase=0: 0, phase=π/2: 1, phase=π: 0, phase=3π/2: -1
-                    // Formula: 2 * abs(2 * (x/2π - floor(x/2π + 0.5))) - 1
-                    // Simplified using modulo:
-                    let x = oscillation_phase / (2.0 * std::f32::consts::PI);
-                    let t = (x - (x + 0.5).floor()).abs();
-                    4.0 * t - 1.0
+                    // Use standard formula: 2/π * arcsin(sin(x))
+                    (2.0 / std::f32::consts::PI) * oscillation_phase.sin().asin()
                 }
                 _ => oscillation_phase.sin(), // Default to sine
             };
