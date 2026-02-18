@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-18T21:14:37.454167+08:00",
+  "timestamp": "2026-02-18T23:30:00.480461+08:00",
   "summary": {
-    "passed": 42,
+    "passed": 43,
     "skipped": 3,
     "failed": 36
   },
@@ -151,7 +151,7 @@
     },
     "effects/linear-repeat/ramdom1/3": {
       "status": "fail",
-      "avg_similarity": 0.8682
+      "avg_similarity": 0.7473
     },
     "effects/linear-repeat/random2/1": {
       "status": "fail",
@@ -159,7 +159,7 @@
     },
     "effects/linear-repeat/random2/2": {
       "status": "fail",
-      "avg_similarity": 0.735
+      "avg_similarity": 0.8447
     },
     "effects/linear-repeat/random2/3": {
       "status": "fail",
@@ -204,7 +204,7 @@
     },
     "effects/swing/basic": {
       "status": "fail",
-      "avg_similarity": 0.9236
+      "avg_similarity": 0.9278
     },
     "effects/threshold/basic": {
       "status": "fail",
@@ -257,7 +257,10 @@
     },
     "private/USER_chen_pi/6": {
       "status": "fail",
-      "avg_similarity": 0.6973
+      "avg_similarity": 0.7004
+    },
+    "private/USER_chen_pi/6_soul": {
+      "status": "pass"
     },
     "private/USER_chen_pi/8": {
       "status": "fail",
