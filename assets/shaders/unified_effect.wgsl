@@ -773,8 +773,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             // Check if transformed coord is within the original shape bounds
             if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
                transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
-                // Convert to UV [0,1]
-                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                // Convert to UV [0,1], flip Y for correct orientation
+                let copy_uv = vec2<f32>(
+                    transformed_coord.x / orig_width + center.x,
+                    -transformed_coord.y / orig_height + center.y
+                );
                 var copy_color: vec4<f32>;
                 if blur_enabled && uniforms.blur_params.x > 0.5 {
                     copy_color = apply_blur(copy_uv);
@@ -856,7 +859,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             // Transform: inverse transform to find source position
             var transformed_coord = pixel_coord;
             
-            // Reverse translation (Y flipped for coordinate system)
+            // Reverse translation (flip Y for AM coordinate conversion)
             transformed_coord = transformed_coord - vec2<f32>(total_displacement.x, -total_displacement.y);
             
             // Reverse rotation around center
@@ -879,8 +882,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             // Check if transformed coord is within the original shape bounds
             if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
                transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
-                // Convert to UV [0,1]
-                let copy_uv = transformed_coord / vec2<f32>(orig_width, orig_height) + center;
+                // Convert to UV [0,1], flip Y for correct orientation
+                let copy_uv = vec2<f32>(
+                    transformed_coord.x / orig_width + center.x,
+                    -transformed_coord.y / orig_height + center.y
+                );
                 var copy_color: vec4<f32>;
                 if blur_enabled && uniforms.blur_params.x > 0.5 {
                     copy_color = apply_blur(copy_uv);
@@ -891,19 +897,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 // AM color blending algorithm (computeRepeatBlend):
                 // baseColor = layer's fillColor (uniforms.color)
                 // blendColor = effect's fillColor parameter
-                // blend <= 0: use baseColor for all copies
+                // blend <= 0: use base color (no change)
                 // blend 0-1: start = base, end = mix(base, fill, blend)
                 // blend > 1: start = mix(base, fill, blend-1), end = fill
                 // Final color = mix(start, end, interpProgress)
                 
-                // For linear-repeat, we replace the texture color with the computed color
-                // The base color is uniforms.color (layer's fill color)
-                let base_rgb = uniforms.color.rgb;
-                let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
-                
-                var final_rgb = base_rgb; // Default to base color
-                
+                // Only apply color blending when blend > 0
                 if linear_repeat_blend > 0.001 {
+                    let base_rgb = uniforms.color.rgb;
+                    let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
+                    
                     var should_blend = true;
                     // AM logic: if colorAltCopies && index % 2 == 1, use original fillColor (skip blend)
                     if linear_repeat_color_alt && (i % 2 == 1) {
@@ -922,15 +925,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                             end_color = fill_rgb;
                         }
                         // Final color = mix(start, end, interpProgress)
-                        final_rgb = mix(start_color, end_color, interp_progress);
+                        let final_rgb = mix(start_color, end_color, interp_progress);
+                        // Replace color but keep alpha from texture
+                        copy_color = vec4<f32>(final_rgb, copy_color.a);
                     }
                 }
-                
-                // Replace color but keep alpha from texture
-                copy_color = vec4<f32>(final_rgb, copy_color.a);
-                
-                // Mark that we've applied color (to skip final uniforms.color multiplication)
-                // We do this by encoding in a flag that will be checked later
                 
                 // Apply copy alpha
                 copy_color.a *= copy_alpha;
@@ -941,7 +940,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         
         tex_color = accumulated_color;
-        linear_repeat_color_applied = true; // We've already applied uniforms.color in the blend
+        // Only mark color as applied if we actually applied blend (blend > 0)
+        linear_repeat_color_applied = linear_repeat_blend > 0.001;
     } else if linear_repeat_activated && !linear_repeat_enabled {
         // Linear repeat is activated but count=0: render nothing (hide element)
         tex_color = vec4<f32>(0.0);
