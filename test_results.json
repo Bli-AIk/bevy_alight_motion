@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-13T18:30:49.355317+08:00",
+  "timestamp": "2026-02-18T11:21:58.648860+08:00",
   "summary": {
-    "passed": 39,
+    "passed": 40,
     "skipped": 3,
-    "failed": 29
+    "failed": 32
   },
   "results": {
     "basic/bezier/bezier": {
@@ -141,7 +141,7 @@
     },
     "effects/linear-repeat/basic": {
       "status": "fail",
-      "avg_similarity": 0.6706
+      "avg_similarity": 0.6666
     },
     "effects/palette/basic": {
       "status": "fail",
@@ -230,6 +230,17 @@
     "private/USER_chen_pi/13_ex": {
       "status": "pass"
     },
+    "private/USER_chen_pi/13_ex1": {
+      "status": "pass"
+    },
+    "private/USER_chen_pi/6": {
+      "status": "fail",
+      "avg_similarity": 0.6973
+    },
+    "private/USER_chen_pi/8": {
+      "status": "fail",
+      "avg_similarity": 0.6504
+    },
     "private/USER_chen_pi/9": {
       "status": "fail",
       "avg_similarity": 0.9683
@@ -243,6 +254,10 @@
     "private/USER_chen_pi/9_ex2": {
       "status": "fail",
       "avg_similarity": 0.9663
+    },
+    "private/USER_chen_pi/misc/sanb_anim": {
+      "status": "fail",
+      "avg_similarity": 0.4304
     },
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "fail",

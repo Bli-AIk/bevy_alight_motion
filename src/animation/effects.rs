@@ -898,6 +898,12 @@ pub fn animate_unified_effect_system(
 
             // Update replace color effect if present
             let has_replace_color = animated.replace_old_color.w > 0.0;
+            bevy::log::debug!(
+                "[ReplaceColor Check] layer={} has_replace={} old_color={:?}",
+                animated.layer_id,
+                has_replace_color,
+                animated.replace_old_color
+            );
             if has_replace_color {
                 let new_color = super::interpolation::interpolate_color(
                     &animated.replace_new_color,
@@ -909,6 +915,16 @@ pub fn animate_unified_effect_system(
                 let feather =
                     interpolate_float(&animated.replace_feather, layer_time).unwrap_or(0.25);
                 let alpha = interpolate_float(&animated.replace_alpha, layer_time).unwrap_or(1.0);
+
+                bevy::log::debug!(
+                    "[ReplaceColor Apply] layer={} old={:?} new={:?} threshold={:.3} feather={:.3} alpha={:.3}",
+                    animated.layer_id,
+                    animated.replace_old_color,
+                    new_color,
+                    threshold,
+                    feather,
+                    alpha
+                );
 
                 // Pass colors directly - shader will handle color space
                 material.set_replace_color(

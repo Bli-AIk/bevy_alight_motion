@@ -463,6 +463,13 @@ pub fn animate_sdf_scale_system(
     }
 
     for (animated, children) in parent_query.iter() {
+        // Debug: Log parent transform for SDF rendering issues
+        bevy::log::debug!(
+            "[SDF_PARENT] layer={}: children_count={}",
+            animated.layer_id,
+            children.len()
+        );
+
         // Debug: Log scale_assist status for first few occurrences
         if animated.scale_assist_axis != 0 {
             static SDF_DEBUG_COUNTER: std::sync::atomic::AtomicU32 =
@@ -580,6 +587,16 @@ pub fn animate_sdf_scale_system(
 
                 // Update material params: (half_width, half_height, stroke_width, packed_stroke)
                 if let Some(material) = materials.get_mut(&material_handle.0) {
+                    bevy::log::debug!(
+                        "[SDF_SCALE] layer={}: scaled_half=({:.1},{:.1}), stroke={:.1}, frame_half={:.1}, anim_scale=({:.2},{:.2})",
+                        animated.layer_id,
+                        scaled_half_width,
+                        scaled_half_height,
+                        final_stroke_width,
+                        material.uniform_data.frame_half,
+                        anim_scale[0],
+                        anim_scale[1]
+                    );
                     material.uniform_data.params = Vec4::new(
                         scaled_half_width,
                         scaled_half_height,

@@ -734,18 +734,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             // Calculate cumulative transform for this copy
             // In linear repeat:
             // - position defines the total span from copy 0 to copy (count-1)
-            // - offset is a constant shift applied only to COPIES (not original)
+            // - offset is a constant shift applied to ALL copies (including copy 0)
             // spacing = position / (count - 1)
             let position_offset = spacing * fi;
             let constant_offset = vec2<f32>(linear_repeat_offset.x, linear_repeat_offset.y);
-            var cumulative_offset: vec2<f32>;
-            if i == 0 {
-                // Original stays at position determined by spacing only
-                cumulative_offset = position_offset;
-            } else {
-                // Copies get spacing + constant offset
-                cumulative_offset = position_offset + constant_offset;
-            }
+            // All copies get the same constant offset
+            let cumulative_offset = position_offset + constant_offset;
             let cumulative_angle = angle_rad * fi;
             let cumulative_scale = pow(linear_repeat_scale, fi);
             let cumulative_alpha = pow(linear_repeat_alpha, fi);
@@ -857,20 +851,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     
-    // Apply replace color effect if enabled (before palette map)
-    if replace_color_enabled {
-        tex_color = apply_replace_color(tex_color);
-    }
-    
-    // Apply palette map effect if enabled
-    if palette_enabled {
-        let palette_alpha = uniforms.palette_flags.w;
-        let quantized_color = apply_palette_map(tex_color);
-        // Blend between original and quantized based on palette alpha
-        tex_color = mix(tex_color, quantized_color, palette_alpha);
-    }
-    
     // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
+    // IMPORTANT: Threshold must be applied BEFORE replace_color to match AM's effect order
+    // AM applies effects in the order they appear in the XML, and threshold typically comes
+    // before replacecolor when both are present on the same layer
     let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
     if threshold_enabled {
         let threshold_value = uniforms.threshold_params.x;
@@ -899,6 +883,19 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         
         // Set RGB to the threshold result, preserve alpha
         tex_color = vec4<f32>(bw_value, bw_value, bw_value, tex_color.a);
+    }
+    
+    // Apply replace color effect if enabled (AFTER threshold)
+    if replace_color_enabled {
+        tex_color = apply_replace_color(tex_color);
+    }
+    
+    // Apply palette map effect if enabled
+    if palette_enabled {
+        let palette_alpha = uniforms.palette_flags.w;
+        let quantized_color = apply_palette_map(tex_color);
+        // Blend between original and quantized based on palette alpha
+        tex_color = mix(tex_color, quantized_color, palette_alpha);
     }
     
     // Apply grid effect if enabled
