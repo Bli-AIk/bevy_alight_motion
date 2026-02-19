@@ -1,7 +1,7 @@
 # Threshold
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 14:38:53
+> Last tested: 2026-02-19 14:46:33
 
 Converts the image to a high-contrast image with only black and white.
 

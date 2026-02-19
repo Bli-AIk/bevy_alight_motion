@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T14:38:53.186402+08:00",
+  "timestamp": "2026-02-19T14:46:33.771177+08:00",
   "summary": {
-    "passed": 43,
+    "passed": 42,
     "skipped": 2,
-    "failed": 33
+    "failed": 34
   },
   "results": {
     "basic/bezier/bezier": {
@@ -116,14 +116,15 @@
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.8733
+      "avg_similarity": 0.8726
     },
     "effects/linear-repeat/random_generated1/2": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8501
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.8682
+      "avg_similarity": 0.8593
     },
     "effects/linear-repeat/random_generated2/1": {
       "status": "fail",

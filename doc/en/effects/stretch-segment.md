@@ -1,7 +1,7 @@
 # Stretch Segment
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 14:38:53
+> Last tested: 2026-02-19 14:46:33
 
 UV domain distortion effect that stretches the image along a dividing line. Formula: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
 

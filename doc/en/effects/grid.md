@@ -1,7 +1,7 @@
 # Grid
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 14:38:53
+> Last tested: 2026-02-19 14:46:33
 
 Overlays a grid pattern on the layer or punches it out.
 
