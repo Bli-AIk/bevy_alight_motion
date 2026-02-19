@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T15:11:59.583355+08:00",
+  "timestamp": "2026-02-19T16:06:30.790259+08:00",
   "summary": {
-    "passed": 43,
+    "passed": 44,
     "skipped": 2,
-    "failed": 33
+    "failed": 32
   },
   "results": {
     "basic/bezier/bezier": {
@@ -92,8 +92,7 @@
       "status": "pass"
     },
     "basic/tween/step": {
-      "status": "fail",
-      "avg_similarity": 0.9891
+      "status": "pass"
     },
     "effects/gaussian-blur/basic": {
       "status": "skip"
