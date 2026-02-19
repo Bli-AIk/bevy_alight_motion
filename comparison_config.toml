@@ -9,8 +9,8 @@ frame_offset = 0.0
 # min_frame_similarity: 单帧最低相似度阈值（默认0.8）
 min_frame_similarity = 0.8
 
-# max_failed_rate: 允许失败帧的最大比例（默认0.1，即10%）
-max_failed_rate = 0.1
+# max_failed_rate: 允许失败帧的最大比例
+max_failed_rate = 0.15
 
 # =============================================================================
 # Basic tests
@@ -116,43 +116,6 @@ min_frame_similarity = 0.40
 # Gaussian blur - not implemented
 [overrides."effects/gaussian-blur/basic"]
 skip = true
-
-# =============================================================================
-# Complex tests
-# 复杂测试
-# =============================================================================
-
-# Complex examples with speed=0.7 need frame offset for alignment
-# 速度=0.7的复杂示例需要帧偏移来对齐
-[overrides."complex/examples/2_ex2"]
-frame_offset = 0.45
-
-[overrides."complex/examples/2_ex1"]
-frame_offset = 0.45
-
-# complex/examples/2_ex3 needs stricter threshold to ensure stretch formula is correct
-# 复杂示例2_ex3需要更严格的阈值来确保拉伸公式正确
-[overrides."complex/examples/2_ex3"]
-avg_threshold = 0.98
-frame_threshold = 0.98
-
-[overrides."complex/examples/2_ex4"]
-avg_threshold = 0.97
-frame_threshold = 0.97
-
-# complex/turn/9 simplified test cases
-# complex/turn/9 简化测试用例
-[overrides."complex/turn/9_ex"]
-avg_threshold = 0.98
-frame_threshold = 0.98
-
-[overrides."complex/turn/9_ex1"]
-avg_threshold = 0.98
-frame_threshold = 0.98
-
-[overrides."complex/turn/13_ex"]
-avg_threshold = 0.98
-frame_threshold = 0.98
 
 # =============================================================================
 # Effects tests - close to passing

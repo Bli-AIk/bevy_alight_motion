@@ -304,6 +304,8 @@ pub enum AmLayerSpec {
         stroke_color_value: String,
         stroke_width: f32,
         stroke_join: String,
+        /// Border direction: "centered", "inside", "outside"
+        stroke_direction: String,
         width: f32,
         height: f32,
         pivot_x: f32,

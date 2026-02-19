@@ -476,6 +476,10 @@ pub struct AmShape {
     /// Stroke/border style.
     #[serde(rename = "path-stroke", default)]
     pub stroke: Option<AmStroke>,
+
+    /// Border decorations (can have multiple with different directions).
+    #[serde(rename = "border", default)]
+    pub borders: Vec<AmStroke>,
 }
 
 /// Stroke/border properties for shapes.
@@ -484,6 +488,10 @@ pub struct AmStroke {
     /// Stroke direction ("centered", "inside", "outside").
     #[serde(rename = "@direction", default)]
     pub direction: String,
+
+    /// Border ID (for multi-border shapes).
+    #[serde(rename = "@id", default)]
+    pub id: Option<i32>,
 
     /// Line cap style ("square", "round", "butt").
     #[serde(rename = "@cap", default)]

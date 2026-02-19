@@ -28,7 +28,7 @@ struct SdfMaterialUniform {
     frame_half: f32,
     mask_rotation: f32,
     mask2_rotation: f32,
-    _padding1: f32,
+    border_mode: f32,
     _padding2: f32,
 };
 
@@ -277,9 +277,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     if stroke_width > 0.0 {
         let stroke_color = unpack_color(packed_stroke);
         
-        // Centered stroke: distance band around the edge
+        // Border direction: 0=centered, 1=inside, -1=outside
+        // For inside: shift dist so stroke band is entirely inside (negative dist)
+        // For outside: shift dist so stroke band is entirely outside (positive dist)
         let half_stroke = stroke_width * 0.5;
-        let dist_from_edge = abs(dist);
+        let adjusted_dist = dist + material.border_mode * half_stroke;
+        let dist_from_edge = abs(adjusted_dist);
         // Hard edge stroke: inside if dist_from_edge <= half_stroke
         let stroke_alpha = step(dist_from_edge, half_stroke);
         let stroke_col = vec4<f32>(stroke_color.rgb, stroke_color.a * stroke_alpha);

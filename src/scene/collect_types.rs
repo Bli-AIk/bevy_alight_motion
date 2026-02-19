@@ -64,15 +64,19 @@ pub(crate) fn collect_shape(
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
 
+    let has_stroke_or_border = shape.stroke.as_ref().is_some_and(|s| {
+        s.size
+            .as_ref()
+            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+            || s.end_size > 0.0
+    }) || shape.borders.iter().any(|b| {
+        b.size
+            .as_ref()
+            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+            || b.end_size > 0.0
+    });
     let needs_sdf = (shape.fill_type == "color" || shape.fill_type == "none")
-        && (shape.shape_type == ".circle"
-            || shape.stroke.as_ref().is_some_and(|s| {
-                // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
-                s.size
-                    .as_ref()
-                    .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-                    || s.end_size > 0.0
-            }));
+        && (shape.shape_type == ".circle" || has_stroke_or_border);
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -102,7 +106,11 @@ pub(crate) fn collect_shape(
 
     let spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
-        let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
+        // Use path-stroke if available, otherwise fall back to first border
+        let stroke = shape
+            .stroke
+            .as_ref()
+            .unwrap_or_else(|| shape.borders.first().unwrap_or(&default_stroke));
         // Get initial stroke width: first check <size> element, then fall back to @end-size attribute
         let stroke_width = stroke
             .size
@@ -137,6 +145,7 @@ pub(crate) fn collect_shape(
             stroke_color_value,
             stroke_width,
             stroke_join: stroke.join.clone(),
+            stroke_direction: stroke.direction.clone(),
             width,
             height,
             pivot_x,
@@ -173,7 +182,8 @@ pub(crate) fn collect_shape(
         Vec2::new(comp_x, comp_y)
     };
 
-    let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
+    let stroke_width_anim =
+        get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
 
     Some(PendingLayer {
         id: shape.id,

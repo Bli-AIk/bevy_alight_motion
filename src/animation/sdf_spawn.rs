@@ -27,6 +27,7 @@ pub fn spawn_sdf_visual(
     stroke_color_value: &str,
     stroke_width: f32,
     stroke_join: &str,
+    stroke_direction: &str,
     width: f32,
     height: f32,
     pivot_x: f32,
@@ -46,6 +47,13 @@ pub fn spawn_sdf_visual(
             .unwrap_or(Color::WHITE)
     } else {
         Color::WHITE
+    };
+
+    // Border direction mode: 0.0=centered, 1.0=inside, -1.0=outside
+    let border_mode = match stroke_direction {
+        "inside" => 1.0_f32,
+        "outside" => -1.0_f32,
+        _ => 0.0_f32, // "centered" or empty
     };
 
     // Target dimensions from shape properties (base size before animation scale)
@@ -132,7 +140,7 @@ pub fn spawn_sdf_visual(
             mask.center.x,
             mask.center.y
         );
-        sdf_materials.add(SdfMaterial::new_with_mask_and_frame_half(
+        let mut mat = SdfMaterial::new_with_mask_and_frame_half(
             sdf_shape_type,
             target_half_width,
             target_half_height,
@@ -144,9 +152,11 @@ pub fn spawn_sdf_visual(
             mask.is_circle,
             mask.is_exclude,
             frame_half,
-        ))
+        );
+        mat.uniform_data.border_mode = border_mode;
+        sdf_materials.add(mat)
     } else {
-        sdf_materials.add(SdfMaterial::from_linear(
+        let mut mat = SdfMaterial::from_linear(
             fill_linear,
             Vec4::new(
                 target_half_width,
@@ -156,7 +166,9 @@ pub fn spawn_sdf_visual(
             ),
             shape_type_f32,
             frame_half,
-        ))
+        );
+        mat.uniform_data.border_mode = border_mode;
+        sdf_materials.add(mat)
     };
 
     // Spawn SDF entity with Material2d components

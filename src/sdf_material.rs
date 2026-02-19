@@ -51,8 +51,9 @@ pub struct SdfMaterialUniform {
     pub mask_rotation: f32,
     /// Mask 2 rotation in radians
     pub mask2_rotation: f32,
+    /// Border direction mode: 0.0=centered, 1.0=inside, -1.0=outside
+    pub border_mode: f32,
     /// Padding to ensure 16-byte alignment (4 floats = 16 bytes)
-    pub _padding1: f32,
     pub _padding2: f32,
 }
 
@@ -145,7 +146,7 @@ impl Default for SdfMaterial {
                 frame_half: default_frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
+                border_mode: 0.0,
                 _padding2: 0.0,
             },
         }
@@ -203,7 +204,7 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
+                border_mode: 0.0,
                 _padding2: 0.0,
             },
         }
@@ -284,7 +285,7 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
+                border_mode: 0.0,
                 _padding2: 0.0,
             },
         }
@@ -304,7 +305,7 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
+                border_mode: 0.0,
                 _padding2: 0.0,
             },
         }

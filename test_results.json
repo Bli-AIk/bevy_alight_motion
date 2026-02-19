@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T22:26:59.490787+08:00",
+  "timestamp": "2026-02-19T23:43:04.195214+08:00",
   "summary": {
-    "passed": 50,
+    "passed": 51,
     "skipped": 2,
-    "failed": 29
+    "failed": 30
   },
   "results": {
     "basic/bezier/bezier": {
@@ -81,6 +81,10 @@
     },
     "basic/shape/ex": {
       "status": "pass"
+    },
+    "basic/shape/ex1": {
+      "status": "fail",
+      "avg_similarity": 0.9312
     },
     "basic/shape/shape": {
       "status": "pass"
@@ -204,18 +208,18 @@
     },
     "private/USER_71/2_ex3": {
       "status": "fail",
-      "avg_similarity": 0.8665
+      "avg_similarity": 0.8673
     },
     "private/USER_71/2_ex4": {
       "status": "pass"
     },
     "private/USER_71/3_ex": {
       "status": "fail",
-      "avg_similarity": 0.871
+      "avg_similarity": 0.8712
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8564
+      "avg_similarity": 0.8566
     },
     "private/USER_71/3_ex2": {
       "status": "fail",
@@ -223,11 +227,11 @@
     },
     "private/USER_71/3_ex2_1": {
       "status": "fail",
-      "avg_similarity": 0.9527
+      "avg_similarity": 0.9529
     },
     "private/USER_71/3_ex3": {
       "status": "fail",
-      "avg_similarity": 0.9631
+      "avg_similarity": 0.9632
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
@@ -254,12 +258,15 @@
       "status": "fail",
       "avg_similarity": 0.6835
     },
+    "private/USER_chen_pi/distrust/8_box": {
+      "status": "pass"
+    },
     "private/USER_chen_pi/distrust/8_soul": {
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/9": {
       "status": "fail",
-      "avg_similarity": 0.9687
+      "avg_similarity": 0.9676
     },
     "private/USER_chen_pi/distrust/9_ex": {
       "status": "pass"
