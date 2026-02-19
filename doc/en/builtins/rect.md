@@ -1,7 +1,7 @@
 # Rectangle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 08:18:36
+> Last tested: 2026-02-19 09:05:40
 
 Basic rectangle shape, supports SDF and sprite rendering.
 

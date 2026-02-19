@@ -46,33 +46,10 @@ pub fn manage_layer_lifecycle_system(
 ) {
     let global_time = playback.current_time_ms;
 
-    // Debug logging for force_stopped state
-    if (990.0..=1050.0).contains(&global_time) {
-        bevy::log::info!(
-            "[Lifecycle ENTRY] time={:.1}ms force_stopped={}",
-            global_time,
-            playback.force_stopped
-        );
-    }
-
     // Skip if force stopped
     if playback.force_stopped {
         bevy::log::trace!("[Lifecycle] Skipped: force_stopped=true");
         return;
-    }
-
-    // Debug logging
-    static FRAME_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let frame_count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    // Debug: Log time around frame 30 (time 1000-1033)
-    if (990.0..=1050.0).contains(&global_time) {
-        bevy::log::info!(
-            "[Lifecycle] Frame {} global_time={:.1}ms playing={}",
-            frame_count,
-            global_time,
-            playback.playing
-        );
     }
 
     for (project_entity, root, mut pending, spawn_settings) in project_query.iter_mut() {
@@ -105,17 +82,5 @@ pub fn manage_layer_lifecycle_system(
             0, // root time offset
             filter,
         );
-
-        // Log stats occasionally
-        if frame_count % 300 == 1 {
-            let spawned_count = pending.spawned_entities.len();
-            let total_layers = count_total_layers(&pending.layers);
-            bevy::log::trace!(
-                "[Lifecycle] time={:.0}ms | spawned={}/{} entities",
-                global_time,
-                spawned_count,
-                total_layers
-            );
-        }
     }
 }

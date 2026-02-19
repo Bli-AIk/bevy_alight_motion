@@ -1,7 +1,7 @@
 # Pixelate
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 08:18:36
+> Last tested: 2026-02-19 09:05:40
 
 Reduces image resolution to create a pixelated effect.
 
@@ -18,7 +18,7 @@ Reduces image resolution to create a pixelated effect.
 - `basic/mask/child.amproj` ✅
 - `basic/mask/circle.amproj` ✅
 - `basic/shape/ex.amproj` ✅
-- `effects/pixelate/basic.amproj` ⏭️
+- `effects/pixelate/basic.amproj` ❌
 
 ---
 
