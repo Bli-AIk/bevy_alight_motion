@@ -129,10 +129,10 @@ impl Easing {
     pub fn evaluate(&self, t: f32) -> f32 {
         match self {
             Easing::Linear => t,
-            Easing::Step { .. } => {
-                // Step function: hold previous value until t reaches 1.0
-                if t < 1.0 { 0.0 } else { 1.0 }
-            }
+            Easing::Step {
+                x: step_length,
+                y: smoothing,
+            } => am_step(t, *step_length, *smoothing),
             Easing::CubicBezier { x1, y1, x2, y2 } => cubic_bezier_y_for_x(t, *x1, *y1, *x2, *y2),
             Easing::Bounce { p1, p2 } => am_bounce(t, *p1, *p2),
             Easing::ReverseBounce { p1, p2 } => am_reverse_bounce(t, *p1, *p2),
@@ -155,6 +155,27 @@ impl Easing {
             } => am_elastic_step(t, *step_length, *magnitude),
         }
     }
+}
+
+/// AM-style step easing (staircase with optional smoothstep transition).
+///
+/// Implementation based on AM source code (StepEasing.java).
+/// Parameters:
+/// - step_length: duration of each step (in t-space, 0-1)
+/// - smoothing: smoothstep transition zone at the end of each step (0 = instant, 1 = full smooth)
+fn am_step(t: f32, step_length: f32, smoothing: f32) -> f32 {
+    let safe_step = step_length.max(0.001);
+    let step_base = t - (t % safe_step);
+    let within_step = t % safe_step;
+    let smooth_edge0 = safe_step * (1.0 - smoothing);
+    let denominator = safe_step - smooth_edge0;
+    let smooth_t = if denominator.abs() < f32::EPSILON {
+        0.0
+    } else {
+        ((within_step - smooth_edge0) / denominator).clamp(0.0, 1.0)
+    };
+    let smooth_val = smooth_t * smooth_t * (3.0 - 2.0 * smooth_t);
+    step_base + smooth_val * safe_step
 }
 
 /// Standard Ease-Out-Bounce function.
@@ -474,11 +495,20 @@ mod tests {
 
     #[test]
     fn test_easing_step() {
+        // step 1.0 0.0: single step, no smoothing → hold 0 until t=1.0
         let easing = Easing::Step { x: 1.0, y: 0.0 };
         assert!((easing.evaluate(0.0) - 0.0).abs() < 0.001);
         assert!((easing.evaluate(0.5) - 0.0).abs() < 0.001);
         assert!((easing.evaluate(0.99) - 0.0).abs() < 0.001);
         assert!((easing.evaluate(1.0) - 1.0).abs() < 0.001);
+
+        // step 0.25 0.0: 4 steps, no smoothing → staircase
+        let easing = Easing::Step { x: 0.25, y: 0.0 };
+        assert!((easing.evaluate(0.0) - 0.0).abs() < 0.001);
+        assert!((easing.evaluate(0.1) - 0.0).abs() < 0.001);
+        assert!((easing.evaluate(0.25) - 0.25).abs() < 0.001);
+        assert!((easing.evaluate(0.5) - 0.5).abs() < 0.001);
+        assert!((easing.evaluate(0.75) - 0.75).abs() < 0.001);
     }
 
     #[test]
