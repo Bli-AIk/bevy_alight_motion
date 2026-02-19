@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T13:05:14.578299+08:00",
+  "timestamp": "2026-02-19T14:38:53.186402+08:00",
   "summary": {
-    "passed": 42,
+    "passed": 43,
     "skipped": 2,
-    "failed": 30
+    "failed": 33
   },
   "results": {
     "basic/bezier/bezier": {
@@ -85,9 +85,16 @@
     "basic/shape/shape": {
       "status": "pass"
     },
+    "basic/tween/bounce": {
+      "status": "pass"
+    },
     "basic/tween/multi": {
       "status": "fail",
       "avg_similarity": 0.9575
+    },
+    "basic/tween/step": {
+      "status": "fail",
+      "avg_similarity": 0.7196
     },
     "effects/gaussian-blur/basic": {
       "status": "skip"
@@ -99,26 +106,34 @@
     "effects/linear-repeat/basic": {
       "status": "pass"
     },
-    "effects/linear-repeat/ramdom1/1": {
+    "effects/linear-repeat/dual": {
+      "status": "fail",
+      "avg_similarity": 0.5763
+    },
+    "effects/linear-repeat/random": {
+      "status": "fail",
+      "avg_similarity": 0.881
+    },
+    "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
       "avg_similarity": 0.8733
     },
-    "effects/linear-repeat/ramdom1/2": {
+    "effects/linear-repeat/random_generated1/2": {
       "status": "pass"
     },
-    "effects/linear-repeat/ramdom1/3": {
+    "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
       "avg_similarity": 0.8682
     },
-    "effects/linear-repeat/random2/1": {
+    "effects/linear-repeat/random_generated2/1": {
       "status": "fail",
       "avg_similarity": 0.9443
     },
-    "effects/linear-repeat/random2/2": {
+    "effects/linear-repeat/random_generated2/2": {
       "status": "fail",
-      "avg_similarity": 0.8447
+      "avg_similarity": 0.735
     },
-    "effects/linear-repeat/random2/3": {
+    "effects/linear-repeat/random_generated2/3": {
       "status": "fail",
       "avg_similarity": 0.9247
     },
@@ -223,7 +238,7 @@
     },
     "private/USER_chen_pi/6_ex": {
       "status": "fail",
-      "avg_similarity": 0.7921
+      "avg_similarity": 0.7922
     },
     "private/USER_chen_pi/6_soul": {
       "status": "pass"

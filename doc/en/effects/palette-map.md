@@ -1,7 +1,7 @@
 # Palette Map
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 09:05:40
+> Last tested: 2026-02-19 14:38:53
 
 Maps image colors to specified palette colors. Supports up to 8 palette colors.
 
