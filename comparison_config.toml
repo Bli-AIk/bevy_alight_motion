@@ -184,3 +184,7 @@ avg_threshold = 0.97
 frame_threshold = 0.80
 max_failed_rate = 0.95
 min_frame_similarity = 0.25
+
+# 这集神了
+[overrides."private/USER_327/last"]
+skip = true

@@ -293,8 +293,8 @@ pub fn animate_transform_system(
         let mut final_rotation = -base_rotation; // Negate for Bevy's coordinate system
 
         // Apply swing effect (oscillating rotation)
-        // Swing uses freq (Hz), a1 (min angle), a2 (max angle), phase, and type (waveform)
-        // Note: swing uses local_time for layer-relative oscillation
+        // AM swing2: freq is Hz-accumulated (integral of freq over time),
+        // sine uses sin((accum + phase) * π), triangle uses AM.triangle((accum + phase) / 2)
         if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time)
             && swing_freq > 0.0
         {
@@ -302,34 +302,45 @@ pub fn animate_transform_system(
             let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
             let swing_phase = interpolate_float(&animated.swing_phase, layer_time).unwrap_or(0.0);
 
-            // Calculate time in seconds for oscillation
-            // Use local_time for layer-relative oscillation
-            let time_sec = local_time / 1000.0;
-
-            // Calculate oscillation phase (2π * freq * time + phase)
-            // Phase is in degrees, convert to radians
-            let phase_rad = swing_phase.to_radians();
-            let oscillation_phase = 2.0 * std::f32::consts::PI * swing_freq * time_sec + phase_rad;
-
-            // Apply waveform based on type
-            // type=0: sine wave (smooth oscillation)
-            // type=1: triangle wave
-            let wave_value = match animated.swing_type {
-                0 => oscillation_phase.sin(),
-                1 => {
-                    // Triangle wave that matches sine at key points:
-                    // phase=0: 0, phase=π/2: 1, phase=π: 0, phase=3π/2: -1
-                    // Use standard formula: 2/π * arcsin(sin(x))
-                    (2.0 / std::f32::consts::PI) * oscillation_phase.sin().asin()
+            // Hz accumulation: AM integrates freq over time for Hz-type parameters
+            let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+            let time_sec = layer_time * duration_sec;
+            let accumulated_freq = if animated.swing_freq.keyframes.is_empty() {
+                // Non-keyed: simple multiplication
+                swing_freq * time_sec
+            } else {
+                // Keyed: numerical integration at 120 steps/sec (matches AM)
+                let total_steps = (duration_sec * 120.0).round() as i32;
+                let current_step = (120.0 * time_sec).round() as i32;
+                let mut accum = 0.0f64;
+                if total_steps > 0 {
+                    for i in 0..=current_step.min(total_steps) {
+                        let frac_t = i as f32 / total_steps as f32;
+                        let freq_at_t = interpolate_float(&animated.swing_freq, frac_t).unwrap_or(0.0);
+                        accum += freq_at_t as f64 / 120.0;
+                    }
                 }
-                _ => oscillation_phase.sin(), // Default to sine
+                accum as f32
             };
 
-            // Map wave_value (-1..1) to angle range (a1..a2)
-            // When wave_value = -1: angle = a1
-            // When wave_value = 1: angle = a2
-            let swing_angle =
-                (swing_a1 + swing_a2) / 2.0 + (swing_a2 - swing_a1) / 2.0 * wave_value;
+            // Waveform: AM script formula
+            let wave_value = match animated.swing_type {
+                0 => {
+                    // Sine: sin((accumulated_freq + phase) * π)
+                    ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin()
+                }
+                1 => {
+                    // Triangle: AM.triangle((accumulated_freq + phase) / 2.0)
+                    // AM.triangle(x) = abs(((x + 0.75) % 1.0) - 0.5) * 4 - 1
+                    let x = (accumulated_freq + swing_phase) / 2.0;
+                    let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
+                    x_mod.abs() * 4.0 - 1.0
+                }
+                _ => ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin(),
+            };
+
+            // AM angle formula: ((a2 - a1) * ((m + 1) / 2)) + a1
+            let swing_angle = ((swing_a2 - swing_a1) * ((wave_value + 1.0) / 2.0)) + swing_a1;
 
             // Add swing angle to base rotation (swing is additive)
             // Negate for Bevy's coordinate system (like base rotation)
