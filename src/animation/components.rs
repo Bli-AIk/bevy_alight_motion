@@ -176,6 +176,10 @@ pub struct AmAnimated {
     pub linear_repeat_shape: i32,
     /// Linear repeat effect: invert flag
     pub linear_repeat_invert: bool,
+    /// Linear repeat effect: random order flag
+    pub linear_repeat_random_order: bool,
+    /// Linear repeat effect: random seed
+    pub linear_repeat_seed: f32,
     // Swing effect (com.alightcreative.effects.swing2)
     /// Swing effect: oscillation frequency (per second)
     pub swing_freq: AmAnimatedFloat,

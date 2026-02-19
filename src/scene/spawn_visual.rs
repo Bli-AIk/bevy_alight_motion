@@ -150,6 +150,8 @@ pub(crate) fn spawn_image(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                linear_repeat_random_order: linear_repeat_effect.random_order,
+                linear_repeat_seed: linear_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -440,6 +442,8 @@ pub(crate) fn spawn_text(
             linear_repeat_overlap: AmAnimatedFloat::default(),
             linear_repeat_shape: 0,
             linear_repeat_invert: false,
+            linear_repeat_random_order: false,
+            linear_repeat_seed: 0.0,
             // Swing effect (defaults for text)
             swing_freq: AmAnimatedFloat::default(),
             swing_a1: AmAnimatedFloat::default(),

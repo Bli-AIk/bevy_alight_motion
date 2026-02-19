@@ -82,13 +82,6 @@ pub fn spawn_scene(
 
         match layer {
             AmLayer::Shape(shape) => {
-                // Debug print to verify hidden attribute is parsed
-                if shape.hidden {
-                    eprintln!(
-                        "[SPAWN_SCENE DEBUG] Shape '{}' has hidden=true",
-                        shape.label
-                    );
-                }
                 let entity = spawn_shape(
                     commands,
                     shaders,
@@ -367,10 +360,6 @@ pub(crate) fn spawn_shape(
     let no_fill = shape.fill_type == "none";
     // If shape is marked hidden in AM, force base_alpha to 0 so it's never visible
     let base_alpha = if shape.hidden {
-        eprintln!(
-            "[DEBUG] Shape '{}' (id={}) is marked hidden, setting base_alpha=0",
-            shape.label, shape.id
-        );
         0.0
     } else {
         get_base_alpha(&shape.fill_color, no_fill)
@@ -452,6 +441,8 @@ pub(crate) fn spawn_shape(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                linear_repeat_random_order: linear_repeat_effect.random_order,
+                linear_repeat_seed: linear_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -622,6 +613,8 @@ pub(crate) fn spawn_null(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                linear_repeat_random_order: linear_repeat_effect.random_order,
+                linear_repeat_seed: linear_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -789,6 +782,8 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_overlap: AmAnimatedFloat::default(),
                 linear_repeat_shape: 0,
                 linear_repeat_invert: false,
+                linear_repeat_random_order: false,
+                linear_repeat_seed: 0.0,
                 // Swing effect (defaults for embed scene)
                 swing_freq: AmAnimatedFloat::default(),
                 swing_a1: AmAnimatedFloat::default(),

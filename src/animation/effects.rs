@@ -1294,6 +1294,16 @@ pub fn animate_unified_effect_system(
                 material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
                 material.uniform_data.linear_repeat_params4 =
                     Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
+                material.uniform_data.linear_repeat_params5 = Vec4::new(
+                    if animated.linear_repeat_random_order {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    animated.linear_repeat_seed,
+                    0.0,
+                    0.0,
+                );
                 material.uniform_data.linear_repeat_fill_color = fill_color;
 
                 // Calculate mesh expansion using AM's repeatWithEasing algorithm
@@ -1425,6 +1435,7 @@ pub fn animate_unified_effect_system(
                 material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
                 material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
                 material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+                material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
                 material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
             }
         }

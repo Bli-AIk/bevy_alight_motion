@@ -95,6 +95,9 @@ pub struct UnifiedEffectUniform {
     /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
     pub linear_repeat_params4: Vec4,
 
+    /// Linear repeat params5: (random_order, seed, 0, 0)
+    pub linear_repeat_params5: Vec4,
+
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
 
@@ -349,6 +352,7 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
+            linear_repeat_params5: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,
