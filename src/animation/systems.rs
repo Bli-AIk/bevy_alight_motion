@@ -348,6 +348,34 @@ pub fn animate_transform_system(
             final_rotation -= swing_angle;
         }
 
+        // Apply spin effect (RPM-based continuous rotation)
+        // AM spin: rpm is accumulated like Hz, but each step adds rpm/20 (degrees)
+        // Non-keyed: accumulated = rpm * time_seconds * 6.0
+        if animated.spin_rpm.value.is_some() || !animated.spin_rpm.keyframes.is_empty() {
+            let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+            let time_sec = layer_time * duration_sec;
+            let spin_angle = if animated.spin_rpm.keyframes.is_empty() {
+                // Non-keyed: rpm * time_seconds * 6.0
+                let rpm = interpolate_float(&animated.spin_rpm, layer_time).unwrap_or(0.0);
+                rpm * time_sec * 6.0
+            } else {
+                // Keyed: numerical integration at 120 steps/sec, each step adds rpm(t) / 20.0
+                let total_steps = (duration_sec * 120.0).round() as i32;
+                let current_step = (120.0 * time_sec).round() as i32;
+                let mut accum = 0.0f64;
+                if total_steps > 0 {
+                    for i in 0..=current_step.min(total_steps) {
+                        let frac_t = i as f32 / total_steps as f32;
+                        let rpm_at_t = interpolate_float(&animated.spin_rpm, frac_t).unwrap_or(0.0);
+                        accum += rpm_at_t as f64 / 20.0;
+                    }
+                }
+                accum as f32
+            };
+            // Negate for Bevy's coordinate system
+            final_rotation -= spin_angle;
+        }
+
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
         // DEBUG: Log rotation for 空2 layers to verify correct value

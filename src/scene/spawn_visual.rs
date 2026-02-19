@@ -39,6 +39,7 @@ pub(crate) fn spawn_image(
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
+    let spin_rpm = extract_spin_rpm(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
     let pixelate_effect = extract_pixelate_effect(&image.effects);
@@ -161,6 +162,8 @@ pub(crate) fn spawn_image(
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Spin effect
+                spin_rpm,
                 // Threshold effect
                 threshold_value: threshold_effect.threshold,
                 threshold_feather: threshold_effect.feather,
@@ -455,6 +458,8 @@ pub(crate) fn spawn_text(
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
+            // Spin effect (defaults for text)
+            spin_rpm: AmAnimatedFloat::default(),
             // Threshold effect (defaults for text)
             threshold_value: AmAnimatedFloat::default(),
             threshold_feather: AmAnimatedFloat::default(),

@@ -105,6 +105,29 @@ pub(crate) fn extract_swing_effect(effects: &[AmEffect]) -> SwingParams {
     params
 }
 
+/// Extract spin effect RPM parameter from effects.
+/// 从效果中提取旋转效果RPM参数
+pub(crate) fn extract_spin_rpm(effects: &[AmEffect]) -> AmAnimatedFloat {
+    let mut rpm = AmAnimatedFloat::default();
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.spin" {
+            // Default RPM is 60 (from spin.xml)
+            rpm.value = Some(60.0);
+            for prop in &effect.properties {
+                if prop.name == "rpm" {
+                    if !prop.keyframes.is_empty() {
+                        rpm.keyframes = prop.keyframes.clone();
+                    } else if let Ok(v) = prop.value.parse::<f32>() {
+                        rpm.value = Some(v);
+                    }
+                }
+            }
+            break;
+        }
+    }
+    rpm
+}
+
 /// Threshold effect parameters
 /// Converts image to high-contrast black and white
 /// 阈值效果参数

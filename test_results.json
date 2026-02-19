@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-19T22:05:17.128603+08:00",
+  "timestamp": "2026-02-19T22:26:59.490787+08:00",
   "summary": {
-    "passed": 49,
+    "passed": 50,
     "skipped": 2,
     "failed": 29
   },
@@ -162,6 +162,9 @@
     "effects/scale-assist/ex": {
       "status": "pass"
     },
+    "effects/spin/basic": {
+      "status": "pass"
+    },
     "effects/stretch-segment/basic": {
       "status": "pass"
     },
@@ -249,7 +252,7 @@
     },
     "private/USER_chen_pi/distrust/8": {
       "status": "fail",
-      "avg_similarity": 0.6557
+      "avg_similarity": 0.6835
     },
     "private/USER_chen_pi/distrust/8_soul": {
       "status": "pass"

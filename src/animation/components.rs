@@ -197,6 +197,9 @@ pub struct AmAnimated {
     pub swing_phase: AmAnimatedFloat,
     /// Swing effect: swing type (0 = sine, 1 = triangle)
     pub swing_type: i32,
+    // Spin effect (com.alightcreative.effects.spin)
+    /// Spin effect: RPM (revolutions per minute)
+    pub spin_rpm: AmAnimatedFloat,
     // Threshold effect (com.alightcreative.effects.threshold)
     /// Threshold effect: threshold value (0.0-1.0)
     pub threshold_value: AmAnimatedFloat,

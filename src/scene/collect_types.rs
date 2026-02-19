@@ -48,6 +48,7 @@ pub(crate) fn collect_shape(
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
+    let spin_rpm = extract_spin_rpm(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
@@ -263,6 +264,7 @@ pub(crate) fn collect_shape(
             swing_a2: swing_effect.a2,
             swing_phase: swing_effect.phase,
             swing_type: swing_effect.swing_type,
+            spin_rpm,
             // Threshold effect
             threshold_value: threshold_effect.threshold,
             threshold_feather: threshold_effect.feather,
@@ -325,6 +327,7 @@ pub(crate) fn collect_null(
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
+    let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
@@ -419,6 +422,7 @@ pub(crate) fn collect_null(
             swing_a2: swing_effect.a2,
             swing_phase: swing_effect.phase,
             swing_type: swing_effect.swing_type,
+            spin_rpm,
             // Threshold effect
             threshold_value: threshold_effect.threshold,
             threshold_feather: threshold_effect.feather,
@@ -644,6 +648,7 @@ pub(crate) fn collect_embed_scene(
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
+            spin_rpm: AmAnimatedFloat::default(),
             // Threshold effect (defaults for embed)
             threshold_value: AmAnimatedFloat::default(),
             threshold_feather: AmAnimatedFloat::default(),
@@ -852,6 +857,7 @@ pub(crate) fn collect_text(
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
+            spin_rpm: AmAnimatedFloat::default(),
             // Threshold effect (defaults for text)
             threshold_value: AmAnimatedFloat::default(),
             threshold_feather: AmAnimatedFloat::default(),
@@ -913,6 +919,7 @@ pub(crate) fn collect_image(
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
+    let spin_rpm = extract_spin_rpm(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
     let pixelate_effect = extract_pixelate_effect(&image.effects);
@@ -1014,6 +1021,7 @@ pub(crate) fn collect_image(
             swing_a2: swing_effect.a2,
             swing_phase: swing_effect.phase,
             swing_type: swing_effect.swing_type,
+            spin_rpm,
             // Threshold effect
             threshold_value: threshold_effect.threshold,
             threshold_feather: threshold_effect.feather,
