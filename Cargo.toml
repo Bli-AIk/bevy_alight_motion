@@ -45,11 +45,23 @@ bevy = "0.18"
 image = "0.25"
 toml = "0.8"
 
+[dependencies.tracing-tracy]
+version = "0.11"
+optional = true
+
 [features]
 default = []
 debug = ["bevy-inspector-egui"]
 video-debug = []
 video-comparison = []
+
+# Tracy profiling with minimal overhead (no GUI)
+# Tracy 性能分析，最小开销（无 GUI）
+trace_tracy = ["bevy/trace_tracy", "bevy/trace", "dep:tracing-tracy"]
+# Tracy profiling with system names visible (uses bevy/debug for ECS names)
+# Tracy 性能分析，可见系统名称（使用 bevy/debug 获取 ECS 名称）
+debug_tracy = ["trace_tracy", "bevy/debug"]
+
 
 [[example]]
 name = "player"

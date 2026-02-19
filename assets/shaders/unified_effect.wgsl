@@ -1046,12 +1046,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         
         // Threshold/posterization: quantize color levels
-        // threshold 0.5 = 2 levels (black/white), threshold 0.25 = 4 levels, etc.
+        // In AM, threshold=0.5 means convert to pure black/white (binarize)
+        // threshold is a binarization cutoff, not a posterization level count
         if pixelate_threshold > 0.001 && pixelate_threshold < 1.0 {
-            let levels = 1.0 / pixelate_threshold;
-            tex_color.r = floor(tex_color.r * levels + 0.5) / levels;
-            tex_color.g = floor(tex_color.g * levels + 0.5) / levels;
-            tex_color.b = floor(tex_color.b * levels + 0.5) / levels;
+            // Calculate luminance for thresholding
+            let lum = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            // Binarize: if luminance >= threshold, output white; else black
+            let bw = select(0.0, 1.0, lum >= pixelate_threshold);
+            tex_color = vec4<f32>(bw, bw, bw, tex_color.a);
         }
     }
     
