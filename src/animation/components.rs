@@ -98,6 +98,10 @@ pub struct AmAnimated {
     /// Speed multiplier from parent embed scenes.
     /// Local time = (global_time - time_offset) * speed_multiplier
     pub speed_multiplier: f32,
+    /// Element-level speed (from shape/nullobj `speed` attribute, default 1.0).
+    /// Affects keyframe interpolation rate: layer_time = raw_layer_time * element_speed.
+    /// Does NOT affect visibility timing (start/end).
+    pub element_speed: f32,
     /// Embed parent offset (Bevy coords) for coordinate adjustment.
     /// When this layer is a child of an embed scene, this stores the embed's
     /// Bevy position so the animation system can compensate for it.
@@ -251,6 +255,8 @@ impl AmAnimated {
     }
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
+    /// Note: element_speed is stored but NOT applied to layer_time.
+    /// AM's speed attribute on shapes primarily affects media playback, not keyframe interpolation.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
         let duration = (self.end_time - self.start_time) as f32;
         if duration > 0.0 {

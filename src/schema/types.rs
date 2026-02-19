@@ -452,6 +452,11 @@ pub struct AmShape {
     #[serde(rename = "@hidden", default)]
     pub hidden: bool,
 
+    /// Playback speed multiplier (1.0 = normal, 0.5 = half speed).
+    /// Affects keyframe interpolation rate but not visibility timing.
+    #[serde(rename = "@speed", default = "default_speed")]
+    pub speed: f32,
+
     /// Transform data.
     #[serde(default)]
     pub transform: AmTransform,
