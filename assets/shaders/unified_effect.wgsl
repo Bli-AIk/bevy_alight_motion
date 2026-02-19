@@ -46,6 +46,7 @@ struct UnifiedEffectUniform {
     linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
     linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
+    linear_repeat_params5: vec4<f32>,  // (random_order, seed, 0, 0)
     linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
@@ -564,6 +565,51 @@ fn apply_am_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {
     return cubic_bezier_2d(progress, p1x, p1y, p2x, p2y);
 }
 
+// Linear Congruential Generator matching Java's Random
+// Returns a value in [0, bound)
+fn java_random_next_int(seed_state: ptr<function, u32>, bound: i32) -> i32 {
+    // Java Random uses: seed = (seed * 0x5DEECE66D + 0xB) & mask
+    // We simulate the effect for Fisher-Yates shuffle
+    let mask: u32 = 0xFFFFFFFFu;
+    let mult: u32 = 0x5DEECE66u; // simplified multiplier
+    let inc: u32 = 0xBu;
+    
+    *seed_state = ((*seed_state) * mult + inc) & mask;
+    let val = (*seed_state >> 16u) % u32(bound);
+    return i32(val);
+}
+
+// Compute the shuffled index for Fisher-Yates shuffle
+// This computes what index position would be at after shuffling
+fn get_shuffled_index(original_index: i32, count: i32, seed: f32) -> i32 {
+    // Convert AM seed formula: 15234322 + (35432882176 * seed)
+    let am_seed = u32(15234322u) + u32(35432882176.0 * seed) % 0xFFFFFFFFu;
+    
+    // Build the permutation array by simulating Fisher-Yates
+    // For small counts (up to 100), we can compute this directly
+    var perm: array<i32, 100>;
+    for (var i = 0; i < count && i < 100; i = i + 1) {
+        perm[i] = i;
+    }
+    
+    var state = am_seed;
+    // Fisher-Yates shuffle from end to start
+    for (var i = count - 1; i > 0; i = i - 1) {
+        // Get random index in [0, i]
+        let j = java_random_next_int(&state, i + 1);
+        // Swap perm[i] and perm[j]
+        let temp = perm[i];
+        perm[i] = perm[j];
+        perm[j] = temp;
+    }
+    
+    // Return the value at original_index
+    if original_index >= 0 && original_index < count && original_index < 100 {
+        return perm[original_index];
+    }
+    return original_index;
+}
+
 // Calculate linear repeat progress for a single copy index
 // Returns (baseProgress, interpProgress) matching AM's repeatWithEasing algorithm
 fn calc_linear_repeat_progress(
@@ -576,9 +622,20 @@ fn calc_linear_repeat_progress(
     shape: i32,
     invert: bool,
     ease_in: f32,
-    ease_out: f32
+    ease_out: f32,
+    random_order: bool,
+    seed: f32
 ) -> vec2<f32> {
-    let fi = f32(index);
+    // Get shuffled index if random_order is enabled
+    // The shuffled index is used for position calculation (base_position)
+    // while original index is used for baseProgress (rendering order)
+    var shuffled_index = index;
+    if random_order {
+        shuffled_index = get_shuffled_index(index, count, seed);
+    }
+    
+    let fi_shuffled = f32(shuffled_index);
+    let fi_original = f32(index);
     let fcount = f32(count);
     
     // AM algorithm: overlap_value = overlap + 1.0
@@ -590,15 +647,17 @@ fn calc_linear_repeat_progress(
     // half_width = step_width * overlap_value
     let half_width = step_width * overlap_value;
     
-    // base_position = ((index + overlap_value) / denominator) + phase
-    let base_position = ((fi + overlap_value) / denominator) + phase;
+    // base_position uses shuffled index for position calculation
+    // AM: intValue2 = ((list.get(i3) + overlap_value) / denominator) + phase
+    let base_position = ((fi_shuffled + overlap_value) / denominator) + phase;
     // center_pos = base_position + half_width / 2
     let center_pos = base_position + half_width * 0.5;
     
-    // Calculate base progress (i / (count - 1))
+    // Calculate base progress using original index (rendering order)
+    // AM: baseProgress = i / (count - 1)
     var base_progress: f32;
     if count > 1 {
-        base_progress = fi / (fcount - 1.0);
+        base_progress = fi_original / (fcount - 1.0);
     } else {
         base_progress = 0.0;
     }
@@ -697,6 +756,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_shape = linear_repeat_shape_invert_alt / 100;
     let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
     let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
+    let linear_repeat_random_order = uniforms.linear_repeat_params5.x > 0.5;
+    let linear_repeat_seed = uniforms.linear_repeat_params5.y;
     // Linear repeat activation states:
     // - count < 0: effect not activated, render original
     // - count == 0: effect activated but count=0, render nothing (hide)
@@ -894,7 +955,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 linear_repeat_shape,
                 linear_repeat_invert,
                 linear_repeat_ease_in,
-                linear_repeat_ease_out
+                linear_repeat_ease_out,
+                linear_repeat_random_order,
+                linear_repeat_seed
             );
             let base_progress = progress.x;
             let interp_progress = progress.y;
