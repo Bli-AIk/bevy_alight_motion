@@ -316,7 +316,8 @@ pub fn animate_transform_system(
                 if total_steps > 0 {
                     for i in 0..=current_step.min(total_steps) {
                         let frac_t = i as f32 / total_steps as f32;
-                        let freq_at_t = interpolate_float(&animated.swing_freq, frac_t).unwrap_or(0.0);
+                        let freq_at_t =
+                            interpolate_float(&animated.swing_freq, frac_t).unwrap_or(0.0);
                         accum += freq_at_t as f64 / 120.0;
                     }
                 }
