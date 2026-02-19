@@ -301,3 +301,68 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod hidden_tests {
+    use crate::schema::AmShape;
+    use quick_xml::de::from_str;
+
+    #[test]
+    fn test_parse_hidden_shape() {
+        let xml = r#"<shape id="6242242" label="骨头" hidden="true" startTime="0" endTime="8182" fillType="media" fillImage="amproj:267ee5549b4091ea.png" s=".rect">
+    <transform>
+        <location x="0" y="0"/>
+    </transform>
+</shape>"#;
+        let shape: AmShape = from_str(xml).expect("Failed to parse");
+        assert!(
+            shape.hidden,
+            "Shape should be hidden but got: {}",
+            shape.hidden
+        );
+    }
+}
+
+#[cfg(test)]
+mod hidden_integration_tests {
+    use crate::schema::{AmLayer, AmScene};
+    use quick_xml::de::from_str;
+    use std::fs;
+
+    #[test]
+    fn test_parse_sanb_anim_hidden_layer() {
+        // Read the full XML file
+        let xml = fs::read_to_string("/tmp/sanb_test.xml").expect("Failed to read test XML");
+        let scene: AmScene = from_str(&xml).expect("Failed to parse scene");
+
+        println!("Found {} layers", scene.layers.len());
+        for layer in &scene.layers {
+            if let AmLayer::Shape(shape) = layer {
+                println!(
+                    "Shape: '{}' id={} hidden={}",
+                    shape.label, shape.id, shape.hidden
+                );
+            }
+        }
+
+        // Find the 骨头 layer and verify it's hidden
+        let bone_layer = scene
+            .layers
+            .iter()
+            .filter_map(|l| {
+                if let AmLayer::Shape(s) = l {
+                    Some(s)
+                } else {
+                    None
+                }
+            })
+            .find(|s| s.label == "骨头")
+            .expect("Should find 骨头 layer");
+
+        assert!(
+            bone_layer.hidden,
+            "骨头 layer should be hidden, but got hidden={}",
+            bone_layer.hidden
+        );
+    }
+}

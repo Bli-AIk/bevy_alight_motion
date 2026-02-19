@@ -82,6 +82,13 @@ pub fn spawn_scene(
 
         match layer {
             AmLayer::Shape(shape) => {
+                // Debug print to verify hidden attribute is parsed
+                if shape.hidden {
+                    eprintln!(
+                        "[SPAWN_SCENE DEBUG] Shape '{}' has hidden=true",
+                        shape.label
+                    );
+                }
                 let entity = spawn_shape(
                     commands,
                     shaders,
@@ -225,10 +232,11 @@ pub(crate) fn spawn_shape(
     // AM location points to object CENTER, not pivot. No position compensation needed.
     // Pivot only affects rotation/scale center, which is handled by Anchor.
     bevy::log::trace!(
-        "Registering shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
+        "Registering shape '{}' (id={}, parent={}, hidden={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
         shape.label,
         shape.id,
         shape.parent,
+        shape.hidden,
         tx,
         ty,
         z,
@@ -357,7 +365,16 @@ pub(crate) fn spawn_shape(
 
     let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
     let no_fill = shape.fill_type == "none";
-    let base_alpha = get_base_alpha(&shape.fill_color, no_fill);
+    // If shape is marked hidden in AM, force base_alpha to 0 so it's never visible
+    let base_alpha = if shape.hidden {
+        eprintln!(
+            "[DEBUG] Shape '{}' (id={}) is marked hidden, setting base_alpha=0",
+            shape.label, shape.id
+        );
+        0.0
+    } else {
+        get_base_alpha(&shape.fill_color, no_fill)
+    };
     let palette_map = extract_palette_map_effect(&shape.effects);
     let replace_color = extract_replace_color_effect(&shape.effects);
 
@@ -477,6 +494,11 @@ pub(crate) fn spawn_shape(
         commands
             .entity(entity)
             .insert(AmPaletteMapParams::from_params(&palette_map));
+    }
+
+    // If shape is marked as hidden in AM, force it to stay hidden
+    if shape.hidden {
+        commands.entity(entity).insert(AmForceHidden);
     }
 
     entity

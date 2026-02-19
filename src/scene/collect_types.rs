@@ -213,7 +213,12 @@ pub(crate) fn collect_shape(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: stroke_width_anim,
-            base_alpha: get_base_alpha(&shape.fill_color, shape.fill_type == "none"),
+            // If shape is marked hidden in AM, force base_alpha to 0 so it's never visible
+            base_alpha: if shape.hidden {
+                0.0
+            } else {
+                get_base_alpha(&shape.fill_color, shape.fill_type == "none")
+            },
             palette_alpha: palette_map.alpha.clone(),
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,

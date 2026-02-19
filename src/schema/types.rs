@@ -448,6 +448,10 @@ pub struct AmShape {
     #[serde(rename = "@blending", default)]
     pub blending: String,
 
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
+
     /// Transform data.
     #[serde(default)]
     pub transform: AmTransform,

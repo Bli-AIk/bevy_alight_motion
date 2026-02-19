@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-19T12:36:33.939957+08:00",
+  "timestamp": "2026-02-19T13:05:14.578299+08:00",
   "summary": {
     "passed": 42,
     "skipped": 2,
@@ -252,7 +252,7 @@
     },
     "private/USER_chen_pi/misc/sanb_anim": {
       "status": "fail",
-      "avg_similarity": 0.9194
+      "avg_similarity": 0.9449
     },
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "fail",
