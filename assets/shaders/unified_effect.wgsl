@@ -48,6 +48,13 @@ struct UnifiedEffectUniform {
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
     linear_repeat_params5: vec4<f32>,  // (random_order, seed, 0, 0)
     linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
+    // Second linear repeat effect (for stacked/dual effects)
+    linear_repeat2_params1: vec4<f32>,
+    linear_repeat2_params2: vec4<f32>,
+    linear_repeat2_params3: vec4<f32>,
+    linear_repeat2_params4: vec4<f32>,
+    linear_repeat2_params5: vec4<f32>,
+    linear_repeat2_fill_color: vec4<f32>,
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
     // Grid effect
@@ -764,6 +771,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // - count > 0: effect activated, render count copies
     let linear_repeat_activated = linear_repeat_count >= 0;
     let linear_repeat_enabled = linear_repeat_count > 0;
+
+    // Second linear repeat effect
+    let lr2_count = i32(round(uniforms.linear_repeat2_params1.x));
+    let lr2_position = vec2<f32>(uniforms.linear_repeat2_params1.y, uniforms.linear_repeat2_params1.z);
+    let lr2_angle_deg = uniforms.linear_repeat2_params1.w;
+    let lr2_offset = vec2<f32>(uniforms.linear_repeat2_params2.x, uniforms.linear_repeat2_params2.y);
+    let lr2_scale = uniforms.linear_repeat2_params2.z;
+    let lr2_alpha = uniforms.linear_repeat2_params2.w;
+    let lr2_start = uniforms.linear_repeat2_params3.x;
+    let lr2_end = uniforms.linear_repeat2_params3.y;
+    let lr2_phase = uniforms.linear_repeat2_params3.z;
+    let lr2_overlap = uniforms.linear_repeat2_params3.w;
+    let lr2_ease_in = uniforms.linear_repeat2_params4.x;
+    let lr2_ease_out = uniforms.linear_repeat2_params4.y;
+    let lr2_blend = uniforms.linear_repeat2_params4.z;
+    let lr2_sia = i32(uniforms.linear_repeat2_params4.w);
+    let lr2_shape = lr2_sia / 100;
+    let lr2_invert = (lr2_sia / 10) % 10 == 1;
+    let lr2_color_alt = lr2_sia % 10 == 1;
+    let lr2_random_order = uniforms.linear_repeat2_params5.x > 0.5;
+    let lr2_seed = uniforms.linear_repeat2_params5.y;
+    let lr2_enabled = lr2_count > 0;
     
     // Extract pixelate effect params
     let pixelate_enabled = uniforms.pixelate_flags.x > 0.5;
@@ -928,7 +957,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = accumulated_color;
     } else if linear_repeat_enabled {
         // Linear repeat effect: render multiple copies arranged in a line
-        // Algorithm matches AM's repeatWithEasing implementation exactly
+        // Supports dual stacked effects via nested loops
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
         
@@ -939,142 +968,159 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // Accumulate color from all copies (back to front)
         var accumulated_color = vec4<f32>(0.0);
         
-        // Total copies to render
-        let total_copies = linear_repeat_count;
-        
-        // Start from the farthest copy (highest index) and work backwards
-        for (var i = total_copies - 1; i >= 0; i = i - 1) {
-            // Calculate progress using AM algorithm
-            let progress = calc_linear_repeat_progress(
-                i,
-                total_copies,
-                linear_repeat_start,
-                linear_repeat_end,
-                linear_repeat_phase,
-                linear_repeat_overlap,
-                linear_repeat_shape,
-                linear_repeat_invert,
-                linear_repeat_ease_in,
-                linear_repeat_ease_out,
-                linear_repeat_random_order,
-                linear_repeat_seed
-            );
-            let base_progress = progress.x;
-            let interp_progress = progress.y;
-            
-            // Note: We don't skip copies based on interp_progress alone
-            // because alpha = mix(1.0, alpha_param, interp_progress)
-            // so even with interp_progress=0, alpha can be 1.0 if alpha_param=1.0
-            
-            // AM transform calculation:
-            // translation = position * baseProgress + offset * interpProgress
-            // scale = mix(1.0, scale_param, interpProgress)
-            // rotation = angle * interpProgress
-            // alpha = mix(1.0, alpha_param, interpProgress)  <-- NOT alpha_param * interpProgress!
-            let position_displacement = linear_repeat_position * base_progress;
-            let offset_displacement = linear_repeat_offset * interp_progress;
-            let total_displacement = position_displacement + offset_displacement;
-            
-            // Scale: mix(1.0, scale_param, interp_progress)
-            let copy_scale = 1.0 + (linear_repeat_scale - 1.0) * interp_progress;
-            
-            // Rotation: angle * interpProgress (convert to radians, negate for AM convention)
-            let copy_angle_rad = -linear_repeat_angle_deg * 3.14159265 / 180.0 * interp_progress;
-            
-            // Alpha: mix(1.0, alpha_param, interpProgress) - NOT multiplication!
-            let copy_alpha = 1.0 + (linear_repeat_alpha - 1.0) * interp_progress;
-            
-            // Skip copies with negligible alpha or scale
-            if copy_alpha < 0.001 || abs(copy_scale) < 0.001 {
+        // Effect 2 iteration count (1 if no second effect)
+        let total_copies2 = select(1, lr2_count, lr2_enabled);
+
+        // Outer loop: effect 2 copies (or single pass if no effect 2)
+        for (var j = total_copies2 - 1; j >= 0; j = j - 1) {
+            // Effect 2 transform (identity if disabled)
+            var d2 = vec2<f32>(0.0, 0.0);
+            var scale2 = 1.0;
+            var angle2_rad = 0.0;
+            var alpha2 = 1.0;
+            var interp2 = 0.0;
+            if lr2_enabled {
+                let progress2 = calc_linear_repeat_progress(
+                    j, lr2_count, lr2_start, lr2_end, lr2_phase, lr2_overlap,
+                    lr2_shape, lr2_invert, lr2_ease_in, lr2_ease_out,
+                    lr2_random_order, lr2_seed
+                );
+                let base2 = progress2.x;
+                interp2 = progress2.y;
+                d2 = lr2_position * base2 + lr2_offset * interp2;
+                scale2 = 1.0 + (lr2_scale - 1.0) * interp2;
+                angle2_rad = -lr2_angle_deg * 3.14159265 / 180.0 * interp2;
+                alpha2 = 1.0 + (lr2_alpha - 1.0) * interp2;
+            }
+            if alpha2 < 0.001 || abs(scale2) < 0.001 {
                 continue;
             }
-            
-            // Transform: inverse transform to find source position
-            var transformed_coord = pixel_coord;
-            
-            // Reverse translation (flip Y for AM coordinate conversion)
-            transformed_coord = transformed_coord - vec2<f32>(total_displacement.x, -total_displacement.y);
-            
-            // Reverse rotation around center
-            if abs(copy_angle_rad) > 0.001 {
-                let cos_a = cos(-copy_angle_rad);
-                let sin_a = sin(-copy_angle_rad);
-                transformed_coord = vec2<f32>(
-                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
-                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+
+            // Inner loop: effect 1 copies
+            let total_copies = linear_repeat_count;
+            for (var i = total_copies - 1; i >= 0; i = i - 1) {
+                let progress = calc_linear_repeat_progress(
+                    i, total_copies, linear_repeat_start, linear_repeat_end,
+                    linear_repeat_phase, linear_repeat_overlap, linear_repeat_shape,
+                    linear_repeat_invert, linear_repeat_ease_in, linear_repeat_ease_out,
+                    linear_repeat_random_order, linear_repeat_seed
                 );
-            }
-            
-            // Reverse scale around center
-            transformed_coord = transformed_coord / copy_scale;
-            
-            // Convert back to UV and check bounds
-            let half_w = orig_width * 0.5;
-            let half_h = orig_height * 0.5;
-            
-            // Check if transformed coord is within the original shape bounds
-            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
-               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
-                // Convert to UV [0,1], flip Y for correct orientation
-                let copy_uv = vec2<f32>(
-                    transformed_coord.x / orig_width + center.x,
-                    -transformed_coord.y / orig_height + center.y
-                );
-                var copy_color: vec4<f32>;
-                if blur_enabled && uniforms.blur_params.x > 0.5 {
-                    copy_color = apply_blur(copy_uv);
-                } else {
-                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                let base_progress = progress.x;
+                let interp_progress = progress.y;
+                
+                let d1 = linear_repeat_position * base_progress + linear_repeat_offset * interp_progress;
+                let copy_scale1 = 1.0 + (linear_repeat_scale - 1.0) * interp_progress;
+                let copy_angle1 = -linear_repeat_angle_deg * 3.14159265 / 180.0 * interp_progress;
+                let copy_alpha1 = 1.0 + (linear_repeat_alpha - 1.0) * interp_progress;
+                
+                let combined_alpha = copy_alpha1 * alpha2;
+                let combined_scale = copy_scale1 * scale2;
+                
+                if combined_alpha < 0.001 || abs(combined_scale) < 0.001 {
+                    continue;
                 }
                 
-                // AM color blending algorithm (computeRepeatBlend):
-                // baseColor = layer's fillColor (uniforms.color)
-                // blendColor = effect's fillColor parameter
-                // blend <= 0: use base color (no change)
-                // blend 0-1: start = base, end = mix(base, fill, blend)
-                // blend > 1: start = mix(base, fill, blend-1), end = fill
-                // Final color = mix(start, end, interpProgress)
+                // Inverse transform: first undo effect 2, then undo effect 1
+                var transformed_coord = pixel_coord;
                 
-                // Only apply color blending when blend > 0
-                if linear_repeat_blend > 0.001 {
-                    let base_rgb = uniforms.color.rgb;
-                    let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
+                // Undo effect 2 translation
+                if lr2_enabled {
+                    transformed_coord = transformed_coord - vec2<f32>(d2.x, -d2.y);
+                    // Undo effect 2 rotation
+                    if abs(angle2_rad) > 0.001 {
+                        let c2 = cos(-angle2_rad);
+                        let s2 = sin(-angle2_rad);
+                        transformed_coord = vec2<f32>(
+                            transformed_coord.x * c2 - transformed_coord.y * s2,
+                            transformed_coord.x * s2 + transformed_coord.y * c2
+                        );
+                    }
+                    // Undo effect 2 scale
+                    transformed_coord = transformed_coord / scale2;
+                }
+                
+                // Undo effect 1 translation
+                transformed_coord = transformed_coord - vec2<f32>(d1.x, -d1.y);
+                // Undo effect 1 rotation
+                if abs(copy_angle1) > 0.001 {
+                    let c1 = cos(-copy_angle1);
+                    let s1 = sin(-copy_angle1);
+                    transformed_coord = vec2<f32>(
+                        transformed_coord.x * c1 - transformed_coord.y * s1,
+                        transformed_coord.x * s1 + transformed_coord.y * c1
+                    );
+                }
+                // Undo effect 1 scale
+                transformed_coord = transformed_coord / copy_scale1;
+                
+                let half_w = orig_width * 0.5;
+                let half_h = orig_height * 0.5;
+                
+                if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
+                   transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
+                    let copy_uv = vec2<f32>(
+                        transformed_coord.x / orig_width + center.x,
+                        -transformed_coord.y / orig_height + center.y
+                    );
+                    var copy_color: vec4<f32>;
+                    if blur_enabled && uniforms.blur_params.x > 0.5 {
+                        copy_color = apply_blur(copy_uv);
+                    } else {
+                        copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                    }
                     
-                    var should_blend = true;
-                    // AM logic: if colorAltCopies && index % 2 == 1, use original fillColor (skip blend)
-                    if linear_repeat_color_alt && (i % 2 == 1) {
-                        should_blend = false;
-                    }
-                    if should_blend {
-                        var start_color = base_rgb;
-                        var end_color: vec3<f32>;
-                        
-                        if linear_repeat_blend <= 1.0 {
-                            // blend 0-1: start = base, end = mix(base, fill, blend)
-                            end_color = mix(base_rgb, fill_rgb, linear_repeat_blend);
-                        } else {
-                            // blend > 1: start = mix(base, fill, blend-1), end = fill
-                            start_color = mix(base_rgb, fill_rgb, linear_repeat_blend - 1.0);
-                            end_color = fill_rgb;
+                    // Color blending from effect 1
+                    if linear_repeat_blend > 0.001 {
+                        let base_rgb = uniforms.color.rgb;
+                        let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
+                        var should_blend = true;
+                        if linear_repeat_color_alt && (i % 2 == 1) {
+                            should_blend = false;
                         }
-                        // Final color = mix(start, end, interpProgress)
-                        let final_rgb = mix(start_color, end_color, interp_progress);
-                        // Replace color but keep alpha from texture
-                        copy_color = vec4<f32>(final_rgb, copy_color.a);
+                        if should_blend {
+                            var start_color = base_rgb;
+                            var end_color: vec3<f32>;
+                            if linear_repeat_blend <= 1.0 {
+                                end_color = mix(base_rgb, fill_rgb, linear_repeat_blend);
+                            } else {
+                                start_color = mix(base_rgb, fill_rgb, linear_repeat_blend - 1.0);
+                                end_color = fill_rgb;
+                            }
+                            let final_rgb = mix(start_color, end_color, interp_progress);
+                            copy_color = vec4<f32>(final_rgb, copy_color.a);
+                        }
                     }
+                    
+                    // Color blending from effect 2
+                    if lr2_enabled && lr2_blend > 0.001 {
+                        let base_rgb2 = copy_color.rgb;
+                        let fill_rgb2 = uniforms.linear_repeat2_fill_color.rgb;
+                        var should_blend2 = true;
+                        if lr2_color_alt && (j % 2 == 1) {
+                            should_blend2 = false;
+                        }
+                        if should_blend2 {
+                            var start_color2 = base_rgb2;
+                            var end_color2: vec3<f32>;
+                            if lr2_blend <= 1.0 {
+                                end_color2 = mix(base_rgb2, fill_rgb2, lr2_blend);
+                            } else {
+                                start_color2 = mix(base_rgb2, fill_rgb2, lr2_blend - 1.0);
+                                end_color2 = fill_rgb2;
+                            }
+                            let final_rgb2 = mix(start_color2, end_color2, interp2);
+                            copy_color = vec4<f32>(final_rgb2, copy_color.a);
+                        }
+                    }
+                    
+                    copy_color.a *= combined_alpha;
+                    accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
                 }
-                
-                // Apply copy alpha
-                copy_color.a *= copy_alpha;
-                
-                // Blend using standard alpha compositing (back to front)
-                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
             }
         }
         
         tex_color = accumulated_color;
-        // Only mark color as applied if we actually applied blend (blend > 0)
-        linear_repeat_color_applied = linear_repeat_blend > 0.001;
+        linear_repeat_color_applied = linear_repeat_blend > 0.001 || (lr2_enabled && lr2_blend > 0.001);
     } else if linear_repeat_activated && !linear_repeat_enabled {
         // Linear repeat is activated but count=0: render nothing (hide element)
         tex_color = vec4<f32>(0.0);

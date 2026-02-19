@@ -180,6 +180,8 @@ pub struct AmAnimated {
     pub linear_repeat_random_order: bool,
     /// Linear repeat effect: random seed
     pub linear_repeat_seed: f32,
+    /// Second linear repeat effect (for stacked/dual effects)
+    pub linear_repeat2: Option<Box<crate::scene::effects::LinearRepeatParams>>,
     // Swing effect (com.alightcreative.effects.swing2)
     /// Swing effect: oscillation frequency (per second)
     pub swing_freq: AmAnimatedFloat,

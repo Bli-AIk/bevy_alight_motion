@@ -905,7 +905,8 @@ fn spawn_layer_entity(
                     .linear_repeat_count
                     .value
                     .is_some_and(|v| v > 0.0)
-                || !layer.animated.linear_repeat_count.keyframes.is_empty(), // has_repeat - needs UnifiedEffectMaterial
+                || !layer.animated.linear_repeat_count.keyframes.is_empty()
+                || layer.animated.linear_repeat2.is_some(), // has_repeat - needs UnifiedEffectMaterial
             layer.animated.threshold_value.value.is_some()
                 || !layer.animated.threshold_value.keyframes.is_empty(), // has_threshold - needs UnifiedEffectMaterial
             layer.animated.grid_spacing.value.is_some()

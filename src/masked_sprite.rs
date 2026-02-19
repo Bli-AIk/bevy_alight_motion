@@ -101,6 +101,24 @@ pub struct UnifiedEffectUniform {
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
 
+    /// Second linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub linear_repeat2_params1: Vec4,
+
+    /// Second linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub linear_repeat2_params2: Vec4,
+
+    /// Second linear repeat params3: (start, end, phase, overlap)
+    pub linear_repeat2_params3: Vec4,
+
+    /// Second linear repeat params4: (ease_in, ease_out, blend, shape_invert_alt)
+    pub linear_repeat2_params4: Vec4,
+
+    /// Second linear repeat params5: (random_order, seed, 0, 0)
+    pub linear_repeat2_params5: Vec4,
+
+    /// Second linear repeat fill color (r, g, b, a)
+    pub linear_repeat2_fill_color: Vec4,
+
     /// Threshold effect params: (threshold, feather, invert, blendMode)
     pub threshold_params: Vec4,
 
@@ -354,6 +372,12 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params4: Vec4::ZERO,
             linear_repeat_params5: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            linear_repeat2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            linear_repeat2_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            linear_repeat2_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            linear_repeat2_params4: Vec4::ZERO,
+            linear_repeat2_params5: Vec4::ZERO,
+            linear_repeat2_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,
             grid_params1: Vec4::ZERO,

@@ -11,7 +11,7 @@
 mod collect;
 mod collect_types;
 mod components;
-mod effects;
+pub(crate) mod effects;
 mod helpers;
 mod spawn;
 mod spawn_visual;

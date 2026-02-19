@@ -212,7 +212,8 @@ pub(crate) fn spawn_shape(
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
     let repeat_effect = extract_repeat_effect(&shape.effects);
-    let linear_repeat_effect = extract_linear_repeat_effect(&shape.effects);
+    let (linear_repeat_effect, linear_repeat_effect2) =
+        extract_linear_repeat_effects(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
@@ -443,6 +444,7 @@ pub(crate) fn spawn_shape(
                 linear_repeat_invert: linear_repeat_effect.invert,
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat2: linear_repeat_effect2.map(Box::new),
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -513,7 +515,8 @@ pub(crate) fn spawn_null(
     let scale_assist = extract_scale_assist_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
     let repeat_effect = extract_repeat_effect(&null.effects);
-    let linear_repeat_effect = extract_linear_repeat_effect(&null.effects);
+    let (linear_repeat_effect, linear_repeat_effect2) =
+        extract_linear_repeat_effects(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
@@ -615,6 +618,7 @@ pub(crate) fn spawn_null(
                 linear_repeat_invert: linear_repeat_effect.invert,
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat2: linear_repeat_effect2.map(Box::new),
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -784,6 +788,7 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_invert: false,
                 linear_repeat_random_order: false,
                 linear_repeat_seed: 0.0,
+                linear_repeat2: None,
                 // Swing effect (defaults for embed scene)
                 swing_freq: AmAnimatedFloat::default(),
                 swing_a1: AmAnimatedFloat::default(),
