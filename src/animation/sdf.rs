@@ -48,11 +48,11 @@ pub fn update_sdf_mask_system(
     };
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
-    // Log fit_scale once per frame
+    // Log fit_scale once per frame (DEBUG level)
     static mut LOGGED_SCALE: bool = false;
     unsafe {
         if !LOGGED_SCALE {
-            bevy::log::info!(
+            bevy::log::debug!(
                 "[MASK_SYSTEM] fit_scale={}, inv_fit_scale={}",
                 fit_scale,
                 pending.inv_fit_scale

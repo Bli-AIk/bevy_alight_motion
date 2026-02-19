@@ -366,7 +366,8 @@ pub fn animate_transform_system(
 }
 
 /// DEBUG: System to print GlobalTransform for debugging parent-child transforms
-pub fn debug_global_transform_system(
+#[allow(dead_code)]
+fn debug_global_transform_system(
     playback: Res<AmPlayback>,
     query: Query<(&AmAnimated, &GlobalTransform, &Transform, &AmLayerMarker)>,
 ) {

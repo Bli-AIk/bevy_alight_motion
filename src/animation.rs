@@ -38,7 +38,7 @@ pub use sdf::{
 };
 pub use systems::{
     advance_playback_system, animate_opacity_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, debug_global_transform_system,
+    animate_text_opacity_system, animate_transform_system,
 };
 
 // Re-export interpolation functions

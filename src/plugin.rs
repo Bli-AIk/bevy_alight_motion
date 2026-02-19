@@ -28,8 +28,8 @@ use crate::animation::{
     AmPlayback, advance_playback_system, animate_opacity_system, animate_rtt_blur_system,
     animate_sdf_opacity_system, animate_sdf_scale_system, animate_size_system,
     animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
-    apply_mask_clipping_system, debug_global_transform_system, manage_layer_lifecycle_system,
-    update_sdf_mask_system, update_unified_mask_system,
+    apply_mask_clipping_system, manage_layer_lifecycle_system, update_sdf_mask_system,
+    update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -127,11 +127,7 @@ impl Plugin for AlightMotionPlugin {
             // This ensures GlobalTransform is correctly propagated before mask calculations
             .add_systems(
                 PostUpdate,
-                (
-                    update_sdf_mask_system,
-                    update_unified_mask_system,
-                    debug_global_transform_system, // DEBUG: Print GlobalTransform (after propagate)
-                )
+                (update_sdf_mask_system, update_unified_mask_system)
                     .chain()
                     .after(bevy::transform::TransformSystems::Propagate),
             );

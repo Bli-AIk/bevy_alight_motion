@@ -17,7 +17,7 @@ use crate::scene::{AmPendingLayers, AmProjectRoot};
 use crate::sdf_material::SdfMaterial;
 
 use super::components::AmPlayback;
-use super::spawn::{count_total_layers, process_pending_layers};
+use super::spawn::process_pending_layers;
 
 /// System to manage layer lifecycle based on playback time.
 /// - Creates entities when layers enter their time range

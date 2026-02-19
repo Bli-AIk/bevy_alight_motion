@@ -332,18 +332,8 @@ fn debug_sdf_shapes(
         Added<MeshMaterial2d<bevy_alight_motion::sdf_material::SdfMaterial>>,
     >,
 ) {
-    #[cfg(feature = "video-comparison")]
+    #[allow(unused_variables)]
     let _ = &query;
-
-    #[cfg(not(feature = "video-comparison"))]
-    for (name, transform, global_transform) in query.iter() {
-        let local_z = transform.translation.z;
-        let global_z = global_transform.translation().z;
-        println!(
-            "[SDF Z-DEBUG] '{}': local_z={:.6} global_z={:.6}",
-            name, local_z, global_z,
-        );
-    }
 }
 
 #[allow(unused_variables, unused_mut)]
@@ -807,17 +797,18 @@ mod video_debug_systems {
         }
 
         // Load all frames as images using relative asset paths
-        // frame_paths contain absolute paths like:
-        // /path/to/crates/bevy_alight_motion/assets/projects/_video_frames/video_name/frame_000001.png
-        // We need to extract the asset-relative path: projects/_video_frames/video_name/frame_000001.png
+        // frame_paths contain paths like:
+        // - Absolute: /path/to/crates/bevy_alight_motion/assets/debug/_video_frames/video_name/frame_000001.png
+        // - Relative: assets/projects/xxx/_video_frames/video_name/frame_000001.png
+        // We need to extract the asset-relative path (everything after "assets/")
         state.frame_handles = state
             .frame_paths
             .iter()
             .filter_map(|path| {
-                // Find "projects/_video_frames" in the path and extract everything after "assets/"
                 let path_str = path.to_string_lossy();
-                if let Some(idx) = path_str.find("projects/_video_frames") {
-                    let asset_path = &path_str[idx..];
+                // Find "assets/" and extract everything after it
+                if let Some(idx) = path_str.find("assets/") {
+                    let asset_path = &path_str[idx + "assets/".len()..];
                     Some(asset_server.load(asset_path.to_string()))
                 } else {
                     println!("[VIDEO DEBUG] Could not find asset path in: {:?}", path);

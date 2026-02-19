@@ -35,6 +35,7 @@ use super::visual::add_visual_components;
 /// Count total layers including nested ones.
 ///
 /// 计算图层总数（包括嵌套图层）。
+#[allow(dead_code)]
 pub fn count_total_layers(layers: &[PendingLayer]) -> usize {
     layers
         .iter()

@@ -940,27 +940,11 @@ pub fn animate_unified_effect_system(
             // Update threshold effect if present
             let has_threshold = animated.threshold_value.value.is_some()
                 || !animated.threshold_value.keyframes.is_empty();
-            bevy::log::info!(
-                "[Threshold Check] layer={} has_threshold={} value={:?} keyframes={}",
-                animated.layer_id,
-                has_threshold,
-                animated.threshold_value.value,
-                animated.threshold_value.keyframes.len()
-            );
             if has_threshold {
                 let threshold =
                     interpolate_float(&animated.threshold_value, layer_time).unwrap_or(0.5);
                 let feather =
                     interpolate_float(&animated.threshold_feather, layer_time).unwrap_or(0.0);
-
-                bevy::log::debug!(
-                    "[Threshold] layer={} time={:.2} threshold={:.3} feather={:.3} invert={}",
-                    animated.layer_id,
-                    layer_time,
-                    threshold,
-                    feather,
-                    animated.threshold_invert
-                );
 
                 material.set_threshold(
                     true,
@@ -1300,20 +1284,6 @@ pub fn animate_unified_effect_system(
                         phase,
                         ease_in,
                         ease_out
-                    );
-                }
-
-                // Debug blend and fill_color for frame 250 region (layer_time ~0.40)
-                if layer_time > 0.39 && layer_time < 0.42 {
-                    bevy::log::info!(
-                        "[LinearRepeat BLEND DEBUG] layer={} layer_time={:.4} blend={:.2} fill_color=({:.3},{:.3},{:.3},{:.3})",
-                        animated.layer_id,
-                        layer_time,
-                        blend,
-                        fill_color.x,
-                        fill_color.y,
-                        fill_color.z,
-                        fill_color.w
                     );
                 }
 
