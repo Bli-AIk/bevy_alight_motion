@@ -1,11 +1,11 @@
 # 线性重复 (Linear Repeat)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-18 10:29:09
+> 最近测试时间：2026-02-19 08:18:36
 
 创建沿直线排列的图层副本，支持位置、偏移、旋转、缩放、透明度和颜色混合等高级控制。
 
-**支持状态**: ❌ 不支持
+**支持状态**: ⚠️ 部分支持
 
 - **数量 (count)**: ✅ 已实现 (创建的副本数量)
 - **位置 (position)**: ✅ 已实现 (从第一个副本到最后一个副本的总位移)
@@ -28,7 +28,13 @@
 - **种子 (seed)**: ❌ 未实现 (随机种子)
 
 **关联测试文件：**
-- `effects/linear-repeat/basic.amproj` ❌
+- `effects/linear-repeat/basic.amproj` ✅
+- `effects/linear-repeat/ramdom1/1.amproj` ❌
+- `effects/linear-repeat/ramdom1/2.amproj` ✅
+- `effects/linear-repeat/ramdom1/3.amproj` ❌
+- `effects/linear-repeat/random2/1.amproj` ❌
+- `effects/linear-repeat/random2/2.amproj` ❌
+- `effects/linear-repeat/random2/3.amproj` ❌
 
 ---
 

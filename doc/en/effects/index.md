@@ -1,7 +1,7 @@
 # Effects List
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-18 10:29:09
+> Last tested: 2026-02-19 08:18:36
 
 | Effect | Status | Description |
 |--------|--------|-------------|
@@ -16,5 +16,5 @@
 | [Scale Assist](./scale-assist.md) | ✅ | Automatically adjusts layer size to fit the canvas based ... |
 | [Pixelate](./pixelate.md) | ⚠️ | Reduces image resolution to create a pixelated effect. |
 | [Repeat](./repeat.md) | ⚠️ | Creates multiple copies of the layer with cumulative offs... |
-| [Linear Repeat](./linear-repeat.md) | ❌ | Creates copies of the layer arranged in a line with advan... |
+| [Linear Repeat](./linear-repeat.md) | ⚠️ | Creates copies of the layer arranged in a line with advan... |
 | [Swing](./swing2.md) | ❌ | Makes the layer swing back and forth with specified frequ... |

@@ -1,7 +1,7 @@
 # Pixelate
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-18 10:29:09
+> Last tested: 2026-02-19 08:18:36
 
 Reduces image resolution to create a pixelated effect.
 

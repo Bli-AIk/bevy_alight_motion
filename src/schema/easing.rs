@@ -31,6 +31,17 @@ pub enum Easing {
         decay: f32,
         reserved: f32,
     },
+    /// Elastic easing with spring-like oscillation.
+    /// Parameters: step_length, attack, decay, magnitude
+    Elastic {
+        step_length: f32,
+        attack: f32,
+        decay: f32,
+        magnitude: f32,
+    },
+    /// Elastic step easing - stepped elastic effect.
+    /// Parameters: step_length, magnitude
+    ElasticStep { step_length: f32, magnitude: f32 },
 }
 
 impl Easing {
@@ -90,6 +101,26 @@ impl Easing {
                     reserved,
                 }
             }
+            Some("elastic") => {
+                let step_length = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.25);
+                let attack = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(1.0);
+                let decay = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.5);
+                let magnitude = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(1.0);
+                Easing::Elastic {
+                    step_length,
+                    attack,
+                    decay,
+                    magnitude,
+                }
+            }
+            Some("elasticStep") => {
+                let step_length = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.2);
+                let magnitude = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.5);
+                Easing::ElasticStep {
+                    step_length,
+                    magnitude,
+                }
+            }
             _ => Easing::Linear,
         }
     }
@@ -112,6 +143,16 @@ impl Easing {
                 decay,
                 reserved,
             } => am_cyclic(t, *step_length, *sharpness, *skew, *decay, *reserved),
+            Easing::Elastic {
+                step_length,
+                attack: _,
+                decay,
+                magnitude,
+            } => am_elastic(t, *step_length, *decay, *magnitude),
+            Easing::ElasticStep {
+                step_length,
+                magnitude,
+            } => am_elastic_step(t, *step_length, *magnitude),
         }
     }
 }
@@ -334,6 +375,71 @@ fn bezier_derivative(t: f32, p1: f32, p2: f32) -> f32 {
     let mt = 1.0 - t;
 
     3.0 * mt * mt * p1 + 6.0 * mt * t * (p2 - p1) + 3.0 * t2 * (1.0 - p2)
+}
+
+/// AM-style elastic easing.
+///
+/// Implementation based on AM source code (ElasticEasing.java).
+/// Parameters:
+/// - step_length: period of oscillation
+/// - decay: controls amplitude decay
+/// - magnitude: oscillation amplitude
+fn am_elastic(t: f32, step_length: f32, decay: f32, magnitude: f32) -> f32 {
+    // basicElasticEase: cos wave with decay
+    let basic_elastic_ease = |t: f32| -> f32 {
+        let safe_step = step_length.max(0.01);
+        let cos_val = (std::f32::consts::PI * t / safe_step).cos();
+        let decay_base = 1.0 - t.max(0.005);
+        let decay_power = (decay * decay * 15.0) + 1.0;
+        cos_val * decay_base.powf(decay_power).abs()
+    };
+
+    // interpolateWithoutAttack
+    let safe_step = step_length.max(0.01);
+    if t >= step_length {
+        1.0 - (basic_elastic_ease(t) * magnitude)
+    } else {
+        // Mix between cosine ramp and elastic
+        let cos_ramp = (1.0 - (std::f32::consts::PI * t / safe_step).cos()) / 2.0;
+        let elastic_at_step = basic_elastic_ease(step_length) * magnitude;
+        let target = 1.0 - elastic_at_step;
+        let elastic_now = 1.0 - (basic_elastic_ease(t) * magnitude);
+        let blend_factor = (t / safe_step).powf(3.0);
+        // mix(a, b, t) = a * (1 - t) + b * t
+        (cos_ramp * target) * (1.0 - blend_factor) + elastic_now * blend_factor
+    }
+}
+
+/// AM-style elastic step easing.
+///
+/// Implementation based on AM source code (ElasticStepEasing.java).
+fn am_elastic_step(t: f32, step_length: f32, magnitude: f32) -> f32 {
+    if t < step_length {
+        return 0.0;
+    }
+
+    // Create an elastic easing for each step
+    // ElasticEasing params derived from magnitude:
+    // step_length = 0.5 - 0.45 * magnitude
+    // attack = 1.0
+    // decay = 1.0 - magnitude * 0.5
+    // magnitude = (1.0 - magnitude) * 0.5 + 0.5
+    let elastic_step_length = 0.5 - (0.45 * magnitude);
+    let elastic_decay = 1.0 - (magnitude * 0.5);
+    let elastic_magnitude = ((1.0 - magnitude) * 0.5) + 0.5;
+
+    // Compute step-relative position
+    let step_progress = (t % step_length) / step_length;
+    let step_base = t - (t % step_length);
+
+    // Interpolate elastic within step and offset by step position
+    let elastic_val = am_elastic(
+        step_progress,
+        elastic_step_length,
+        elastic_decay,
+        elastic_magnitude,
+    );
+    step_base + (step_length * (elastic_val - 1.0))
 }
 
 #[cfg(test)]

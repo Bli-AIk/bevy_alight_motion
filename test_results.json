@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T01:25:17.705533+08:00",
+  "timestamp": "2026-02-19T08:18:36.766977+08:00",
   "summary": {
     "passed": 43,
     "skipped": 3,
-    "failed": 38
+    "failed": 40
   },
   "results": {
     "basic/bezier/bezier": {
@@ -60,6 +60,10 @@
     "basic/mask/square-ex": {
       "status": "pass"
     },
+    "basic/muti-shape/muti-shape": {
+      "status": "fail",
+      "avg_similarity": 0.7557
+    },
     "basic/pivot/pivot": {
       "status": "pass"
     },
@@ -71,7 +75,7 @@
     },
     "basic/tween/multi": {
       "status": "fail",
-      "avg_similarity": 0.7798
+      "avg_similarity": 0.9575
     },
     "complex/examples/2_ex": {
       "status": "fail",
@@ -151,11 +155,11 @@
     },
     "effects/linear-repeat/ramdom1/3": {
       "status": "fail",
-      "avg_similarity": 0.7473
+      "avg_similarity": 0.8682
     },
     "effects/linear-repeat/random2/1": {
       "status": "fail",
-      "avg_similarity": 0.9443
+      "avg_similarity": 0.7628
     },
     "effects/linear-repeat/random2/2": {
       "status": "fail",
@@ -171,6 +175,10 @@
     },
     "effects/pixelate/basic": {
       "status": "skip"
+    },
+    "effects/radial-repeat/basic": {
+      "status": "fail",
+      "avg_similarity": 0.5317
     },
     "effects/repeat/basic": {
       "status": "pass"

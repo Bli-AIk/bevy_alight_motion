@@ -15,7 +15,7 @@ export const zhHansEffects = {
     { text: '<span style="color:#22c55e">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> 像素化 (Pixelate)', link: '/zh-hans/effects/pixelate' },
     { text: '<span style="color:#eab308">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' },
-    { text: '<span style="color:#ef4444">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
+    { text: '<span style="color:#eab308">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
     { text: '<span style="color:#ef4444">●</span> 摇摆 (Swing)', link: '/zh-hans/effects/swing2' }
   ]
 };
@@ -34,7 +34,7 @@ export const enEffects = {
     { text: '<span style="color:#22c55e">●</span> Scale Assist', link: '/en/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> Pixelate', link: '/en/effects/pixelate' },
     { text: '<span style="color:#eab308">●</span> Repeat', link: '/en/effects/repeat' },
-    { text: '<span style="color:#ef4444">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
+    { text: '<span style="color:#eab308">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
     { text: '<span style="color:#ef4444">●</span> Swing', link: '/en/effects/swing2' }
   ]
 };

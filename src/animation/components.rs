@@ -64,6 +64,8 @@ pub struct AmAnimated {
     pub canvas_height: f32,
     /// Whether this layer has a parent (uses local coordinates).
     pub has_parent: bool,
+    /// Parent layer's ID (0 if no parent). Used for AM-style transform computation.
+    pub parent_layer_id: u64,
     /// Effect position X offset (from transform2 effect).
     pub effect_pos_x: AmAnimatedFloat,
     /// Effect position Y offset (from transform2 effect).

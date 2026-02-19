@@ -110,11 +110,6 @@ min_frame_similarity = 0.40
 [overrides."effects/gaussian-blur/basic"]
 skip = true
 
-
-# Pixelate - not implemented
-[overrides."effects/pixelate/basic"]
-skip = true
-
 # =============================================================================
 # Complex tests
 # 复杂测试
@@ -123,13 +118,9 @@ skip = true
 # Complex examples with speed=0.7 need frame offset for alignment
 # 速度=0.7的复杂示例需要帧偏移来对齐
 [overrides."complex/examples/2_ex2"]
-avg_threshold = 0.95
-frame_threshold = 0.95
 frame_offset = 0.45
 
 [overrides."complex/examples/2_ex1"]
-avg_threshold = 0.95
-frame_threshold = 0.95
 frame_offset = 0.45
 
 # complex/examples/2_ex3 needs stricter threshold to ensure stretch formula is correct

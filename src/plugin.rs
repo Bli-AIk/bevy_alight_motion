@@ -117,7 +117,6 @@ impl Plugin for AlightMotionPlugin {
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers
                     hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
-                    debug_global_transform_system, // DEBUG: Print GlobalTransform
                                                    // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
                                                    // crate::effects::sync_rtt_camera_position_system,
                 )
@@ -128,7 +127,11 @@ impl Plugin for AlightMotionPlugin {
             // This ensures GlobalTransform is correctly propagated before mask calculations
             .add_systems(
                 PostUpdate,
-                (update_sdf_mask_system, update_unified_mask_system)
+                (
+                    update_sdf_mask_system,
+                    update_unified_mask_system,
+                    debug_global_transform_system, // DEBUG: Print GlobalTransform (after propagate)
+                )
                     .chain()
                     .after(bevy::transform::TransformSystems::Propagate),
             );

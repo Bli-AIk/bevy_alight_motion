@@ -269,6 +269,28 @@ pub(crate) fn process_pending_layers(
         count_spawn_depth(layer_id, &pending.layers, &spawning_ids, &mut visited)
     });
 
+    // DEBUG: Log spawn order for 空 layers
+    if to_spawn
+        .iter()
+        .any(|&idx| pending.layers[idx].label.contains("空"))
+    {
+        bevy::log::info!("[SPAWN_ORDER] Spawning {} layers:", to_spawn.len());
+        for &idx in &to_spawn {
+            let layer = &pending.layers[idx];
+            let depth = {
+                let mut visited = std::collections::HashSet::new();
+                count_spawn_depth(layer.id, &pending.layers, &spawning_ids, &mut visited)
+            };
+            bevy::log::info!(
+                "[SPAWN_ORDER]   depth={}: '{}' (id={}, parent={})",
+                depth,
+                layer.label,
+                layer.id,
+                layer.parent
+            );
+        }
+    }
+
     // Spawn new entities in dependency order
     for idx in to_spawn {
         let layer = &pending.layers[idx];

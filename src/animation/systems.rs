@@ -338,6 +338,18 @@ pub fn animate_transform_system(
 
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
+        // DEBUG: Log rotation for 空2 layers to verify correct value
+        if _marker.label.contains("空 2") {
+            bevy::log::info!(
+                "[DEBUG_ROT] '{}' (id={}): base_rotation={:.1}°, final_rotation={:.1}°, transform.rotation={:?}",
+                _marker.label,
+                animated.layer_id,
+                base_rotation,
+                final_rotation,
+                transform.rotation
+            );
+        }
+
         // Interpolate scale
         // Skip for SDF shapes (handled by animate_sdf_scale)
         // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
@@ -356,21 +368,45 @@ pub fn animate_transform_system(
 /// DEBUG: System to print GlobalTransform for debugging parent-child transforms
 pub fn debug_global_transform_system(
     playback: Res<AmPlayback>,
-    query: Query<(&AmAnimated, &GlobalTransform, &AmLayerMarker)>,
+    query: Query<(&AmAnimated, &GlobalTransform, &Transform, &AmLayerMarker)>,
 ) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static PRINTED: AtomicBool = AtomicBool::new(false);
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static LAST_FRAME: AtomicU32 = AtomicU32::new(999);
 
-    // Only print once when time is around frame 10 (to ensure transforms propagated)
+    // Print on frame 0, 10, 30 (30 is t=0.5s where animation should be stable)
     let frame = (playback.current_time_ms / 16.667).round() as u32;
-    if frame == 10 && !PRINTED.swap(true, Ordering::Relaxed) {
-        for (animated, global_transform, marker) in query.iter() {
-            let (_scale, rot, trans) = global_transform.to_scale_rotation_translation();
-            let rot_deg = rot.to_euler(EulerRot::ZYX).0.to_degrees();
+    let last = LAST_FRAME.load(Ordering::Relaxed);
+    if (frame == 0 || frame == 10 || frame == 30) && frame != last {
+        LAST_FRAME.store(frame, Ordering::Relaxed);
+        info!(
+            "[DEBUG_GLOBAL] === Frame {} (t={:.1}ms) ===",
+            frame, playback.current_time_ms
+        );
+        for (animated, global_transform, local_transform, marker) in query.iter() {
+            let (g_scale, g_rot, g_trans) = global_transform.to_scale_rotation_translation();
+            let g_rot_deg = g_rot.to_euler(EulerRot::ZYX).0.to_degrees();
+            let (l_scale, l_rot, l_trans) = (
+                local_transform.scale,
+                local_transform.rotation,
+                local_transform.translation,
+            );
+            let l_rot_deg = l_rot.to_euler(EulerRot::ZYX).0.to_degrees();
             if marker.label.contains("空") || marker.label.contains("Image_1699715690143") {
                 info!(
-                    "[DEBUG_GLOBAL] '{}' (id={}): global_pos=({:.1},{:.1}), rot={:.1}°, has_parent={}",
-                    marker.label, animated.layer_id, trans.x, trans.y, rot_deg, animated.has_parent
+                    "[DEBUG_GLOBAL] '{}' (id={}, parent={}): LOCAL pos=({:.1},{:.1}), rot={:.1}°, scale=({:.2},{:.2}) | GLOBAL pos=({:.1},{:.1}), rot={:.1}°, scale=({:.2},{:.2})",
+                    marker.label,
+                    animated.layer_id,
+                    animated.parent_layer_id,
+                    l_trans.x,
+                    l_trans.y,
+                    l_rot_deg,
+                    l_scale.x,
+                    l_scale.y,
+                    g_trans.x,
+                    g_trans.y,
+                    g_rot_deg,
+                    g_scale.x,
+                    g_scale.y
                 );
             }
         }
