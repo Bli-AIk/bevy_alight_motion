@@ -1058,7 +1058,9 @@ mod video_comparison_systems {
                 avg_threshold: self.avg_threshold.unwrap_or(base.avg_threshold),
                 frame_threshold: self.frame_threshold.unwrap_or(base.frame_threshold),
                 frame_offset: self.frame_offset.unwrap_or(base.frame_offset),
-                min_frame_similarity: self.min_frame_similarity.unwrap_or(base.min_frame_similarity),
+                min_frame_similarity: self
+                    .min_frame_similarity
+                    .unwrap_or(base.min_frame_similarity),
                 max_failed_rate: self.max_failed_rate.unwrap_or(base.max_failed_rate),
             }
         }
@@ -1234,7 +1236,7 @@ mod video_comparison_systems {
             // Start a wait period - lifecycle needs to run with the new time first,
             // then we need to wait for the scene to be rendered.
             playback.force_stopped = true;
-            state.render_wait_frames = 2; // Wait 2 frames: 1 for lifecycle to run, 1 for render
+            state.render_wait_frames = 2; // Wait for mesh commands to be applied
             debug!(
                 "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames=2",
                 time_ms

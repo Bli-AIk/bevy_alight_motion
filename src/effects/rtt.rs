@@ -931,8 +931,7 @@ pub fn apply_embed_bounds_clipping_system(
         // Extract embed's world position, scale, and rotation from GlobalTransform
         // Note: GlobalTransform already includes fit_scale from parent chain,
         // so we DON'T need to multiply by fit_scale again!
-        let (embed_scale, embed_rotation, embed_pos) =
-            embed_gt.to_scale_rotation_translation();
+        let (embed_scale, embed_rotation, embed_pos) = embed_gt.to_scale_rotation_translation();
 
         // Calculate embed bounds in world coordinates
         // bounds.width/height are in project coordinates (e.g., 1440x1080)

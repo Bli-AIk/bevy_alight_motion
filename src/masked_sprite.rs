@@ -119,6 +119,24 @@ pub struct UnifiedEffectUniform {
     /// Second linear repeat fill color (r, g, b, a)
     pub linear_repeat2_fill_color: Vec4,
 
+    /// Radial repeat params1: (count, radius, orientation_deg, startAngle_deg)
+    pub radial_repeat_params1: Vec4,
+
+    /// Radial repeat params2: (sweep_deg, baseScale, angle_deg, scale)
+    pub radial_repeat_params2: Vec4,
+
+    /// Radial repeat params3: (alpha, offset_x, offset_y, blend)
+    pub radial_repeat_params3: Vec4,
+
+    /// Radial repeat params4: (start, end, phase, overlap)
+    pub radial_repeat_params4: Vec4,
+
+    /// Radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed)
+    pub radial_repeat_params5: Vec4,
+
+    /// Radial repeat fill color (r, g, b, a)
+    pub radial_repeat_fill_color: Vec4,
+
     /// Threshold effect params: (threshold, feather, invert, blendMode)
     pub threshold_params: Vec4,
 
@@ -384,6 +402,12 @@ impl Default for UnifiedEffectUniform {
             linear_repeat2_params4: Vec4::ZERO,
             linear_repeat2_params5: Vec4::ZERO,
             linear_repeat2_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            radial_repeat_params1: Vec4::ZERO,
+            radial_repeat_params2: Vec4::new(360.0, 1.0, 0.0, 1.0),
+            radial_repeat_params3: Vec4::new(1.0, 0.0, 0.0, 0.0),
+            radial_repeat_params4: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            radial_repeat_params5: Vec4::ZERO,
+            radial_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,
             grid_params1: Vec4::ZERO,

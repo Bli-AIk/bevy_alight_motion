@@ -686,11 +686,7 @@ pub fn animate_am_camera_system(
         let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate camera location in AM coords
-        let default_loc = [
-            cam.scene_width / 2.0,
-            cam.scene_height / 2.0,
-            cam.base_z,
-        ];
+        let default_loc = [cam.scene_width / 2.0, cam.scene_height / 2.0, cam.base_z];
         let loc = interpolate_vec3(&animated.location, layer_time).unwrap_or(default_loc);
 
         // Interpolate rotation (degrees, clockwise positive in AM)
@@ -710,8 +706,8 @@ pub fn animate_am_camera_system(
         let current_fov_rad = fov_deg.to_radians();
         let z_abs = loc[2].abs();
         let base_z_abs = cam.base_z.abs();
-        let zoom = (z_abs * (current_fov_rad / 2.0).tan())
-            / (base_z_abs * (base_fov_rad / 2.0).tan());
+        let zoom =
+            (z_abs * (current_fov_rad / 2.0).tan()) / (base_z_abs * (base_fov_rad / 2.0).tan());
 
         // Get fit_scale from pending layers
         let fit_scale = pending_query

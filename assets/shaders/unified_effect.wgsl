@@ -55,6 +55,13 @@ struct UnifiedEffectUniform {
     linear_repeat2_params4: vec4<f32>,
     linear_repeat2_params5: vec4<f32>,
     linear_repeat2_fill_color: vec4<f32>,
+    // Radial repeat effect
+    radial_repeat_params1: vec4<f32>,  // (count, radius, orientation_deg, startAngle_deg)
+    radial_repeat_params2: vec4<f32>,  // (sweep_deg, baseScale, angle_deg, scale)
+    radial_repeat_params3: vec4<f32>,  // (alpha, offset_x, offset_y, blend)
+    radial_repeat_params4: vec4<f32>,  // (start, end, phase, overlap)
+    radial_repeat_params5: vec4<f32>,  // (ease_in, ease_out, shape_invert_alt, seed+random)
+    radial_repeat_fill_color: vec4<f32>,
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
     // Grid effect
@@ -100,6 +107,22 @@ fn srgb_to_linear(color: vec3<f32>) -> vec3<f32> {
         srgb_to_linear_channel(color.r),
         srgb_to_linear_channel(color.g),
         srgb_to_linear_channel(color.b)
+    );
+}
+
+fn linear_to_srgb_channel(c: f32) -> f32 {
+    if c <= 0.0031308 {
+        return c * 12.92;
+    } else {
+        return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+    }
+}
+
+fn linear_to_srgb(color: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        linear_to_srgb_channel(color.r),
+        linear_to_srgb_channel(color.g),
+        linear_to_srgb_channel(color.b)
     );
 }
 
@@ -335,8 +358,7 @@ fn apply_blur(uv: vec2<f32>) -> vec4<f32> {
     }
 }
 
-// Get palette color by index (0-7)
-// Palette colors are stored as sRGB values, so convert to linear for correct comparison
+// Get palette color by index (0-7), colors are stored in sRGB space
 fn get_palette_color(index: i32) -> vec4<f32> {
     var col: vec4<f32>;
     switch(index) {
@@ -350,56 +372,44 @@ fn get_palette_color(index: i32) -> vec4<f32> {
         case 7: { col = uniforms.palette_color8; }
         default: { col = uniforms.palette_color1; }
     }
-    // Convert from sRGB to linear color space
-    return vec4<f32>(srgb_to_linear(col.rgb), col.a);
+    // Return as-is (sRGB); palette matching happens in sRGB space
+    return col;
 }
 
-// Calculate color distance with bias toward brighter palette colors
-// This helps match AM's palette mapping behavior where brighter colors
-// are preferred for pixels with moderate luminance
+// Calculate color distance (Euclidean, matching AM's length())
 fn color_distance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     let diff = c1 - c2;
     return dot(diff, diff);
 }
 
 // Apply palette map effect - quantize color to nearest palette color
+// AM processes entirely in sRGB space, so we convert linear→sRGB before matching
 fn apply_palette_map(input_color: vec4<f32>) -> vec4<f32> {
     let palette_count = i32(uniforms.palette_flags.y);
-    let shades_enabled = uniforms.palette_flags.z > 0.5;
     
-    // Extract RGB from input (keep alpha separate)
-    let input_rgb = input_color.rgb;
+    // Convert input from linear to sRGB for matching (AM works in sRGB)
+    let a = input_color.a;
+    let srgb_rgb = linear_to_srgb(input_color.rgb);
     
-    // Find nearest palette color
+    // Find nearest palette color in sRGB space
     var min_dist = 1000000.0;
     var nearest_index = 0;
     
     for (var i = 0; i < palette_count; i = i + 1) {
         let palette_rgb = get_palette_color(i).rgb;
-        let dist = color_distance(input_rgb, palette_rgb);
+        let dist = color_distance(srgb_rgb, palette_rgb);
         if dist < min_dist {
             min_dist = dist;
             nearest_index = i;
         }
     }
     
-    let nearest_color = get_palette_color(nearest_index);
+    let best_color = get_palette_color(nearest_index).rgb;
     
-    // If shades enabled, blend based on luminance difference
-    var result_rgb: vec3<f32>;
-    if shades_enabled {
-        // Calculate luminance of input and nearest palette color
-        let input_lum = dot(input_rgb, vec3<f32>(0.299, 0.587, 0.114));
-        let palette_lum = dot(nearest_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
-        
-        // Adjust palette color brightness to match input luminance
-        let lum_ratio = input_lum / max(palette_lum, 0.001);
-        result_rgb = nearest_color.rgb * clamp(lum_ratio, 0.0, 2.0);
-    } else {
-        result_rgb = nearest_color.rgb;
-    }
-    
-    return vec4<f32>(result_rgb, input_color.a);
+    // AM output: mix(texColor, vec4(bestColor, 1.0) * a, alpha)
+    // bestColor is in sRGB, convert to linear for GPU pipeline
+    let result_linear = srgb_to_linear(best_color);
+    return vec4<f32>(result_linear, a);
 }
 
 // Apply replace color effect - replaces old_color with new_color based on threshold and feather
@@ -768,6 +778,35 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let lr2_seed = uniforms.linear_repeat2_params5.y;
     let lr2_enabled = lr2_count > 0;
     
+    // Extract radial repeat effect params
+    let rr_raw_count = uniforms.radial_repeat_params1.x;
+    let rr_count = max(i32(round(rr_raw_count)), 0);
+    let rr_count_f = max(abs(rr_raw_count), 0.001); // raw float for position formula (AM uses unrounded)
+    let rr_enabled = rr_raw_count != 0.0; // -1 means "effect present, 0 copies"
+    let rr_radius = uniforms.radial_repeat_params1.y;
+    let rr_orientation_deg = uniforms.radial_repeat_params1.z;
+    let rr_start_angle_deg = uniforms.radial_repeat_params1.w;
+    let rr_sweep_deg = uniforms.radial_repeat_params2.x;
+    let rr_base_scale = uniforms.radial_repeat_params2.y;
+    let rr_angle_deg = uniforms.radial_repeat_params2.z;
+    let rr_scale = uniforms.radial_repeat_params2.w;
+    let rr_alpha = uniforms.radial_repeat_params3.x;
+    let rr_offset = vec2<f32>(uniforms.radial_repeat_params3.y, uniforms.radial_repeat_params3.z);
+    let rr_blend = uniforms.radial_repeat_params3.w;
+    let rr_start = uniforms.radial_repeat_params4.x;
+    let rr_end = uniforms.radial_repeat_params4.y;
+    let rr_phase = uniforms.radial_repeat_params4.z;
+    let rr_overlap = uniforms.radial_repeat_params4.w;
+    let rr_ease_in = uniforms.radial_repeat_params5.x;
+    let rr_ease_out = uniforms.radial_repeat_params5.y;
+    let rr_sia = i32(uniforms.radial_repeat_params5.z);
+    let rr_shape = rr_sia / 100;
+    let rr_invert = (rr_sia / 10) % 10 == 1;
+    let rr_color_alt = rr_sia % 10 == 1;
+    let rr_seed_raw = uniforms.radial_repeat_params5.w;
+    let rr_random_order = fract(rr_seed_raw) > 0.3;
+    let rr_seed = floor(rr_seed_raw);
+
     // Extract pixelate effect params
     let pixelate_enabled = uniforms.pixelate_flags.x > 0.5;
     let pixelate_screen_space = uniforms.pixelate_flags.y > 0.5;
@@ -779,6 +818,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let pixelate_saturation = uniforms.pixelate_params2.z;
     
     var sample_uv = mesh.uv;
+    
+    // Discard fragments in expansion area when no expansion-capable effect is active
+    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled
+        && (mesh.uv.x < 0.0 || mesh.uv.x > 1.0 || mesh.uv.y < 0.0 || mesh.uv.y > 1.0) {
+        discard;
+    }
     
     // Apply stretch segment effect if enabled (before blur)
     if stretch_enabled {
@@ -793,51 +838,43 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
-    // Apply pixelate effect if enabled
-    // Pixelate snaps UV coordinates to a grid, making each "pixel" sample from the center
+    // Apply pixelate effect (AM pixelate2 algorithm)
+    // Grid is centered on layer (non-screenSpace) or screen (screenSpace)
+    var pixelate_dist_center = 0.0;
     if pixelate_enabled {
-        let orig_width = uniforms.original_size.x;
-        let orig_height = uniforms.original_size.y;
-        
-        // Calculate effective pixel size with stretch
-        let pixel_size_x = pixelate_size * pixelate_stretch.x;
-        let pixel_size_y = pixelate_size * pixelate_stretch.y;
-        
-        // Convert UV to pixel coordinates
-        var pixel_coord: vec2<f32>;
-        if pixelate_screen_space {
-            pixel_coord = mesh.world_position.xy;
-        } else {
-            pixel_coord = sample_uv * vec2<f32>(orig_width, orig_height);
-        }
-        
-        // Apply angle rotation if needed
-        if abs(pixelate_angle) > 0.001 {
-            let center = vec2<f32>(orig_width * 0.5, orig_height * 0.5);
-            pixel_coord = pixel_coord - center;
-            pixel_coord = rotate_vec(pixel_coord, -pixelate_angle);
-            pixel_coord = pixel_coord + center;
-        }
-        
-        // Snap to pixel grid - floor to get cell, then add 0.5 to sample center
-        let cell_x = floor(pixel_coord.x / pixel_size_x);
-        let cell_y = floor(pixel_coord.y / pixel_size_y);
-        var snapped_coord = vec2<f32>(
-            (cell_x + 0.5) * pixel_size_x,
-            (cell_y + 0.5) * pixel_size_y
+        let display_size = vec2<f32>(uniforms.original_size.x, uniforms.original_size.y);
+        let size_vec = vec2<f32>(pixelate_size * pixelate_stretch.x, pixelate_size * pixelate_stretch.y);
+
+        // Position in display pixels relative to layer center (matches AM's st = acScreenNorm - acLayerCenterNorm)
+        var dp = (sample_uv - vec2<f32>(0.5)) * display_size;
+
+        // Rotate
+        let cos_a = cos(pixelate_angle);
+        let sin_a = sin(pixelate_angle);
+        var st = vec2<f32>(cos_a * dp.x - sin_a * dp.y, sin_a * dp.x + cos_a * dp.y);
+
+        // Find position within pixel cell (true modulo for negative values)
+        var pos_in_pixel = st - floor(st / size_vec) * size_vec;
+
+        // Center, rotate back, un-center (AM's posInPixel adjustment)
+        pos_in_pixel -= size_vec * 0.5;
+        pos_in_pixel = vec2<f32>(
+            cos_a * pos_in_pixel.x + sin_a * pos_in_pixel.y,
+            -sin_a * pos_in_pixel.x + cos_a * pos_in_pixel.y
         );
-        
-        // Reverse angle rotation
-        if abs(pixelate_angle) > 0.001 {
-            let center = vec2<f32>(orig_width * 0.5, orig_height * 0.5);
-            snapped_coord = snapped_coord - center;
-            snapped_coord = rotate_vec(snapped_coord, pixelate_angle);
-            snapped_coord = snapped_coord + center;
+        pos_in_pixel += size_vec * 0.5;
+
+        // Distance from pixel center (for vignette)
+        pixelate_dist_center = smoothstep(0.0, 1.0, length((pos_in_pixel / size_vec) - vec2<f32>(0.5)));
+
+        // Snap to pixel center
+        let snapped_dp = dp - pos_in_pixel + size_vec * 0.5;
+        sample_uv = snapped_dp / display_size + vec2<f32>(0.5);
+        // Discard if the grid cell center maps outside the texture
+        // This matches AM's behavior: only cells with centers inside the layer render
+        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+            discard;
         }
-        
-        // Convert back to UV
-        sample_uv = snapped_coord / vec2<f32>(orig_width, orig_height);
-        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
     // Sample texture - with or without blur, with or without repeat
@@ -845,73 +882,59 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     var linear_repeat_color_applied = false; // Flag to skip final uniforms.color multiplication
     
     if repeat_enabled {
-        // Repeat effect: render multiple copies from back to front
-        // Each copy has cumulative offset, rotation, scale, and alpha
+        // Repeat effect: render multiple copies composited in paint order.
+        // AM iterates copies 0..count-1, each painted on canvas (later = on top).
+        // pixel_coord is Y-down (UV convention: UV.y=0 at top, UV.y=1 at bottom).
+        // AM offset/angle are also Y-down, so no Y-flip needed.
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
         
-        // Convert UV to pixel space for transformation
         let center = vec2<f32>(0.5, 0.5);
         let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
         
-        // Accumulate color from all copies (back to front)
         var accumulated_color = vec4<f32>(0.0);
         
-        // Start from the farthest copy (highest index) and work backwards
-        // AM's count means total number of copies, so render copies 0 to count-1
-        // When count=7, render copies 0,1,2,3,4,5,6 (7 total)
-        for (var i = repeat_count - 1; i >= 0; i = i - 1) {
+        for (var i = 0; i < repeat_count; i = i + 1) {
             let fi = f32(i);
             
-            // Calculate cumulative transform for this copy
-            let cumulative_offset = repeat_offset * fi;
-            // Negate angle because AM uses opposite rotation direction
-            let cumulative_angle = -repeat_angle * fi;
-            let cumulative_scale = pow(repeat_scale, fi);
-            let cumulative_alpha = pow(repeat_alpha, fi);
-            
-            // Skip copies with negligible alpha
-            if cumulative_alpha < 0.001 {
+            // AM alpha: linear decay  alpha_i = 1.0 - i * (1.0 - repeat_alpha)
+            let cumulative_alpha = 1.0 - fi * (1.0 - repeat_alpha);
+            if cumulative_alpha <= 0.0 {
                 continue;
             }
             
-            // Transform: first un-offset, then un-rotate, then un-scale
-            // This gives us the source UV for this copy
-            // For copy at offset O, a pixel at position P was sourced from P - O
-            var transformed_coord = pixel_coord;
+            let cumulative_offset = repeat_offset * fi;
+            let cumulative_angle = repeat_angle * fi;
+            let cumulative_scale = pow(repeat_scale, fi);
             
-            // Reverse offset (subtract the offset to find source position)
-            // Y flipped because AM uses Y-down, Bevy uses Y-up
-            transformed_coord = transformed_coord - vec2<f32>(cumulative_offset.x, -cumulative_offset.y);
+            // Inverse transform: un-offset → un-rotate → un-scale
+            var tc = pixel_coord;
             
-            // Reverse rotation around center
+            // 1. Reverse offset (both pixel_coord and offset are Y-down)
+            tc = tc - cumulative_offset;
+            
+            // 2. Reverse rotation (inverse = rotate by -angle)
             if abs(cumulative_angle) > 0.001 {
                 let cos_a = cos(-cumulative_angle);
                 let sin_a = sin(-cumulative_angle);
-                transformed_coord = vec2<f32>(
-                    transformed_coord.x * cos_a - transformed_coord.y * sin_a,
-                    transformed_coord.x * sin_a + transformed_coord.y * cos_a
+                tc = vec2<f32>(
+                    tc.x * cos_a - tc.y * sin_a,
+                    tc.x * sin_a + tc.y * cos_a
                 );
             }
             
-            // Reverse scale around center
+            // 3. Reverse scale
             if abs(cumulative_scale) > 0.001 {
-                transformed_coord = transformed_coord / cumulative_scale;
+                tc = tc / cumulative_scale;
             }
             
-            // Convert back to UV and check bounds
-            // For shapes, valid source region is the original texture area [-half_w, half_w] x [-half_h, half_h]
             let half_w = orig_width * 0.5;
             let half_h = orig_height * 0.5;
             
-            // Check if transformed coord is within the original shape bounds
-            if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
-               transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
-                // Convert to UV [0,1], flip Y for correct orientation
-                let copy_uv = vec2<f32>(
-                    transformed_coord.x / orig_width + center.x,
-                    -transformed_coord.y / orig_height + center.y
-                );
+            if tc.x >= -half_w && tc.x <= half_w &&
+               tc.y >= -half_h && tc.y <= half_h {
+                // Convert back to UV (same Y-down convention)
+                let copy_uv = tc / vec2<f32>(orig_width, orig_height) + center;
                 var copy_color: vec4<f32>;
                 if blur_enabled && uniforms.blur_params.x > 0.5 {
                     copy_color = apply_blur(copy_uv);
@@ -919,11 +942,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     copy_color = textureSample(base_texture, base_sampler, copy_uv);
                 }
                 
-                // Apply cumulative alpha
                 copy_color.a *= cumulative_alpha;
-                
-                // Blend using standard alpha compositing (back to front)
-                // result = src + dst * (1 - src.alpha)
                 accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
             }
         }
@@ -931,23 +950,20 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = accumulated_color;
     } else if linear_repeat_enabled {
         // Linear repeat effect: render multiple copies arranged in a line
-        // Supports dual stacked effects via nested loops
+        // pixel_coord is Y-down (matching AM convention), no Y-flips needed.
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
         
-        // Convert UV to pixel space for transformation
         let center = vec2<f32>(0.5, 0.5);
         let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
         
-        // Accumulate color from all copies (back to front)
         var accumulated_color = vec4<f32>(0.0);
         
         // Effect 2 iteration count (1 if no second effect)
         let total_copies2 = select(1, lr2_count, lr2_enabled);
 
-        // Outer loop: effect 2 copies (or single pass if no effect 2)
-        for (var j = total_copies2 - 1; j >= 0; j = j - 1) {
-            // Effect 2 transform (identity if disabled)
+        // Iterate forward to match AM's paint order (later copies on top)
+        for (var j = 0; j < total_copies2; j = j + 1) {
             var d2 = vec2<f32>(0.0, 0.0);
             var scale2 = 1.0;
             var angle2_rad = 0.0;
@@ -963,16 +979,15 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 interp2 = progress2.y;
                 d2 = lr2_position * base2 + lr2_offset * interp2;
                 scale2 = 1.0 + (lr2_scale - 1.0) * interp2;
-                angle2_rad = -lr2_angle_deg * 3.14159265 / 180.0 * interp2;
+                angle2_rad = lr2_angle_deg * 3.14159265 / 180.0 * interp2;
                 alpha2 = 1.0 + (lr2_alpha - 1.0) * interp2;
             }
             if alpha2 < 0.001 || abs(scale2) < 0.001 {
                 continue;
             }
 
-            // Inner loop: effect 1 copies
             let total_copies = linear_repeat_count;
-            for (var i = total_copies - 1; i >= 0; i = i - 1) {
+            for (var i = 0; i < total_copies; i = i + 1) {
                 let progress = calc_linear_repeat_progress(
                     i, total_copies, linear_repeat_start, linear_repeat_end,
                     linear_repeat_phase, linear_repeat_overlap, linear_repeat_shape,
@@ -984,7 +999,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 
                 let d1 = linear_repeat_position * base_progress + linear_repeat_offset * interp_progress;
                 let copy_scale1 = 1.0 + (linear_repeat_scale - 1.0) * interp_progress;
-                let copy_angle1 = -linear_repeat_angle_deg * 3.14159265 / 180.0 * interp_progress;
+                let copy_angle1 = linear_repeat_angle_deg * 3.14159265 / 180.0 * interp_progress;
                 let copy_alpha1 = 1.0 + (linear_repeat_alpha - 1.0) * interp_progress;
                 
                 let combined_alpha = copy_alpha1 * alpha2;
@@ -994,48 +1009,41 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     continue;
                 }
                 
-                // Inverse transform: first undo effect 2, then undo effect 1
-                var transformed_coord = pixel_coord;
+                // Inverse transform: undo effect2, then undo effect1
+                var tc = pixel_coord;
                 
-                // Undo effect 2 translation
+                // Undo effect 2
                 if lr2_enabled {
-                    transformed_coord = transformed_coord - vec2<f32>(d2.x, -d2.y);
-                    // Undo effect 2 rotation
+                    tc = tc - d2;
                     if abs(angle2_rad) > 0.001 {
                         let c2 = cos(-angle2_rad);
                         let s2 = sin(-angle2_rad);
-                        transformed_coord = vec2<f32>(
-                            transformed_coord.x * c2 - transformed_coord.y * s2,
-                            transformed_coord.x * s2 + transformed_coord.y * c2
+                        tc = vec2<f32>(
+                            tc.x * c2 - tc.y * s2,
+                            tc.x * s2 + tc.y * c2
                         );
                     }
-                    // Undo effect 2 scale
-                    transformed_coord = transformed_coord / scale2;
+                    tc = tc / scale2;
                 }
                 
-                // Undo effect 1 translation
-                transformed_coord = transformed_coord - vec2<f32>(d1.x, -d1.y);
-                // Undo effect 1 rotation
+                // Undo effect 1
+                tc = tc - d1;
                 if abs(copy_angle1) > 0.001 {
                     let c1 = cos(-copy_angle1);
                     let s1 = sin(-copy_angle1);
-                    transformed_coord = vec2<f32>(
-                        transformed_coord.x * c1 - transformed_coord.y * s1,
-                        transformed_coord.x * s1 + transformed_coord.y * c1
+                    tc = vec2<f32>(
+                        tc.x * c1 - tc.y * s1,
+                        tc.x * s1 + tc.y * c1
                     );
                 }
-                // Undo effect 1 scale
-                transformed_coord = transformed_coord / copy_scale1;
+                tc = tc / copy_scale1;
                 
                 let half_w = orig_width * 0.5;
                 let half_h = orig_height * 0.5;
                 
-                if transformed_coord.x >= -half_w && transformed_coord.x <= half_w &&
-                   transformed_coord.y >= -half_h && transformed_coord.y <= half_h {
-                    let copy_uv = vec2<f32>(
-                        transformed_coord.x / orig_width + center.x,
-                        -transformed_coord.y / orig_height + center.y
-                    );
+                if tc.x >= -half_w && tc.x <= half_w &&
+                   tc.y >= -half_h && tc.y <= half_h {
+                    let copy_uv = tc / vec2<f32>(orig_width, orig_height) + center;
                     var copy_color: vec4<f32>;
                     if blur_enabled && uniforms.blur_params.x > 0.5 {
                         copy_color = apply_blur(copy_uv);
@@ -1095,6 +1103,116 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         
         tex_color = accumulated_color;
         linear_repeat_color_applied = linear_repeat_blend > 0.001 || (lr2_enabled && lr2_blend > 0.001);
+    } else if rr_enabled {
+        // Radial repeat: AM's transform chain (TransformKt.transform on Canvas):
+        //   translate(L) translate(P) rotate(rotation) scale(S) translate(-P) rotate(orient) scale(size)
+        // Copy fields: L=elem.L+offset*interp+(0,r), P=(0,-r), rotation=spread,
+        //   S=(mix,mix), orient=orient_param+angle*interp, size=baseScale
+        // Forward: pixel = offset*interp + R(spread)*mix*(R(orbit)*baseScale*p + (0,radius))
+        // Inverse: p = R(-orbit)*(R(-spread)*(pixel-offset*interp)/mix - (0,radius)) / baseScale
+        let orig_width = uniforms.original_size.x;
+        let orig_height = uniforms.original_size.y;
+        let center = vec2<f32>(0.5, 0.5);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        let deg2rad = 3.14159265 / 180.0;
+        let gamma = vec3<f32>(2.2);
+        let inv_gamma = vec3<f32>(1.0 / 2.2);
+        
+        // AM composites in sRGB space; accumulate in sRGB premultiplied alpha
+        var acc_srgb = vec4<f32>(0.0);
+        
+        for (var i = 0; i < rr_count; i = i + 1) {
+            let progress = calc_linear_repeat_progress(
+                i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
+                rr_shape, rr_invert, rr_ease_in, rr_ease_out,
+                rr_random_order, rr_seed
+            );
+            let base_progress = progress.x;
+            let interp_progress = progress.y;
+            
+            // Spread angle (rotation field — rotates around pivot)
+            var spread: f32;
+            if rr_count > 1 {
+                spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
+                    + (rr_sweep_deg - rr_sweep_deg / f32(rr_count)) * base_progress) * deg2rad;
+            } else {
+                spread = rr_start_angle_deg * deg2rad;
+            }
+            // Orbit angle (orientation field — local rotation)
+            let orbit = (rr_orientation_deg + rr_angle_deg * interp_progress) * deg2rad;
+            
+            let mix_scale = 1.0 + (rr_scale - 1.0) * interp_progress;
+            let copy_alpha = 1.0 + (rr_alpha - 1.0) * interp_progress;
+            
+            if copy_alpha < 0.001 || abs(mix_scale) < 0.001 || abs(rr_base_scale) < 0.001 {
+                continue;
+            }
+            
+            // Inverse transform (6 steps)
+            var tc = pixel_coord - rr_offset * interp_progress;
+            let cos_s = cos(-spread);
+            let sin_s = sin(-spread);
+            tc = vec2<f32>(tc.x * cos_s - tc.y * sin_s, tc.x * sin_s + tc.y * cos_s);
+            tc = tc / mix_scale;
+            tc = tc - vec2<f32>(0.0, rr_radius);
+            let cos_o = cos(-orbit);
+            let sin_o = sin(-orbit);
+            tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
+            tc = tc / rr_base_scale;
+            
+            let half_w = orig_width * 0.5;
+            let half_h = orig_height * 0.5;
+            
+            if tc.x >= -half_w && tc.x <= half_w &&
+               tc.y >= -half_h && tc.y <= half_h {
+                let copy_uv = tc / vec2<f32>(orig_width, orig_height) + center;
+                var copy_color: vec4<f32>;
+                if blur_enabled && uniforms.blur_params.x > 0.5 {
+                    copy_color = apply_blur(copy_uv);
+                } else {
+                    copy_color = textureSample(base_texture, base_sampler, copy_uv);
+                }
+                
+                // Convert to sRGB for AM-compatible compositing
+                var copy_srgb = pow(copy_color.rgb, inv_gamma);
+                
+                // Color blending in sRGB (AM blends in sRGB space)
+                if rr_blend > 0.001 {
+                    let base_srgb = pow(uniforms.color.rgb, inv_gamma);
+                    let fill_srgb = pow(uniforms.radial_repeat_fill_color.rgb, inv_gamma);
+                    var should_blend = true;
+                    if rr_color_alt && (i % 2 == 1) {
+                        should_blend = false;
+                    }
+                    if should_blend {
+                        var start_color = base_srgb;
+                        var end_color: vec3<f32>;
+                        if rr_blend <= 1.0 {
+                            end_color = mix(base_srgb, fill_srgb, rr_blend);
+                        } else {
+                            start_color = mix(base_srgb, fill_srgb, rr_blend - 1.0);
+                            end_color = fill_srgb;
+                        }
+                        copy_srgb = mix(start_color, end_color, interp_progress);
+                    }
+                }
+                
+                // Composite in sRGB premultiplied alpha (matches AM's Canvas)
+                let final_a = copy_color.a * copy_alpha;
+                let premult = vec4<f32>(copy_srgb * final_a, final_a);
+                acc_srgb = premult + acc_srgb * (1.0 - final_a);
+            }
+        }
+        
+        // Convert premultiplied sRGB to linear for output.
+        // Output as opaque since AM composites with black bg in sRGB space,
+        // and Bevy's linear-space blend would give different results.
+        if acc_srgb.a > 0.001 {
+            tex_color = vec4<f32>(pow(acc_srgb.rgb, gamma), 1.0);
+        } else {
+            tex_color = vec4<f32>(0.0);
+        }
+        linear_repeat_color_applied = rr_blend > 0.001;
     } else if linear_repeat_activated && !linear_repeat_enabled {
         // Linear repeat is activated but count=0: render nothing (hide element)
         tex_color = vec4<f32>(0.0);
@@ -1109,69 +1227,65 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
     }
     
-    // Apply pixelate post-effects if enabled (vignette, saturation, threshold)
+    // Apply pixelate post-effects (AM algorithm: threshold on alpha, saturation boost, cubic vignette)
     if pixelate_enabled {
-        // Vignette: darken edges based on distance from center
-        if pixelate_vignette > 0.001 {
-            let center = vec2<f32>(0.5, 0.5);
-            let dist = length(sample_uv - center) * 2.0; // 0 at center, ~1.4 at corners
-            let vignette_factor = 1.0 - pixelate_vignette * dist * dist;
-            tex_color.r *= max(vignette_factor, 0.0);
-            tex_color.g *= max(vignette_factor, 0.0);
-            tex_color.b *= max(vignette_factor, 0.0);
+        // Threshold: compare against alpha (not luminance like standalone threshold effect)
+        let tclamp = step(pixelate_threshold, tex_color.a);
+
+        // Saturation: boost colors by dividing by alpha ratio
+        if tex_color.a > 0.0 && pixelate_saturation > 0.0 {
+            tex_color /= tex_color.a / max(tex_color.a, pixelate_saturation);
         }
-        
-        // Saturation adjustment
-        if abs(pixelate_saturation - 1.0) > 0.001 {
-            let luminance = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
-            let gray = vec3<f32>(luminance, luminance, luminance);
-            tex_color = vec4<f32>(mix(gray, tex_color.rgb, pixelate_saturation), tex_color.a);
-        }
-        
-        // Threshold/posterization: quantize color levels
-        // In AM, threshold=0.5 means convert to pure black/white (binarize)
-        // threshold is a binarization cutoff, not a posterization level count
-        if pixelate_threshold > 0.001 && pixelate_threshold < 1.0 {
-            // Calculate luminance for thresholding
-            let lum = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
-            // Binarize: if luminance >= threshold, output white; else black
-            let bw = select(0.0, 1.0, lum >= pixelate_threshold);
-            tex_color = vec4<f32>(bw, bw, bw, tex_color.a);
-        }
+
+        // Apply threshold clamp
+        tex_color = tex_color * tclamp;
+
+        // Vignette: cubic darkening, only when size >= 1.5
+        let vignette_gate = step(1.5, pixelate_size);
+        tex_color = mix(
+            tex_color,
+            vec4<f32>(
+                min(tex_color.rgb * tex_color.rgb * tex_color.rgb, vec3<f32>(0.9)),
+                tex_color.a * tex_color.a * tex_color.a
+            ),
+            vignette_gate * pixelate_vignette * pixelate_dist_center
+        );
     }
     
     // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
-    // IMPORTANT: Threshold must be applied BEFORE replace_color to match AM's effect order
-    // AM applies effects in the order they appear in the XML, and threshold typically comes
-    // before replacecolor when both are present on the same layer
+    // AM works in sRGB space, so we convert linear→sRGB before processing
     let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
     if threshold_enabled {
         let threshold_value = uniforms.threshold_params.x;
         let threshold_feather = uniforms.threshold_params.y;
         let threshold_invert = uniforms.threshold_params.z > 0.5;
+        let threshold_blend_mode = i32(uniforms.threshold_params.w);
         
-        // Calculate luminance using standard weights
-        let luminance = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+        // Convert to sRGB space to match AM's processing
+        let srgb_rgb = linear_to_srgb(tex_color.rgb);
+        let luminance = dot(srgb_rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
         
-        // Apply threshold with optional feather
-        var bw_value: f32;
-        if threshold_feather > 0.001 {
-            // Smooth transition using smoothstep
-            bw_value = smoothstep(threshold_value - threshold_feather * 0.5, 
-                                  threshold_value + threshold_feather * 0.5, 
-                                  luminance);
-        } else {
-            // Sharp threshold
-            bw_value = select(0.0, 1.0, luminance >= threshold_value);
-        }
+        // AM threshold formula
+        let f = max(min(threshold_feather / 4.0, abs(0.5 - threshold_value)), 0.00196);
+        let t = ((threshold_value - 0.5) * (1.003 + f * 2.0)) + 0.5;
+        var p = smoothstep(t - f, t + f, luminance);
         
-        // Apply invert if enabled
         if threshold_invert {
-            bw_value = 1.0 - bw_value;
+            p = 1.0 - p;
         }
         
-        // Set RGB to the threshold result, preserve alpha
-        tex_color = vec4<f32>(bw_value, bw_value, bw_value, tex_color.a);
+        // Apply blend mode in sRGB space, then convert back to linear
+        var result_rgb: vec3<f32>;
+        if threshold_blend_mode == 1 {
+            result_rgb = srgb_to_linear(srgb_rgb * p);
+        } else if threshold_blend_mode == 2 {
+            result_rgb = srgb_to_linear(1.0 - ((1.0 - srgb_rgb) * (1.0 - p)));
+        } else {
+            // Normal: output is just B&W (0 or 1), same in both spaces
+            result_rgb = vec3<f32>(p, p, p);
+        }
+        
+        tex_color = vec4<f32>(result_rgb, tex_color.a);
     }
     
     // Apply replace color effect if enabled (AFTER threshold)
@@ -1187,7 +1301,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         tex_color = mix(tex_color, quantized_color, palette_alpha);
     }
     
-    // Apply grid effect if enabled
+    // Apply grid effect if enabled (AM grid2 algorithm)
     let grid_enabled = uniforms.grid_flags.x > 0.5;
     if grid_enabled {
         let grid_punchout = uniforms.grid_flags.y > 0.5;
@@ -1196,42 +1310,55 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let grid_spacing = uniforms.grid_params1.z;
         let grid_width = uniforms.grid_params1.w;
         let grid_smoothing = uniforms.grid_params2.x;
-        let grid_color = uniforms.grid_color;
-        
-        // Calculate grid coordinates
-        var grid_uv: vec2<f32>;
+        let grid_color_val = uniforms.grid_color;
+
+        // AM coordinate setup: normalized + aspect-corrected + centered
+        var st: vec2<f32>;
         if grid_screen_space {
-            grid_uv = mesh.world_position.xy + grid_pos;
+            st = mesh.uv;
+            // TODO: proper screen-space needs screen size uniform
+            st.x = st.x * uniforms.original_size.x / uniforms.original_size.y;
+            st.y = 1.0 - st.y;
         } else {
-            grid_uv = mesh.uv * uniforms.original_size.xy + grid_pos;
+            st = mesh.uv;  // acLayerNorm equivalent [0,1]
+            st.x = st.x * uniforms.original_size.x / uniforms.original_size.y;
+            st.y = 1.0 - st.y;
         }
-        
-        // Calculate grid pattern
-        let cell_size = grid_spacing * 100.0; // Scale spacing to reasonable pixel values
-        let line_width = grid_width * cell_size * 0.5;
-        
-        // Calculate distance to nearest grid line
-        let grid_coord = fract(grid_uv / cell_size) * cell_size;
-        let dist_x = min(grid_coord.x, cell_size - grid_coord.x);
-        let dist_y = min(grid_coord.y, cell_size - grid_coord.y);
-        let dist_to_line = min(dist_x, dist_y);
-        
-        // Calculate line intensity with optional smoothing
-        var line_intensity: f32;
-        if grid_smoothing > 0.001 {
-            let smooth_width = line_width * grid_smoothing;
-            line_intensity = 1.0 - smoothstep(line_width - smooth_width, line_width, dist_to_line);
-        } else {
-            line_intensity = select(0.0, 1.0, dist_to_line < line_width);
-        }
-        
-        // Apply grid effect
+        st -= vec2<f32>(0.5);
+        st -= grid_pos / 1000.0;
+
+        // GLSL mod: x - y * floor(x/y) — always positive result
+        let px_cell = (st.x - grid_spacing * floor(st.x / grid_spacing)) / grid_spacing;
+        let py_cell = (st.y - grid_spacing * floor(st.y / grid_spacing)) / grid_spacing;
+
+        // Triangle wave: 1 at edges (grid lines), 0 at cell center
+        var px = 1.0 - abs(px_cell - 0.5) * 2.0;
+        var py = 1.0 - abs(py_cell - 0.5) * 2.0;
+
+        // Width relative to spacing
+        let w = clamp(grid_width / grid_spacing, 0.0, 1.0);
+        var s = w * grid_smoothing;
+
+        // AM adaptive smoothing for thin lines (inverted smoothstep — WGSL-compatible form)
+        s = mix(s, max(s, 0.5 * w), 1.0 - smoothstep(0.01, 0.012, grid_width));
+        s = mix(s, max(s, w), 1.0 - smoothstep(0.005, 0.006, grid_width));
+
+        // Grid line intensity
+        px = smoothstep(1.0 - w - s, 1.0 - w + s, px);
+        py = smoothstep(1.0 - w - s, 1.0 - w + s, py);
+        let p = max(px, py);
+
+        // AM-matching composite (blend in sRGB space to match AM's non-linear pipeline)
+        // grid_color_val is in sRGB [0,1], convert tex_color to sRGB for blending
+        let tex_srgb = linear_to_srgb(tex_color.rgb);
+        let c = grid_color_val * p;
         if grid_punchout {
-            // Punchout mode: cut out grid lines (make transparent)
-            tex_color.a *= (1.0 - line_intensity);
+            tex_color = vec4<f32>(tex_color.rgb * (1.0 - p), tex_color.a * (1.0 - p));
         } else {
-            // Overlay mode: blend grid color with texture
-            tex_color = mix(tex_color, grid_color, line_intensity * grid_color.a);
+            let grid_alpha = c.a * tex_color.a;
+            let blended_srgb = c.rgb * grid_alpha + tex_srgb * (1.0 - grid_alpha);
+            let blended_a = c.a * grid_alpha + tex_color.a * (1.0 - grid_alpha);
+            tex_color = vec4<f32>(srgb_to_linear(blended_srgb), blended_a);
         }
     }
     

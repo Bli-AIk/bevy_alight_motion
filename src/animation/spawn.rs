@@ -926,11 +926,45 @@ fn spawn_layer_entity(
                     .value
                     .is_some_and(|v| v > 0.0)
                 || !layer.animated.linear_repeat_count.keyframes.is_empty()
-                || layer.animated.linear_repeat2.is_some(), // has_repeat - needs UnifiedEffectMaterial
+                || layer.animated.linear_repeat2.is_some()
+                || layer
+                    .animated
+                    .radial_repeat_count
+                    .value
+                    .is_some_and(|v| v > 0.0)
+                || !layer.animated.radial_repeat_count.keyframes.is_empty(), // has_repeat - needs UnifiedEffectMaterial
             layer.animated.threshold_value.value.is_some()
                 || !layer.animated.threshold_value.keyframes.is_empty(), // has_threshold - needs UnifiedEffectMaterial
             layer.animated.grid_spacing.value.is_some()
                 || !layer.animated.grid_spacing.keyframes.is_empty(), // has_grid - needs UnifiedEffectMaterial
+            layer.animated.pixelate_size.value.is_some()
+                || !layer.animated.pixelate_size.keyframes.is_empty(), // has_pixelate - needs UnifiedEffectMaterial
+            {
+                // Calculate max pixelate expansion for mesh sizing
+                // Edge blocks extend up to half a grid cell beyond the content area
+                let mut max_size = layer.animated.pixelate_size.value.unwrap_or(0.0);
+                for kf in &layer.animated.pixelate_size.keyframes {
+                    if let Ok(v) = kf.value.parse::<f32>() {
+                        max_size = max_size.max(v);
+                    }
+                }
+                let mut max_stretch = 1.0f32;
+                if let Some(v) = layer.animated.pixelate_stretch.value {
+                    max_stretch = max_stretch.max(v[0].abs()).max(v[1].abs());
+                }
+                for kf in &layer.animated.pixelate_stretch.keyframes {
+                    let parts: Vec<&str> = kf.value.split(',').collect();
+                    if parts.len() >= 2 {
+                        if let (Ok(x), Ok(y)) = (
+                            parts[0].trim().parse::<f32>(),
+                            parts[1].trim().parse::<f32>(),
+                        ) {
+                            max_stretch = max_stretch.max(x.abs()).max(y.abs());
+                        }
+                    }
+                }
+                max_size * max_stretch / 2.0
+            }, // pixelate_expansion
             global_time as u64,    // current playback time for mask initialization
             initial_replace_color, // replace color params
         );

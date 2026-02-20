@@ -128,79 +128,78 @@ pub fn update_unified_mask_system(
                             if let Ok((mask_global_transform, animated, spec)) =
                                 mask_layer_query.get(mask_entity)
                             {
-                                let (base_width, base_height, pivot_x, pivot_y, fill_alpha, initial_sw, stroke_dir) =
-                                    match spec {
-                                        crate::scene::AmLayerSpec::SdfShape {
-                                            width,
-                                            height,
-                                            pivot_x,
-                                            pivot_y,
-                                            fill_color,
-                                            no_fill,
-                                            stroke_width,
-                                            stroke_direction,
-                                            ..
-                                        } => {
-                                            let fa = if *no_fill {
-                                                0.0
-                                            } else if let Some(fc) = fill_color {
-                                                if fc.value.len() >= 3 && fc.value.starts_with('#')
-                                                {
-                                                    let alpha_hex = &fc.value[1..3];
-                                                    u8::from_str_radix(alpha_hex, 16)
-                                                        .unwrap_or(255)
-                                                        as f32
-                                                        / 255.0
-                                                } else {
-                                                    1.0
-                                                }
+                                let (
+                                    base_width,
+                                    base_height,
+                                    pivot_x,
+                                    pivot_y,
+                                    fill_alpha,
+                                    initial_sw,
+                                    stroke_dir,
+                                ) = match spec {
+                                    crate::scene::AmLayerSpec::SdfShape {
+                                        width,
+                                        height,
+                                        pivot_x,
+                                        pivot_y,
+                                        fill_color,
+                                        no_fill,
+                                        stroke_width,
+                                        stroke_direction,
+                                        ..
+                                    } => {
+                                        let fa = if *no_fill {
+                                            0.0
+                                        } else if let Some(fc) = fill_color {
+                                            if fc.value.len() >= 3 && fc.value.starts_with('#') {
+                                                let alpha_hex = &fc.value[1..3];
+                                                u8::from_str_radix(alpha_hex, 16).unwrap_or(255)
+                                                    as f32
+                                                    / 255.0
                                             } else {
                                                 1.0
-                                            };
-                                            (
-                                                *width,
-                                                *height,
-                                                *pivot_x,
-                                                *pivot_y,
-                                                fa,
-                                                *stroke_width,
-                                                stroke_direction.as_str(),
-                                            )
-                                        }
-                                        crate::scene::AmLayerSpec::SpriteShape {
-                                            width, height, ..
-                                        } => (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered"),
-                                        _ => (
-                                            mask.half_size.x * 2.0 / mask.scale.x,
-                                            mask.half_size.y * 2.0 / mask.scale.y,
-                                            0.0,
-                                            0.0,
-                                            1.0,
-                                            0.0,
-                                            "centered",
-                                        ),
-                                    };
+                                            }
+                                        } else {
+                                            1.0
+                                        };
+                                        (
+                                            *width,
+                                            *height,
+                                            *pivot_x,
+                                            *pivot_y,
+                                            fa,
+                                            *stroke_width,
+                                            stroke_direction.as_str(),
+                                        )
+                                    }
+                                    crate::scene::AmLayerSpec::SpriteShape {
+                                        width,
+                                        height,
+                                        ..
+                                    } => (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered"),
+                                    _ => (
+                                        mask.half_size.x * 2.0 / mask.scale.x,
+                                        mask.half_size.y * 2.0 / mask.scale.y,
+                                        0.0,
+                                        0.0,
+                                        1.0,
+                                        0.0,
+                                        "centered",
+                                    ),
+                                };
 
-                                let local_time =
-                                    animated.calc_local_time(playback.current_time_ms);
+                                let local_time = animated.calc_local_time(playback.current_time_ms);
                                 let layer_time = animated.calc_layer_time(local_time);
 
-                                let mask_opacity = interpolate_float(
-                                    &animated.opacity,
-                                    layer_time,
-                                )
-                                .unwrap_or(1.0);
-                                let current_sw = interpolate_float(
-                                    &animated.stroke_width,
-                                    layer_time,
-                                )
-                                .unwrap_or(initial_sw);
+                                let mask_opacity =
+                                    interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+                                let current_sw =
+                                    interpolate_float(&animated.stroke_width, layer_time)
+                                        .unwrap_or(initial_sw);
 
-                                let rotation_deg = interpolate_float(
-                                    &animated.rotation,
-                                    layer_time,
-                                )
-                                .unwrap_or(0.0);
+                                let rotation_deg =
+                                    interpolate_float(&animated.rotation, layer_time)
+                                        .unwrap_or(0.0);
                                 let rotation_rad = (-rotation_deg).to_radians();
 
                                 let [scale_x, scale_y] =
@@ -209,10 +208,8 @@ pub fn update_unified_mask_system(
 
                                 let mask_translation = mask_global_transform.translation();
 
-                                let scaled_offset_x =
-                                    -pivot_x * scale_x * entity_global_scale.x;
-                                let scaled_offset_y =
-                                    pivot_y * scale_y * entity_global_scale.y;
+                                let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
+                                let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
 
                                 let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
                                     - scaled_offset_y * rotation_rad.sin();
@@ -281,12 +278,8 @@ pub fn update_unified_mask_system(
                     mask1_half_size.x,
                     mask1_half_size.y,
                 );
-                material.uniform_data.mask_blend = bevy::math::Vec4::new(
-                    mask1_blend.x,
-                    mask1_blend.y,
-                    mask1_blend.z,
-                    0.0,
-                );
+                material.uniform_data.mask_blend =
+                    bevy::math::Vec4::new(mask1_blend.x, mask1_blend.y, mask1_blend.z, 0.0);
                 material.uniform_data.mask2_flags.y = mask1_rotation;
 
                 // Second mask (if present)
@@ -307,12 +300,8 @@ pub fn update_unified_mask_system(
                         mask2_half_size.x,
                         mask2_half_size.y,
                     );
-                    material.uniform_data.mask2_blend = bevy::math::Vec4::new(
-                        mask2_blend.x,
-                        mask2_blend.y,
-                        mask2_blend.z,
-                        0.0,
-                    );
+                    material.uniform_data.mask2_blend =
+                        bevy::math::Vec4::new(mask2_blend.x, mask2_blend.y, mask2_blend.z, 0.0);
                     material.uniform_data.mask2_flags.z = mask2_rotation;
                 } else {
                     material.uniform_data.mask2_flags.x = 0.0;

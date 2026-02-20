@@ -1,4 +1,4 @@
-//! Repeat and Linear Repeat effect parameter extraction.
+//! Repeat, Linear Repeat, and Radial Repeat effect parameter extraction.
 
 use bevy::prelude::*;
 
@@ -342,4 +342,224 @@ pub(crate) fn extract_linear_repeat_effects(
     };
 
     (first, second)
+}
+
+/// Radial Repeat effect parameters.
+/// Arranges copies in a circular pattern around a pivot point.
+#[derive(Debug, Clone, Default)]
+pub struct RadialRepeatParams {
+    pub count: AmAnimatedFloat,
+    pub radius: AmAnimatedFloat,
+    pub orientation: AmAnimatedFloat,
+    pub start_angle: AmAnimatedFloat,
+    pub sweep: AmAnimatedFloat,
+    pub base_scale: AmAnimatedFloat,
+    pub offset: AmAnimatedVec2,
+    pub angle: AmAnimatedFloat,
+    pub scale: AmAnimatedFloat,
+    pub alpha: AmAnimatedFloat,
+    pub fill_color: AmAnimatedColor,
+    pub blend: AmAnimatedFloat,
+    pub color_alt_copies: bool,
+    pub start: AmAnimatedFloat,
+    pub end: AmAnimatedFloat,
+    pub phase: AmAnimatedFloat,
+    pub ease_in: AmAnimatedFloat,
+    pub ease_out: AmAnimatedFloat,
+    pub overlap: AmAnimatedFloat,
+    pub shape: i32,
+    pub invert: bool,
+    pub random_order: bool,
+    pub seed: f32,
+}
+
+/// Extract radial repeat effect parameters from effects.
+pub(crate) fn extract_radial_repeat_effect(effects: &[AmEffect]) -> RadialRepeatParams {
+    let mut params = RadialRepeatParams::default();
+    params.base_scale.value = Some(1.0);
+    params.scale.value = Some(1.0);
+    params.alpha.value = Some(1.0);
+    params.end.value = Some(1.0);
+    params.sweep.value = Some(360.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.repeat.radial" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "count" => {
+                        if !prop.keyframes.is_empty() {
+                            params.count.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.count.value = Some(v);
+                        }
+                    }
+                    "radius" => {
+                        if !prop.keyframes.is_empty() {
+                            params.radius.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.radius.value = Some(v);
+                        }
+                    }
+                    "orientation" => {
+                        if !prop.keyframes.is_empty() {
+                            params.orientation.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.orientation.value = Some(v);
+                        }
+                    }
+                    "startAngle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.start_angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.start_angle.value = Some(v);
+                        }
+                    }
+                    "sweep" => {
+                        if !prop.keyframes.is_empty() {
+                            params.sweep.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.sweep.value = Some(v);
+                        }
+                    }
+                    "baseScale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.base_scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.base_scale.value = Some(v);
+                        }
+                    }
+                    "offset" => {
+                        if !prop.keyframes.is_empty() {
+                            params.offset.keyframes = prop.keyframes.clone();
+                        } else {
+                            let parts: Vec<&str> = prop.value.split(',').collect();
+                            if parts.len() == 2
+                                && let Ok(x) = parts[0].trim().parse::<f32>()
+                                && let Ok(y) = parts[1].trim().parse::<f32>()
+                            {
+                                params.offset.value = Some([x, y]);
+                            }
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "scale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.scale.value = Some(v);
+                        }
+                    }
+                    "alpha" => {
+                        if !prop.keyframes.is_empty() {
+                            params.alpha.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.alpha.value = Some(v);
+                        }
+                    }
+                    "fillColor" => {
+                        if !prop.keyframes.is_empty() {
+                            params.fill_color.keyframes = prop
+                                .keyframes
+                                .iter()
+                                .filter_map(|kf| {
+                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
+                                        Some(crate::schema::AmKeyframe {
+                                            time: kf.time,
+                                            value: format!(
+                                                "{},{},{},{}",
+                                                color[0], color[1], color[2], color[3]
+                                            ),
+                                            easing: kf.easing.clone(),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                            params.fill_color.value =
+                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
+                        }
+                    }
+                    "blend" => {
+                        if !prop.keyframes.is_empty() {
+                            params.blend.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.blend.value = Some(v);
+                        }
+                    }
+                    "colorAltCopies" => {
+                        params.color_alt_copies = prop.value == "true";
+                    }
+                    "start" => {
+                        if !prop.keyframes.is_empty() {
+                            params.start.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.start.value = Some(v);
+                        }
+                    }
+                    "end" => {
+                        if !prop.keyframes.is_empty() {
+                            params.end.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.end.value = Some(v);
+                        }
+                    }
+                    "phase" => {
+                        if !prop.keyframes.is_empty() {
+                            params.phase.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.phase.value = Some(v);
+                        }
+                    }
+                    "easeIn" => {
+                        if !prop.keyframes.is_empty() {
+                            params.ease_in.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.ease_in.value = Some(v);
+                        }
+                    }
+                    "easeOut" => {
+                        if !prop.keyframes.is_empty() {
+                            params.ease_out.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.ease_out.value = Some(v);
+                        }
+                    }
+                    "overlap" => {
+                        if !prop.keyframes.is_empty() {
+                            params.overlap.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.overlap.value = Some(v);
+                        }
+                    }
+                    "shape" => {
+                        if let Ok(v) = prop.value.parse::<i32>() {
+                            params.shape = v;
+                        }
+                    }
+                    "invert" => {
+                        params.invert = prop.value == "true";
+                    }
+                    "randomOrder" => {
+                        params.random_order = prop.value == "true";
+                    }
+                    "seed" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.seed = v;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
 }

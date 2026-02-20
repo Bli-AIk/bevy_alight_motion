@@ -147,17 +147,40 @@ pub fn spawn_sdf_visual(
         SdfShapeType::Triangle | SdfShapeType::Quad | SdfShapeType::Penta | SdfShapeType::Path => {
             // Max extent from all points
             let mut max_r: f32 = 0.0;
-            let pts = [shape_extra.x, shape_extra.y, shape_extra.z, shape_extra.w,
-                       shape_extra2.x, shape_extra2.y, shape_extra2.z, shape_extra2.w,
-                       shape_extra3.x, shape_extra3.y, shape_extra3.z, shape_extra3.w,
-                       shape_extra4.x, shape_extra4.y, shape_extra4.z, shape_extra4.w,
-                       shape_extra5.x, shape_extra5.y, shape_extra5.z, shape_extra5.w,
-                       shape_extra6.x, shape_extra6.y, shape_extra6.z, shape_extra6.w,
-                       shape_extra7.x, shape_extra7.y];
+            let pts = [
+                shape_extra.x,
+                shape_extra.y,
+                shape_extra.z,
+                shape_extra.w,
+                shape_extra2.x,
+                shape_extra2.y,
+                shape_extra2.z,
+                shape_extra2.w,
+                shape_extra3.x,
+                shape_extra3.y,
+                shape_extra3.z,
+                shape_extra3.w,
+                shape_extra4.x,
+                shape_extra4.y,
+                shape_extra4.z,
+                shape_extra4.w,
+                shape_extra5.x,
+                shape_extra5.y,
+                shape_extra5.z,
+                shape_extra5.w,
+                shape_extra6.x,
+                shape_extra6.y,
+                shape_extra6.z,
+                shape_extra6.w,
+                shape_extra7.x,
+                shape_extra7.y,
+            ];
             let mut i = 0;
             while i < 26 {
-                let r = (pts[i] * pts[i] + pts[i+1] * pts[i+1]).sqrt();
-                if r > max_r { max_r = r; }
+                let r = (pts[i] * pts[i] + pts[i + 1] * pts[i + 1]).sqrt();
+                if r > max_r {
+                    max_r = r;
+                }
                 i += 2;
             }
             max_r + 10.0
@@ -165,8 +188,9 @@ pub fn spawn_sdf_visual(
         _ => target_half_width.max(target_half_height),
     };
     let max_scale_factor = 100.0;
-    let frame_half =
-        (shape_extent.max(target_half_width.max(target_half_height)) * max_scale_factor) + stroke_width * 2.0;
+    let frame_half = (shape_extent.max(target_half_width.max(target_half_height))
+        * max_scale_factor)
+        + stroke_width * 2.0;
     let frame_size = frame_half * 2.0;
 
     // Calculate initial translation based on pivot and initial scale (with Y-flip for Bevy)
@@ -185,10 +209,20 @@ pub fn spawn_sdf_visual(
 
     bevy::log::warn!(
         "[SDF_SPAWN] '{}': shape_type={:?}({}), half=({:.1},{:.1}), frame_half={:.1}, extra=({:.1},{:.1},{:.1},{:.1}), fill=({:.3},{:.3},{:.3},{:.3})",
-        marker.label, sdf_shape_type, shape_type_f32,
-        target_half_width, target_half_height, frame_half,
-        shape_extra.x, shape_extra.y, shape_extra.z, shape_extra.w,
-        fill_linear.red, fill_linear.green, fill_linear.blue, fill_linear.alpha
+        marker.label,
+        sdf_shape_type,
+        shape_type_f32,
+        target_half_width,
+        target_half_height,
+        frame_half,
+        shape_extra.x,
+        shape_extra.y,
+        shape_extra.z,
+        shape_extra.w,
+        fill_linear.red,
+        fill_linear.green,
+        fill_linear.blue,
+        fill_linear.alpha
     );
 
     // Create SDF material - with or without mask

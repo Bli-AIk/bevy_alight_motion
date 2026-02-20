@@ -214,6 +214,7 @@ pub(crate) fn spawn_shape(
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&shape.effects);
+    let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let spin_rpm = extract_spin_rpm(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
@@ -332,22 +333,36 @@ pub(crate) fn spawn_shape(
         let border2_color_value = border2
             .and_then(|b| b.color.as_ref().map(|c| c.value.clone()))
             .unwrap_or_default();
-        let border2_direction = border2
-            .map(|b| b.direction.clone())
-            .unwrap_or_default();
+        let border2_direction = border2.map(|b| b.direction.clone()).unwrap_or_default();
 
         if border2_width > 0.0 {
             bevy::log::debug!(
                 "[SPAWN] '{}': border2 width={}, color='{}', direction='{}', borders_count={}",
-                shape.label, border2_width, border2_color_value, border2_direction, shape.borders.len()
+                shape.label,
+                border2_width,
+                border2_color_value,
+                border2_direction,
+                shape.borders.len()
             );
         }
 
         // Extract shape-specific extra parameters
-        let (shape_extra, shape_extra2, shape_extra3, shape_extra4, shape_extra5, shape_extra6, shape_extra7) = super::collect_types::extract_shape_extras(
+        let (
+            shape_extra,
+            shape_extra2,
+            shape_extra3,
+            shape_extra4,
+            shape_extra5,
+            shape_extra6,
+            shape_extra7,
+        ) = super::collect_types::extract_shape_extras(
             &shape.shape_type,
             &shape.properties,
-            shape.path_element.as_ref().map(|p| p.d.as_str()).unwrap_or(""),
+            shape
+                .path_element
+                .as_ref()
+                .map(|p| p.d.as_str())
+                .unwrap_or(""),
         );
 
         // Extract gradient data
@@ -502,6 +517,30 @@ pub(crate) fn spawn_shape(
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
                 linear_repeat2: linear_repeat_effect2.map(Box::new),
+                // Radial repeat effect
+                radial_repeat_count: radial_repeat_effect.count.clone(),
+                radial_repeat_radius: radial_repeat_effect.radius.clone(),
+                radial_repeat_orientation: radial_repeat_effect.orientation.clone(),
+                radial_repeat_start_angle: radial_repeat_effect.start_angle.clone(),
+                radial_repeat_sweep: radial_repeat_effect.sweep.clone(),
+                radial_repeat_base_scale: radial_repeat_effect.base_scale.clone(),
+                radial_repeat_offset: radial_repeat_effect.offset.clone(),
+                radial_repeat_angle: radial_repeat_effect.angle.clone(),
+                radial_repeat_scale: radial_repeat_effect.scale.clone(),
+                radial_repeat_alpha: radial_repeat_effect.alpha.clone(),
+                radial_repeat_fill_color: radial_repeat_effect.fill_color.clone(),
+                radial_repeat_blend: radial_repeat_effect.blend.clone(),
+                radial_repeat_color_alt_copies: radial_repeat_effect.color_alt_copies,
+                radial_repeat_start: radial_repeat_effect.start.clone(),
+                radial_repeat_end: radial_repeat_effect.end.clone(),
+                radial_repeat_phase: radial_repeat_effect.phase.clone(),
+                radial_repeat_ease_in: radial_repeat_effect.ease_in.clone(),
+                radial_repeat_ease_out: radial_repeat_effect.ease_out.clone(),
+                radial_repeat_overlap: radial_repeat_effect.overlap.clone(),
+                radial_repeat_shape: radial_repeat_effect.shape,
+                radial_repeat_invert: radial_repeat_effect.invert,
+                radial_repeat_random_order: radial_repeat_effect.random_order,
+                radial_repeat_seed: radial_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -578,6 +617,7 @@ pub(crate) fn spawn_null(
     let repeat_effect = extract_repeat_effect(&null.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&null.effects);
+    let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
     let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
@@ -682,6 +722,30 @@ pub(crate) fn spawn_null(
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
                 linear_repeat2: linear_repeat_effect2.map(Box::new),
+                // Radial repeat effect
+                radial_repeat_count: radial_repeat_effect.count,
+                radial_repeat_radius: radial_repeat_effect.radius,
+                radial_repeat_orientation: radial_repeat_effect.orientation,
+                radial_repeat_start_angle: radial_repeat_effect.start_angle,
+                radial_repeat_sweep: radial_repeat_effect.sweep,
+                radial_repeat_base_scale: radial_repeat_effect.base_scale,
+                radial_repeat_offset: radial_repeat_effect.offset,
+                radial_repeat_angle: radial_repeat_effect.angle,
+                radial_repeat_scale: radial_repeat_effect.scale,
+                radial_repeat_alpha: radial_repeat_effect.alpha,
+                radial_repeat_fill_color: radial_repeat_effect.fill_color,
+                radial_repeat_blend: radial_repeat_effect.blend,
+                radial_repeat_color_alt_copies: radial_repeat_effect.color_alt_copies,
+                radial_repeat_start: radial_repeat_effect.start,
+                radial_repeat_end: radial_repeat_effect.end,
+                radial_repeat_phase: radial_repeat_effect.phase,
+                radial_repeat_ease_in: radial_repeat_effect.ease_in,
+                radial_repeat_ease_out: radial_repeat_effect.ease_out,
+                radial_repeat_overlap: radial_repeat_effect.overlap,
+                radial_repeat_shape: radial_repeat_effect.shape,
+                radial_repeat_invert: radial_repeat_effect.invert,
+                radial_repeat_random_order: radial_repeat_effect.random_order,
+                radial_repeat_seed: radial_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
@@ -857,6 +921,33 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_random_order: false,
                 linear_repeat_seed: 0.0,
                 linear_repeat2: None,
+                // Radial repeat effect (defaults for embed scene)
+                radial_repeat_count: AmAnimatedFloat::default(),
+                radial_repeat_radius: AmAnimatedFloat::default(),
+                radial_repeat_orientation: AmAnimatedFloat::default(),
+                radial_repeat_start_angle: AmAnimatedFloat::default(),
+                radial_repeat_sweep: AmAnimatedFloat::default(),
+                radial_repeat_base_scale: AmAnimatedFloat::default(),
+                radial_repeat_offset: AmAnimatedVec2::default(),
+                radial_repeat_angle: AmAnimatedFloat::default(),
+                radial_repeat_scale: AmAnimatedFloat::default(),
+                radial_repeat_alpha: AmAnimatedFloat::default(),
+                radial_repeat_fill_color: crate::schema::AmAnimatedColor::default(),
+                radial_repeat_blend: AmAnimatedFloat::default(),
+                radial_repeat_color_alt_copies: false,
+                radial_repeat_start: AmAnimatedFloat::default(),
+                radial_repeat_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    ..Default::default()
+                },
+                radial_repeat_phase: AmAnimatedFloat::default(),
+                radial_repeat_ease_in: AmAnimatedFloat::default(),
+                radial_repeat_ease_out: AmAnimatedFloat::default(),
+                radial_repeat_overlap: AmAnimatedFloat::default(),
+                radial_repeat_shape: 0,
+                radial_repeat_invert: false,
+                radial_repeat_random_order: false,
+                radial_repeat_seed: 0.0,
                 // Swing effect (defaults for embed scene)
                 swing_freq: AmAnimatedFloat::default(),
                 swing_a1: AmAnimatedFloat::default(),
@@ -1046,9 +1137,7 @@ pub(crate) fn extract_gradient_data(
             })
             .unwrap_or(Vec4::ZERO);
         let end_color = crate::schema::parse_color(&g.end_color)
-            .map(|c| {
-                Vec4::new(c[0], c[1], c[2], c[3])
-            })
+            .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
             .unwrap_or(Vec4::ZERO);
         let start_pt = g.start.unwrap_or([0.0, 0.0]);
         let end_pt = g.end.unwrap_or([1.0, 1.0]);

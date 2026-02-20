@@ -27,10 +27,6 @@ pub fn animate_unified_effect_system(
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if playback.force_stopped {
-        return;
-    }
-
     let global_time = playback.current_time_ms;
 
     for (entity, animated, material_handle, transform, _mesh2d, embed_marker) in query.iter() {
@@ -147,6 +143,9 @@ pub fn animate_unified_effect_system(
             || !animated.stretch_offset.keyframes.is_empty()
             || animated.stretch_smooth.value.is_some()
             || !animated.stretch_smooth.keyframes.is_empty();
+
+        let has_pixelate =
+            animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             // Update wipe parameters if needed
@@ -501,11 +500,38 @@ pub fn animate_unified_effect_system(
                     let offset_x = -anchor_x * orig_width;
                     let offset_y = -anchor_y * orig_height;
 
+                    // Pixelate expansion: edge blocks extend half a cell beyond content area
+                    let pix_expansion = if has_pixelate {
+                        let size =
+                            interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
+                        let stretch = interpolate_vec2(&animated.pixelate_stretch, layer_time)
+                            .unwrap_or([1.0, 1.0]);
+                        size * stretch[0].abs().max(stretch[1].abs()) / 2.0
+                    } else {
+                        0.0
+                    };
+
                     let vertices = vec![
-                        [offset_x - half_w, offset_y - half_h, 0.0],
-                        [offset_x + half_w, offset_y - half_h, 0.0],
-                        [offset_x + half_w, offset_y + half_h, 0.0],
-                        [offset_x - half_w, offset_y + half_h, 0.0],
+                        [
+                            offset_x - half_w - pix_expansion,
+                            offset_y - half_h - pix_expansion,
+                            0.0,
+                        ],
+                        [
+                            offset_x + half_w + pix_expansion,
+                            offset_y - half_h - pix_expansion,
+                            0.0,
+                        ],
+                        [
+                            offset_x + half_w + pix_expansion,
+                            offset_y + half_h + pix_expansion,
+                            0.0,
+                        ],
+                        [
+                            offset_x - half_w - pix_expansion,
+                            offset_y + half_h + pix_expansion,
+                            0.0,
+                        ],
                     ];
                     let normals = vec![
                         [0.0, 0.0, 1.0],
@@ -513,7 +539,14 @@ pub fn animate_unified_effect_system(
                         [0.0, 0.0, 1.0],
                         [0.0, 0.0, 1.0],
                     ];
-                    let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+                    let uv_exp_x = pix_expansion / orig_width;
+                    let uv_exp_y = pix_expansion / orig_height;
+                    let uvs = vec![
+                        [-uv_exp_x, 1.0 + uv_exp_y],
+                        [1.0 + uv_exp_x, 1.0 + uv_exp_y],
+                        [1.0 + uv_exp_x, -uv_exp_y],
+                        [-uv_exp_x, -uv_exp_y],
+                    ];
                     let indices = vec![0u32, 1, 2, 0, 2, 3];
 
                     let mut new_mesh = Mesh::new(
@@ -626,8 +659,6 @@ pub fn animate_unified_effect_system(
             }
 
             // Update pixelate effect if present
-            let has_pixelate = animated.pixelate_size.value.is_some()
-                || !animated.pixelate_size.keyframes.is_empty();
             if has_pixelate {
                 let size = interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
                 let stretch =
@@ -684,6 +715,25 @@ pub fn animate_unified_effect_system(
                 entity,
                 &mut meshes,
                 &mut commands,
+            );
+
+            super::repeat::process_radial_repeat_effect(
+                animated,
+                layer_time,
+                material,
+                orig_width,
+                orig_height,
+                entity,
+                &mut meshes,
+                &mut commands,
+            );
+
+            // Log final material state after ALL repeat processors
+            bevy::log::warn!(
+                "[UNIFIED FINAL] layer={} time={:.4} rr_params1.x={:.3}",
+                animated.layer_id,
+                layer_time,
+                material.uniform_data.radial_repeat_params1.x
             );
         }
     }

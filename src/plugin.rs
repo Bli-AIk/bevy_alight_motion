@@ -109,7 +109,7 @@ impl Plugin for AlightMotionPlugin {
                 (
                     animate_transform_system,
                     animate_am_camera_system, // Animate Bevy camera from AM camera layer
-                    animate_size_system, // Update size from size property animation
+                    animate_size_system,      // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation
                     animate_opacity_system,
                     animate_sdf_opacity_system,

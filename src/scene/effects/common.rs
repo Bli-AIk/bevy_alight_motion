@@ -197,12 +197,12 @@ pub(crate) fn extract_gaussian_blur_effect(effects: &[AmEffect]) -> GaussianBlur
 pub struct PaletteMapParams {
     /// Effect alpha/strength (0.0-1.0)
     pub alpha: AmAnimatedFloat,
-    /// Number of colors to use (1-8)
-    pub count: u8,
+    /// Palette selector ID (0-10, NOT color count)
+    pub palette_id: u8,
     /// Whether to enable shade variations
     pub shades: bool,
-    /// Palette colors (up to 8)
-    pub colors: [Vec4; 8],
+    /// Custom palette colors from XML (up to 8)
+    pub custom_colors: [Vec4; 8],
 }
 
 impl PaletteMapParams {
@@ -229,7 +229,7 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
                     }
                     "palette" => {
                         if let Ok(v) = prop.value.parse::<u8>() {
-                            params.count = v;
+                            params.palette_id = v;
                         }
                     }
                     "shades" => {
@@ -242,7 +242,7 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
                             && (1..=8).contains(&index)
                             && let Ok(color) = crate::schema::parse_color(&prop.value)
                         {
-                            params.colors[index - 1] =
+                            params.custom_colors[index - 1] =
                                 Vec4::new(color[0], color[1], color[2], color[3]);
                         }
                     }

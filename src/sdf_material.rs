@@ -677,7 +677,11 @@ mod tests {
         use bevy::render::render_resource::ShaderType;
         let size = SdfMaterialUniform::min_size();
         println!("SdfMaterialUniform min_size = {}", size);
-        assert_eq!(size.get(), 160, "SdfMaterialUniform size mismatch! Expected 160 bytes");
+        assert_eq!(
+            size.get(),
+            160,
+            "SdfMaterialUniform size mismatch! Expected 160 bytes"
+        );
     }
 
     #[test]

@@ -509,33 +509,196 @@ impl Default for AmSceneConfig {
 }
 
 /// Component to store palette map effect parameters for animation.
+/// Colors are stored in sRGB space (matching AM's processing).
 #[derive(Component, Debug, Clone)]
 pub struct AmPaletteMapParams {
-    /// Number of colors to use (1-8)
+    /// Number of colors in the resolved palette
     pub count: u8,
-    /// Whether to enable shade variations
-    pub shades: bool,
-    /// Palette colors (up to 8)
+    /// Resolved palette colors (up to 16, stored as pairs of 8 for GPU)
     pub colors: [Vec4; 8],
     /// Initial alpha value from the effect
     pub initial_alpha: f32,
 }
 
 impl AmPaletteMapParams {
-    /// Create from extracted PaletteMapParams
+    /// Create from extracted PaletteMapParams, resolving palette_id to actual colors.
+    /// AM hardcodes predefined palettes (0-5, 10) in the shader; custom palettes (6-9)
+    /// use colors from XML. Shades add 0.667x darker variants.
     pub fn from_params(params: &super::effects::PaletteMapParams) -> Self {
-        // Get initial alpha from keyframes if available, otherwise from static value
         let initial_alpha = if !params.alpha.keyframes.is_empty() {
-            // Use the first keyframe's value as initial
             params.alpha.keyframes[0].value.parse().unwrap_or(0.0)
         } else {
             params.alpha.value.unwrap_or(1.0)
         };
 
+        let c = &params.custom_colors;
+        // Helper to create sRGB color Vec4 from f32 components
+        let v = |r: f32, g: f32, b: f32| Vec4::new(r, g, b, 1.0);
+
+        // Resolve palette_id to colors and count (matching AM's shader)
+        let (mut colors, count) = match (params.palette_id, params.shades) {
+            // CGA Green/Red/Yellow
+            (0, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 1.0, 0.333);
+                arr[2] = v(1.0, 0.333, 0.333);
+                arr[3] = v(1.0, 1.0, 0.333);
+                (arr, 4u8)
+            }
+            // CGA Cyan/Magenta/White
+            (1, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 1.0, 1.0);
+                arr[2] = v(1.0, 0.333, 1.0);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // CGA Blue/Cyan/Magenta/White
+            (10, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.333, 0.333, 1.0);
+                arr[1] = v(0.333, 1.0, 1.0);
+                arr[2] = v(1.0, 0.333, 1.0);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // 3-bit RGB
+            (4, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 0.333, 1.0);
+                arr[2] = v(0.333, 1.0, 0.333);
+                arr[3] = v(0.333, 1.0, 1.0);
+                arr[4] = v(1.0, 0.333, 0.333);
+                arr[5] = v(1.0, 0.333, 1.0);
+                arr[6] = v(1.0, 1.0, 0.333);
+                arr[7] = v(1.0, 1.0, 1.0);
+                (arr, 8)
+            }
+            // 2-bit gray
+            (5, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 0.333, 0.333);
+                arr[2] = v(0.667, 0.667, 0.667);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // Custom 3-color
+            (6, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                (arr, 3)
+            }
+            (6, true) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                // AM skips index 3 (zero), shade copies at 4,5,6
+                arr[3] = Vec4::ZERO;
+                arr[4] = c[0] * 0.667;
+                arr[5] = c[1] * 0.667;
+                arr[6] = c[2] * 0.667;
+                // Fix alpha for shade colors
+                arr[4].w = c[0].w;
+                arr[5].w = c[1].w;
+                arr[6].w = c[2].w;
+                (arr, 7) // AM uses ncolors=6 but checks indices 0-5; we use 7 to include index 6
+            }
+            // Custom 4-color
+            (7, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                (arr, 4)
+            }
+            (7, true) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                arr[4] = c[0] * 0.667;
+                arr[5] = c[1] * 0.667;
+                arr[6] = c[2] * 0.667;
+                arr[7] = c[3] * 0.667;
+                arr[4].w = c[0].w;
+                arr[5].w = c[1].w;
+                arr[6].w = c[2].w;
+                arr[7].w = c[3].w;
+                (arr, 8)
+            }
+            // Custom 6-color (no shades variant exceeds 8 GPU slots)
+            (8, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                arr[4] = c[4];
+                arr[5] = c[5];
+                (arr, 6)
+            }
+            // Custom 8-color
+            (9, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                for i in 0..8 {
+                    arr[i] = c[i];
+                }
+                (arr, 8)
+            }
+            // EGA palettes (2, 3) - these need 16 colors, we only have 8 GPU slots
+            // For now, use the first 8 colors; full support would need GPU changes
+            (2, _) | (3, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                if params.palette_id == 2 {
+                    arr[0] = v(0.0, 0.0, 0.0);
+                    arr[1] = v(0.0, 0.0, 0.667);
+                    arr[2] = v(0.0, 0.667, 0.0);
+                    arr[3] = v(0.0, 0.667, 0.667);
+                    arr[4] = v(0.667, 0.0, 0.0);
+                    arr[5] = v(0.667, 0.0, 0.667);
+                    arr[6] = v(0.667, 0.333, 0.0);
+                    arr[7] = v(0.667, 0.667, 0.667);
+                } else {
+                    arr[0] = v(0.0, 0.0, 0.0);
+                    arr[1] = v(0.0, 0.0, 0.667);
+                    arr[2] = v(0.0, 0.667, 0.0);
+                    arr[3] = v(0.333, 0.667, 1.0);
+                    arr[4] = v(0.667, 0.0, 0.0);
+                    arr[5] = v(0.667, 0.0, 0.667);
+                    arr[6] = v(0.333, 0.667, 0.0);
+                    arr[7] = v(0.667, 0.667, 0.667);
+                }
+                (arr, 8) // Only first 8 of 16
+            }
+            // Fallback: custom shades variants that exceed 8 slots
+            _ => {
+                let mut arr = [Vec4::ZERO; 8];
+                for i in 0..8 {
+                    arr[i] = c[i];
+                }
+                (arr, 8)
+            }
+        };
+
+        // Ensure alpha is preserved correctly for sRGB colors
+        for color in colors.iter_mut().take(count as usize) {
+            if color.w == 0.0 {
+                color.w = 1.0;
+            }
+        }
+
         Self {
-            count: params.count,
-            shades: params.shades,
-            colors: params.colors,
+            count,
+            colors,
             initial_alpha,
         }
     }

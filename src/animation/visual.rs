@@ -48,13 +48,15 @@ pub(crate) fn add_visual_components(
     has_repeat: bool,       // True if layer has repeat effect (needs UnifiedEffectMaterial)
     has_threshold: bool,    // True if layer has threshold effect (needs UnifiedEffectMaterial)
     has_grid: bool,         // True if layer has grid effect (needs UnifiedEffectMaterial)
+    has_pixelate: bool,     // True if layer has pixelate effect (needs UnifiedEffectMaterial)
+    pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}, has_pixelate={}",
         label,
         id,
         std::mem::discriminant(spec),
@@ -62,7 +64,8 @@ pub(crate) fn add_visual_components(
         has_scale_assist,
         has_repeat,
         has_threshold,
-        has_grid
+        has_grid,
+        has_pixelate
     );
 
     // Determine which effects are needed
@@ -84,7 +87,8 @@ pub(crate) fn add_visual_components(
         || has_scale_assist
         || has_repeat
         || has_threshold
-        || has_grid;
+        || has_grid
+        || has_pixelate;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -328,7 +332,7 @@ pub(crate) fn add_visual_components(
         if let Some(palette) = palette_params {
             material.uniform_data.palette_flags.x = 1.0; // enabled
             material.uniform_data.palette_flags.y = palette.count as f32;
-            material.uniform_data.palette_flags.z = if palette.shades { 1.0 } else { 0.0 };
+            material.uniform_data.palette_flags.z = 0.0; // shades already resolved into colors
             material.uniform_data.palette_flags.w = palette.initial_alpha;
             material.uniform_data.palette_color1 = palette.colors[0];
             material.uniform_data.palette_color2 = palette.colors[1];
@@ -416,10 +420,9 @@ pub(crate) fn add_visual_components(
                         let scaled_width = base_width * initial_scale.0.abs();
                         let scaled_height = base_height * initial_scale.1.abs();
 
-                        // Don't expand mesh statically - blur will work within original bounds
-                        // For proper glow effect, we'd need dynamic mesh resizing per frame
-                        // which is complex. For now, blur fades naturally at edges.
-                        let blur_expansion = 0.0;
+                        // Don't expand mesh statically for blur - blur will work within original bounds
+                        // For pixelate, expand mesh so edge blocks aren't clipped at layer boundary
+                        let blur_expansion = pixelate_expansion;
 
                         // Use initial stretch mesh bounds if provided (to prevent first frame jump)
                         let mesh = if let Some((min_x, max_x, min_y, max_y)) =

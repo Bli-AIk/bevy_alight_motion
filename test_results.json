@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-20T14:24:16.491863+08:00",
+  "timestamp": "2026-02-21T01:48:39.396057+08:00",
   "summary": {
-    "passed": 56,
+    "passed": 58,
     "skipped": 1,
-    "failed": 28
+    "failed": 26
   },
   "results": {
     "basic/bezier/bezier": {
@@ -107,7 +107,7 @@
     },
     "effects/grid/basic": {
       "status": "fail",
-      "avg_similarity": 0.9192
+      "avg_similarity": 0.9559
     },
     "effects/linear-repeat/basic": {
       "status": "pass"
@@ -120,43 +120,41 @@
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.881
+      "avg_similarity": 0.8809
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.8726
+      "avg_similarity": 0.8682
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.8501
+      "avg_similarity": 0.8353
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.8593
+      "avg_similarity": 0.8632
     },
     "effects/linear-repeat/random_generated2/1": {
       "status": "fail",
-      "avg_similarity": 0.9443
+      "avg_similarity": 0.9422
     },
     "effects/linear-repeat/random_generated2/2": {
       "status": "fail",
-      "avg_similarity": 0.8565
+      "avg_similarity": 0.8475
     },
     "effects/linear-repeat/random_generated2/3": {
       "status": "fail",
-      "avg_similarity": 0.9247
+      "avg_similarity": 0.9239
     },
     "effects/palette/basic": {
-      "status": "fail",
-      "avg_similarity": 0.9002
+      "status": "pass"
     },
     "effects/pixelate/basic": {
-      "status": "fail",
-      "avg_similarity": 0.9197
+      "status": "pass"
     },
     "effects/radial-repeat/basic": {
       "status": "fail",
-      "avg_similarity": 0.5317
+      "avg_similarity": 0.6894
     },
     "effects/repeat/basic": {
       "status": "pass"
@@ -196,7 +194,7 @@
     },
     "effects/threshold/basic": {
       "status": "fail",
-      "avg_similarity": 0.9241
+      "avg_similarity": 0.9898
     },
     "private/USER_71/2_ex": {
       "status": "fail",

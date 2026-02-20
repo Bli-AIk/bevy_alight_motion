@@ -549,15 +549,26 @@ pub(crate) fn get_shape_vec2_animation(
 pub(crate) fn extract_shape_animations(
     shape_type: &str,
     properties: &[crate::schema::AmProperty],
-) -> ([crate::schema::AmAnimatedFloat; 4], [crate::schema::AmAnimatedVec2; 5]) {
+) -> (
+    [crate::schema::AmAnimatedFloat; 4],
+    [crate::schema::AmAnimatedVec2; 5],
+) {
     use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
-    let df = || AmAnimatedFloat { value: Some(0.0), keyframes: Vec::new() };
-    let dv = || AmAnimatedVec2 { value: Some([0.0, 0.0]), keyframes: Vec::new() };
+    let df = || AmAnimatedFloat {
+        value: Some(0.0),
+        keyframes: Vec::new(),
+    };
+    let dv = || AmAnimatedVec2 {
+        value: Some([0.0, 0.0]),
+        keyframes: Vec::new(),
+    };
 
     let props = match shape_type {
         ".roundrect" => [
             get_shape_float_animation(properties, "cornerRadius", 0.0),
-            df(), df(), df(),
+            df(),
+            df(),
+            df(),
         ],
         ".poly" => [
             get_shape_float_animation(properties, "sideCount", 6.0),
@@ -579,7 +590,9 @@ pub(crate) fn extract_shape_animations(
         ],
         ".plus" => [
             get_shape_float_animation(properties, "stemSize", 50.0),
-            df(), df(), df(),
+            df(),
+            df(),
+            df(),
         ],
         ".multifoil" => [
             get_shape_float_animation(properties, "pointCount", 5.0),
@@ -595,40 +608,55 @@ pub(crate) fn extract_shape_animations(
         ],
         ".line" => {
             let p = [df(), df(), df(), df()];
-            return (p, [
-                get_shape_vec2_animation(properties, "p1", [0.0, 0.0]),
-                get_shape_vec2_animation(properties, "p2", [50.0, 0.0]),
-                dv(), dv(), dv(),
-            ]);
+            return (
+                p,
+                [
+                    get_shape_vec2_animation(properties, "p1", [0.0, 0.0]),
+                    get_shape_vec2_animation(properties, "p2", [50.0, 0.0]),
+                    dv(),
+                    dv(),
+                    dv(),
+                ],
+            );
         }
         ".triangle" => {
             let p = [df(), df(), df(), df()];
-            return (p, [
-                get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
-                get_shape_vec2_animation(properties, "p2", [-50.0, 50.0]),
-                get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
-                dv(), dv(),
-            ]);
+            return (
+                p,
+                [
+                    get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
+                    get_shape_vec2_animation(properties, "p2", [-50.0, 50.0]),
+                    get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
+                    dv(),
+                    dv(),
+                ],
+            );
         }
         ".quad" => {
             let p = [df(), df(), df(), df()];
-            return (p, [
-                get_shape_vec2_animation(properties, "p1", [-50.0, -50.0]),
-                get_shape_vec2_animation(properties, "p2", [50.0, -50.0]),
-                get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
-                get_shape_vec2_animation(properties, "p4", [-50.0, 50.0]),
-                dv(),
-            ]);
+            return (
+                p,
+                [
+                    get_shape_vec2_animation(properties, "p1", [-50.0, -50.0]),
+                    get_shape_vec2_animation(properties, "p2", [50.0, -50.0]),
+                    get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
+                    get_shape_vec2_animation(properties, "p4", [-50.0, 50.0]),
+                    dv(),
+                ],
+            );
         }
         ".penta" => {
             let p = [df(), df(), df(), df()];
-            return (p, [
-                get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
-                get_shape_vec2_animation(properties, "p2", [-47.5, -15.5]),
-                get_shape_vec2_animation(properties, "p3", [-29.4, 40.5]),
-                get_shape_vec2_animation(properties, "p4", [29.4, 40.5]),
-                get_shape_vec2_animation(properties, "p5", [47.5, -15.5]),
-            ]);
+            return (
+                p,
+                [
+                    get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
+                    get_shape_vec2_animation(properties, "p2", [-47.5, -15.5]),
+                    get_shape_vec2_animation(properties, "p3", [-29.4, 40.5]),
+                    get_shape_vec2_animation(properties, "p4", [29.4, 40.5]),
+                    get_shape_vec2_animation(properties, "p5", [47.5, -15.5]),
+                ],
+            );
         }
         _ => [df(), df(), df(), df()],
     };
