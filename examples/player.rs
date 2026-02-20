@@ -1014,7 +1014,7 @@ mod video_comparison_systems {
     struct ComparisonConfig {
         default: ProjectConfig,
         #[serde(default)]
-        overrides: HashMap<String, ProjectConfig>,
+        overrides: HashMap<String, OverrideConfig>,
     }
 
     fn default_avg_threshold() -> f32 {
@@ -1037,6 +1037,31 @@ mod video_comparison_systems {
         min_frame_similarity: f32,
         #[serde(default = "default_max_failed_rate")]
         max_failed_rate: f32,
+    }
+
+    // Override config with optional fields for proper inheritance from [default]
+    #[derive(Deserialize, Debug, Clone, Copy)]
+    struct OverrideConfig {
+        #[serde(default)]
+        skip: Option<bool>,
+        avg_threshold: Option<f32>,
+        frame_threshold: Option<f32>,
+        frame_offset: Option<f32>,
+        min_frame_similarity: Option<f32>,
+        max_failed_rate: Option<f32>,
+    }
+
+    impl OverrideConfig {
+        fn merge_with(&self, base: &ProjectConfig) -> ProjectConfig {
+            ProjectConfig {
+                skip: self.skip.unwrap_or(base.skip),
+                avg_threshold: self.avg_threshold.unwrap_or(base.avg_threshold),
+                frame_threshold: self.frame_threshold.unwrap_or(base.frame_threshold),
+                frame_offset: self.frame_offset.unwrap_or(base.frame_offset),
+                min_frame_similarity: self.min_frame_similarity.unwrap_or(base.min_frame_similarity),
+                max_failed_rate: self.max_failed_rate.unwrap_or(base.max_failed_rate),
+            }
+        }
     }
 
     fn default_min_frame_similarity() -> f32 {
@@ -1096,7 +1121,11 @@ mod video_comparison_systems {
 
         // Apply configuration
         if let Some(cfg) = config {
-            let settings = cfg.overrides.get(&project_name).unwrap_or(&cfg.default);
+            let settings = if let Some(override_cfg) = cfg.overrides.get(&project_name) {
+                override_cfg.merge_with(&cfg.default)
+            } else {
+                cfg.default
+            };
 
             // Check if this test should be skipped
             if settings.skip {

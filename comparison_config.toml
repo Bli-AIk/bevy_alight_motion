@@ -22,6 +22,10 @@ max_failed_rate = 0.15
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides."basic/muti-shape/muti-shape"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 [overrides."basic/pivot/pivot"]
 avg_threshold = 0.98
 frame_threshold = 0.98
@@ -48,8 +52,6 @@ frame_threshold = 0.75
 avg_threshold = 0.90
 frame_threshold = 0.70
 
-# Multi-level group tests need 0.98 threshold to catch group nesting issues
-# 多级编组测试需要0.98阈值来捕获编组嵌套问题
 [overrides."basic/group/multi-level/ex"]
 avg_threshold = 0.98
 frame_threshold = 0.98
@@ -58,8 +60,6 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
-# Basic group mask test (nested embed with mask)
-# 基础编组遮罩测试（嵌套embed带遮罩）
 [overrides."basic/group/mask"]
 avg_threshold = 0.98
 frame_threshold = 0.98
@@ -68,24 +68,9 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
-# basic/mask/square-ex - complex mask with timing differences
-[overrides."basic/mask/square-ex"]
-avg_threshold = 0.92
-frame_threshold = 0.80
-max_failed_rate = 0.95
-min_frame_similarity = 0.70
-
-# basic/bounce/box - bounce animation timing differences  
-[overrides."basic/bounce/box"]
-avg_threshold = 0.88
-frame_threshold = 0.75
-max_failed_rate = 0.95
-min_frame_similarity = 0.65
-
-# basic/gradient uses gradient feature which is not implemented yet
-# basic/gradient 使用渐变功能，尚未实现
-[overrides."basic/gradient/gradient"]
-skip = true
+[overrides."basic/mask/shape_ex"]
+avg_threshold = 0.98
+frame_threshold = 0.98
 
 # basic/tween/step - step boundary precision issue at frame 4
 # AM shows inconsistent behavior at 0.25 boundary for smoothing=0

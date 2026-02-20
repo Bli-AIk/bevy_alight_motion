@@ -13,9 +13,9 @@ use bevy::prelude::*;
 
 use crate::scene::AmLayerMarker;
 
-use super::components::{AmAnimated, AmPlayback, AmSdfShapeParent};
+use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent};
 use super::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
+    interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
 };
 
 /// System to advance playback time.
@@ -658,6 +658,78 @@ pub fn animate_size_system(
             // Use original size - no scaling needed
             // For embed content, the final display size is affected by embed's inherited fit_scale
             sprite.custom_size = Some(Vec2::new(size[0].abs(), size[1].abs()));
+        }
+    }
+}
+
+/// Animate the Bevy Camera2d based on AM camera layer data.
+/// Reads camera location/rotation/FOV and computes 2D pan, zoom, and rotation.
+pub fn animate_am_camera_system(
+    playback: Res<AmPlayback>,
+    camera_query: Query<(&AmAnimated, &AmCameraLayer)>,
+    pending_query: Query<&crate::scene::AmPendingLayers>,
+    mut bevy_camera_query: Query<
+        (&mut Transform, &mut Projection),
+        (With<Camera2d>, Without<crate::effects::EmbedSceneRttCamera>),
+    >,
+) {
+    if playback.force_stopped {
+        return;
+    }
+    let global_time = playback.current_time_ms;
+
+    for (animated, cam) in camera_query.iter() {
+        let local_time = animated.calc_local_time(global_time);
+        if !animated.is_active(local_time) {
+            continue;
+        }
+        let layer_time = animated.calc_layer_time(local_time);
+
+        // Interpolate camera location in AM coords
+        let default_loc = [
+            cam.scene_width / 2.0,
+            cam.scene_height / 2.0,
+            cam.base_z,
+        ];
+        let loc = interpolate_vec3(&animated.location, layer_time).unwrap_or(default_loc);
+
+        // Interpolate rotation (degrees, clockwise positive in AM)
+        let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+
+        // Interpolate FOV (degrees)
+        let fov_deg = interpolate_float(&cam.fov, layer_time).unwrap_or(60.0);
+
+        // Convert pan from AM coords to Bevy coords
+        let pan_x = loc[0] - cam.scene_width / 2.0;
+        let pan_y = cam.scene_height / 2.0 - loc[1];
+
+        // Compute zoom factor:
+        // visible_half_w = |z| * tan(fov/2)
+        // base_visible_half_w = |base_z| * tan(base_fov/2) = scene_width/2
+        let base_fov_rad = 60.0_f32.to_radians();
+        let current_fov_rad = fov_deg.to_radians();
+        let z_abs = loc[2].abs();
+        let base_z_abs = cam.base_z.abs();
+        let zoom = (z_abs * (current_fov_rad / 2.0).tan())
+            / (base_z_abs * (base_fov_rad / 2.0).tan());
+
+        // Get fit_scale from pending layers
+        let fit_scale = pending_query
+            .iter()
+            .next()
+            .map(|p| 1.0 / p.inv_fit_scale)
+            .unwrap_or(1.0);
+
+        // Apply to Bevy camera
+        for (mut transform, mut projection) in bevy_camera_query.iter_mut() {
+            transform.translation.x = pan_x * fit_scale;
+            transform.translation.y = pan_y * fit_scale;
+            // AM clockwise → Bevy counter-clockwise
+            transform.rotation = Quat::from_rotation_z(-rotation_deg.to_radians());
+
+            if let Projection::Orthographic(ref mut ortho) = *projection {
+                ortho.scale = zoom;
+            }
         }
     }
 }

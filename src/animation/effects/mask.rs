@@ -103,8 +103,6 @@ pub fn update_unified_mask_system(
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
     let global_time = playback.current_time_ms as u64;
-    let global_time_sec = playback.current_time_ms / 1000.0;
-
     for (mask_info, material_handle, marker, entity_global_transform) in query.iter() {
         // Get all active masks for current time (supports up to 2)
         let active_masks = mask_info.get_active_masks(global_time);
@@ -114,165 +112,162 @@ pub fn update_unified_mask_system(
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
             if active_masks.is_empty() {
-                // No active masks - disable masking
+                // No active masks - disable masking (content visible without clipping)
                 material.uniform_data.effect_flags.x = 0.0;
                 material.uniform_data.mask2_flags.x = 0.0;
                 material.uniform_data.mask2_flags.y = 0.0; // mask1 rotation
                 material.uniform_data.mask2_flags.z = 0.0; // mask2 rotation
-                // Debug log when mask is disabled for unified effect
-                static UNIFIED_MASK_LOG: std::sync::atomic::AtomicU32 =
-                    std::sync::atomic::AtomicU32::new(0);
-                let count = UNIFIED_MASK_LOG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                // Log at frame 32 time (1066ms) and after
-                if (1060..=1100).contains(&global_time) && count < 50 {
-                    bevy::log::info!(
-                        "[UNIFIED_MASK_DISABLED] '{}' at time {}ms: effect_flags set to 0, mask_info.masks.len={}, mask_times={:?}",
-                        marker.label,
-                        global_time,
-                        mask_info.masks.len(),
-                        mask_info
-                            .masks
-                            .iter()
-                            .map(|m| (m.start_time, m.end_time))
-                            .collect::<Vec<_>>()
-                    );
-                }
             } else {
-                // Helper function to compute mask parameters from layer transform
-                // IMPORTANT: The returned coordinates must be in the same space as the entity's world_position.
-                // We use entity_global_scale to match the entity's coordinate space.
-                let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32) {
-                    // Try to get the mask layer's current transform and animation data
-                    if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) {
-                        if let Ok((mask_global_transform, animated, spec)) =
-                            mask_layer_query.get(mask_entity)
+                // Returns (center, half_size, rotation, blend_params)
+                // blend_params = Vec3(fill_alpha, opacity, stroke_width_world)
+                let compute_mask_params =
+                    |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32, Vec3) {
+                        if let Some(&mask_entity) =
+                            pending.spawned_entities.get(&mask.mask_layer_id)
                         {
-                            // Get base shape dimensions from spec
-                            let (base_width, base_height, pivot_x, pivot_y) = match spec {
-                                crate::scene::AmLayerSpec::SdfShape {
-                                    width,
-                                    height,
-                                    pivot_x,
-                                    pivot_y,
-                                    ..
-                                } => (*width, *height, *pivot_x, *pivot_y),
-                                crate::scene::AmLayerSpec::SpriteShape {
-                                    width, height, ..
-                                } => (*width, *height, 0.0, 0.0),
-                                _ => (
-                                    mask.half_size.x * 2.0 / mask.scale.x,
-                                    mask.half_size.y * 2.0 / mask.scale.y,
-                                    0.0,
-                                    0.0,
-                                ),
-                            };
+                            if let Ok((mask_global_transform, animated, spec)) =
+                                mask_layer_query.get(mask_entity)
+                            {
+                                let (base_width, base_height, pivot_x, pivot_y, fill_alpha, initial_sw, stroke_dir) =
+                                    match spec {
+                                        crate::scene::AmLayerSpec::SdfShape {
+                                            width,
+                                            height,
+                                            pivot_x,
+                                            pivot_y,
+                                            fill_color,
+                                            no_fill,
+                                            stroke_width,
+                                            stroke_direction,
+                                            ..
+                                        } => {
+                                            let fa = if *no_fill {
+                                                0.0
+                                            } else if let Some(fc) = fill_color {
+                                                if fc.value.len() >= 3 && fc.value.starts_with('#')
+                                                {
+                                                    let alpha_hex = &fc.value[1..3];
+                                                    u8::from_str_radix(alpha_hex, 16)
+                                                        .unwrap_or(255)
+                                                        as f32
+                                                        / 255.0
+                                                } else {
+                                                    1.0
+                                                }
+                                            } else {
+                                                1.0
+                                            };
+                                            (
+                                                *width,
+                                                *height,
+                                                *pivot_x,
+                                                *pivot_y,
+                                                fa,
+                                                *stroke_width,
+                                                stroke_direction.as_str(),
+                                            )
+                                        }
+                                        crate::scene::AmLayerSpec::SpriteShape {
+                                            width, height, ..
+                                        } => (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered"),
+                                        _ => (
+                                            mask.half_size.x * 2.0 / mask.scale.x,
+                                            mask.half_size.y * 2.0 / mask.scale.y,
+                                            0.0,
+                                            0.0,
+                                            1.0,
+                                            0.0,
+                                            "centered",
+                                        ),
+                                    };
 
-                            // Calculate layer-local time for interpolation
-                            let layer_time =
-                                (global_time_sec - animated.start_time as f32 / 1000.0).max(0.0);
+                                let local_time =
+                                    animated.calc_local_time(playback.current_time_ms);
+                                let layer_time = animated.calc_layer_time(local_time);
 
-                            // Get animated values using interpolation
-                            // Rotation
-                            let rotation_deg =
-                                interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
-                            let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
+                                let mask_opacity = interpolate_float(
+                                    &animated.opacity,
+                                    layer_time,
+                                )
+                                .unwrap_or(1.0);
+                                let current_sw = interpolate_float(
+                                    &animated.stroke_width,
+                                    layer_time,
+                                )
+                                .unwrap_or(initial_sw);
 
-                            // Scale (local animated scale)
-                            let [scale_x, scale_y] =
-                                interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+                                let rotation_deg = interpolate_float(
+                                    &animated.rotation,
+                                    layer_time,
+                                )
+                                .unwrap_or(0.0);
+                                let rotation_rad = (-rotation_deg).to_radians();
 
-                            // Size - get animated size (AM stores full dimensions, we need half-extents)
-                            let [_anim_size_x, _anim_size_y] =
-                                interpolate_vec2(&animated.size, layer_time)
-                                    .unwrap_or([base_width, base_height]);
+                                let [scale_x, scale_y] =
+                                    interpolate_vec2(&animated.scale, layer_time)
+                                        .unwrap_or([1.0, 1.0]);
 
-                            // Use the mask layer's GlobalTransform to get world position
-                            // This already includes AM project root offset and all parent transforms
-                            let mask_translation = mask_global_transform.translation();
+                                let mask_translation = mask_global_transform.translation();
 
-                            // Calculate center: accounting for pivot offset with rotation
-                            // Pivot offset is scaled by local animated scale, then by entity's global scale
-                            let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
-                            let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
+                                let scaled_offset_x =
+                                    -pivot_x * scale_x * entity_global_scale.x;
+                                let scaled_offset_y =
+                                    pivot_y * scale_y * entity_global_scale.y;
 
-                            let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
-                                - scaled_offset_y * rotation_rad.sin();
-                            let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
-                                + scaled_offset_y * rotation_rad.cos();
+                                let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
+                                    - scaled_offset_y * rotation_rad.sin();
+                                let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
+                                    + scaled_offset_y * rotation_rad.cos();
 
-                            // Use mask's world translation and add pivot offset
-                            let center_x = mask_translation.x + rotated_offset_x;
-                            let center_y = mask_translation.y + rotated_offset_y;
+                                let center_x = mask_translation.x + rotated_offset_x;
+                                let center_y = mask_translation.y + rotated_offset_y;
 
-                            // Half-size: Use precomputed mask.half_size from collect stage
-                            // This already includes initial scale and parent scale for child masks
-                            //
-                            // IMPORTANT: AM's mask clipping region does NOT animate with scale!
-                            // The mask's scale animation only affects the visual stroke/border,
-                            // not the actual clipping rectangle. This matches reference behavior
-                            // where the mask boundary stays constant while bones animate.
-                            //
-                            // Previously we calculated scale_ratio = current_scale / initial_scale
-                            // and applied it to half_size. This caused the mask to expand/shrink
-                            // with the scale animation, which is incorrect.
-                            let half_width = mask.half_size.x * fit_scale;
-                            let half_height = mask.half_size.y * fit_scale;
+                                let [anim_size_x, anim_size_y] =
+                                    interpolate_vec2(&animated.size, layer_time)
+                                        .unwrap_or([base_width, base_height]);
 
-                            bevy::log::trace!(
-                                "[MASK-UE] mask_trans=({:.1},{:.1}), mask_half_size=({:.1},{:.1}), pivot=({:.1},{:.1}) => center=({:.1},{:.1}), half_size=({:.1},{:.1}), current_scale=({:.3},{:.3}), initial_scale=({:.3},{:.3}), layer_time={:.4}",
-                                mask_translation.x,
-                                mask_translation.y,
-                                mask.half_size.x,
-                                mask.half_size.y,
-                                pivot_x,
-                                pivot_y,
-                                center_x,
-                                center_y,
-                                half_width,
-                                half_height,
-                                scale_x,
-                                scale_y,
-                                mask.scale.x,
-                                mask.scale.y,
-                                layer_time
-                            );
+                                let ext = |sw: f32| match stroke_dir {
+                                    "inside" => 0.0,
+                                    "outside" => sw,
+                                    _ => sw * 0.5,
+                                };
+                                let stroke_delta = ext(current_sw) - ext(initial_sw);
+                                let initial_stroke_ext_x =
+                                    mask.half_size.x - base_width / 2.0 * mask.scale.x;
+                                let initial_stroke_ext_y =
+                                    mask.half_size.y - base_height / 2.0 * mask.scale.y;
+                                let half_width = (anim_size_x / 2.0 * scale_x
+                                    + initial_stroke_ext_x
+                                    + stroke_delta)
+                                    * fit_scale;
+                                let half_height = (anim_size_y / 2.0 * scale_y
+                                    + initial_stroke_ext_y
+                                    + stroke_delta)
+                                    * fit_scale;
 
-                            // Return world coordinates in entity's coordinate space
-                            return (
-                                Vec2::new(center_x, center_y),
-                                Vec2::new(half_width, half_height),
-                                rotation_rad,
-                            );
-                        } else {
-                            bevy::log::warn!(
-                                "[MASK] Mask entity found but query failed for id={}",
-                                mask.mask_layer_id
-                            );
+                                let sw_world = current_sw * fit_scale;
+
+                                return (
+                                    Vec2::new(center_x, center_y),
+                                    Vec2::new(half_width, half_height),
+                                    rotation_rad,
+                                    Vec3::new(fill_alpha, mask_opacity, sw_world),
+                                );
+                            }
                         }
-                    } else {
-                        bevy::log::warn!(
-                            "[MASK] Mask entity NOT found for id={} (spawned_entities has {} entries)",
-                            mask.mask_layer_id,
-                            pending.spawned_entities.len()
-                        );
-                    }
-                    // Fallback to stored values if transform lookup fails
-                    bevy::log::debug!(
-                        "[MASK] Using fallback center=({:.1},{:.1}) for mask_layer_id={}",
-                        mask.center.x,
-                        mask.center.y,
-                        mask.mask_layer_id
-                    );
-                    (
-                        mask.center * fit_scale,
-                        mask.half_size * fit_scale * mask.scale,
-                        mask.rotation,
-                    )
-                };
+                        // Fallback
+                        (
+                            mask.center * fit_scale,
+                            mask.half_size * fit_scale * mask.scale,
+                            mask.rotation,
+                            Vec3::new(1.0, 1.0, 0.0),
+                        )
+                    };
 
                 // First mask
                 let mask1 = active_masks[0];
-                let (mask1_center, mask1_half_size, mask1_rotation) = compute_mask_params(mask1);
+                let (mask1_center, mask1_half_size, mask1_rotation, mask1_blend) =
+                    compute_mask_params(mask1);
 
                 let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
                 material.uniform_data.effect_flags.x = if mask1.is_exclude {
@@ -286,13 +281,18 @@ pub fn update_unified_mask_system(
                     mask1_half_size.x,
                     mask1_half_size.y,
                 );
-                // Store mask1 rotation in mask2_flags.y (radians)
+                material.uniform_data.mask_blend = bevy::math::Vec4::new(
+                    mask1_blend.x,
+                    mask1_blend.y,
+                    mask1_blend.z,
+                    0.0,
+                );
                 material.uniform_data.mask2_flags.y = mask1_rotation;
 
                 // Second mask (if present)
                 if active_masks.len() >= 2 {
                     let mask2 = active_masks[1];
-                    let (mask2_center, mask2_half_size, mask2_rotation) =
+                    let (mask2_center, mask2_half_size, mask2_rotation, mask2_blend) =
                         compute_mask_params(mask2);
 
                     let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
@@ -307,42 +307,17 @@ pub fn update_unified_mask_system(
                         mask2_half_size.x,
                         mask2_half_size.y,
                     );
-                    // Store mask2 rotation in mask2_flags.z (radians)
-                    material.uniform_data.mask2_flags.z = mask2_rotation;
-
-                    bevy::log::debug!(
-                        "[UnifiedMask] '{}' time={}, DUAL mask: mask1_type={:.0} center=({:.1},{:.1}) rot={:.2}°, mask2_type={:.0} center=({:.1},{:.1}) rot={:.2}°",
-                        marker.label,
-                        global_time,
-                        material.uniform_data.effect_flags.x,
-                        mask1_center.x,
-                        mask1_center.y,
-                        mask1_rotation.to_degrees(),
-                        material.uniform_data.mask2_flags.x,
-                        mask2_center.x,
-                        mask2_center.y,
-                        mask2_rotation.to_degrees()
+                    material.uniform_data.mask2_blend = bevy::math::Vec4::new(
+                        mask2_blend.x,
+                        mask2_blend.y,
+                        mask2_blend.z,
+                        0.0,
                     );
+                    material.uniform_data.mask2_flags.z = mask2_rotation;
                 } else {
-                    // Only one mask - disable second mask
                     material.uniform_data.mask2_flags.x = 0.0;
                     material.uniform_data.mask2_flags.z = 0.0;
-
-                    // Log entity world position for debugging child layer mask issues
-                    let entity_world_pos = entity_global_transform.translation();
-                    bevy::log::debug!(
-                        "[UnifiedMask] '{}' time={}, mask_type={:.0}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), rot={:.2}°, entity_world_pos=({:.1},{:.1})",
-                        marker.label,
-                        global_time,
-                        material.uniform_data.effect_flags.x,
-                        mask1_center.x,
-                        mask1_center.y,
-                        mask1_half_size.x,
-                        mask1_half_size.y,
-                        mask1_rotation.to_degrees(),
-                        entity_world_pos.x,
-                        entity_world_pos.y
-                    );
+                    material.uniform_data.mask2_blend = bevy::math::Vec4::ZERO;
                 }
             }
         }

@@ -29,7 +29,7 @@ pub const DEBUG_NEGATIVE_HEIGHT_SCALE: f32 = 1.05;
 /// Component marking an entity as part of an AM animation.
 ///
 /// 标记实体为 AM 动画一部分的组件。
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Default)]
 pub struct AmAnimated {
     /// Unique layer ID from AM.
     ///
@@ -239,6 +239,18 @@ pub struct AmAnimated {
     pub pixelate_saturation: AmAnimatedFloat,
     /// Pixelate effect: use screen space coordinates
     pub pixelate_screen_space: bool,
+    // Shape-specific animated properties
+    /// Generic shape float properties (up to 4).
+    /// Meaning depends on shape_type:
+    /// RoundRect: [cornerRadius, _, _, _]
+    /// Polygon: [sideCount, radius, offsetAngle, _]
+    /// Star/Multifoil: [pointCount, outerRadius, innerRadius, offsetAngle]
+    /// Pie/Arc: [startAngle, endAngle, radius, _]
+    /// Plus: [stemSize, _, _, _]
+    pub shape_props: [AmAnimatedFloat; 4],
+    /// Generic shape vec2 properties (up to 5 points).
+    /// Used by Line, Triangle, Quad, Penta for vertex animation.
+    pub shape_points: [AmAnimatedVec2; 5],
 }
 
 impl AmAnimated {
@@ -344,6 +356,12 @@ pub struct AmSdfParams {
     pub base_pivot_x: f32,
     /// Base pivot Y in pixels
     pub base_pivot_y: f32,
+    /// Border 2 width (static, 0 if no second border)
+    pub border2_width: f32,
+    /// Border 2 packed color
+    pub border2_packed_color: f32,
+    /// Border 2 mode (0=centered, 1=inside, -1=outside)
+    pub border2_mode: f32,
 }
 
 // Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere
@@ -375,3 +393,17 @@ pub struct AmSdfStrokeParams {
 /// Used to skip scale animation in animate_transform (scale is handled by animate_sdf_scale).
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmSdfShapeParent;
+
+/// Camera layer data for AM perspective camera animation.
+/// Stores FOV animation and base parameters needed to compute 2D pan/zoom from 3D camera.
+#[derive(Component, Debug, Clone)]
+pub struct AmCameraLayer {
+    /// FOV animation in degrees.
+    pub fov: AmAnimatedFloat,
+    /// Initial Z distance (negative, e.g. -1247).
+    pub base_z: f32,
+    /// Scene width in pixels.
+    pub scene_width: f32,
+    /// Scene height in pixels.
+    pub scene_height: f32,
+}

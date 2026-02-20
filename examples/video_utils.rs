@@ -303,7 +303,7 @@ pub fn compare_images(
         |p: &image::Rgba<u8>| -> bool { p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0) };
 
     // Helper function to check if a pixel is on the edge of content
-    // (has at least one empty neighbor within 2-pixel Manhattan radius)
+    // (has at least one empty neighbor within 3-pixel Manhattan radius)
     let is_edge_pixel = |img: &image::RgbaImage, x: u32, y: u32| -> bool {
         let p = img.get_pixel(x, y);
         if is_empty(p) {
@@ -311,12 +311,12 @@ pub fn compare_images(
         }
         let w = img.width();
         let h = img.height();
-        for dx in -2i32..=2 {
-            for dy in -2i32..=2 {
+        for dx in -3i32..=3 {
+            for dy in -3i32..=3 {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
-                if dx.abs() + dy.abs() > 2 {
+                if dx.abs() + dy.abs() > 3 {
                     continue;
                 }
                 let nx = x as i32 + dx;

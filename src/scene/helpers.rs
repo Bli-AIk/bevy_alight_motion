@@ -293,13 +293,12 @@ pub(crate) fn get_stroke_width_animation(
             };
         }
 
-        // Fall back to @end-size attribute if no <size> element
-        if stroke.end_size > 0.0 {
-            return AmAnimatedFloat {
-                value: Some(stroke.end_size),
-                keyframes: Vec::new(),
-            };
-        }
+        // Fall back: AM's default stroke size for path-stroke is 4.0
+        // (from KeyableEdgeDecoration.NO_STROKE template)
+        return AmAnimatedFloat {
+            value: Some(4.0),
+            keyframes: Vec::new(),
+        };
     }
 
     // Default: no stroke width
@@ -444,4 +443,194 @@ pub(crate) fn get_scale_at_normalized_time(
 
     // Fallback
     (1.0, 1.0)
+}
+
+/// Extract a float property from shape properties by name.
+pub(crate) fn get_shape_float_property(
+    properties: &[crate::schema::AmProperty],
+    name: &str,
+    default: f32,
+) -> f32 {
+    for prop in properties {
+        if prop.name == name && prop.prop_type == "float" {
+            if !prop.value.is_empty() {
+                if let Ok(v) = prop.value.parse::<f32>() {
+                    return v;
+                }
+            }
+            if let Some(kf) = prop.keyframes.first() {
+                if let Ok(v) = kf.value.parse::<f32>() {
+                    return v;
+                }
+            }
+        }
+    }
+    default
+}
+
+/// Extract a float property animation from shape properties by name.
+pub(crate) fn get_shape_float_animation(
+    properties: &[crate::schema::AmProperty],
+    name: &str,
+    default: f32,
+) -> crate::schema::AmAnimatedFloat {
+    use crate::schema::AmAnimatedFloat;
+    for prop in properties {
+        if prop.name == name && prop.prop_type == "float" {
+            let value = if !prop.value.is_empty() {
+                prop.value.parse::<f32>().ok()
+            } else {
+                None
+            };
+            return AmAnimatedFloat {
+                value: value.or(Some(default)),
+                keyframes: prop.keyframes.clone(),
+            };
+        }
+    }
+    AmAnimatedFloat {
+        value: Some(default),
+        keyframes: Vec::new(),
+    }
+}
+
+/// Extract a vec2 property from shape properties by name.
+pub(crate) fn get_shape_vec2_property(
+    properties: &[crate::schema::AmProperty],
+    name: &str,
+    default: [f32; 2],
+) -> [f32; 2] {
+    for prop in properties {
+        if prop.name == name && prop.prop_type == "vec2" {
+            if !prop.value.is_empty() {
+                if let Ok(v) = crate::schema::parse_vec2(&prop.value) {
+                    return v;
+                }
+            }
+            if let Some(kf) = prop.keyframes.first() {
+                if let Ok(v) = crate::schema::parse_vec2(&kf.value) {
+                    return v;
+                }
+            }
+        }
+    }
+    default
+}
+
+/// Extract a vec2 property animation from shape properties by name.
+pub(crate) fn get_shape_vec2_animation(
+    properties: &[crate::schema::AmProperty],
+    name: &str,
+    default: [f32; 2],
+) -> crate::schema::AmAnimatedVec2 {
+    use crate::schema::{AmAnimatedVec2, AmKeyframe};
+    for prop in properties {
+        if prop.name == name && prop.prop_type == "vec2" {
+            let value = if !prop.value.is_empty() {
+                crate::schema::parse_vec2(&prop.value).ok()
+            } else {
+                None
+            };
+            let keyframes: Vec<AmKeyframe> = prop.keyframes.clone();
+            return AmAnimatedVec2 {
+                value: value.or(Some(default)),
+                keyframes,
+            };
+        }
+    }
+    AmAnimatedVec2 {
+        value: Some(default),
+        keyframes: Vec::new(),
+    }
+}
+
+/// Extract animated shape properties based on shape type.
+/// Returns ([4 float props], [5 vec2 points]) with animation keyframes.
+pub(crate) fn extract_shape_animations(
+    shape_type: &str,
+    properties: &[crate::schema::AmProperty],
+) -> ([crate::schema::AmAnimatedFloat; 4], [crate::schema::AmAnimatedVec2; 5]) {
+    use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
+    let df = || AmAnimatedFloat { value: Some(0.0), keyframes: Vec::new() };
+    let dv = || AmAnimatedVec2 { value: Some([0.0, 0.0]), keyframes: Vec::new() };
+
+    let props = match shape_type {
+        ".roundrect" => [
+            get_shape_float_animation(properties, "cornerRadius", 0.0),
+            df(), df(), df(),
+        ],
+        ".poly" => [
+            get_shape_float_animation(properties, "sideCount", 6.0),
+            get_shape_float_animation(properties, "radius", 50.0),
+            get_shape_float_animation(properties, "offsetAngle", 0.0),
+            df(),
+        ],
+        ".star" => [
+            get_shape_float_animation(properties, "pointCount", 5.0),
+            get_shape_float_animation(properties, "outerRadius", 50.0),
+            get_shape_float_animation(properties, "innerRadius", 25.0),
+            get_shape_float_animation(properties, "offsetAngle", 0.0),
+        ],
+        ".pie" => [
+            get_shape_float_animation(properties, "startAngle", 0.0),
+            get_shape_float_animation(properties, "endAngle", 270.0),
+            get_shape_float_animation(properties, "radius", 50.0),
+            df(),
+        ],
+        ".plus" => [
+            get_shape_float_animation(properties, "stemSize", 50.0),
+            df(), df(), df(),
+        ],
+        ".multifoil" => [
+            get_shape_float_animation(properties, "pointCount", 5.0),
+            get_shape_float_animation(properties, "outerRadius", 50.0),
+            get_shape_float_animation(properties, "innerRadius", 25.0),
+            get_shape_float_animation(properties, "offsetAngle", 0.0),
+        ],
+        ".arc" => [
+            get_shape_float_animation(properties, "startAngle", 0.0),
+            get_shape_float_animation(properties, "endAngle", 270.0),
+            get_shape_float_animation(properties, "radius", 50.0),
+            df(),
+        ],
+        ".line" => {
+            let p = [df(), df(), df(), df()];
+            return (p, [
+                get_shape_vec2_animation(properties, "p1", [0.0, 0.0]),
+                get_shape_vec2_animation(properties, "p2", [50.0, 0.0]),
+                dv(), dv(), dv(),
+            ]);
+        }
+        ".triangle" => {
+            let p = [df(), df(), df(), df()];
+            return (p, [
+                get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
+                get_shape_vec2_animation(properties, "p2", [-50.0, 50.0]),
+                get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
+                dv(), dv(),
+            ]);
+        }
+        ".quad" => {
+            let p = [df(), df(), df(), df()];
+            return (p, [
+                get_shape_vec2_animation(properties, "p1", [-50.0, -50.0]),
+                get_shape_vec2_animation(properties, "p2", [50.0, -50.0]),
+                get_shape_vec2_animation(properties, "p3", [50.0, 50.0]),
+                get_shape_vec2_animation(properties, "p4", [-50.0, 50.0]),
+                dv(),
+            ]);
+        }
+        ".penta" => {
+            let p = [df(), df(), df(), df()];
+            return (p, [
+                get_shape_vec2_animation(properties, "p1", [0.0, -50.0]),
+                get_shape_vec2_animation(properties, "p2", [-47.5, -15.5]),
+                get_shape_vec2_animation(properties, "p3", [-29.4, 40.5]),
+                get_shape_vec2_animation(properties, "p4", [29.4, 40.5]),
+                get_shape_vec2_animation(properties, "p5", [47.5, -15.5]),
+            ]);
+        }
+        _ => [df(), df(), df(), df()],
+    };
+    (props, [dv(), dv(), dv(), dv(), dv()])
 }

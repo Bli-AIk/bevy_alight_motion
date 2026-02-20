@@ -25,11 +25,11 @@ use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback_system, animate_opacity_system, animate_rtt_blur_system,
-    animate_sdf_opacity_system, animate_sdf_scale_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
-    apply_mask_clipping_system, manage_layer_lifecycle_system, update_sdf_mask_system,
-    update_unified_mask_system,
+    AmPlayback, advance_playback_system, animate_am_camera_system, animate_opacity_system,
+    animate_rtt_blur_system, animate_sdf_opacity_system, animate_sdf_scale_system,
+    animate_size_system, animate_text_opacity_system, animate_transform_system,
+    animate_unified_effect_system, apply_mask_clipping_system, manage_layer_lifecycle_system,
+    update_sdf_mask_system, update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -108,6 +108,7 @@ impl Plugin for AlightMotionPlugin {
                 Update,
                 (
                     animate_transform_system,
+                    animate_am_camera_system, // Animate Bevy camera from AM camera layer
                     animate_size_system, // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation
                     animate_opacity_system,

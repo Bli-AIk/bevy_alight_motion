@@ -185,6 +185,8 @@ pub(crate) fn spawn_image(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -481,6 +483,8 @@ pub(crate) fn spawn_text(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         transform,
         GlobalTransform::default(),

@@ -291,6 +291,10 @@ pub struct AmCamera {
     /// Camera properties.
     #[serde(rename = "property", default)]
     pub properties: Vec<AmProperty>,
+
+    /// FOV animation (degrees). Default 60°.
+    #[serde(default)]
+    pub fov: AmAnimatedFloat,
 }
 
 /// Image layer (standalone image, similar to shape with media fill).
@@ -480,6 +484,14 @@ pub struct AmShape {
     /// Border decorations (can have multiple with different directions).
     #[serde(rename = "border", default)]
     pub borders: Vec<AmStroke>,
+
+    /// Gradient fill data (when fillType="gradient").
+    #[serde(default)]
+    pub gradient: Option<AmGradient>,
+
+    /// SVG path data for freeform shapes.
+    #[serde(rename = "path", default)]
+    pub path_element: Option<AmPathElement>,
 }
 
 /// Stroke/border properties for shapes.
@@ -786,4 +798,36 @@ where
         Some(s) if !s.is_empty() => parse_vec2(&s).map(Some).map_err(serde::de::Error::custom),
         _ => Ok(None),
     }
+}
+
+/// Gradient fill data for shapes with fillType="gradient".
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmGradient {
+    /// Gradient type: "linear", "radial", "sweep"
+    #[serde(rename = "@type", default)]
+    pub gradient_type: String,
+
+    /// Start color
+    #[serde(rename = "@startColor", default)]
+    pub start_color: String,
+
+    /// End color
+    #[serde(rename = "@endColor", default)]
+    pub end_color: String,
+
+    /// Start point (UV coordinates, 0-1)
+    #[serde(rename = "@start", default, deserialize_with = "deserialize_vec2_opt")]
+    pub start: Option<[f32; 2]>,
+
+    /// End point (UV coordinates, 0-1)
+    #[serde(rename = "@end", default, deserialize_with = "deserialize_vec2_opt")]
+    pub end: Option<[f32; 2]>,
+}
+
+/// SVG path element for freeform shapes.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AmPathElement {
+    /// SVG path data string (e.g., "M 0 0 L 100 100")
+    #[serde(rename = "@d", default)]
+    pub d: String,
 }

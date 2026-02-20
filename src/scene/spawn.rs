@@ -262,8 +262,9 @@ pub(crate) fn spawn_shape(
             .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
             || b.end_size > 0.0
     });
-    let needs_sdf = (shape.fill_type == "color" || shape.fill_type == "none")
-        && (shape.shape_type == ".circle" || has_stroke_or_border);
+    let needs_sdf = shape.fill_type == "gradient"
+        || ((shape.fill_type == "color" || shape.fill_type == "none")
+            && (shape.shape_type != ".rect" || has_stroke_or_border));
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -303,15 +304,10 @@ pub(crate) fn spawn_shape(
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
             .unwrap_or({
-                // Fall back to @end-size attribute if no <size> element
-                // Note: end-size appears to use a different scale than <size> element
-                // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
-                // Scale by ~20x to match <size> element behavior
-                if stroke.end_size > 0.0 {
-                    stroke.end_size * 1.5
-                } else {
-                    0.0
-                }
+                // Fall back: AM's default stroke size for path-stroke is 4.0
+                // (from KeyableEdgeDecoration.NO_STROKE template)
+                // end-size is a separate attribute (end cap size multiplier), not stroke width
+                4.0
             });
         let stroke_color_value = stroke
             .color
@@ -323,18 +319,67 @@ pub(crate) fn spawn_shape(
         // This is different from having no fillColor value (defaults to white)
         let no_fill = shape.fill_type == "none";
 
+        // Extract second border data if present
+        let border2 = shape.borders.get(1);
+        let border2_width = border2
+            .and_then(|b| {
+                b.size.as_ref().and_then(|s| {
+                    s.value
+                        .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
+                })
+            })
+            .unwrap_or(0.0);
+        let border2_color_value = border2
+            .and_then(|b| b.color.as_ref().map(|c| c.value.clone()))
+            .unwrap_or_default();
+        let border2_direction = border2
+            .map(|b| b.direction.clone())
+            .unwrap_or_default();
+
+        if border2_width > 0.0 {
+            bevy::log::debug!(
+                "[SPAWN] '{}': border2 width={}, color='{}', direction='{}', borders_count={}",
+                shape.label, border2_width, border2_color_value, border2_direction, shape.borders.len()
+            );
+        }
+
+        // Extract shape-specific extra parameters
+        let (shape_extra, shape_extra2, shape_extra3, shape_extra4, shape_extra5, shape_extra6, shape_extra7) = super::collect_types::extract_shape_extras(
+            &shape.shape_type,
+            &shape.properties,
+            shape.path_element.as_ref().map(|p| p.d.as_str()).unwrap_or(""),
+        );
+
+        // Extract gradient data
+        let (gradient_type, gradient_start_color, gradient_end_color, gradient_points) =
+            extract_gradient_data(&shape.gradient);
+
         AmLayerSpec::SdfShape {
             fill_color: shape.fill_color.clone(),
             stroke_color_value,
             stroke_width,
             stroke_join: stroke.join.clone(),
             stroke_direction: stroke.direction.clone(),
+            border2_color_value,
+            border2_width,
+            border2_direction,
             width,
             height,
             pivot_x,
             pivot_y,
             shape_type: shape.shape_type.clone(),
             no_fill,
+            shape_extra,
+            shape_extra2,
+            shape_extra3,
+            shape_extra4,
+            shape_extra5,
+            shape_extra6,
+            shape_extra7,
+            gradient_type,
+            gradient_start_color,
+            gradient_end_color,
+            gradient_points,
         }
     } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         AmLayerSpec::SpriteShape {
@@ -486,6 +531,8 @@ pub(crate) fn spawn_shape(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             layer_spec,
             transform,
@@ -664,6 +711,8 @@ pub(crate) fn spawn_null(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::Null,
             transform,
@@ -837,6 +886,8 @@ pub(crate) fn spawn_embed_scene(
                 pixelate_threshold: AmAnimatedFloat::default(),
                 pixelate_saturation: AmAnimatedFloat::default(),
                 pixelate_screen_space: false,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)
@@ -970,4 +1021,40 @@ pub(crate) fn calculate_pivot_compensation(
     };
 
     (comp_x, comp_y)
+}
+
+/// Extract gradient data from an AmGradient into uniform-ready values.
+/// Returns (gradient_type, start_color, end_color, points).
+pub(crate) fn extract_gradient_data(
+    gradient: &Option<crate::schema::AmGradient>,
+) -> (u8, bevy::math::Vec4, bevy::math::Vec4, bevy::math::Vec4) {
+    use bevy::math::Vec4;
+    if let Some(g) = gradient {
+        let grad_type = match g.gradient_type.as_str() {
+            "linear" => 1u8,
+            "radial" => 2u8,
+            "sweep" => 3u8,
+            _ => 0u8,
+        };
+        if grad_type == 0 {
+            return (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO);
+        }
+        let start_color = crate::schema::parse_color(&g.start_color)
+            .map(|c| {
+                // Store in sRGB space for sRGB-space interpolation (matching AM's NanoVG)
+                Vec4::new(c[0], c[1], c[2], c[3])
+            })
+            .unwrap_or(Vec4::ZERO);
+        let end_color = crate::schema::parse_color(&g.end_color)
+            .map(|c| {
+                Vec4::new(c[0], c[1], c[2], c[3])
+            })
+            .unwrap_or(Vec4::ZERO);
+        let start_pt = g.start.unwrap_or([0.0, 0.0]);
+        let end_pt = g.end.unwrap_or([1.0, 1.0]);
+        let points = Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]);
+        (grad_type, start_color, end_color, points)
+    } else {
+        (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO)
+    }
 }

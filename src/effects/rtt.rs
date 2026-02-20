@@ -928,11 +928,11 @@ pub fn apply_embed_bounds_clipping_system(
             continue;
         }
 
-        // Extract embed's world position and scale from GlobalTransform
+        // Extract embed's world position, scale, and rotation from GlobalTransform
         // Note: GlobalTransform already includes fit_scale from parent chain,
         // so we DON'T need to multiply by fit_scale again!
-        let embed_pos = embed_gt.translation();
-        let embed_scale = embed_gt.to_scale_rotation_translation().0;
+        let (embed_scale, embed_rotation, embed_pos) =
+            embed_gt.to_scale_rotation_translation();
 
         // Calculate embed bounds in world coordinates
         // bounds.width/height are in project coordinates (e.g., 1440x1080)
@@ -942,19 +942,27 @@ pub fn apply_embed_bounds_clipping_system(
         let center_x = embed_pos.x;
         let center_y = embed_pos.y;
 
+        // Extract Z rotation angle for rotated rectangle clipping
+        let rotation_z = embed_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
+
         // Set mask params for rectangular clipping
         // mask_type 1.0 = rectangle include (only show pixels inside)
         material.uniform_data.effect_flags.x = 1.0; // Rectangle mask
         material.uniform_data.mask_params =
             bevy::math::Vec4::new(center_x, center_y, half_width, half_height);
+        // mask_blend: fill_alpha=1.0 (opaque fill), opacity=1.0 (full strength), sw=0
+        material.uniform_data.mask_blend = bevy::math::Vec4::new(1.0, 1.0, 0.0, 0.0);
+        // mask1 rotation stored in mask2_flags.y
+        material.uniform_data.mask2_flags.y = rotation_z;
 
         bevy::log::trace!(
-            "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), embed_scale=({:.3},{:.3})",
+            "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), rot={:.3}, embed_scale=({:.3},{:.3})",
             _entity,
             center_x,
             center_y,
             half_width,
             half_height,
+            rotation_z,
             embed_scale.x,
             embed_scale.y
         );

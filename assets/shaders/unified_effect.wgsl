@@ -66,6 +66,9 @@ struct UnifiedEffectUniform {
     pixelate_flags: vec4<f32>,         // (enabled, screen_space, 0, 0)
     pixelate_params1: vec4<f32>,       // (size, stretch_x, stretch_y, angle)
     pixelate_params2: vec4<f32>,       // (vignette, threshold, saturation, 0)
+    // Mask blend parameters
+    mask_blend: vec4<f32>,             // mask1: (fill_alpha, opacity, stroke_width, 0)
+    mask2_blend: vec4<f32>,            // mask2: (fill_alpha, opacity, stroke_width, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -165,123 +168,94 @@ fn apply_wipe(uv: vec2<f32>) -> f32 {
     }
 }
 
-// Check if a point is inside a single mask shape (with rotation support)
-// rotation: rotation angle in radians
-// Returns true if inside the shape, false if outside
-fn check_mask_shape_rotated(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool, rotation: f32) -> bool {
-    // Transform world position to mask-local coordinates
-    var rel_pos = world_pos - mask_center;
-    
-    // Apply inverse rotation to transform to axis-aligned space
-    // rotation is the mask's rotation, so we rotate the point by -rotation
-    if abs(rotation) > 0.001 {
-        let cos_r = cos(-rotation);
-        let sin_r = sin(-rotation);
-        rel_pos = vec2<f32>(
-            rel_pos.x * cos_r - rel_pos.y * sin_r,
-            rel_pos.x * sin_r + rel_pos.y * cos_r
-        );
+// Compute mask blend factor for a single mask.
+// Returns 1.0 = fully visible, 0.0 = fully hidden.
+fn compute_ue_mask_blend_factor(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
     }
-    
-    if is_ellipse {
-        // Ellipse equation: (x/a)^2 + (y/b)^2 <= 1
-        let normalized = rel_pos / mask_half_size;
-        return dot(normalized, normalized) <= 1.0;
-    } else {
-        // Rectangle mask (now axis-aligned after inverse rotation)
-        return abs(rel_pos.x) <= mask_half_size.x && abs(rel_pos.y) <= mask_half_size.y;
-    }
-}
 
-// Backward compatibility: check without rotation
-fn check_mask_shape(world_pos: vec2<f32>, mask_center: vec2<f32>, mask_half_size: vec2<f32>, is_ellipse: bool) -> bool {
-    return check_mask_shape_rotated(world_pos, mask_center, mask_half_size, is_ellipse, 0.0);
-}
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
 
-// Apply single mask - returns true if pixel should be kept
-// mask_type: 0=disabled, 1=rect, 2=ellipse, 3=rect exclude, 4=ellipse exclude
-fn apply_single_mask(world_pos: vec2<f32>, mask_type: f32, mask_center: vec2<f32>, mask_half_size: vec2<f32>) -> bool {
-    // Disabled mask or invalid half_size - keep all pixels
-    if mask_type < 0.5 || mask_half_size.x > 5000.0 {
-        return true;
+    var rel = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel = vec2<f32>(rel.x * c - rel.y * s, rel.x * s + rel.y * c);
     }
-    
-    // Determine if this is an exclude mask (type >= 2.5)
+
     let is_exclude = mask_type > 2.5;
-    // Determine if this is an ellipse (type ~= 2 or 4)
     let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
-    
-    let inside = check_mask_shape(world_pos, mask_center, mask_half_size, is_ellipse);
-    
-    // For exclude masks, keep pixels OUTSIDE the shape
-    if is_exclude {
-        return !inside;
+
+    // Shape fill boundary = bounding box minus stroke extension (centered stroke)
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    var mask_sdf: f32;
+    if is_ellipse {
+        let norm = rel / shape_half;
+        let r = length(norm);
+        mask_sdf = (r - 1.0) * min(shape_half.x, shape_half.y);
+    } else {
+        mask_sdf = max(abs(rel.x) - shape_half.x, abs(rel.y) - shape_half.y);
     }
-    // For include masks, keep pixels INSIDE the shape
-    return inside;
+
+    let fill_factor = select(0.0, fill_alpha, mask_sdf < 0.0);
+    // Stroke is solid within its width, with ~1px AA at the outer edge
+    let aa = min(1.0, sw * 0.5);
+    let stroke_factor = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+    let mask_alpha = min(max(fill_factor, stroke_factor), 1.0);
+
+    if is_exclude {
+        return 1.0 - opacity * mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - mask_alpha);
+    }
 }
 
-// Apply combined masks with correct AM logic:
-// - Multiple include masks: INTERSECTION (show only where ALL include masks overlap)
-// - Multiple exclude masks: UNION (hide if inside ANY exclude mask)
-// - Mixed: (inside include intersection) AND (outside exclude union)
-fn apply_masks(world_pos: vec2<f32>) -> bool {
+// Apply combined masks - returns blend factor (1.0=fully visible, 0.0=fully hidden)
+fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
     let mask1_type = uniforms.effect_flags.x;
     let mask2_type = uniforms.mask2_flags.x;
-    // Rotation angles are stored in mask2_flags.y (mask1) and mask2_flags.z (mask2)
     let mask1_rotation = uniforms.mask2_flags.y;
     let mask2_rotation = uniforms.mask2_flags.z;
-    
-    // Disabled masks
+
     let mask1_enabled = mask1_type > 0.5;
     let mask2_enabled = mask2_type > 0.5;
-    
+
     if !mask1_enabled && !mask2_enabled {
-        return true; // No masks - keep all pixels
+        return 1.0;
     }
-    
-    // Check if each mask is exclude type (type >= 2.5 means type 3 or 4)
-    let mask1_is_exclude = mask1_type > 2.5;
-    let mask2_is_exclude = mask2_type > 2.5;
-    
-    // Check if pixel is inside each mask shape (with rotation)
-    let mask1_is_ellipse = (mask1_type > 1.5 && mask1_type < 2.5) || mask1_type > 3.5;
-    let mask2_is_ellipse = (mask2_type > 1.5 && mask2_type < 2.5) || mask2_type > 3.5;
-    
-    let mask1_inside = mask1_enabled && uniforms.mask_params.z < 5000.0 && 
-        check_mask_shape_rotated(world_pos, uniforms.mask_params.xy, uniforms.mask_params.zw, mask1_is_ellipse, mask1_rotation);
-    let mask2_inside = mask2_enabled && uniforms.mask2_params.z < 5000.0 && 
-        check_mask_shape_rotated(world_pos, uniforms.mask2_params.xy, uniforms.mask2_params.zw, mask2_is_ellipse, mask2_rotation);
-    
-    // Separate into include and exclude groups
-    let include1 = mask1_enabled && !mask1_is_exclude;
-    let include2 = mask2_enabled && !mask2_is_exclude;
-    let exclude1 = mask1_enabled && mask1_is_exclude;
-    let exclude2 = mask2_enabled && mask2_is_exclude;
-    
-    // Calculate include result: pixel must be inside ALL include masks (intersection)
-    var include_pass = true;
-    if include1 || include2 {
-        if include1 && include2 {
-            // Both include masks: must be inside both (intersection)
-            include_pass = mask1_inside && mask2_inside;
-        } else if include1 {
-            include_pass = mask1_inside;
-        } else {
-            include_pass = mask2_inside;
-        }
+
+    var factor = 1.0;
+    if mask1_enabled {
+        factor *= compute_ue_mask_blend_factor(
+            world_pos,
+            uniforms.mask_params,
+            mask1_rotation,
+            mask1_type,
+            uniforms.mask_blend,
+        );
     }
-    
-    // Calculate exclude result: pixel must be outside ALL exclude masks
-    var exclude_pass = true;
-    if exclude1 || exclude2 {
-        let in_exclude1 = exclude1 && mask1_inside;
-        let in_exclude2 = exclude2 && mask2_inside;
-        // If inside any exclude mask, fail
-        exclude_pass = !(in_exclude1 || in_exclude2);
+    if mask2_enabled {
+        factor *= compute_ue_mask_blend_factor(
+            world_pos,
+            uniforms.mask2_params,
+            mask2_rotation,
+            mask2_type,
+            uniforms.mask2_blend,
+        );
     }
-    
-    return include_pass && exclude_pass;
+    return factor;
 }
 
 // Gaussian weight function
@@ -1261,11 +1235,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     
-    // Apply mask clipping if any mask is enabled
-    // Uses combined mask logic for dual masks and mixed include/exclude
+    // Apply mask blend factor if any mask is enabled
+    var mask_factor = 1.0;
     if mask_enabled {
         let world_pos = mesh.world_position.xy;
-        if !apply_masks(world_pos) {
+        mask_factor = apply_masks_blend(world_pos);
+        if mask_factor < 0.005 {
             discard;
         }
     }
@@ -1289,7 +1264,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         final_color = tex_color * uniforms.color;
     }
     final_color.a *= wipe_alpha;
-    
+
+    // Apply mask in sRGB space to match AM's compositing pipeline.
+    // AM blends: output_sRGB = content_sRGB * mask_factor.
+    // GPU pipeline is linear, so do sRGB round-trip for mask application.
+    if mask_factor < 0.999 {
+        let lin = final_color.rgb;
+        // linear → sRGB (approximate, matching sRGB standard piecewise curve)
+        let srgb = vec3<f32>(
+            select(1.055 * pow(lin.r, 1.0 / 2.4) - 0.055, lin.r * 12.92, lin.r <= 0.0031308),
+            select(1.055 * pow(lin.g, 1.0 / 2.4) - 0.055, lin.g * 12.92, lin.g <= 0.0031308),
+            select(1.055 * pow(lin.b, 1.0 / 2.4) - 0.055, lin.b * 12.92, lin.b <= 0.0031308),
+        );
+        let masked = srgb * mask_factor;
+        // sRGB → linear
+        final_color = vec4<f32>(
+            select(pow((masked.x + 0.055) / 1.055, 2.4), masked.x / 12.92, masked.x <= 0.04045),
+            select(pow((masked.y + 0.055) / 1.055, 2.4), masked.y / 12.92, masked.y <= 0.04045),
+            select(pow((masked.z + 0.055) / 1.055, 2.4), masked.z / 12.92, masked.z <= 0.04045),
+            final_color.a,
+        );
+    }
+
     if final_color.a < 0.001 {
         discard;
     }

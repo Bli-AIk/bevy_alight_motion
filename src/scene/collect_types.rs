@@ -7,10 +7,11 @@
 
 use bevy::prelude::*;
 use std::collections::HashMap;
+use super::helpers;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmShape, AmText};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmCamera, AmShape, AmText};
 
 use super::collect::{apply_mask_to_children, collect_pending_layers};
 use super::components::*;
@@ -75,8 +76,9 @@ pub(crate) fn collect_shape(
             .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
             || b.end_size > 0.0
     });
-    let needs_sdf = (shape.fill_type == "color" || shape.fill_type == "none")
-        && (shape.shape_type == ".circle" || has_stroke_or_border);
+    let needs_sdf = shape.fill_type == "gradient"
+        || ((shape.fill_type == "color" || shape.fill_type == "none")
+            && (shape.shape_type != ".rect" || has_stroke_or_border));
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -104,32 +106,58 @@ pub(crate) fn collect_shape(
         },
     };
 
+    // Extract animated shape properties (for SDF shapes; defaults for others)
+    let (shape_props, shape_points) = if needs_sdf {
+        helpers::extract_shape_animations(&shape.shape_type, &shape.properties)
+    } else {
+        Default::default()
+    };
+
     let spec = if needs_sdf {
         let default_stroke = crate::schema::AmStroke::default();
+        let has_path_stroke = shape.stroke.is_some();
         // Use path-stroke if available, otherwise fall back to first border
         let stroke = shape
             .stroke
             .as_ref()
             .unwrap_or_else(|| shape.borders.first().unwrap_or(&default_stroke));
-        // Get initial stroke width: first check <size> element, then fall back to @end-size attribute
-        let stroke_width = stroke
-            .size
-            .as_ref()
-            .and_then(|s| {
-                // Prefer static value, fall back to first keyframe value
-                s.value
-                    .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
-            })
-            .unwrap_or({
-                // Fall back to @end-size attribute if no <size> element
-                // Note: end-size appears to use a different scale than <size> element
-                // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
-                if stroke.end_size > 0.0 {
-                    stroke.end_size * 1.5
-                } else {
-                    0.0
-                }
-            });
+
+        // AM's border effect uses a pixel-scanning shader hardcoded to 2048-wide buffers.
+        // Border sizes are in this 2048-normalized space, so we scale to composition pixels:
+        //   effective_size = xml_size * (comp_width / 2048)
+        // Path-stroke and centered borders use NanoVG strokeWidth (no scaling needed).
+        // AM filters out centered borders for shapes and renders them as NanoVG path strokes.
+        let border_scale = if has_path_stroke {
+            1.0
+        } else {
+            let direction = shape
+                .borders
+                .first()
+                .map(|b| b.direction.as_str())
+                .unwrap_or("centered");
+            if direction == "centered" {
+                1.0 // Centered borders rendered via NanoVG, not pixel-scan effect
+            } else {
+                config.canvas_width / 2048.0
+            }
+        };
+
+        let has_any_stroke = has_path_stroke || !shape.borders.is_empty();
+
+        // Get initial stroke width: only use default 4.0 if shape actually has a stroke
+        let stroke_width = if has_any_stroke {
+            stroke
+                .size
+                .as_ref()
+                .and_then(|s| {
+                    s.value
+                        .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
+                })
+                .unwrap_or(4.0)
+                * border_scale
+        } else {
+            0.0
+        };
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -140,18 +168,62 @@ pub(crate) fn collect_shape(
         // This is different from having no fillColor value (defaults to white)
         let no_fill = shape.fill_type == "none";
 
+        // Extract second border data if present (always uses border scaling)
+        let border2 = shape.borders.get(1);
+        let border2_scale = config.canvas_width / 2048.0;
+        let border2_width = border2
+            .and_then(|b| {
+                b.size.as_ref().and_then(|s| {
+                    s.value
+                        .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
+                })
+            })
+            .unwrap_or(0.0)
+            * border2_scale;
+        let border2_color_value = border2
+            .and_then(|b| b.color.as_ref().map(|c| c.value.clone()))
+            .unwrap_or_default();
+        let border2_direction = border2
+            .map(|b| b.direction.clone())
+            .unwrap_or_default();
+
+        // Extract shape-specific extra parameters based on shape type
+        let (shape_extra, shape_extra2, shape_extra3, shape_extra4, shape_extra5, shape_extra6, shape_extra7) = extract_shape_extras(
+            &shape.shape_type,
+            &shape.properties,
+            shape.path_element.as_ref().map(|p| p.d.as_str()).unwrap_or(""),
+        );
+
+        // Extract gradient data
+        let (gradient_type, gradient_start_color, gradient_end_color, gradient_points) =
+            super::spawn::extract_gradient_data(&shape.gradient);
+
         AmLayerSpec::SdfShape {
             fill_color: shape.fill_color.clone(),
             stroke_color_value,
             stroke_width,
             stroke_join: stroke.join.clone(),
             stroke_direction: stroke.direction.clone(),
+            border2_color_value,
+            border2_width,
+            border2_direction,
             width,
             height,
             pivot_x,
             pivot_y,
             shape_type: shape.shape_type.clone(),
             no_fill,
+            shape_extra,
+            shape_extra2,
+            shape_extra3,
+            shape_extra4,
+            shape_extra5,
+            shape_extra6,
+            shape_extra7,
+            gradient_type,
+            gradient_start_color,
+            gradient_end_color,
+            gradient_points,
         }
     } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
         AmLayerSpec::SpriteShape {
@@ -182,8 +254,37 @@ pub(crate) fn collect_shape(
         Vec2::new(comp_x, comp_y)
     };
 
-    let stroke_width_anim =
-        get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
+    let stroke_width_anim = {
+        let has_path_stroke = shape.stroke.is_some();
+        let border_scale = if has_path_stroke {
+            1.0
+        } else {
+            let direction = shape
+                .borders
+                .first()
+                .map(|b| b.direction.as_str())
+                .unwrap_or("centered");
+            if direction == "centered" {
+                1.0
+            } else {
+                config.canvas_width / 2048.0
+            }
+        };
+        let mut anim =
+            get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
+        // Scale border-sourced keyframe values by comp_width/2048
+        if border_scale != 1.0 {
+            if let Some(ref mut v) = anim.value {
+                *v *= border_scale;
+            }
+            for kf in &mut anim.keyframes {
+                if let Ok(val) = kf.value.parse::<f32>() {
+                    kf.value = (val * border_scale).to_string();
+                }
+            }
+        }
+        anim
+    };
 
     Some(PendingLayer {
         id: shape.id,
@@ -296,6 +397,8 @@ pub(crate) fn collect_shape(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            shape_props,
+            shape_points,
         },
         spec,
         z_index: z,
@@ -454,6 +557,8 @@ pub(crate) fn collect_null(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -680,6 +785,8 @@ pub(crate) fn collect_embed_scene(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -889,6 +996,8 @@ pub(crate) fn collect_text(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -1053,6 +1162,8 @@ pub(crate) fn collect_image(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
@@ -1073,4 +1184,243 @@ pub(crate) fn collect_image(
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
     })
+}
+
+/// Collect a camera layer's data for lazy spawning.
+pub(crate) fn collect_camera(
+    camera: &AmCamera,
+    config: &AmSceneConfig,
+    z: f32,
+) -> Option<PendingLayer> {
+    let has_parent = camera.parent != 0;
+    let (tx, ty) = get_initial_location(&camera.transform.location, config, has_parent);
+
+    // Extract base Z from first location keyframe (or use default)
+    let base_z = camera
+        .transform
+        .location
+        .keyframes
+        .first()
+        .and_then(|kf| {
+            let parts: Vec<&str> = kf.value.split(',').collect();
+            parts.get(2).and_then(|s| s.trim().parse::<f32>().ok())
+        })
+        .or_else(|| {
+            camera
+                .transform
+                .location
+                .value
+                .as_ref()
+                .map(|v| v[2])
+        })
+        .unwrap_or(-1247.0);
+
+    let transform = Transform {
+        translation: Vec3::new(tx, ty, z),
+        ..Default::default()
+    };
+
+    Some(PendingLayer {
+        id: camera.id,
+        label: camera.label.clone(),
+        parent: camera.parent,
+        start_time: camera.start_time,
+        end_time: camera.end_time,
+        transform,
+        animated: AmAnimated {
+            layer_id: camera.id,
+            start_time: camera.start_time,
+            end_time: camera.end_time,
+            time_offset: config.time_offset,
+            lifecycle_offset: config.lifecycle_offset,
+            location: camera.transform.location.clone(),
+            pivot: camera.transform.pivot.clone(),
+            rotation: camera.transform.rotation.clone(),
+            scale: camera.transform.scale.clone(),
+            opacity: camera.transform.opacity.clone(),
+            canvas_width: config.canvas_width,
+            canvas_height: config.canvas_height,
+            has_parent,
+            parent_layer_id: camera.parent,
+            speed_multiplier: config.speed_multiplier,
+            element_speed: 1.0,
+            ..Default::default()
+        },
+        spec: AmLayerSpec::Camera {
+            fov: camera.fov.clone(),
+            base_z,
+        },
+        z_index: z,
+        children: Vec::new(),
+        blending_mode: AmBlendingMode::Normal,
+        mask_info: None,
+        palette_params: None,
+        embed_scene_size: None,
+        containing_embed_id: 0,
+        from_deeply_nested_scene: config.nesting_depth > 1,
+    })
+}
+
+/// Extract shape-specific extra parameters based on shape type.
+/// Returns (shape_extra, shape_extra2, ..., shape_extra7) as Vec4 values.
+pub(crate) fn extract_shape_extras(
+    shape_type: &str,
+    properties: &[crate::schema::AmProperty],
+    path_data: &str,
+) -> (Vec4, Vec4, Vec4, Vec4, Vec4, Vec4, Vec4) {
+    use super::helpers::*;
+    let z = Vec4::ZERO;
+    match shape_type {
+        ".roundrect" => {
+            let corner_radius = get_shape_float_property(properties, "cornerRadius", 25.0);
+            (Vec4::new(corner_radius, 0.0, 0.0, 0.0), z, z, z, z, z, z)
+        }
+        ".poly" => {
+            let side_count = get_shape_float_property(properties, "sideCount", 6.0);
+            let radius = get_shape_float_property(properties, "radius", 100.0);
+            let offset_angle = get_shape_float_property(properties, "offsetAngle", 0.0);
+            (Vec4::new(side_count, radius, offset_angle, 0.0), z, z, z, z, z, z)
+        }
+        ".star" => {
+            let point_count = get_shape_float_property(properties, "pointCount", 5.0);
+            let outer_radius = get_shape_float_property(properties, "outerRadius", 100.0);
+            let inner_radius = get_shape_float_property(properties, "innerRadius", 50.0);
+            let offset_angle = get_shape_float_property(properties, "offsetAngle", 0.0);
+            (Vec4::new(point_count, outer_radius, inner_radius, offset_angle), z, z, z, z, z, z)
+        }
+        ".pie" => {
+            let start_angle = get_shape_float_property(properties, "startAngle", 0.0);
+            let end_angle = get_shape_float_property(properties, "endAngle", 90.0);
+            let radius = get_shape_float_property(properties, "radius", 100.0);
+            (Vec4::new(start_angle, end_angle, radius, 0.0), z, z, z, z, z, z)
+        }
+        ".plus" => {
+            let stem_size = get_shape_float_property(properties, "stemSize", 50.0);
+            (Vec4::new(stem_size, 0.0, 0.0, 0.0), z, z, z, z, z, z)
+        }
+        ".multifoil" => {
+            let point_count = get_shape_float_property(properties, "pointCount", 5.0);
+            let outer_radius = get_shape_float_property(properties, "outerRadius", 100.0);
+            let inner_radius = get_shape_float_property(properties, "innerRadius", 50.0);
+            let offset_angle = get_shape_float_property(properties, "offsetAngle", 0.0);
+            (Vec4::new(point_count, outer_radius, inner_radius, offset_angle), z, z, z, z, z, z)
+        }
+        ".line" => {
+            let p1 = get_shape_vec2_property(properties, "p1", [-100.0, 0.0]);
+            let p2 = get_shape_vec2_property(properties, "p2", [100.0, 0.0]);
+            (Vec4::new(p1[0], p1[1], p2[0], p2[1]), z, z, z, z, z, z)
+        }
+        ".arc" => {
+            let start_angle = get_shape_float_property(properties, "startAngle", 0.0);
+            let end_angle = get_shape_float_property(properties, "endAngle", 90.0);
+            let radius = get_shape_float_property(properties, "radius", 100.0);
+            (Vec4::new(start_angle, end_angle, radius, 0.0), z, z, z, z, z, z)
+        }
+        ".triangle" => {
+            let p1 = get_shape_vec2_property(properties, "p1", [-100.0, 100.0]);
+            let p2 = get_shape_vec2_property(properties, "p2", [0.0, -100.0]);
+            let p3 = get_shape_vec2_property(properties, "p3", [100.0, 100.0]);
+            (
+                Vec4::new(p1[0], p1[1], p2[0], p2[1]),
+                Vec4::new(p3[0], p3[1], 0.0, 0.0),
+                z, z, z, z, z,
+            )
+        }
+        ".quad" => {
+            let p1 = get_shape_vec2_property(properties, "p1", [-100.0, -100.0]);
+            let p2 = get_shape_vec2_property(properties, "p2", [100.0, -100.0]);
+            let p3 = get_shape_vec2_property(properties, "p3", [100.0, 100.0]);
+            let p4 = get_shape_vec2_property(properties, "p4", [-100.0, 100.0]);
+            (
+                Vec4::new(p1[0], p1[1], p2[0], p2[1]),
+                Vec4::new(p3[0], p3[1], p4[0], p4[1]),
+                z, z, z, z, z,
+            )
+        }
+        ".penta" => {
+            let p1 = get_shape_vec2_property(properties, "p1", [-100.0, -100.0]);
+            let p2 = get_shape_vec2_property(properties, "p2", [0.0, -100.0]);
+            let p3 = get_shape_vec2_property(properties, "p3", [0.0, 0.0]);
+            let p4 = get_shape_vec2_property(properties, "p4", [100.0, 100.0]);
+            let p5 = get_shape_vec2_property(properties, "p5", [-100.0, 100.0]);
+            (
+                Vec4::new(p1[0], p1[1], p2[0], p2[1]),
+                Vec4::new(p3[0], p3[1], p4[0], p4[1]),
+                Vec4::new(p5[0], p5[1], 0.0, 0.0),
+                z, z, z, z,
+            )
+        }
+        _ if shape_type.is_empty() && !path_data.is_empty() => {
+            // Freeform path: parse path data into vertices
+            parse_path_extras(path_data)
+        }
+        _ => (z, z, z, z, z, z, z),
+    }
+}
+
+/// Parse SVG-like path data into vertex vec4s for the shader.
+/// Supports M (move) and L (line) commands. Stores up to 13 vertices + vertex count.
+pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec4, Vec4, Vec4) {
+    let mut vertices: Vec<f32> = Vec::new();
+    // Pre-process: insert spaces around SVG command letters
+    let mut cleaned = String::with_capacity(path_data.len() + 20);
+    for c in path_data.chars() {
+        if c.is_ascii_alphabetic() {
+            cleaned.push(' ');
+            cleaned.push(c);
+            cleaned.push(' ');
+        } else {
+            cleaned.push(c);
+        }
+    }
+    let tokens: Vec<&str> = cleaned.split_whitespace().collect();
+    let mut i = 0;
+    while i < tokens.len() {
+        match tokens[i] {
+            "M" | "L" | "m" | "l" => {
+                if i + 2 < tokens.len() {
+                    if let (Ok(x), Ok(y)) = (tokens[i+1].parse::<f32>(), tokens[i+2].parse::<f32>()) {
+                        if vertices.len() < 26 { // 13 vertices max (26 floats)
+                            vertices.push(x);
+                            vertices.push(y);
+                        }
+                    }
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            }
+            "Z" | "z" => {
+                i += 1;
+            }
+            _ => {
+                // Try parsing as coordinate pair (implicit L command)
+                if i + 1 < tokens.len() {
+                    if let (Ok(x), Ok(y)) = (tokens[i].parse::<f32>(), tokens[i+1].parse::<f32>()) {
+                        if vertices.len() < 26 {
+                            vertices.push(x);
+                            vertices.push(y);
+                        }
+                        i += 2;
+                        continue;
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+    let vertex_count = (vertices.len() / 2) as f32;
+    // Pad to 26 floats (13 vertices)
+    while vertices.len() < 26 {
+        vertices.push(0.0);
+    }
+    (
+        Vec4::new(vertices[0], vertices[1], vertices[2], vertices[3]),
+        Vec4::new(vertices[4], vertices[5], vertices[6], vertices[7]),
+        Vec4::new(vertices[8], vertices[9], vertices[10], vertices[11]),
+        Vec4::new(vertices[12], vertices[13], vertices[14], vertices[15]),
+        Vec4::new(vertices[16], vertices[17], vertices[18], vertices[19]),
+        Vec4::new(vertices[20], vertices[21], vertices[22], vertices[23]),
+        Vec4::new(vertices[24], vertices[25], vertex_count, 0.0),
+    )
 }

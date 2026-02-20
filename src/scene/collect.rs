@@ -372,8 +372,20 @@ pub(crate) fn collect_layer(
                 pending.push(pl);
             }
         }
+        AmLayer::Camera(camera) => {
+            if let Some(pl) = collect_camera(camera, config, z) {
+                bevy::log::trace!(
+                    "  Collected camera '{}' (id={}, time={}..{}ms)",
+                    camera.label,
+                    camera.id,
+                    camera.start_time,
+                    camera.end_time
+                );
+                pending.push(pl);
+            }
+        }
         // Ignore unsupported layer types
-        AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Camera(_) | AmLayer::Video(_) => {}
+        AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Video(_) => {}
     }
 }
 pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {

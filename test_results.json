@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-19T23:43:04.195214+08:00",
+  "timestamp": "2026-02-20T14:24:16.491863+08:00",
   "summary": {
-    "passed": 51,
-    "skipped": 2,
-    "failed": 30
+    "passed": 56,
+    "skipped": 1,
+    "failed": 28
   },
   "results": {
     "basic/bezier/bezier": {
@@ -15,6 +15,9 @@
     "basic/bounce/box": {
       "status": "pass"
     },
+    "basic/camera/basic": {
+      "status": "pass"
+    },
     "basic/cutoff/cutoff": {
       "status": "pass"
     },
@@ -22,7 +25,7 @@
       "status": "pass"
     },
     "basic/gradient/gradient": {
-      "status": "skip"
+      "status": "pass"
     },
     "basic/group/cutoff": {
       "status": "pass"
@@ -54,6 +57,9 @@
     "basic/mask/circle": {
       "status": "pass"
     },
+    "basic/mask/shape_ex": {
+      "status": "pass"
+    },
     "basic/mask/square": {
       "status": "pass"
     },
@@ -73,8 +79,7 @@
       "status": "pass"
     },
     "basic/muti-shape/muti-shape": {
-      "status": "fail",
-      "avg_similarity": 0.7559
+      "status": "pass"
     },
     "basic/pivot/pivot": {
       "status": "pass"
@@ -83,8 +88,7 @@
       "status": "pass"
     },
     "basic/shape/ex1": {
-      "status": "fail",
-      "avg_similarity": 0.9312
+      "status": "pass"
     },
     "basic/shape/shape": {
       "status": "pass"

@@ -304,8 +304,14 @@ pub enum AmLayerSpec {
         stroke_color_value: String,
         stroke_width: f32,
         stroke_join: String,
-        /// Border direction: "centered", "inside", "outside"
+        /// Border 1 direction: "centered", "inside", "outside"
         stroke_direction: String,
+        /// Border 2 color (empty if no second border)
+        border2_color_value: String,
+        /// Border 2 width (0 if no second border)
+        border2_width: f32,
+        /// Border 2 direction: "centered", "inside", "outside"
+        border2_direction: String,
         width: f32,
         height: f32,
         pivot_x: f32,
@@ -314,6 +320,22 @@ pub enum AmLayerSpec {
         /// Whether the shape has no fill (fillType="none").
         /// When true, fill is transparent. When false, fill defaults to white if fill_color is None.
         no_fill: bool,
+        /// Shape-specific extra parameters (initial values)
+        shape_extra: bevy::math::Vec4,
+        shape_extra2: bevy::math::Vec4,
+        shape_extra3: bevy::math::Vec4,
+        shape_extra4: bevy::math::Vec4,
+        shape_extra5: bevy::math::Vec4,
+        shape_extra6: bevy::math::Vec4,
+        shape_extra7: bevy::math::Vec4,
+        /// Gradient fill type: 0=none, 1=linear, 2=radial, 3=sweep
+        gradient_type: u8,
+        /// Gradient start color (linear RGBA)
+        gradient_start_color: bevy::math::Vec4,
+        /// Gradient end color (linear RGBA)
+        gradient_end_color: bevy::math::Vec4,
+        /// Gradient start/end points in shape UV [0,1] space
+        gradient_points: bevy::math::Vec4,
     },
     /// Text layer
     Text {
@@ -334,6 +356,13 @@ pub enum AmLayerSpec {
     Null,
     /// Embedded scene container (children managed separately)
     EmbedScene,
+    /// Camera layer (no visual, controls Bevy Camera2d)
+    Camera {
+        /// FOV animation in degrees.
+        fov: crate::schema::AmAnimatedFloat,
+        /// Initial Z distance (negative).
+        base_z: f32,
+    },
 }
 
 /// Blending mode for layers.

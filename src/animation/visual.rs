@@ -630,12 +630,26 @@ pub(crate) fn add_visual_components(
             stroke_width,
             stroke_join,
             stroke_direction,
+            border2_color_value,
+            border2_width,
+            border2_direction,
             width,
             height,
             pivot_x,
             pivot_y,
             shape_type,
             no_fill,
+            shape_extra,
+            shape_extra2,
+            shape_extra3,
+            shape_extra4,
+            shape_extra5,
+            shape_extra6,
+            shape_extra7,
+            gradient_type,
+            gradient_start_color,
+            gradient_end_color,
+            gradient_points,
         } => {
             bevy::log::info!("[Visual] Spawning SdfShape for '{}'", label);
             spawn_sdf_visual(
@@ -648,6 +662,9 @@ pub(crate) fn add_visual_components(
                 *stroke_width,
                 stroke_join,
                 stroke_direction,
+                border2_color_value,
+                *border2_width,
+                border2_direction,
                 *width,
                 *height,
                 *pivot_x,
@@ -662,6 +679,17 @@ pub(crate) fn add_visual_components(
                 global_time_ms,
                 fit_scale,
                 *no_fill,
+                *shape_extra,
+                *shape_extra2,
+                *shape_extra3,
+                *shape_extra4,
+                *shape_extra5,
+                *shape_extra6,
+                *shape_extra7,
+                *gradient_type,
+                *gradient_start_color,
+                *gradient_end_color,
+                *gradient_points,
             );
         }
         AmLayerSpec::Image {
@@ -827,6 +855,10 @@ pub(crate) fn add_visual_components(
                 );
                 commands.entity(entity).insert(AmVisualSpawned);
             }
+        }
+        AmLayerSpec::Camera { .. } => {
+            // Camera layers have no visual — marker only
+            commands.entity(entity).insert(AmVisualSpawned);
         }
     }
 }

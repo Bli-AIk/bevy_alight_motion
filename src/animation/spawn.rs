@@ -596,6 +596,7 @@ fn spawn_layer_entity(
         crate::scene::AmLayerSpec::Image { .. } => AmElementType::Image,
         crate::scene::AmLayerSpec::Null => AmElementType::Null,
         crate::scene::AmLayerSpec::EmbedScene => AmElementType::EmbedScene,
+        crate::scene::AmLayerSpec::Camera { .. } => AmElementType::Null,
     };
 
     // Create base entity with common components
@@ -641,13 +642,32 @@ fn spawn_layer_entity(
         );
     }
 
-    // Add visual components based on spec (skip for mask layers)
+    // Add camera layer component if this is a camera layer
+    if let crate::scene::AmLayerSpec::Camera { ref fov, base_z } = layer.spec {
+        commands
+            .entity(entity)
+            .insert(crate::animation::AmCameraLayer {
+                fov: fov.clone(),
+                base_z,
+                scene_width: layer.animated.canvas_width,
+                scene_height: layer.animated.canvas_height,
+            });
+        bevy::log::info!(
+            "[Lifecycle] Camera layer '{}' spawned (base_z={:.1})",
+            layer.label,
+            base_z
+        );
+    }
+
+    // Add visual components based on spec (skip for mask and camera layers)
     bevy::log::debug!(
         "[spawn_layer_entity] '{}' blending_mode={:?}, checking visual spawn",
         layer.label,
         layer.blending_mode
     );
-    if layer.blending_mode != AmBlendingMode::Mask && layer.blending_mode != AmBlendingMode::Exclude
+    if layer.blending_mode != AmBlendingMode::Mask
+        && layer.blending_mode != AmBlendingMode::Exclude
+        && !matches!(layer.spec, crate::scene::AmLayerSpec::Camera { .. })
     {
         // Extract initial scale from animated data for SDF shapes
         // (transform.scale is set to 1.0 for SDF shapes, actual scale is in animated)
