@@ -216,6 +216,19 @@ pub struct AmAnimated {
     pub radial_repeat_invert: bool,
     pub radial_repeat_random_order: bool,
     pub radial_repeat_seed: f32,
+    // Oscillate effect (com.alightcreative.effects.oscillate3)
+    /// Oscillate effect: direction mode (0=angle, 1=depth/z, 2=orbit)
+    pub oscillate_direction: i32,
+    /// Oscillate effect: movement angle (degrees)
+    pub oscillate_angle: AmAnimatedFloat,
+    /// Oscillate effect: frequency (Hz)
+    pub oscillate_freq: AmAnimatedFloat,
+    /// Oscillate effect: magnitude (pixels)
+    pub oscillate_mag: AmAnimatedFloat,
+    /// Oscillate effect: wave type (0=sine, 1=triangle)
+    pub oscillate_wave_type: i32,
+    /// Oscillate effect: phase offset
+    pub oscillate_phase: AmAnimatedFloat,
     // Swing effect (com.alightcreative.effects.swing2)
     /// Swing effect: oscillation frequency (per second)
     pub swing_freq: AmAnimatedFloat,

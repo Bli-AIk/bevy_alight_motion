@@ -153,6 +153,7 @@ pub fn animate_transform_system(
 
         // Interpolate location and convert from AM to Bevy coordinates
         // Use extrapolation for location to improve accuracy before first keyframe
+        let mut oscillate_z_zoom = 1.0_f32;
         if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
             let (mut bx, mut by) = if animated.has_parent {
                 // For layers with parents, use local coordinates
@@ -284,6 +285,112 @@ pub fn animate_transform_system(
             // They render to RTT camera at origin - no scaling needed for position
             // The inv_fit_scale is only used for sprite SIZE compensation, not position
 
+            // Apply oscillate effect (position oscillation)
+            // AM oscillate3: freq is Hz-accumulated, applies positional offset
+            let mut oscillate_z_offset: f32 = 0.0;
+            if animated.oscillate_freq.value.is_some()
+                || !animated.oscillate_freq.keyframes.is_empty()
+            {
+                let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+                let time_sec = layer_time * duration_sec;
+
+                // Hz accumulation (same pattern as swing)
+                let accumulated_freq = if animated.oscillate_freq.keyframes.is_empty() {
+                    let freq =
+                        interpolate_float(&animated.oscillate_freq, layer_time).unwrap_or(0.0);
+                    freq * time_sec
+                } else {
+                    let total_steps = (duration_sec * 120.0).round() as i32;
+                    let current_step = (120.0 * time_sec).round() as i32;
+                    let mut accum = 0.0f64;
+                    if total_steps > 0 {
+                        for i in 0..=current_step.min(total_steps) {
+                            let frac_t = i as f32 / total_steps as f32;
+                            let freq_at_t =
+                                interpolate_float(&animated.oscillate_freq, frac_t).unwrap_or(0.0);
+                            accum += freq_at_t as f64 / 120.0;
+                        }
+                    }
+                    accum as f32
+                };
+
+                let phase = interpolate_float(&animated.oscillate_phase, layer_time).unwrap_or(0.0);
+                let mag = interpolate_float(&animated.oscillate_mag, layer_time).unwrap_or(25.0);
+                let angle_deg =
+                    interpolate_float(&animated.oscillate_angle, layer_time).unwrap_or(45.0);
+
+                // AM formula: a = (90 - angle) * PI / 180
+                let a = (90.0 - angle_deg) * std::f32::consts::PI / 180.0;
+                let dx = a.sin();
+                let dy = a.cos();
+
+                // Wave value: sin((freq*2 + phase*2) * PI) or triangle variant
+                let m = match animated.oscillate_wave_type {
+                    0 => ((accumulated_freq * 2.0 + phase * 2.0) * std::f32::consts::PI).sin(),
+                    1 => {
+                        // AM.triangle((freq*2 + phase*2) / 2 + phase)
+                        let x = (accumulated_freq * 2.0 + phase * 2.0) / 2.0 + phase;
+                        let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
+                        x_mod.abs() * 4.0 - 1.0
+                    }
+                    _ => ((accumulated_freq * 2.0 + phase * 2.0) * std::f32::consts::PI).sin(),
+                };
+
+                match animated.oscillate_direction {
+                    1 => {
+                        // Depth (z): AM perspective camera maps z-offset to scale + position
+                        oscillate_z_offset = mag * m;
+                    }
+                    2 => {
+                        // Orbit: offset x/y and z (90° phase shift)
+                        bx += dx * mag * m;
+                        by -= dy * mag * m; // Y inverted for Bevy
+
+                        let m2 = match animated.oscillate_wave_type {
+                            0 => ((accumulated_freq * 2.0 + (phase + 0.25) * 2.0)
+                                * std::f32::consts::PI)
+                                .sin(),
+                            1 => {
+                                let x = (accumulated_freq * 2.0 + (phase + 0.125) * 2.0) / 2.0
+                                    + phase
+                                    + 0.125;
+                                let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
+                                x_mod.abs() * 4.0 - 1.0
+                            }
+                            _ => ((accumulated_freq * 2.0 + (phase + 0.25) * 2.0)
+                                * std::f32::consts::PI)
+                                .sin(),
+                        };
+                        oscillate_z_offset = mag * m2;
+                    }
+                    _ => {
+                        // Direction 0 (angle-based): offset x/y
+                        bx += dx * mag * m;
+                        by -= dy * mag * m; // Y inverted for Bevy
+                    }
+                }
+            }
+
+            // Apply z-depth perspective effect from oscillate direction=1/2
+            // AM default camera: Perspective, FOV=60°, at scene center z=-base_cam_dist
+            // zoom = base_cam_dist / (base_cam_dist + z_offset)
+            // Position scales from center, element scale multiplied by zoom
+            oscillate_z_zoom = if oscillate_z_offset != 0.0 {
+                let cam_dist = animated.canvas_width.max(animated.canvas_height)
+                    / (2.0 * (30.0_f32).to_radians().tan());
+                let denom = cam_dist + oscillate_z_offset;
+                if denom > 0.0 {
+                    let zoom = cam_dist / denom;
+                    bx *= zoom;
+                    by *= zoom;
+                    zoom
+                } else {
+                    0.001 // element behind camera, nearly invisible
+                }
+            } else {
+                1.0
+            };
+
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
 
@@ -394,7 +501,11 @@ pub fn animate_transform_system(
         // Skip for SDF shapes (handled by animate_sdf_scale)
         // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
         if sdf_parent.is_none() && effect_marker.is_none() {
-            transform.scale = Vec3::new(current_scale[0], current_scale[1], 1.0);
+            transform.scale = Vec3::new(
+                current_scale[0] * oscillate_z_zoom,
+                current_scale[1] * oscillate_z_zoom,
+                1.0,
+            );
         } else if effect_marker.is_some() {
             // Effect sprites: apply only the sign of scale for flipping
             // The magnitude is already baked into the mesh by animate_unified_effect_system

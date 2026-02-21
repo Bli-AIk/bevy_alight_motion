@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-21T16:56:05.030937+08:00",
+  "timestamp": "2026-02-21T23:14:41.667031+08:00",
   "summary": {
-    "passed": 70,
+    "passed": 72,
     "skipped": 2,
     "failed": 17
   },
@@ -186,7 +186,13 @@
     "effects/stretch-segment/ex5": {
       "status": "pass"
     },
+    "effects/swing/animation": {
+      "status": "pass"
+    },
     "effects/swing/basic": {
+      "status": "pass"
+    },
+    "effects/swing/multi": {
       "status": "pass"
     },
     "effects/threshold/basic": {

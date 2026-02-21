@@ -217,6 +217,7 @@ pub(crate) fn spawn_shape(
         extract_linear_repeat_effects(&shape.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
+    let oscillate_effect = extract_oscillate_effect(&shape.effects);
     let spin_rpm = extract_spin_rpm(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
@@ -551,6 +552,13 @@ pub(crate) fn spawn_shape(
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Oscillate effect
+                oscillate_direction: oscillate_effect.direction,
+                oscillate_angle: oscillate_effect.angle.clone(),
+                oscillate_freq: oscillate_effect.freq.clone(),
+                oscillate_mag: oscillate_effect.mag.clone(),
+                oscillate_wave_type: oscillate_effect.wave_type,
+                oscillate_phase: oscillate_effect.phase.clone(),
                 // Spin effect
                 spin_rpm,
                 // Threshold effect
@@ -624,6 +632,7 @@ pub(crate) fn spawn_null(
         extract_linear_repeat_effects(&null.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
+    let oscillate_effect = extract_oscillate_effect(&null.effects);
     let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
@@ -760,6 +769,13 @@ pub(crate) fn spawn_null(
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Oscillate effect
+                oscillate_direction: oscillate_effect.direction,
+                oscillate_angle: oscillate_effect.angle,
+                oscillate_freq: oscillate_effect.freq,
+                oscillate_mag: oscillate_effect.mag,
+                oscillate_wave_type: oscillate_effect.wave_type,
+                oscillate_phase: oscillate_effect.phase,
                 // Spin effect
                 spin_rpm,
                 // Threshold effect
@@ -965,6 +981,13 @@ pub(crate) fn spawn_embed_scene(
                 swing_a2: AmAnimatedFloat::default(),
                 swing_phase: AmAnimatedFloat::default(),
                 swing_type: 0,
+                // Oscillate effect (defaults for embed scene)
+                oscillate_direction: 0,
+                oscillate_angle: AmAnimatedFloat::default(),
+                oscillate_freq: AmAnimatedFloat::default(),
+                oscillate_mag: AmAnimatedFloat::default(),
+                oscillate_wave_type: 0,
+                oscillate_phase: AmAnimatedFloat::default(),
                 // Spin effect (defaults for embed scene)
                 spin_rpm: AmAnimatedFloat::default(),
                 // Threshold effect (defaults for embed scene)

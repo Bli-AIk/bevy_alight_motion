@@ -41,6 +41,7 @@ pub(crate) fn spawn_image(
         extract_linear_repeat_effects(&image.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
+    let oscillate_effect = extract_oscillate_effect(&image.effects);
     let spin_rpm = extract_spin_rpm(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
@@ -191,6 +192,13 @@ pub(crate) fn spawn_image(
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Oscillate effect
+                oscillate_direction: oscillate_effect.direction,
+                oscillate_angle: oscillate_effect.angle,
+                oscillate_freq: oscillate_effect.freq,
+                oscillate_mag: oscillate_effect.mag,
+                oscillate_wave_type: oscillate_effect.wave_type,
+                oscillate_phase: oscillate_effect.phase,
                 // Spin effect
                 spin_rpm,
                 // Threshold effect
@@ -519,6 +527,13 @@ pub(crate) fn spawn_text(
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
+            // Oscillate effect (defaults for text)
+            oscillate_direction: 0,
+            oscillate_angle: AmAnimatedFloat::default(),
+            oscillate_freq: AmAnimatedFloat::default(),
+            oscillate_mag: AmAnimatedFloat::default(),
+            oscillate_wave_type: 0,
+            oscillate_phase: AmAnimatedFloat::default(),
             // Spin effect (defaults for text)
             spin_rpm: AmAnimatedFloat::default(),
             // Threshold effect (defaults for text)
