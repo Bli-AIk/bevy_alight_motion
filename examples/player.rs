@@ -1441,7 +1441,7 @@ mod video_comparison_systems {
                 let ref_path = &state.frame_paths[frame_idx];
 
                 // Debug: log actual paths being compared for frame 30 and copy ref frame
-                if frame_idx == 30 || frame_idx == 38 || frame_idx == 39 || frame_idx == 40 {
+                if frame_idx % 5 == 0 {
                     println!(
                         "[COMPARE DEBUG] Frame {}: shot={:?}, ref={:?}",
                         frame_idx,

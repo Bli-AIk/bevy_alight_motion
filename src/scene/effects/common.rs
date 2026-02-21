@@ -1,4 +1,4 @@
-//! Common effect parameter extraction (Wipe, Stretch, Blur, PaletteMap, ReplaceColor, ScaleAssist).
+//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist).
 
 use bevy::prelude::*;
 
@@ -387,6 +387,63 @@ pub(crate) fn extract_scale_assist_effect(effects: &[AmEffect]) -> ScaleAssistPa
                         } else if let Ok(v) = prop.value.parse::<f32>() {
                             params.damp.value = Some(v);
                         }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+// --- Stretch2 effect (directional UV-space stretch) ---
+
+#[derive(Default)]
+pub struct Stretch2Params {
+    /// Scale factor along the stretch axis (1.0 = no stretch)
+    pub scale: AmAnimatedFloat,
+    /// Angle in degrees for the stretch direction
+    pub angle: AmAnimatedFloat,
+    /// When true, mask stretched result to original layer alpha
+    pub content_only: bool,
+}
+
+impl Stretch2Params {
+    pub fn has_effect(&self) -> bool {
+        self.scale.value.is_some() || !self.scale.keyframes.is_empty()
+    }
+}
+
+/// Extract stretch2 effect parameters from effects.
+pub(crate) fn extract_stretch2_effect(effects: &[AmEffect]) -> Stretch2Params {
+    let mut params = Stretch2Params::default();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.stretch2" {
+            bevy::prelude::warn!("[extract_stretch2] Found stretch2 effect!");
+            // Default scale=1 (no stretch)
+            params.scale.value = Some(1.0);
+            params.angle.value = Some(0.0);
+
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "scale" => {
+                        if !prop.keyframes.is_empty() {
+                            params.scale.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.scale.value = Some(v);
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "contentOnly" => {
+                        params.content_only = prop.value == "true";
                     }
                     _ => {}
                 }

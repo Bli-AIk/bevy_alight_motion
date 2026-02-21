@@ -21,15 +21,26 @@ pub fn animate_unified_effect_system(
         &AmAnimated,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &Transform,
+        &GlobalTransform,
         &bevy::mesh::Mesh2d,
         Option<&crate::scene::AmEmbedContentMarker>,
     )>,
+    root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let global_time = playback.current_time_ms;
+    // Get the FitWindow root scale (uniform scaling applied to project root entity).
+    let root_scale = root_query
+        .iter()
+        .next()
+        .map(|t| t.scale.x)
+        .unwrap_or(1.0)
+        .max(0.001);
 
-    for (entity, animated, material_handle, transform, _mesh2d, embed_marker) in query.iter() {
+    for (entity, animated, material_handle, transform, global_transform, _mesh2d, embed_marker) in
+        query.iter()
+    {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
 
@@ -148,6 +159,10 @@ pub fn animate_unified_effect_system(
             animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
 
         if let Some(material) = materials.get_mut(&material_handle.0) {
+            // Always set original_size so pixelate (and other effects) have correct display dimensions
+            material.uniform_data.original_size =
+                Vec4::new(orig_width, orig_height, orig_width, orig_height);
+
             // Update wipe parameters if needed
             if has_wipe {
                 material.set_wipe_enabled(true);
@@ -160,6 +175,33 @@ pub fn animate_unified_effect_system(
                     Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
             } else {
                 material.set_wipe_enabled(false);
+            }
+
+            // Update stretch2 parameters (directional UV stretch)
+            let has_stretch2 = animated.stretch2_scale.value.is_some()
+                || !animated.stretch2_scale.keyframes.is_empty();
+            if has_stretch2 {
+                let s2_scale =
+                    interpolate_float(&animated.stretch2_scale, layer_time).unwrap_or(1.0);
+                let s2_angle_deg =
+                    interpolate_float(&animated.stretch2_angle, layer_time).unwrap_or(0.0);
+                let s2_angle_rad = s2_angle_deg.to_radians();
+                let s2_content_only = if animated.stretch2_content_only {
+                    1.0
+                } else {
+                    0.0
+                };
+                bevy::log::warn!(
+                    "[stretch2] layer_id={} scale={:.4} angle_deg={:.4} content_only={}",
+                    animated.layer_id,
+                    s2_scale,
+                    s2_angle_deg,
+                    animated.stretch2_content_only
+                );
+                material.uniform_data.stretch2_params =
+                    Vec4::new(s2_scale, s2_angle_rad, s2_content_only, 0.0);
+            } else {
+                material.uniform_data.stretch2_params = Vec4::ZERO;
             }
 
             // Update blur parameters if needed
@@ -692,6 +734,28 @@ pub fn animate_unified_effect_system(
                     threshold,
                     saturation,
                 );
+
+                // Compute AM-scene parent scale (excluding FitWindow root scale).
+                let origin = global_transform.translation();
+                let local_x_world = global_transform.transform_point(Vec3::X) - origin;
+                let local_y_world = global_transform.transform_point(Vec3::Y) - origin;
+                let scene_scale_x = local_x_world.length() / root_scale;
+                let scene_scale_y = local_y_world.length() / root_scale;
+                let scene_rotation = local_x_world.y.atan2(local_x_world.x);
+                warn!(
+                    "[Pixelate] layer={} orig_size=({:.1},{:.1}) sprite_size=({:.1},{:.1}) scale=({:.4},{:.4}) rot={:.4}",
+                    animated.layer_id,
+                    orig_width,
+                    orig_height,
+                    sprite_size[0],
+                    sprite_size[1],
+                    scale[0],
+                    scale[1],
+                    scene_rotation
+                );
+                material.uniform_data.pixelate_flags.z = scene_scale_x;
+                material.uniform_data.pixelate_flags.w = scene_scale_y;
+                material.uniform_data.pixelate_params2.w = scene_rotation;
             }
 
             // Process repeat and linear repeat effects (delegated to repeat module)
@@ -726,14 +790,6 @@ pub fn animate_unified_effect_system(
                 entity,
                 &mut meshes,
                 &mut commands,
-            );
-
-            // Log final material state after ALL repeat processors
-            bevy::log::warn!(
-                "[UNIFIED FINAL] layer={} time={:.4} rr_params1.x={:.3}",
-                animated.layer_id,
-                layer_time,
-                material.uniform_data.radial_repeat_params1.x
             );
         }
     }

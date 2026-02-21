@@ -572,8 +572,6 @@ pub(super) fn process_radial_repeat_effect(
             interpolate_float(&animated.radial_repeat_ease_out, layer_time).unwrap_or(0.0);
         let overlap = interpolate_float(&animated.radial_repeat_overlap, layer_time).unwrap_or(0.0);
 
-        let count_rounded = count.round();
-
         let shape_invert_alt = animated.radial_repeat_shape * 100
             + if animated.radial_repeat_invert { 10 } else { 0 }
             + if animated.radial_repeat_color_alt_copies {
@@ -586,28 +584,6 @@ pub(super) fn process_radial_repeat_effect(
         // Use -1 as sentinel: tells shader "effect is present, but 0 copies" (render nothing)
         // Pass raw (unrounded) count — AM uses raw count in position formula, rounded only for loop
         let count_for_shader = if count.round() <= 0.0 { -1.0 } else { count };
-
-        bevy::log::warn!(
-            "[RR DEBUG] layer={} time={:.4} count_raw={:.3} count_round={} count_shader={:.3} radius={:.1} orient={:.1} startAngle={:.1} sweep={:.1} baseScale={:.3} angle={:.1} scale={:.3} alpha={:.3} offset=({:.1},{:.1}) blend={:.3} orig=({:.0},{:.0})",
-            animated.layer_id,
-            layer_time,
-            count,
-            count_rounded,
-            count_for_shader,
-            radius,
-            orientation,
-            start_angle,
-            sweep,
-            base_scale,
-            angle,
-            scale,
-            alpha,
-            offset[0],
-            offset[1],
-            blend,
-            orig_width,
-            orig_height
-        );
 
         material.uniform_data.radial_repeat_params1 =
             Vec4::new(count_for_shader, radius, orientation, start_angle);
@@ -626,66 +602,21 @@ pub(super) fn process_radial_repeat_effect(
         );
         material.uniform_data.radial_repeat_fill_color = fill_color;
 
-        // Verify the material value was set correctly
-        bevy::log::warn!(
-            "[RR VERIFY] layer={} params1.x={:.3} (expected count_for_shader={:.3})",
-            animated.layer_id,
-            material.uniform_data.radial_repeat_params1.x,
-            count_for_shader
-        );
+        // Mesh expansion: use conservative bounds covering ALL possible copy positions.
+        // Copies sit on a circle of the given radius, so maximum extent is:
+        //   radius + half_element * max_scale + offset
+        let max_mix = scale.abs().max(1.0);
+        let visual_scale = (max_mix * base_scale).abs().max(1.0);
+        let max_extent = radius.abs() * max_mix
+            + (orig_width.max(orig_height)) / 2.0 * visual_scale
+            + offset[0].abs()
+            + offset[1].abs();
+        let mut min_x = -max_extent;
+        let mut max_x = max_extent;
+        let mut min_y = -max_extent;
+        let mut max_y = max_extent;
 
-        // Mesh expansion: copies are on a circle of given radius
-        let n = count_rounded as i32;
-        let deg2rad = std::f32::consts::PI / 180.0;
-
-        let mut min_x = -orig_width / 2.0;
-        let mut max_x = orig_width / 2.0;
-        let mut min_y = -orig_height / 2.0;
-        let mut max_y = orig_height / 2.0;
-
-        for i in 0..n {
-            let base = if n > 1 {
-                i as f32 / (n as f32 - 1.0)
-            } else {
-                0.0
-            };
-
-            let spread_rad =
-                (start_angle - sweep / 2.0 + (sweep - sweep / n as f32) * base) * deg2rad;
-
-            // Compute bounds at both interp=0 and interp=1 to cover all scheduling states
-            for interp in [0.0_f32, 1.0_f32] {
-                let mix_scale = 1.0 + (scale - 1.0) * interp;
-                let orbit = (orientation + angle * interp) * deg2rad;
-
-                let center_x = offset[0] * interp + mix_scale * (-radius * spread_rad.sin());
-                let center_y_bevy = -(offset[1] * interp + mix_scale * (radius * spread_rad.cos()));
-
-                let visual_scale = (mix_scale * base_scale).abs();
-                let half_w = orig_width / 2.0 * visual_scale;
-                let half_h = orig_height / 2.0 * visual_scale;
-
-                let corners = [
-                    (-half_w, -half_h),
-                    (half_w, -half_h),
-                    (half_w, half_h),
-                    (-half_w, half_h),
-                ];
-                let total_rot = spread_rad + orbit;
-                let cos_a = total_rot.cos();
-                let sin_a = total_rot.sin();
-                for (cx, cy) in corners {
-                    let rx = cx * cos_a - cy * sin_a + center_x;
-                    let ry = cx * sin_a + cy * cos_a + center_y_bevy;
-                    min_x = min_x.min(rx);
-                    max_x = max_x.max(rx);
-                    min_y = min_y.min(ry);
-                    max_y = max_y.max(ry);
-                }
-            }
-        }
-
-        let padding = 20.0 + radius.abs() * 0.1 + offset[0].abs() + offset[1].abs();
+        let padding = 20.0;
         min_x -= padding;
         max_x += padding;
         min_y -= padding;
@@ -693,20 +624,6 @@ pub(super) fn process_radial_repeat_effect(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
-
-        bevy::log::warn!(
-            "[RR MESH] layer={} n={} mesh=({:.0},{:.0})-({:.0},{:.0}) size={:.0}x{:.0} orig={:.0}x{:.0}",
-            animated.layer_id,
-            n,
-            min_x,
-            min_y,
-            max_x,
-            max_y,
-            new_width,
-            new_height,
-            orig_width,
-            orig_height
-        );
 
         material.uniform_data.original_size =
             Vec4::new(orig_width, orig_height, new_width, new_height);

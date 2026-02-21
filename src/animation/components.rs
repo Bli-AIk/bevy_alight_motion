@@ -123,6 +123,12 @@ pub struct AmAnimated {
     pub scale_assist_damp: AmAnimatedFloat,
     /// Scale assist effect axis (1=X, 2=Y, 3=XY).
     pub scale_assist_axis: i32,
+    /// Stretch2 effect scale (animated).
+    pub stretch2_scale: AmAnimatedFloat,
+    /// Stretch2 effect angle in degrees (animated).
+    pub stretch2_angle: AmAnimatedFloat,
+    /// Stretch2 contentOnly flag.
+    pub stretch2_content_only: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)

@@ -34,6 +34,7 @@ pub(crate) fn spawn_image(
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
+    let stretch2_effect = extract_stretch2_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
     let repeat_effect = extract_repeat_effect(&image.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
@@ -125,6 +126,9 @@ pub(crate) fn spawn_image(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                stretch2_scale: stretch2_effect.scale,
+                stretch2_angle: stretch2_effect.angle,
+                stretch2_content_only: stretch2_effect.content_only,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -438,6 +442,9 @@ pub(crate) fn spawn_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            stretch2_scale: AmAnimatedFloat::default(),
+            stretch2_angle: AmAnimatedFloat::default(),
+            stretch2_content_only: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),

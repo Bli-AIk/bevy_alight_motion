@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-21T01:48:39.396057+08:00",
+  "timestamp": "2026-02-21T08:53:37.561387+08:00",
   "summary": {
-    "passed": 58,
+    "passed": 63,
     "skipped": 1,
-    "failed": 26
+    "failed": 21
   },
   "results": {
     "basic/bezier/bezier": {
@@ -107,7 +107,7 @@
     },
     "effects/grid/basic": {
       "status": "fail",
-      "avg_similarity": 0.9559
+      "avg_similarity": 0.9509
     },
     "effects/linear-repeat/basic": {
       "status": "pass"
@@ -124,27 +124,26 @@
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.8682
+      "avg_similarity": 0.9283
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.8353
+      "avg_similarity": 0.8633
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.8632
+      "avg_similarity": 0.9103
     },
     "effects/linear-repeat/random_generated2/1": {
-      "status": "fail",
-      "avg_similarity": 0.9422
+      "status": "pass"
     },
     "effects/linear-repeat/random_generated2/2": {
       "status": "fail",
-      "avg_similarity": 0.8475
+      "avg_similarity": 0.8813
     },
     "effects/linear-repeat/random_generated2/3": {
       "status": "fail",
-      "avg_similarity": 0.9239
+      "avg_similarity": 0.7236
     },
     "effects/palette/basic": {
       "status": "pass"
@@ -153,8 +152,7 @@
       "status": "pass"
     },
     "effects/radial-repeat/basic": {
-      "status": "fail",
-      "avg_similarity": 0.6894
+      "status": "pass"
     },
     "effects/repeat/basic": {
       "status": "pass"
@@ -247,18 +245,17 @@
     },
     "private/USER_chen_pi/distrust/6": {
       "status": "fail",
-      "avg_similarity": 0.8293
+      "avg_similarity": 0.8686
     },
     "private/USER_chen_pi/distrust/6_ex": {
       "status": "fail",
-      "avg_similarity": 0.7923
+      "avg_similarity": 0.8426
     },
     "private/USER_chen_pi/distrust/6_soul": {
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/8": {
-      "status": "fail",
-      "avg_similarity": 0.6835
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/8_box": {
       "status": "pass"
@@ -267,8 +264,7 @@
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/9": {
-      "status": "fail",
-      "avg_similarity": 0.9676
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/9_ex": {
       "status": "pass"
@@ -277,8 +273,7 @@
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/9_ex2": {
-      "status": "fail",
-      "avg_similarity": 0.9663
+      "status": "pass"
     },
     "private/USER_chen_pi/misc/sanb_anim": {
       "status": "pass"

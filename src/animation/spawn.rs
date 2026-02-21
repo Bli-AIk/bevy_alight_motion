@@ -413,7 +413,9 @@ fn spawn_layer_entity(
         || !layer.animated.blur_strength.keyframes.is_empty();
 
     let has_mask = layer.mask_info.is_some();
-    let needs_effect = has_wipe || has_stretch || has_mask || has_blur;
+    let has_stretch2 = layer.animated.stretch2_scale.value.is_some()
+        || !layer.animated.stretch2_scale.keyframes.is_empty();
+    let needs_effect = has_wipe || has_stretch || has_mask || has_blur || has_stretch2;
 
     // Calculate correct initial position at spawn time (to prevent frame jump)
     // Use the same logic as animate_transform_system
@@ -939,6 +941,7 @@ fn spawn_layer_entity(
                 || !layer.animated.grid_spacing.keyframes.is_empty(), // has_grid - needs UnifiedEffectMaterial
             layer.animated.pixelate_size.value.is_some()
                 || !layer.animated.pixelate_size.keyframes.is_empty(), // has_pixelate - needs UnifiedEffectMaterial
+            has_stretch2, // has_stretch2 - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area
@@ -965,7 +968,7 @@ fn spawn_layer_entity(
                 }
                 max_size * max_stretch / 2.0
             }, // pixelate_expansion
-            global_time as u64,    // current playback time for mask initialization
+            global_time as u64, // current playback time for mask initialization
             initial_replace_color, // replace color params
         );
     } else {

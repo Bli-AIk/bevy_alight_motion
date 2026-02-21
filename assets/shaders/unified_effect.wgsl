@@ -76,6 +76,8 @@ struct UnifiedEffectUniform {
     // Mask blend parameters
     mask_blend: vec4<f32>,             // mask1: (fill_alpha, opacity, stroke_width, 0)
     mask2_blend: vec4<f32>,            // mask2: (fill_alpha, opacity, stroke_width, 0)
+    // Stretch2 effect (directional UV-space stretch)
+    stretch2_params: vec4<f32>,        // (scale, angle_radians, content_only, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -124,6 +126,19 @@ fn linear_to_srgb(color: vec3<f32>) -> vec3<f32> {
         linear_to_srgb_channel(color.g),
         linear_to_srgb_channel(color.b)
     );
+}
+
+// Apply stretch2 effect (directional UV-space stretch)
+// From AM stretch2.xml shader:
+//   sampleCoord = ((((layerNorm - 0.5) * rot) * vec2(1/scale, 1)) * invrot) + 0.5
+fn apply_stretch2(uv: vec2<f32>) -> vec2<f32> {
+    let scale = uniforms.stretch2_params.x;
+    let angle = uniforms.stretch2_params.y;
+    let centered = uv - vec2<f32>(0.5);
+    let rotated = rotate_vec(centered, angle);
+    let stretched = rotated * vec2<f32>(1.0 / scale, 1.0);
+    let unrotated = rotate_vec(stretched, -angle);
+    return unrotated + vec2<f32>(0.5);
 }
 
 // Apply stretch segment effect - returns modified UV
@@ -838,19 +853,38 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
+    // Apply stretch2 effect (directional stretch)
+    let stretch2_scale = uniforms.stretch2_params.x;
+    if stretch2_scale > 0.001 && abs(stretch2_scale - 1.0) > 0.0001 {
+        sample_uv = apply_stretch2(sample_uv);
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    }
+    
     // Apply pixelate effect (AM pixelate2 algorithm)
     // Grid is centered on layer (non-screenSpace) or screen (screenSpace)
     var pixelate_dist_center = 0.0;
     if pixelate_enabled {
         let display_size = vec2<f32>(uniforms.original_size.x, uniforms.original_size.y);
-        let size_vec = vec2<f32>(pixelate_size * pixelate_stretch.x, pixelate_size * pixelate_stretch.y);
 
-        // Position in display pixels relative to layer center (matches AM's st = acScreenNorm - acLayerCenterNorm)
+        // AM's grid cell size is in screen pixels
+        let size_vec = vec2<f32>(
+            pixelate_size * pixelate_stretch.x,
+            pixelate_size * pixelate_stretch.y
+        );
+
+        // Position in display pixels relative to layer center
         var dp = (sample_uv - vec2<f32>(0.5)) * display_size;
 
-        // Rotate
-        let cos_a = cos(pixelate_angle);
-        let sin_a = sin(pixelate_angle);
+        // Convert dp from local space to screen-aligned space.
+        // dp is in the layer's local pixel space (Y-down matching UV).
+        // AM computes the grid in FBO pixel space (screen space).
+        // The parent hierarchy rotation (from GlobalTransform) maps local→screen.
+        // In our convention: screen_offset = (dp.y, -dp.x) for 90° parent rotation.
+        // The correct rotation to apply is -parent_rotation (to go from local Y-down to screen Y-down).
+        let parent_rotation = uniforms.pixelate_params2.w;
+        let total_angle = pixelate_angle - parent_rotation;
+        let cos_a = cos(total_angle);
+        let sin_a = sin(total_angle);
         var st = vec2<f32>(cos_a * dp.x - sin_a * dp.y, sin_a * dp.x + cos_a * dp.y);
 
         // Find position within pixel cell (true modulo for negative values)
@@ -871,7 +905,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let snapped_dp = dp - pos_in_pixel + size_vec * 0.5;
         sample_uv = snapped_dp / display_size + vec2<f32>(0.5);
         // Discard if the grid cell center maps outside the texture
-        // This matches AM's behavior: only cells with centers inside the layer render
         if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
             discard;
         }
@@ -1131,13 +1164,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             let interp_progress = progress.y;
             
             // Spread angle (rotation field — rotates around pivot)
-            var spread: f32;
-            if rr_count > 1 {
-                spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
-                    + (rr_sweep_deg - rr_sweep_deg / f32(rr_count)) * base_progress) * deg2rad;
-            } else {
-                spread = rr_start_angle_deg * deg2rad;
-            }
+            // AM uses the same formula for all counts: startAngle - sweep/2 + (sweep - sweep/count) * base
+            // For count=1: (sweep - sweep/1) = 0, so spread = startAngle - sweep/2
+            let spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
+                + (rr_sweep_deg - rr_sweep_deg / f32(max(rr_count, 1))) * base_progress) * deg2rad;
             // Orbit angle (orientation field — local rotation)
             let orbit = (rr_orientation_deg + rr_angle_deg * interp_progress) * deg2rad;
             
@@ -1410,6 +1440,17 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             select(pow((masked.y + 0.055) / 1.055, 2.4), masked.y / 12.92, masked.y <= 0.04045),
             select(pow((masked.z + 0.055) / 1.055, 2.4), masked.z / 12.92, masked.z <= 0.04045),
             final_color.a,
+        );
+    }
+
+    // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
+    // Gamma-encode alpha so that the linear-space alpha blend approximates AM's sRGB result.
+    // For fully opaque content over black: linear_to_srgb(srgb_to_linear(opacity)) = opacity.
+    if final_color.a > 0.001 && final_color.a < 0.999 {
+        final_color.a = select(
+            pow((final_color.a + 0.055) / 1.055, 2.4),
+            final_color.a / 12.92,
+            final_color.a <= 0.04045
         );
     }
 
