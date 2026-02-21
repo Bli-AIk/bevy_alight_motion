@@ -1,7 +1,7 @@
 # Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 14:46:33
+> Last tested: 2026-02-21 10:09:51
 
 Creates multiple copies of the layer with cumulative offset, rotation, scale, and alpha transforms.
 

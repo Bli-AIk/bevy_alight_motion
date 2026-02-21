@@ -1,7 +1,7 @@
 # 像素化 (Pixelate)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-19 14:46:33
+> 最近测试时间：2026-02-21 10:09:51
 
 降低图像分辨率，产生像素化效果。
 
@@ -17,8 +17,9 @@
 - `basic/bounce/box.amproj` ✅
 - `basic/mask/child.amproj` ✅
 - `basic/mask/circle.amproj` ✅
+- `basic/mask/shape_ex.amproj` ✅
 - `basic/shape/ex.amproj` ✅
-- `effects/pixelate/basic.amproj` ❌
+- `effects/pixelate/basic.amproj` ✅
 
 ---
 

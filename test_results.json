@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-21T08:53:37.561387+08:00",
+  "timestamp": "2026-02-21T10:09:51.965403+08:00",
   "summary": {
     "passed": 63,
     "skipped": 1,
@@ -245,11 +245,11 @@
     },
     "private/USER_chen_pi/distrust/6": {
       "status": "fail",
-      "avg_similarity": 0.8686
+      "avg_similarity": 0.8718
     },
     "private/USER_chen_pi/distrust/6_ex": {
       "status": "fail",
-      "avg_similarity": 0.8426
+      "avg_similarity": 0.8463
     },
     "private/USER_chen_pi/distrust/6_soul": {
       "status": "pass"

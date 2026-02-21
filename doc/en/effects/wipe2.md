@@ -1,7 +1,7 @@
 # Wipe2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-19 14:46:33
+> Last tested: 2026-02-21 10:09:51
 
 Covers rectangular segments from opposite sides of the layer. Use keyframe animation to create wipe transitions.
 
