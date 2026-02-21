@@ -222,6 +222,7 @@ pub(crate) fn spawn_shape(
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
+    let solid_color_effect = extract_solid_color_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -582,6 +583,10 @@ pub(crate) fn spawn_shape(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                solid_color: solid_color_effect.color,
+                solid_color_alpha: solid_color_effect.alpha,
+                solid_color_blend_mode: solid_color_effect.blend_mode,
+                base_fill_color: get_initial_fill_color_rgba(&shape.fill_color, no_fill),
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -637,6 +642,7 @@ pub(crate) fn spawn_null(
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
+    let solid_color_effect = extract_solid_color_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -799,6 +805,10 @@ pub(crate) fn spawn_null(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                solid_color: solid_color_effect.color,
+                solid_color_alpha: solid_color_effect.alpha,
+                solid_color_blend_mode: solid_color_effect.blend_mode,
+                base_fill_color: [0.0; 4],
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -1011,6 +1021,10 @@ pub(crate) fn spawn_embed_scene(
                 pixelate_threshold: AmAnimatedFloat::default(),
                 pixelate_saturation: AmAnimatedFloat::default(),
                 pixelate_screen_space: false,
+                solid_color: Default::default(),
+                solid_color_alpha: Default::default(),
+                solid_color_blend_mode: 0,
+                base_fill_color: [0.0; 4],
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },

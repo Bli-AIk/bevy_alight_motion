@@ -942,6 +942,8 @@ fn spawn_layer_entity(
             layer.animated.pixelate_size.value.is_some()
                 || !layer.animated.pixelate_size.keyframes.is_empty(), // has_pixelate - needs UnifiedEffectMaterial
             has_stretch2, // has_stretch2 - needs UnifiedEffectMaterial
+            layer.animated.solid_color_alpha.value.is_some()
+                || !layer.animated.solid_color_alpha.keyframes.is_empty(), // has_solidcolor - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area
@@ -968,7 +970,7 @@ fn spawn_layer_entity(
                 }
                 max_size * max_stretch / 2.0
             }, // pixelate_expansion
-            global_time as u64, // current playback time for mask initialization
+            global_time as u64,    // current playback time for mask initialization
             initial_replace_color, // replace color params
         );
     } else {

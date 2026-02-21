@@ -14,7 +14,7 @@ use crate::scene::{AmLayerMarker, AmMaskInfo};
 use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
-use super::interpolation::{interpolate_float, interpolate_vec2};
+use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
@@ -363,6 +363,45 @@ pub fn animate_sdf_opacity_system(
                     let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
                     material.uniform_data.params.w =
                         repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+
+                    // Apply solidcolor effect: mix base fill color with solid color
+                    let sc_alpha =
+                        interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
+                    if sc_alpha > 0.0 {
+                        let sc_color = interpolate_color(&animated.solid_color, layer_time)
+                            .unwrap_or(bevy::math::Vec4::ZERO);
+                        let base = &animated.base_fill_color;
+                        match animated.solid_color_blend_mode {
+                            0 => {
+                                // Normal: replace RGB, mix by alpha
+                                material.uniform_data.color.x =
+                                    base[0] + (sc_color.x - base[0]) * sc_alpha;
+                                material.uniform_data.color.y =
+                                    base[1] + (sc_color.y - base[1]) * sc_alpha;
+                                material.uniform_data.color.z =
+                                    base[2] + (sc_color.z - base[2]) * sc_alpha;
+                            }
+                            1 => {
+                                // Multiply
+                                let mr = base[0] * sc_color.x;
+                                let mg = base[1] * sc_color.y;
+                                let mb = base[2] * sc_color.z;
+                                material.uniform_data.color.x = base[0] + (mr - base[0]) * sc_alpha;
+                                material.uniform_data.color.y = base[1] + (mg - base[1]) * sc_alpha;
+                                material.uniform_data.color.z = base[2] + (mb - base[2]) * sc_alpha;
+                            }
+                            2 => {
+                                // Screen
+                                let sr = 1.0 - (1.0 - base[0]) * (1.0 - sc_color.x);
+                                let sg = 1.0 - (1.0 - base[1]) * (1.0 - sc_color.y);
+                                let sb = 1.0 - (1.0 - base[2]) * (1.0 - sc_color.z);
+                                material.uniform_data.color.x = base[0] + (sr - base[0]) * sc_alpha;
+                                material.uniform_data.color.y = base[1] + (sg - base[1]) * sc_alpha;
+                                material.uniform_data.color.z = base[2] + (sb - base[2]) * sc_alpha;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
         }

@@ -282,6 +282,15 @@ pub struct AmAnimated {
     pub pixelate_saturation: AmAnimatedFloat,
     /// Pixelate effect: use screen space coordinates
     pub pixelate_screen_space: bool,
+    // Solid color effect (com.alightcreative.solidcolor)
+    /// Solid color: overlay color (animated)
+    pub solid_color: crate::schema::AmAnimatedColor,
+    /// Solid color: blend alpha (0.0-1.0)
+    pub solid_color_alpha: AmAnimatedFloat,
+    /// Solid color: blend mode (0=normal, 1=multiply, 2=screen)
+    pub solid_color_blend_mode: i32,
+    /// Base fill color (stored for solidcolor mixing)
+    pub base_fill_color: [f32; 4],
     // Shape-specific animated properties
     /// Generic shape float properties (up to 4).
     /// Meaning depends on shape_type:

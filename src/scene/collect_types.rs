@@ -63,6 +63,7 @@ pub(crate) fn collect_shape(
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
+    let solid_color_effect = extract_solid_color_effect(&shape.effects);
     if scale_assist.axis != 0 {
         bevy::log::info!(
             "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
@@ -451,6 +452,13 @@ pub(crate) fn collect_shape(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            solid_color: solid_color_effect.color,
+            solid_color_alpha: solid_color_effect.alpha,
+            solid_color_blend_mode: solid_color_effect.blend_mode,
+            base_fill_color: get_initial_fill_color_rgba(
+                &shape.fill_color,
+                shape.fill_type == "none",
+            ),
             shape_props,
             shape_points,
         },
@@ -501,6 +509,7 @@ pub(crate) fn collect_null(
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
+    let solid_color_effect = extract_solid_color_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -648,6 +657,10 @@ pub(crate) fn collect_null(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            solid_color: solid_color_effect.color,
+            solid_color_alpha: solid_color_effect.alpha,
+            solid_color_blend_mode: solid_color_effect.blend_mode,
+            base_fill_color: [0.0; 4],
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -913,6 +926,10 @@ pub(crate) fn collect_embed_scene(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            solid_color: Default::default(),
+            solid_color_alpha: Default::default(),
+            solid_color_blend_mode: 0,
+            base_fill_color: [0.0; 4],
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -1161,6 +1178,10 @@ pub(crate) fn collect_text(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            solid_color: Default::default(),
+            solid_color_alpha: Default::default(),
+            solid_color_blend_mode: 0,
+            base_fill_color: [0.0; 4],
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -1210,6 +1231,7 @@ pub(crate) fn collect_image(
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
     let pixelate_effect = extract_pixelate_effect(&image.effects);
+    let solid_color_effect = extract_solid_color_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -1364,6 +1386,10 @@ pub(crate) fn collect_image(
             pixelate_threshold: pixelate_effect.threshold,
             pixelate_saturation: pixelate_effect.saturation,
             pixelate_screen_space: pixelate_effect.screen_space,
+            solid_color: solid_color_effect.color,
+            solid_color_alpha: solid_color_effect.alpha,
+            solid_color_blend_mode: solid_color_effect.blend_mode,
+            base_fill_color: [0.0; 4],
             shape_props: Default::default(),
             shape_points: Default::default(),
         },

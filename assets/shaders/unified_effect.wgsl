@@ -78,6 +78,9 @@ struct UnifiedEffectUniform {
     mask2_blend: vec4<f32>,            // mask2: (fill_alpha, opacity, stroke_width, 0)
     // Stretch2 effect (directional UV-space stretch)
     stretch2_params: vec4<f32>,        // (scale, angle_radians, content_only, 0)
+    // Solidcolor effect
+    solid_color_params: vec4<f32>,     // (r, g, b, blend_mode)
+    solid_color_alpha: vec4<f32>,      // (alpha, 0, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1420,6 +1423,29 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     } else {
         final_color = tex_color * uniforms.color;
     }
+
+    // Apply solidcolor effect (after color tint, before wipe)
+    let sc_alpha = uniforms.solid_color_alpha.x;
+    if sc_alpha > 0.001 {
+        let sc_color = uniforms.solid_color_params.xyz;
+        let blend_mode = i32(uniforms.solid_color_params.w);
+        var sc_result: vec3<f32>;
+        if blend_mode == 1 {
+            // Multiply
+            sc_result = final_color.rgb * sc_color;
+        } else if blend_mode == 2 {
+            // Screen
+            sc_result = vec3<f32>(1.0) - (vec3<f32>(1.0) - final_color.rgb) * (vec3<f32>(1.0) - sc_color);
+        } else {
+            // Normal (blendMode=0): replace RGB with solid color, keep alpha
+            sc_result = sc_color * final_color.a;
+        }
+        final_color = vec4<f32>(
+            mix(final_color.rgb, sc_result, sc_alpha),
+            final_color.a
+        );
+    }
+
     final_color.a *= wipe_alpha;
 
     // Apply mask in sRGB space to match AM's compositing pipeline.

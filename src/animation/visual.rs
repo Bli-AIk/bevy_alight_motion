@@ -50,6 +50,7 @@ pub(crate) fn add_visual_components(
     has_grid: bool,         // True if layer has grid effect (needs UnifiedEffectMaterial)
     has_pixelate: bool,     // True if layer has pixelate effect (needs UnifiedEffectMaterial)
     has_stretch2: bool,     // True if layer has stretch2 effect (needs UnifiedEffectMaterial)
+    has_solidcolor: bool,   // True if layer has solidcolor effect (needs UnifiedEffectMaterial)
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
@@ -90,7 +91,8 @@ pub(crate) fn add_visual_components(
         || has_threshold
         || has_grid
         || has_pixelate
-        || has_stretch2;
+        || has_stretch2
+        || has_solidcolor;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(

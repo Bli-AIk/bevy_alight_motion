@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-21T23:14:41.667031+08:00",
+  "timestamp": "2026-02-21T23:50:36.164292+08:00",
   "summary": {
-    "passed": 72,
+    "passed": 73,
     "skipped": 2,
     "failed": 17
   },
@@ -163,6 +163,9 @@
       "status": "pass"
     },
     "effects/scale-assist/ex": {
+      "status": "pass"
+    },
+    "effects/solid-color/basic": {
       "status": "pass"
     },
     "effects/spin/basic": {

@@ -338,6 +338,34 @@ pub(crate) fn get_base_alpha(
     }
     1.0 // Default to fully opaque
 }
+
+pub(crate) fn get_initial_fill_color_rgba(
+    fill_color: &Option<crate::schema::AmFillColor>,
+    no_fill: bool,
+) -> [f32; 4] {
+    if no_fill {
+        return [0.0; 4];
+    }
+    if let Some(fc) = fill_color {
+        if !fc.value.is_empty() {
+            if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                return c;
+            }
+        } else if !fc.keyframes.is_empty() {
+            let mut sorted: Vec<_> = fc.keyframes.iter().collect();
+            sorted.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Ok(c) = crate::schema::parse_color(&sorted[0].value) {
+                return c;
+            }
+        }
+    }
+    [1.0, 1.0, 1.0, 1.0]
+}
+
 pub(crate) fn pivot_to_anchor_and_offset(
     pivot_x: f32,
     pivot_y: f32,

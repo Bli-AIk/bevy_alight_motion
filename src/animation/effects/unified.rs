@@ -258,6 +258,31 @@ pub fn animate_unified_effect_system(
                 material.uniform_data.stretch2_params = Vec4::ZERO;
             }
 
+            // Update solidcolor effect
+            let sc_alpha_val =
+                interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
+            if sc_alpha_val > 0.0 {
+                let sc_color =
+                    interpolate_color(&animated.solid_color, layer_time).unwrap_or(Vec4::ZERO);
+                // Convert sRGB to linear for shader (colors from AM are sRGB)
+                fn srgb_to_linear(c: f32) -> f32 {
+                    if c <= 0.04045 {
+                        c / 12.92
+                    } else {
+                        ((c + 0.055) / 1.055).powf(2.4)
+                    }
+                }
+                material.uniform_data.solid_color_params = Vec4::new(
+                    srgb_to_linear(sc_color.x),
+                    srgb_to_linear(sc_color.y),
+                    srgb_to_linear(sc_color.z),
+                    animated.solid_color_blend_mode as f32,
+                );
+                material.uniform_data.solid_color_alpha = Vec4::new(sc_alpha_val, 0.0, 0.0, 0.0);
+            } else {
+                material.uniform_data.solid_color_alpha = Vec4::ZERO;
+            }
+
             // For content_only=false, compute mesh expansion so content extends beyond
             // original layer boundary (matching AM's screen-space stretch behavior).
             // We compute the bounding box of the inverse stretch transform of [0,1]²

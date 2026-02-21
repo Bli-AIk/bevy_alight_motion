@@ -169,6 +169,12 @@ pub struct UnifiedEffectUniform {
 
     /// Stretch2 params: (scale, angle_radians, content_only, 0)
     pub stretch2_params: Vec4,
+
+    /// Solidcolor params: (r, g, b, blend_mode)
+    pub solid_color_params: Vec4,
+
+    /// Solidcolor alpha: (alpha, 0, 0, 0)
+    pub solid_color_alpha: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -422,6 +428,8 @@ impl Default for UnifiedEffectUniform {
             mask_blend: Vec4::ZERO,
             mask2_blend: Vec4::ZERO,
             stretch2_params: Vec4::ZERO,
+            solid_color_params: Vec4::ZERO,
+            solid_color_alpha: Vec4::ZERO,
         }
     }
 }
