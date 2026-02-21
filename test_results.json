@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-21T23:50:36.164292+08:00",
+  "timestamp": "2026-02-22T01:57:54.938921+08:00",
   "summary": {
-    "passed": 73,
+    "passed": 75,
     "skipped": 2,
-    "failed": 17
+    "failed": 18
   },
   "results": {
     "basic/bezier/bezier": {
@@ -93,6 +93,10 @@
     "basic/shape/shape": {
       "status": "pass"
     },
+    "basic/text/basic": {
+      "status": "fail",
+      "avg_similarity": 0.5924
+    },
     "basic/tween/bounce": {
       "status": "pass"
     },
@@ -145,6 +149,12 @@
       "status": "pass"
     },
     "effects/palette/basic": {
+      "status": "pass"
+    },
+    "effects/path-repeat/animation": {
+      "status": "pass"
+    },
+    "effects/path-repeat/basic": {
       "status": "pass"
     },
     "effects/pixelate/basic": {

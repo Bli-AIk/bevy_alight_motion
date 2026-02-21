@@ -56,6 +56,8 @@ pub fn spawn_scene(
     };
 
     // First pass: create all entities and collect parent relationships
+    // Also track previous layer for path-repeat linking
+    let mut prev_layer_info: Option<(Entity, u64, String)> = None; // (entity, layer_id, shape_type)
     for (idx, layer) in scene.layers.iter().enumerate() {
         // Simple sequential z allocation
         let z = z_base + idx as f32 * config.z_spacing;
@@ -98,6 +100,34 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                // Link path-repeat to previous layer
+                let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
+                eprintln!(
+                    "[Spawn] shape {}: effects_count={}, has_path_repeat={}, prev_layer={:?}",
+                    shape.id,
+                    shape.effects.len(),
+                    path_repeat_effect.has_effect(),
+                    prev_layer_info.as_ref().map(|(e, id, _)| (*e, *id))
+                );
+                if path_repeat_effect.has_effect() {
+                    if let Some((prev_entity, prev_id, ref prev_shape)) = prev_layer_info {
+                        bevy::log::warn!(
+                            "[Spawn] Inserting AmPathRepeat on entity {:?}, source={:?}",
+                            entity,
+                            prev_entity
+                        );
+                        commands
+                            .entity(entity)
+                            .insert(crate::animation::AmPathRepeat {
+                                source_entity: prev_entity,
+                                copy_entities: Vec::new(),
+                                source_shape_type: prev_shape.clone(),
+                                source_layer_id: prev_id,
+                                source_animated: Default::default(),
+                            });
+                    }
+                }
+                prev_layer_info = Some((entity, shape.id, shape.shape_type.clone()));
             }
             AmLayer::Nullobj(null) => {
                 let entity = spawn_null(commands, null, config, z);
@@ -107,6 +137,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, null.id, String::new()));
             }
             AmLayer::EmbedScene(embed) => {
                 let entity = spawn_embed_scene(
@@ -127,6 +158,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, embed.id, String::new()));
             }
             AmLayer::Bookmark(_) => {
                 // Bookmarks are non-visual timeline markers, skip them
@@ -139,6 +171,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, text.id, String::new()));
             }
             AmLayer::Audio(audio) => {
                 // TODO: Audio playback is not yet implemented, skip for now
@@ -164,6 +197,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, image.id, String::new()));
             }
             AmLayer::Video(video) => {
                 // TODO: Video playback is not yet implemented, skip for now
@@ -223,6 +257,7 @@ pub(crate) fn spawn_shape(
     let grid_effect = extract_grid_effect(&shape.effects);
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
     let solid_color_effect = extract_solid_color_effect(&shape.effects);
+    let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -587,6 +622,11 @@ pub(crate) fn spawn_shape(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: get_initial_fill_color_rgba(&shape.fill_color, no_fill),
+                path_repeat: if path_repeat_effect.has_effect() {
+                    Some(path_repeat_effect)
+                } else {
+                    None
+                },
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -809,6 +849,7 @@ pub(crate) fn spawn_null(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: [0.0; 4],
+                path_repeat: None,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -1025,6 +1066,7 @@ pub(crate) fn spawn_embed_scene(
                 solid_color_alpha: Default::default(),
                 solid_color_blend_mode: 0,
                 base_fill_color: [0.0; 4],
+                path_repeat: None,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },

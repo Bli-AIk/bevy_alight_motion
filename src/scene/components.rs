@@ -344,6 +344,7 @@ pub enum AmLayerSpec {
         font_size: f32,
         align: String,
         fill_color: Option<crate::schema::AmFillColor>,
+        wrap_width: f32,
     },
     /// Image layer  
     Image {

@@ -227,6 +227,7 @@ pub(crate) fn spawn_image(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: [0.0; 4],
+                path_repeat: None,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -269,26 +270,23 @@ pub(crate) fn spawn_text(
     let (sx, sy) = get_initial_scale(&text.transform.scale);
     let opacity = get_initial_opacity(&text.transform.opacity);
 
-    // AM text position is based on the CENTER of the wrapWidth box
-    // We need to offset to get the LEFT edge for left-aligned text
-    // 在AM中，文本位置是基于wrapWidth框的中心
-    // 对于左对齐文本，我们需要偏移到左边缘
-    // But for text with parent, don't apply wrap offset since position is relative
-    // 但是对于有父对象的文本，不应用wrapWidth偏移，因为位置是相对的
     let wrap_width = text.wrap_width;
+
+    // Calculate wrap offset for text positioning
+    // AM text position is at the CENTER of the wrapWidth box.
+    // With Anchor::CENTER_LEFT, entity position is the LEFT edge of the text box.
+    // So we offset by -wrapWidth/2 for left-aligned text (moving from center to left edge).
     let wrap_offset_x = if has_parent {
-        0.0 // Child text uses relative positioning, no wrap offset
+        0.0
     } else {
         match text.align.as_str() {
-            "left" => -wrap_width / 2.0, // Move left by half of wrapWidth
-            "right" => wrap_width / 2.0, // Move right by half of wrapWidth
-            _ => 0.0,                    // Center - no offset needed
+            "left" => -wrap_width / 2.0,
+            "right" => wrap_width / 2.0,
+            _ => 0.0,
         }
     };
 
     // Get font size (default to 16.0 if not specified)
-    // AM font sizes appear to be in a different scale - use a larger multiplier
-    // 文本大小乘数 - 调整这个值来修改字体大小
     const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
     let font_size = if text.size > 0.0 {
         text.size * TEXT_SIZE_MULTIPLIER
@@ -304,48 +302,11 @@ pub(crate) fn spawn_text(
         .to_string();
 
     // Calculate Y offset based on font metrics
-    // 基于字体度量计算 Y 偏移
-    //
-    // AM 的文本定位似乎基于某个参考字体的 win_ascent 值
-    // 当字体的 win_ascent 与参考值不同时，需要根据差值调整 Y 位置
-    //
-    // 通过实验确定：
-    // - 8-bit Operator + Bold (win_ascent=1.1285) 显示位置正确
-    // - Mars Needs Cunnilingus (win_ascent=0.7500) 需要向下偏移约 16.3px (font_size=48)
-    // - 偏移量 = (REFERENCE_WIN_ASCENT - win_ascent) * font_size * factor
-    //
-    // 经计算: factor ≈ 0.897 使得两个字体都能正确显示
-    // 但为了简化，使用 (1.1285 - win_ascent) / 2 * font_size 作为偏移
-    const REFERENCE_WIN_ASCENT: f32 = 1.1285; // 8-bit Operator + Bold 作为参考
+    const REFERENCE_WIN_ASCENT: f32 = 1.1285;
     let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
-        // 当 win_ascent 小于参考值时，文本需要向下移动（负Y方向）
-        // offset 为正值时减去它会使 Y 变小（向下）
         let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
-        let offset = ascent_diff * font_size * 0.43; // factor 经验值
-
-        // 计算基础Y位置（未应用偏移）
-        let base_y = ty;
-        let final_y = base_y - offset;
-
-        bevy::log::trace!(
-            "  Font metrics for '{}': win_ascent={:.4}, win_descent={:.4}",
-            font_name,
-            metrics.win_ascent,
-            metrics.win_descent
-        );
-        bevy::log::trace!(
-            "  Y calculation: base_y={:.2}, ascent_diff={:.4}, offset={:.2}, final_y={:.2}",
-            base_y,
-            ascent_diff,
-            offset,
-            final_y
-        );
-        offset
+        ascent_diff * font_size * 0.43
     } else {
-        bevy::log::trace!(
-            "  No font metrics found for '{}', using offset=0",
-            font_name
-        );
         0.0
     };
 
@@ -362,21 +323,6 @@ pub(crate) fn spawn_text(
         Color::srgba(1.0, 1.0, 1.0, opacity)
     };
 
-    bevy::log::trace!(
-        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, y_offset={:.1}, content='{}'",
-        text.label,
-        text.id,
-        text.parent,
-        tx,
-        ty,
-        wrap_width,
-        wrap_offset_x,
-        font_size,
-        font_name,
-        font_y_offset,
-        text.content
-    );
-
     // Only apply font_y_offset to root text layers; child text inherits offset from parent
     let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
 
@@ -386,17 +332,17 @@ pub(crate) fn spawn_text(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    // Create a modified location with wrap_offset applied (no Y offset)
-    // 创建一个带有wrapWidth偏移的location副本（无Y偏移）
+    // Apply wrap_offset to animated location for keyframe-based animations
     let mut modified_location = text.transform.location.clone();
-    if let Some(ref mut val) = modified_location.value {
-        val[0] += wrap_offset_x;
-    }
-    // Also modify keyframes if present
-    for kf in &mut modified_location.keyframes {
-        if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
-            parsed[0] += wrap_offset_x;
-            kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+    if wrap_offset_x != 0.0 {
+        if let Some(ref mut val) = modified_location.value {
+            val[0] += wrap_offset_x;
+        }
+        for kf in &mut modified_location.keyframes {
+            if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+                parsed[0] += wrap_offset_x;
+                kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+            }
         }
     }
 
@@ -566,6 +512,7 @@ pub(crate) fn spawn_text(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            path_repeat: None,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -607,23 +554,31 @@ pub(crate) fn spawn_text(
         _ => bevy::text::Justify::Left,
     };
 
+    // Set anchor based on alignment:
+    // Left: position maps to left edge, Center: to center, Right: to right edge
+    let anchor = match text.align.as_str() {
+        "right" => bevy::sprite::Anchor(Vec2::new(0.5, 0.0)),
+        "center" => bevy::sprite::Anchor::CENTER,
+        _ => bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+    };
+
     // Text layers have visual components spawned immediately but use visibility for lifecycle
     entity.insert((
         Text2d::new(&text.content),
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        // Use left-center anchor for text - AM uses center Y as the reference point
-        // With center anchor, the Y coordinate points to the vertical center of the text
-        bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+        bevy::text::TextBounds::new_horizontal(wrap_width * TEXT_SIZE_MULTIPLIER),
+        anchor,
         AmLayerSpec::Text {
             content: text.content.clone(),
             font_name: font_name.clone(),
             font_size,
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
+            wrap_width: text.wrap_width,
         },
-        AmVisualSpawned, // Mark as already spawned
+        AmVisualSpawned,
     ));
 
     entity.id()

@@ -9,10 +9,12 @@
 //! 包含 animate_unified_effect_system、update_unified_mask_system、animate_rtt_blur_system 等。
 
 mod mask;
+pub(crate) mod path_repeat;
 mod repeat;
 mod rtt_blur;
 mod unified;
 
 pub use mask::update_unified_mask_system;
+pub use path_repeat::animate_path_repeat_system;
 pub use rtt_blur::animate_rtt_blur_system;
 pub use unified::animate_unified_effect_system;

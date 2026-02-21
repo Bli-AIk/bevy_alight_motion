@@ -365,6 +365,32 @@ pub(crate) fn process_pending_layers(
         }
 
         pending.spawned_entities.insert(layer.id, entity);
+
+        // Insert AmPathRepeat for layers with path-repeat effect
+        if layer.animated.path_repeat.is_some() {
+            // Find the previous layer in the pending.layers list (by original XML order)
+            if idx > 0 {
+                let prev_layer = &pending.layers[idx - 1];
+                let source_entity_opt = pending.spawned_entities.get(&prev_layer.id).copied();
+                let source_shape_type = match &prev_layer.spec {
+                    crate::scene::AmLayerSpec::SpriteShape { .. } => ".rect".to_string(),
+                    crate::scene::AmLayerSpec::SdfShape { .. } => "sdf".to_string(),
+                    _ => String::new(),
+                };
+                // Clone source's animated data so path positions can be computed
+                // even after the source entity is despawned
+                let source_animated = prev_layer.animated.clone();
+                commands
+                    .entity(entity)
+                    .insert(crate::animation::AmPathRepeat {
+                        source_entity: source_entity_opt.unwrap_or(Entity::PLACEHOLDER),
+                        copy_entities: Vec::new(),
+                        source_shape_type,
+                        source_layer_id: prev_layer.id,
+                        source_animated,
+                    });
+            }
+        }
     }
 }
 

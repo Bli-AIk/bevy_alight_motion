@@ -459,6 +459,10 @@ pub(crate) fn collect_shape(
                 &shape.fill_color,
                 shape.fill_type == "none",
             ),
+            path_repeat: {
+                let pr = extract_path_repeat_effect(&shape.effects);
+                if pr.has_effect() { Some(pr) } else { None }
+            },
             shape_props,
             shape_points,
         },
@@ -661,6 +665,7 @@ pub(crate) fn collect_null(
             solid_color_alpha: solid_color_effect.alpha,
             solid_color_blend_mode: solid_color_effect.blend_mode,
             base_fill_color: [0.0; 4],
+            path_repeat: None,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -930,6 +935,7 @@ pub(crate) fn collect_embed_scene(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            path_repeat: None,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -980,16 +986,14 @@ pub(crate) fn collect_text(
     };
 
     // Calculate wrap offset for text positioning
-    // AM text position is based on the CENTER of the wrapWidth box
-    // We need to offset to get the LEFT edge for left-aligned text
     let wrap_width = text.wrap_width;
     let wrap_offset_x = if has_parent {
-        0.0 // Child text uses relative positioning, no wrap offset
+        0.0
     } else {
         match text.align.as_str() {
-            "left" => -wrap_width / 2.0, // Move left by half of wrapWidth
-            "right" => wrap_width / 2.0, // Move right by half of wrapWidth
-            _ => 0.0,                    // Center - no offset needed
+            "left" => -wrap_width / 2.0,
+            "right" => wrap_width / 2.0,
+            _ => 0.0,
         }
     };
 
@@ -1010,16 +1014,17 @@ pub(crate) fn collect_text(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    // Create a modified location with wrap_offset applied (for animations)
+    // Apply wrap_offset to animated location
     let mut modified_location = text.transform.location.clone();
-    if let Some(ref mut val) = modified_location.value {
-        val[0] += wrap_offset_x;
-    }
-    // Also modify keyframes if present
-    for kf in &mut modified_location.keyframes {
-        if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
-            parsed[0] += wrap_offset_x;
-            kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+    if wrap_offset_x != 0.0 {
+        if let Some(ref mut val) = modified_location.value {
+            val[0] += wrap_offset_x;
+        }
+        for kf in &mut modified_location.keyframes {
+            if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+                parsed[0] += wrap_offset_x;
+                kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+            }
         }
     }
 
@@ -1036,7 +1041,7 @@ pub(crate) fn collect_text(
             end_time: text.end_time,
             time_offset: config.time_offset,
             lifecycle_offset: config.lifecycle_offset,
-            location: modified_location, // Use modified location with wrap offset
+            location: modified_location,
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
             scale: text.transform.scale.clone(),
@@ -1182,6 +1187,7 @@ pub(crate) fn collect_text(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            path_repeat: None,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -1191,6 +1197,7 @@ pub(crate) fn collect_text(
             font_size,
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
+            wrap_width: text.wrap_width,
         },
         z_index: z,
         children: Vec::new(),
@@ -1390,6 +1397,7 @@ pub(crate) fn collect_image(
             solid_color_alpha: solid_color_effect.alpha,
             solid_color_blend_mode: solid_color_effect.blend_mode,
             base_fill_color: [0.0; 4],
+            path_repeat: None,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },

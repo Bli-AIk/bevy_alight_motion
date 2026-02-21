@@ -10,6 +10,7 @@
 
 use bevy::prelude::*;
 
+use crate::scene::effects::PathRepeatParams;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
 /// DEBUG: 拉伸效果乘数，用于调试编组内图片的拉伸计算
@@ -291,6 +292,9 @@ pub struct AmAnimated {
     pub solid_color_blend_mode: i32,
     /// Base fill color (stored for solidcolor mixing)
     pub base_fill_color: [f32; 4],
+    // Path Repeat effect (com.alightcreative.effects.repeat.path)
+    /// Path repeat params (None = no effect)
+    pub path_repeat: Option<PathRepeatParams>,
     // Shape-specific animated properties
     /// Generic shape float properties (up to 4).
     /// Meaning depends on shape_type:
@@ -456,4 +460,23 @@ pub struct AmCameraLayer {
     pub scene_width: f32,
     /// Scene height in pixels.
     pub scene_height: f32,
+}
+
+/// Component linking a path-repeat entity to its path source (previous layer).
+/// The source entity provides the shape outline along which copies are placed.
+/// Source animation data is stored directly so it remains available even after
+/// the source entity is despawned.
+#[derive(Component, Debug)]
+pub struct AmPathRepeat {
+    /// The entity whose shape outline defines the path.
+    pub source_entity: Entity,
+    /// Entities spawned as copies (managed by the path-repeat system).
+    pub copy_entities: Vec<Entity>,
+    /// Shape type of source (e.g. ".rect")
+    pub source_shape_type: String,
+    /// Layer ID of the source (for logging)
+    pub source_layer_id: u64,
+    /// Cloned source animation data so we can compute path positions
+    /// even when the source entity has been despawned.
+    pub source_animated: AmAnimated,
 }

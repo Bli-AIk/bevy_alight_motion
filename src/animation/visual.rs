@@ -803,6 +803,7 @@ pub(crate) fn add_visual_components(
             font_size,
             align,
             fill_color,
+            wrap_width,
         } => {
             use bevy::text::Justify;
 
@@ -818,6 +819,13 @@ pub(crate) fn add_visual_components(
                 .cloned()
                 .unwrap_or_else(Handle::default);
 
+            // Set anchor based on alignment
+            let anchor = match align.as_str() {
+                "right" => bevy::sprite::Anchor(Vec2::new(0.5, 0.0)),
+                "center" => bevy::sprite::Anchor::CENTER,
+                _ => bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+            };
+
             commands.entity(entity).insert((
                 Text2d::new(content.clone()),
                 TextFont {
@@ -827,7 +835,8 @@ pub(crate) fn add_visual_components(
                 },
                 TextLayout::new_with_justify(justify),
                 TextColor(color),
-                bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+                bevy::text::TextBounds::new_horizontal(wrap_width * 3.0),
+                anchor,
                 AmVisualSpawned,
             ));
         }

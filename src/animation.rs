@@ -23,13 +23,14 @@ mod visual;
 
 // Re-export components
 pub use components::{
-    AmAnimated, AmCameraLayer, AmPlayback, AmSdfFillParams, AmSdfParams, AmSdfShapeParent,
-    AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
+    AmAnimated, AmCameraLayer, AmPathRepeat, AmPlayback, AmSdfFillParams, AmSdfParams,
+    AmSdfShapeParent, AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
 };
 
 // Re-export systems
 pub use effects::{
-    animate_rtt_blur_system, animate_unified_effect_system, update_unified_mask_system,
+    animate_path_repeat_system, animate_rtt_blur_system, animate_unified_effect_system,
+    update_unified_mask_system,
 };
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use sdf::{
