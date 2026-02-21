@@ -9,6 +9,51 @@ use bevy::prelude::*;
 use crate::animation::components::{AmAnimated, AmPlayback, DEBUG_NEGATIVE_HEIGHT_SCALE};
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
+/// Compute accumulated ancestor visual scale by walking up the entity hierarchy.
+/// Only accumulates scale from ancestors that have UnifiedEffectMarker,
+/// because those entities bake their animated scale into mesh size (not Transform.scale).
+/// Regular group/shape parents put scale into Transform.scale, which children
+/// already inherit through Bevy's transform hierarchy.
+fn compute_ancestor_scale(
+    entity: Entity,
+    parent_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
+    effect_check: &Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
+    global_time: f32,
+) -> [f32; 2] {
+    let mut acc_scale = [1.0f32, 1.0f32];
+
+    // Get entity's parent
+    let parent_entity = match parent_query.get(entity) {
+        Ok((_, Some(child_of))) => child_of.parent(),
+        _ => return acc_scale,
+    };
+
+    // Walk up from the parent, accumulating animated scales only from effect sprites
+    let mut current = parent_entity;
+    loop {
+        if let Ok((animated, child_of_ref)) = parent_query.get(current) {
+            // Only accumulate scale from effect sprites (scale baked into mesh, not Transform)
+            if effect_check.contains(current) {
+                let local_time = animated.calc_local_time(global_time);
+                let layer_time = animated.calc_layer_time(local_time);
+                let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+                acc_scale[0] *= s[0];
+                acc_scale[1] *= s[1];
+            }
+
+            if let Some(child_of) = child_of_ref {
+                current = child_of.parent();
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    acc_scale
+}
+
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
 /// It is designed for the RTT architecture where effects are stackable.
@@ -25,6 +70,8 @@ pub fn animate_unified_effect_system(
         &bevy::mesh::Mesh2d,
         Option<&crate::scene::AmEmbedContentMarker>,
     )>,
+    parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
+    effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -118,10 +165,18 @@ pub fn animate_unified_effect_system(
             }
         }
 
-        // Actual rendered size = base size * scale
+        // Actual rendered size = base size * scale * accumulated ancestor scale
         // Use abs() because negative size in AM behaves same as positive (no flip)
-        let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0);
-        let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0);
+        // Ancestor scale accounts for parent hierarchy scale that effect sprites bake into
+        // mesh size rather than Transform.scale, ensuring children match screen-space dimensions.
+        let ancestor_scale = compute_ancestor_scale(
+            entity,
+            &parent_animated_query,
+            &effect_marker_query,
+            global_time,
+        );
+        let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0) * ancestor_scale[0].abs();
+        let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0) * ancestor_scale[1].abs();
 
         // NOTE: inv_fit_scale is NOT applied to RTT content dimensions
         // RTT content renders at scene's internal resolution, and the final
@@ -742,7 +797,7 @@ pub fn animate_unified_effect_system(
                 let scene_scale_x = local_x_world.length() / root_scale;
                 let scene_scale_y = local_y_world.length() / root_scale;
                 let scene_rotation = local_x_world.y.atan2(local_x_world.x);
-                warn!(
+                debug!(
                     "[Pixelate] layer={} orig_size=({:.1},{:.1}) sprite_size=({:.1},{:.1}) scale=({:.4},{:.4}) rot={:.4}",
                     animated.layer_id,
                     orig_width,

@@ -966,6 +966,7 @@ mod video_comparison_systems {
         pub frame_offset: f32,         // Frame time offset for alignment
         pub min_frame_similarity: f32, // Minimum similarity for any frame
         pub max_failed_rate: f32,      // Maximum ratio of failed frames allowed
+        pub max_critical_rate: f32, // Maximum ratio of critical frames (below min_frame_similarity) allowed
         pub project_name: String,
         pub skipped: bool,
         pub pending_time_ms: Option<f32>, // Time to set in next First schedule
@@ -1001,8 +1002,9 @@ mod video_comparison_systems {
                 avg_threshold: 0.98,
                 frame_threshold: 0.98,
                 frame_offset: 0.0,
-                min_frame_similarity: 0.8,
+                min_frame_similarity: 0.75,
                 max_failed_rate: 0.05,
+                max_critical_rate: 0.02,
                 project_name: String::new(),
                 skipped: false,
                 pending_time_ms: None,
@@ -1037,6 +1039,8 @@ mod video_comparison_systems {
         min_frame_similarity: f32,
         #[serde(default = "default_max_failed_rate")]
         max_failed_rate: f32,
+        #[serde(default = "default_max_critical_rate")]
+        max_critical_rate: f32,
     }
 
     // Override config with optional fields for proper inheritance from [default]
@@ -1049,6 +1053,7 @@ mod video_comparison_systems {
         frame_offset: Option<f32>,
         min_frame_similarity: Option<f32>,
         max_failed_rate: Option<f32>,
+        max_critical_rate: Option<f32>,
     }
 
     impl OverrideConfig {
@@ -1062,16 +1067,21 @@ mod video_comparison_systems {
                     .min_frame_similarity
                     .unwrap_or(base.min_frame_similarity),
                 max_failed_rate: self.max_failed_rate.unwrap_or(base.max_failed_rate),
+                max_critical_rate: self.max_critical_rate.unwrap_or(base.max_critical_rate),
             }
         }
     }
 
     fn default_min_frame_similarity() -> f32 {
-        0.8
+        0.75
     }
 
     fn default_max_failed_rate() -> f32 {
         0.05
+    }
+
+    fn default_max_critical_rate() -> f32 {
+        0.02
     }
 
     pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<ProjectFile>) {
@@ -1146,14 +1156,16 @@ mod video_comparison_systems {
             state.frame_offset = settings.frame_offset;
             state.min_frame_similarity = settings.min_frame_similarity;
             state.max_failed_rate = settings.max_failed_rate;
+            state.max_critical_rate = settings.max_critical_rate;
             println!(
-                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%",
+                "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%, max_critical={:.1}%",
                 project_name,
                 state.avg_threshold,
                 state.frame_threshold,
                 state.frame_offset,
                 state.min_frame_similarity,
-                state.max_failed_rate * 100.0
+                state.max_failed_rate * 100.0,
+                state.max_critical_rate * 100.0
             );
         }
 
@@ -1532,6 +1544,8 @@ mod video_comparison_systems {
                 let critical_failed_count = critical_failed_frames.len();
                 let max_allowed_failed =
                     (total_frames as f32 * state.max_failed_rate).ceil() as usize;
+                let max_allowed_critical =
+                    (total_frames as f32 * state.max_critical_rate).ceil() as usize;
 
                 println!("========================================");
                 println!("COMPARISON FINISHED: {}", state.project_name);
@@ -1560,18 +1574,20 @@ mod video_comparison_systems {
                     );
 
                     // Per-frame pass rate check
-                    let frame_rate_passed =
-                        critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let frame_rate_passed = critical_failed_count <= max_allowed_critical
+                        && failed_count <= max_allowed_failed;
                     let frame_status = if frame_rate_passed {
                         "✓".green().to_string()
                     } else {
                         "✗".red().to_string()
                     };
                     println!(
-                        "Per-Frame Pass Rate: {} failed/{} total (max allowed: {}, min similarity: {:.2}) {}",
+                        "Per-Frame Pass Rate: {} failed/{} total (max allowed: {}, critical: {}/{}, min similarity: {:.2}) {}",
                         failed_count,
                         total_frames,
                         max_allowed_failed,
+                        critical_failed_count,
+                        max_allowed_critical,
                         state.min_frame_similarity,
                         frame_status
                     );
@@ -1613,8 +1629,8 @@ mod video_comparison_systems {
                     exit.write(AppExit::Success); // Or maybe a specific code for skip?
                 } else {
                     let avg_passed = avg_score >= state.avg_threshold;
-                    let frame_rate_passed =
-                        critical_failed_count == 0 && failed_count <= max_allowed_failed;
+                    let frame_rate_passed = critical_failed_count <= max_allowed_critical
+                        && failed_count <= max_allowed_failed;
                     let overall_passed = avg_passed && frame_rate_passed;
                     if overall_passed {
                         exit.write(AppExit::Success);

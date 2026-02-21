@@ -1,7 +1,7 @@
 # Swing
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-21 10:09:51
+> Last tested: 2026-02-21 13:21:45
 
 Makes the layer swing back and forth with specified frequency and amplitude.
 

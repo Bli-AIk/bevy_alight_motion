@@ -1,7 +1,7 @@
 # 线性重复 (Linear Repeat)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-21 10:09:51
+> 最近测试时间：2026-02-21 13:21:45
 
 创建沿直线排列的图层副本，支持位置、偏移、旋转、缩放、透明度和颜色混合等高级控制。
 
@@ -37,7 +37,7 @@
 - `effects/linear-repeat/random_generated1/3.amproj` ❌
 - `effects/linear-repeat/random_generated2/1.amproj` ✅
 - `effects/linear-repeat/random_generated2/2.amproj` ❌
-- `effects/linear-repeat/random_generated2/3.amproj` ❌
+- `effects/linear-repeat/random_generated2/3.amproj` ✅
 
 ---
 

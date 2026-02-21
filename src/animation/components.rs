@@ -300,8 +300,6 @@ impl AmAnimated {
     }
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
-    /// Note: element_speed is stored but NOT applied to layer_time.
-    /// AM's speed attribute on shapes primarily affects media playback, not keyframe interpolation.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
         let duration = (self.end_time - self.start_time) as f32;
         if duration > 0.0 {
