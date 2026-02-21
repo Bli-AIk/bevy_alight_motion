@@ -779,7 +779,7 @@ pub fn generate_vitepress_effects_sidebar(effects: &[&EffectDef], lang: &str) ->
         } else {
             effect.display_name_en
         };
-        let link = format!("/{}/effects/{}", lang, effect.short_name);
+        let link = format!("/{}/effects/{}", lang, to_kebab_case(effect.short_name));
 
         if i > 0 {
             items.push_str(",\n");
@@ -836,7 +836,10 @@ pub fn generate_vitepress_sidebar_snippet(
         writeln!(
             output,
             "    {{ text: '{}{}', link: '/zh-hans/effects/{}' }}{}",
-            indicator, effect.display_name_zh, effect.short_name, comma
+            indicator,
+            effect.display_name_zh,
+            to_kebab_case(effect.short_name),
+            comma
         )
         .unwrap();
     }
@@ -855,7 +858,10 @@ pub fn generate_vitepress_sidebar_snippet(
         writeln!(
             output,
             "    {{ text: '{}{}', link: '/en/effects/{}' }}{}",
-            indicator, effect.display_name_en, effect.short_name, comma
+            indicator,
+            effect.display_name_en,
+            to_kebab_case(effect.short_name),
+            comma
         )
         .unwrap();
     }
@@ -896,7 +902,10 @@ pub fn generate_vitepress_sidebar_snippet(
             writeln!(
                 output,
                 "      {{ text: '{}{}', link: '/zh-hans/builtins/{}' }}{}",
-                indicator, builtin.display_name_zh, builtin.short_name, comma
+                indicator,
+                builtin.display_name_zh,
+                to_kebab_case(builtin.short_name),
+                comma
             )
             .unwrap();
         }
@@ -932,7 +941,10 @@ pub fn generate_vitepress_sidebar_snippet(
             writeln!(
                 output,
                 "      {{ text: '{}{}', link: '/en/builtins/{}' }}{}",
-                indicator, builtin.display_name_en, builtin.short_name, comma
+                indicator,
+                builtin.display_name_en,
+                to_kebab_case(builtin.short_name),
+                comma
             )
             .unwrap();
         }

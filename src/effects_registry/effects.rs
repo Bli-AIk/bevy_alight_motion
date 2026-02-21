@@ -10,9 +10,11 @@ pub mod grid;
 pub mod linear_repeat;
 pub mod palette_map;
 pub mod pixelate;
+pub mod radial_repeat;
 pub mod repeat;
 pub mod replace_color;
 pub mod scale_assist;
+pub mod spin;
 pub mod stretch_segment;
 pub mod swing;
 pub mod threshold;
@@ -36,7 +38,9 @@ pub fn all() -> &'static [&'static EffectDef] {
         &pixelate::EFFECT,
         &repeat::EFFECT,
         &linear_repeat::EFFECT,
+        &radial_repeat::EFFECT,
         &swing::EFFECT,
+        &spin::EFFECT,
     ]
 }
 

@@ -12,11 +12,13 @@ export const zhHansEffects = {
     { text: '<span style="color:#eab308">●</span> 阈值 (Threshold)', link: '/zh-hans/effects/threshold' },
     { text: '<span style="color:#eab308">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> 颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
-    { text: '<span style="color:#eab308">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
+    { text: '<span style="color:#22c55e">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> 像素化 (Pixelate)', link: '/zh-hans/effects/pixelate' },
     { text: '<span style="color:#eab308">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' },
     { text: '<span style="color:#eab308">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
-    { text: '<span style="color:#22c55e">●</span> 摇摆 (Swing)', link: '/zh-hans/effects/swing2' }
+    { text: '<span style="color:#22c55e">●</span> 径向重复 (Radial Repeat)', link: '/zh-hans/effects/radial-repeat' },
+    { text: '<span style="color:#22c55e">●</span> 摇摆 (Swing)', link: '/zh-hans/effects/swing2' },
+    { text: '<span style="color:#22c55e">●</span> 旋转 (Spin)', link: '/zh-hans/effects/spin' }
   ]
 };
 
@@ -31,11 +33,13 @@ export const enEffects = {
     { text: '<span style="color:#eab308">●</span> Threshold', link: '/en/effects/threshold' },
     { text: '<span style="color:#eab308">●</span> Palette Map', link: '/en/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> Replace Color', link: '/en/effects/replace-color' },
-    { text: '<span style="color:#eab308">●</span> Scale Assist', link: '/en/effects/scale-assist' },
+    { text: '<span style="color:#22c55e">●</span> Scale Assist', link: '/en/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> Pixelate', link: '/en/effects/pixelate' },
     { text: '<span style="color:#eab308">●</span> Repeat', link: '/en/effects/repeat' },
     { text: '<span style="color:#eab308">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
-    { text: '<span style="color:#22c55e">●</span> Swing', link: '/en/effects/swing2' }
+    { text: '<span style="color:#22c55e">●</span> Radial Repeat', link: '/en/effects/radial-repeat' },
+    { text: '<span style="color:#22c55e">●</span> Swing', link: '/en/effects/swing2' },
+    { text: '<span style="color:#22c55e">●</span> Spin', link: '/en/effects/spin' }
   ]
 };
 
@@ -51,7 +55,19 @@ export const zhHansBuiltins = [
     text: '基本形状',
     items: [
       { text: '<span style="color:#22c55e">●</span> 矩形', link: '/zh-hans/builtins/rect' },
-      { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' }
+      { text: '<span style="color:#22c55e">●</span> 圆形', link: '/zh-hans/builtins/circle' },
+      { text: '<span style="color:#22c55e">●</span> 圆角矩形', link: '/zh-hans/builtins/roundrect' },
+      { text: '<span style="color:#22c55e">●</span> 三角形', link: '/zh-hans/builtins/triangle' },
+      { text: '<span style="color:#22c55e">●</span> 星形', link: '/zh-hans/builtins/star' },
+      { text: '<span style="color:#22c55e">●</span> 多边形', link: '/zh-hans/builtins/poly' },
+      { text: '<span style="color:#22c55e">●</span> 菱形', link: '/zh-hans/builtins/quad' },
+      { text: '<span style="color:#22c55e">●</span> 五边形', link: '/zh-hans/builtins/penta' },
+      { text: '<span style="color:#22c55e">●</span> 扇形', link: '/zh-hans/builtins/pie' },
+      { text: '<span style="color:#22c55e">●</span> 十字形', link: '/zh-hans/builtins/plus' },
+      { text: '<span style="color:#22c55e">●</span> 多叶形', link: '/zh-hans/builtins/multifoil' },
+      { text: '<span style="color:#22c55e">●</span> 弧形', link: '/zh-hans/builtins/arc' },
+      { text: '<span style="color:#22c55e">●</span> 线段', link: '/zh-hans/builtins/line' },
+      { text: '<span style="color:#22c55e">●</span> 正 N 边形', link: '/zh-hans/builtins/ngon' }
     ]
   },
   {
@@ -75,7 +91,19 @@ export const enBuiltins = [
     text: 'Basic Shapes',
     items: [
       { text: '<span style="color:#22c55e">●</span> Rectangle', link: '/en/builtins/rect' },
-      { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' }
+      { text: '<span style="color:#22c55e">●</span> Circle', link: '/en/builtins/circle' },
+      { text: '<span style="color:#22c55e">●</span> Rounded Rectangle', link: '/en/builtins/roundrect' },
+      { text: '<span style="color:#22c55e">●</span> Triangle', link: '/en/builtins/triangle' },
+      { text: '<span style="color:#22c55e">●</span> Star', link: '/en/builtins/star' },
+      { text: '<span style="color:#22c55e">●</span> Polygon', link: '/en/builtins/poly' },
+      { text: '<span style="color:#22c55e">●</span> Quad', link: '/en/builtins/quad' },
+      { text: '<span style="color:#22c55e">●</span> Pentagon', link: '/en/builtins/penta' },
+      { text: '<span style="color:#22c55e">●</span> Pie', link: '/en/builtins/pie' },
+      { text: '<span style="color:#22c55e">●</span> Plus', link: '/en/builtins/plus' },
+      { text: '<span style="color:#22c55e">●</span> Multifoil', link: '/en/builtins/multifoil' },
+      { text: '<span style="color:#22c55e">●</span> Arc', link: '/en/builtins/arc' },
+      { text: '<span style="color:#22c55e">●</span> Line', link: '/en/builtins/line' },
+      { text: '<span style="color:#22c55e">●</span> N-gon', link: '/en/builtins/ngon' }
     ]
   },
   {

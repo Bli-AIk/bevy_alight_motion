@@ -232,13 +232,9 @@ impl ValidationReport {
                         id: video.id,
                     });
                 }
-                AmLayer::Camera(camera) => {
+                AmLayer::Camera(_camera) => {
                     self.stats.camera_count += 1;
-                    self.unsupported_layers.push(UnsupportedLayer {
-                        label: camera.label.clone(),
-                        layer_type: "Camera (相机)".to_string(),
-                        id: camera.id,
-                    });
+                    // Camera layers are supported via the collect pipeline
                 }
                 AmLayer::Bookmark(_) => {
                     self.stats.bookmark_count += 1;

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-21T16:28:22.499643+08:00",
+  "timestamp": "2026-02-21T16:56:05.030937+08:00",
   "summary": {
     "passed": 70,
     "skipped": 2,
-    "failed": 16
+    "failed": 17
   },
   "results": {
     "basic/bezier/bezier": {
@@ -194,6 +194,10 @@
     },
     "private/USER_327/last": {
       "status": "skip"
+    },
+    "private/USER_5p/neo_test": {
+      "status": "fail",
+      "avg_similarity": 0.7432
     },
     "private/USER_71/2_ex": {
       "status": "fail",
