@@ -235,22 +235,21 @@ pub fn animate_unified_effect_system(
             // Update stretch2 parameters (directional UV stretch)
             let has_stretch2 = animated.stretch2_scale.value.is_some()
                 || !animated.stretch2_scale.keyframes.is_empty();
+            let s2_scale = interpolate_float(&animated.stretch2_scale, layer_time).unwrap_or(1.0);
+            let s2_angle_rad = interpolate_float(&animated.stretch2_angle, layer_time)
+                .unwrap_or(0.0)
+                .to_radians();
             if has_stretch2 {
-                let s2_scale =
-                    interpolate_float(&animated.stretch2_scale, layer_time).unwrap_or(1.0);
-                let s2_angle_deg =
-                    interpolate_float(&animated.stretch2_angle, layer_time).unwrap_or(0.0);
-                let s2_angle_rad = s2_angle_deg.to_radians();
                 let s2_content_only = if animated.stretch2_content_only {
                     1.0
                 } else {
                     0.0
                 };
-                bevy::log::warn!(
-                    "[stretch2] layer_id={} scale={:.4} angle_deg={:.4} content_only={}",
+                bevy::log::trace!(
+                    "[stretch2] layer_id={} scale={:.4} angle_rad={:.4} content_only={}",
                     animated.layer_id,
                     s2_scale,
-                    s2_angle_deg,
+                    s2_angle_rad,
                     animated.stretch2_content_only
                 );
                 material.uniform_data.stretch2_params =
@@ -258,6 +257,39 @@ pub fn animate_unified_effect_system(
             } else {
                 material.uniform_data.stretch2_params = Vec4::ZERO;
             }
+
+            // For content_only=false, compute mesh expansion so content extends beyond
+            // original layer boundary (matching AM's screen-space stretch behavior).
+            // We compute the bounding box of the inverse stretch transform of [0,1]²
+            // to determine how much larger the mesh needs to be and what UV range to use.
+            let (s2_expand_x, s2_expand_y, s2_uv_min_x, s2_uv_min_y) = if has_stretch2
+                && !animated.stretch2_content_only
+                && (s2_scale - 1.0).abs() > 0.001
+            {
+                let cos_a = s2_angle_rad.cos();
+                let sin_a = s2_angle_rad.sin();
+                let corners = [(-0.5_f32, -0.5_f32), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)];
+                let (mut min_x, mut min_y, mut max_x, mut max_y) =
+                    (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+                for (cx, cy) in corners {
+                    // rotate into stretch-axis space
+                    let rx = cx * cos_a - cy * sin_a;
+                    let ry = cx * sin_a + cy * cos_a;
+                    // apply inverse of 1/scale → multiply by scale
+                    let ux = rx * s2_scale;
+                    let uy = ry;
+                    // rotate back
+                    let mx = ux * cos_a + uy * sin_a;
+                    let my = -ux * sin_a + uy * cos_a;
+                    min_x = min_x.min(mx + 0.5);
+                    min_y = min_y.min(my + 0.5);
+                    max_x = max_x.max(mx + 0.5);
+                    max_y = max_y.max(my + 0.5);
+                }
+                (max_x - min_x, max_y - min_y, min_x, min_y)
+            } else {
+                (1.0, 1.0, 0.0, 0.0)
+            };
 
             // Update blur parameters if needed
             let has_blur = animated.blur_strength.value.is_some()
@@ -520,61 +552,12 @@ pub fn animate_unified_effect_system(
                 // This applies to BOTH regular content AND embed content.
                 // Bounds clipping (if needed) is handled separately by apply_embed_bounds_clipping_system.
                 if !has_blur {
-                    let half_w = orig_width / 2.0;
-                    let half_h = orig_height / 2.0;
-
-                    // Calculate mesh vertex offset from anchor_offset
-                    // anchor_offset contains (comp_x, comp_y) from pivot_to_anchor_and_offset
-                    // Mesh offset should be the OPPOSITE to keep visual center at location
-                    // comp = anchor * size, so mesh_offset = -anchor * size = comp (since we want opposite)
-                    // But wait - anchor_offset is already the compensation, mesh needs opposite
-                    // anchor_offset = (anchor_x * width, anchor_y * height)
-                    // mesh_offset = -anchor * size = -(anchor_offset.x, anchor_offset.y) when size hasn't changed
-                    // However, when size changes due to scale_assist, we need to recalculate
-                    // anchor_offset was computed with original size, but mesh should use current size
-                    //
-                    // Actually, let's think about this more carefully:
-                    // - anchor = pivot / original_size (this is fixed, determined by pivot)
-                    // - For mesh at current_size, offset should be -anchor * current_size
-                    // - anchor_offset was computed as anchor * original_size
-                    // - So mesh_offset = -anchor * current_size = -(anchor_offset / original_size) * current_size
-                    //                  = -anchor_offset * (current_size / original_size)
-                    //                  = -anchor_offset * scale (since current_size = original_size * scale)
-                    //
-                    // But we want the visual center to stay at Transform position, which already has
-                    // anchor_offset applied. So mesh should be offset by the OPPOSITE of what translation has.
-                    //
-                    // WAIT - let me re-read the original logic:
-                    // In visual.rs create_anchored_rectangle:
-                    //   offset_x = -anchor_vec.x * width
-                    //   offset_y = -anchor_vec.y * height
-                    // where anchor_vec = anchor.as_vec() = (anchor_x, anchor_y)
-                    // So mesh offset = (-anchor_x * width, -anchor_y * height)
-                    //
-                    // In collect_types.rs:
-                    //   comp_x = anchor_x * width
-                    //   comp_y = anchor_y * height
-                    //   anchor_offset = Vec2(comp_x, comp_y)
-                    //
-                    // So mesh offset should be -anchor_offset (using original dimensions)
-                    // But when dimensions change due to scale_assist, we need to scale the offset proportionally
-                    //
-                    // For scale_assist with axis=3:
-                    // - scale_x increases, scale_y decreases
-                    // - The pivot point should stay fixed in world space
-                    // - This means mesh offset needs to be: -anchor * current_size
-                    //
-                    // Since anchor = anchor_offset / original_size (approximately), and
-                    // current_size = (orig_width, orig_height), we need:
-                    // mesh_offset_x = -anchor_x * orig_width
-                    // mesh_offset_y = -anchor_y * orig_height
-                    //
-                    // But we don't have anchor directly, we have anchor_offset which was computed
-                    // with the INITIAL size (before scale_assist). Let's compute anchor from pivot.
-                    //
-                    // Actually, the cleanest approach: use anchor_offset with current dimensions
-                    // The anchor ratios are stored in anchor_offset / initial_size
-                    // For current size (orig_width, orig_height), the offset should scale proportionally
+                    // Apply stretch2 mesh expansion for content_only=false.
+                    // The mesh grows so content extends beyond original layer boundary,
+                    // matching AM's screen-space sampling. UV range is expanded so the
+                    // shader's UV stretch maps the full content onto the larger mesh.
+                    let half_w = orig_width / 2.0 * s2_expand_x;
+                    let half_h = orig_height / 2.0 * s2_expand_y;
 
                     // Get original size (before scale_assist) from the animated size property
                     let orig_size = interpolate_vec2(&animated.size, 0.0).unwrap_or([100.0, 100.0]);
@@ -593,7 +576,7 @@ pub fn animate_unified_effect_system(
                         0.0
                     };
 
-                    // mesh offset = -anchor * current_size
+                    // mesh offset = -anchor * current_size (based on content dimensions, not expanded mesh)
                     let offset_x = -anchor_x * orig_width;
                     let offset_y = -anchor_y * orig_height;
 
@@ -636,13 +619,23 @@ pub fn animate_unified_effect_system(
                         [0.0, 0.0, 1.0],
                         [0.0, 0.0, 1.0],
                     ];
+                    // UV range: expanded by stretch2 for content_only=false, plus pixelate margin
                     let uv_exp_x = pix_expansion / orig_width;
                     let uv_exp_y = pix_expansion / orig_height;
                     let uvs = vec![
-                        [-uv_exp_x, 1.0 + uv_exp_y],
-                        [1.0 + uv_exp_x, 1.0 + uv_exp_y],
-                        [1.0 + uv_exp_x, -uv_exp_y],
-                        [-uv_exp_x, -uv_exp_y],
+                        [s2_uv_min_x - uv_exp_x, (1.0 - s2_uv_min_y) + uv_exp_y],
+                        [
+                            (s2_uv_min_x + s2_expand_x) + uv_exp_x,
+                            (1.0 - s2_uv_min_y) + uv_exp_y,
+                        ],
+                        [
+                            (s2_uv_min_x + s2_expand_x) + uv_exp_x,
+                            (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
+                        ],
+                        [
+                            s2_uv_min_x - uv_exp_x,
+                            (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
+                        ],
                     ];
                     let indices = vec![0u32, 1, 2, 0, 2, 3];
 

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-21T15:46:43.660876+08:00",
+  "timestamp": "2026-02-21T16:28:22.499643+08:00",
   "summary": {
-    "passed": 68,
+    "passed": 70,
     "skipped": 2,
-    "failed": 18
+    "failed": 16
   },
   "results": {
     "basic/bezier/bezier": {
@@ -245,12 +245,10 @@
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/6": {
-      "status": "fail",
-      "avg_similarity": 0.9677
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/6_ex": {
-      "status": "fail",
-      "avg_similarity": 0.9692
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/6_ex1": {
       "status": "pass"
