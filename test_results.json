@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-22T11:08:00.609454+08:00",
+  "timestamp": "2026-02-22T12:25:09.711029+08:00",
   "summary": {
     "passed": 75,
     "skipped": 2,
@@ -228,7 +228,7 @@
     },
     "private/USER_5p/neo_test": {
       "status": "fail",
-      "avg_similarity": 0.7432
+      "avg_similarity": 0.7189
     },
     "private/USER_71/2_ex": {
       "status": "fail",
@@ -246,8 +246,7 @@
       "status": "pass"
     },
     "private/USER_71/2_ex4": {
-      "status": "fail",
-      "avg_similarity": 0.9495
+      "status": "pass"
     },
     "private/USER_71/3_ex": {
       "status": "fail",
@@ -271,7 +270,7 @@
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
-      "avg_similarity": 0.6524
+      "avg_similarity": 0.6549
     },
     "private/USER_chen_pi/distrust/13_ex": {
       "status": "pass"
@@ -319,7 +318,8 @@
       "status": "pass"
     },
     "private/USER_chen_pi/misc/simple_gb": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9764
     }
   }
 }

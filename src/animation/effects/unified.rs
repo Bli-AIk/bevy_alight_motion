@@ -30,22 +30,18 @@ fn compute_ancestor_scale(
 
     // Walk up from the parent, accumulating animated scales only from effect sprites
     let mut current = parent_entity;
-    loop {
-        if let Ok((animated, child_of_ref)) = parent_query.get(current) {
-            // Only accumulate scale from effect sprites (scale baked into mesh, not Transform)
-            if effect_check.contains(current) {
-                let local_time = animated.calc_local_time(global_time);
-                let layer_time = animated.calc_layer_time(local_time);
-                let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
-                acc_scale[0] *= s[0];
-                acc_scale[1] *= s[1];
-            }
+    while let Ok((animated, child_of_ref)) = parent_query.get(current) {
+        // Only accumulate scale from effect sprites (scale baked into mesh, not Transform)
+        if effect_check.contains(current) {
+            let local_time = animated.calc_local_time(global_time);
+            let layer_time = animated.calc_layer_time(local_time);
+            let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+            acc_scale[0] *= s[0];
+            acc_scale[1] *= s[1];
+        }
 
-            if let Some(child_of) = child_of_ref {
-                current = child_of.parent();
-            } else {
-                break;
-            }
+        if let Some(child_of) = child_of_ref {
+            current = child_of.parent();
         } else {
             break;
         }

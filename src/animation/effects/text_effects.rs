@@ -706,16 +706,22 @@ pub fn animate_text_progress_system(
 
         // Restore previously-hidden glyphs to original positions.
         if !has_spacing && let Some(orig) = orig_glyphs {
-            for i in visible_start..visible_end.min(total) {
-                if glyphs[i].position.x <= -9999.0 {
-                    glyphs[i].position = orig.data[i].position;
+            for (i, glyph) in glyphs
+                .iter_mut()
+                .enumerate()
+                .take(visible_end.min(total))
+                .skip(visible_start)
+            {
+                if glyph.position.x <= -9999.0 {
+                    glyph.position = orig.data[i].position;
                 }
             }
         }
 
         // Compute cursor position BEFORE hiding glyphs.
-        let cursor_info = if cursor_type != 0 && last_visible.is_some() {
-            let last_idx = last_visible.unwrap();
+        let cursor_info = if cursor_type != 0
+            && let Some(last_idx) = last_visible
+        {
             let g = &glyphs[last_idx];
             let glyph_right = g.position.x + g.size.x / 2.0;
 

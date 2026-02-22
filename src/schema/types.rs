@@ -116,6 +116,7 @@ pub struct AmMedia {
 /// Layer types in the scene.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)]
 pub enum AmLayer {
     /// Visible shape layer.
     Shape(AmShape),

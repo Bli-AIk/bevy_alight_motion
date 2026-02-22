@@ -1,7 +1,7 @@
 # Gaussian Blur
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-21 16:56:05
+> Last tested: 2026-02-22 12:25:09
 
 Multi-pass blur implementation for smooth Gaussian blur effect, supports glow expansion beyond original boundaries.
 

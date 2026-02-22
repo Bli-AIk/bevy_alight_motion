@@ -410,6 +410,7 @@ pub struct Stretch2Params {
 }
 
 impl Stretch2Params {
+    #[allow(dead_code)]
     pub fn has_effect(&self) -> bool {
         self.scale.value.is_some() || !self.scale.keyframes.is_empty()
     }

@@ -288,6 +288,7 @@ pub struct AmRttCamerasContainer;
 
 /// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
 #[derive(Component, Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum AmLayerSpec {
     /// Shape with sprite (media or color fill without stroke)
     SpriteShape {
@@ -650,9 +651,7 @@ impl AmPaletteMapParams {
             // Custom 8-color
             (9, false) => {
                 let mut arr = [Vec4::ZERO; 8];
-                for i in 0..8 {
-                    arr[i] = c[i];
-                }
+                arr[..8].copy_from_slice(&c[..8]);
                 (arr, 8)
             }
             // EGA palettes (2, 3) - these need 16 colors, we only have 8 GPU slots
@@ -683,9 +682,7 @@ impl AmPaletteMapParams {
             // Fallback: custom shades variants that exceed 8 slots
             _ => {
                 let mut arr = [Vec4::ZERO; 8];
-                for i in 0..8 {
-                    arr[i] = c[i];
-                }
+                arr[..8].copy_from_slice(&c[..8]);
                 (arr, 8)
             }
         };
