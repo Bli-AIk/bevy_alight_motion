@@ -985,13 +985,13 @@ fn spawn_layer_entity(
                 }
                 for kf in &layer.animated.pixelate_stretch.keyframes {
                     let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2 {
-                        if let (Ok(x), Ok(y)) = (
+                    if parts.len() >= 2
+                        && let (Ok(x), Ok(y)) = (
                             parts[0].trim().parse::<f32>(),
                             parts[1].trim().parse::<f32>(),
-                        ) {
-                            max_stretch = max_stretch.max(x.abs()).max(y.abs());
-                        }
+                        )
+                    {
+                        max_stretch = max_stretch.max(x.abs()).max(y.abs());
                     }
                 }
                 max_size * max_stretch / 2.0

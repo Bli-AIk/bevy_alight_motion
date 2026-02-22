@@ -103,7 +103,7 @@ pub fn update_unified_mask_system(
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
     let global_time = playback.current_time_ms as u64;
-    for (mask_info, material_handle, marker, entity_global_transform) in query.iter() {
+    for (mask_info, material_handle, _marker, entity_global_transform) in query.iter() {
         // Get all active masks for current time (supports up to 2)
         let active_masks = mask_info.get_active_masks(global_time);
 
@@ -124,133 +124,123 @@ pub fn update_unified_mask_system(
                     |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32, Vec3) {
                         if let Some(&mask_entity) =
                             pending.spawned_entities.get(&mask.mask_layer_id)
-                        {
-                            if let Ok((mask_global_transform, animated, spec)) =
+                            && let Ok((mask_global_transform, animated, spec)) =
                                 mask_layer_query.get(mask_entity)
-                            {
-                                let (
-                                    base_width,
-                                    base_height,
+                        {
+                            let (
+                                base_width,
+                                base_height,
+                                pivot_x,
+                                pivot_y,
+                                fill_alpha,
+                                initial_sw,
+                                stroke_dir,
+                            ) = match spec {
+                                crate::scene::AmLayerSpec::SdfShape {
+                                    width,
+                                    height,
                                     pivot_x,
                                     pivot_y,
-                                    fill_alpha,
-                                    initial_sw,
-                                    stroke_dir,
-                                ) = match spec {
-                                    crate::scene::AmLayerSpec::SdfShape {
-                                        width,
-                                        height,
-                                        pivot_x,
-                                        pivot_y,
-                                        fill_color,
-                                        no_fill,
-                                        stroke_width,
-                                        stroke_direction,
-                                        ..
-                                    } => {
-                                        let fa = if *no_fill {
-                                            0.0
-                                        } else if let Some(fc) = fill_color {
-                                            if fc.value.len() >= 3 && fc.value.starts_with('#') {
-                                                let alpha_hex = &fc.value[1..3];
-                                                u8::from_str_radix(alpha_hex, 16).unwrap_or(255)
-                                                    as f32
-                                                    / 255.0
-                                            } else {
-                                                1.0
-                                            }
+                                    fill_color,
+                                    no_fill,
+                                    stroke_width,
+                                    stroke_direction,
+                                    ..
+                                } => {
+                                    let fa = if *no_fill {
+                                        0.0
+                                    } else if let Some(fc) = fill_color {
+                                        if fc.value.len() >= 3 && fc.value.starts_with('#') {
+                                            let alpha_hex = &fc.value[1..3];
+                                            u8::from_str_radix(alpha_hex, 16).unwrap_or(255) as f32
+                                                / 255.0
                                         } else {
                                             1.0
-                                        };
-                                        (
-                                            *width,
-                                            *height,
-                                            *pivot_x,
-                                            *pivot_y,
-                                            fa,
-                                            *stroke_width,
-                                            stroke_direction.as_str(),
-                                        )
-                                    }
-                                    crate::scene::AmLayerSpec::SpriteShape {
-                                        width,
-                                        height,
-                                        ..
-                                    } => (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered"),
-                                    _ => (
-                                        mask.half_size.x * 2.0 / mask.scale.x,
-                                        mask.half_size.y * 2.0 / mask.scale.y,
-                                        0.0,
-                                        0.0,
-                                        1.0,
-                                        0.0,
-                                        "centered",
-                                    ),
-                                };
+                                        }
+                                    } else {
+                                        1.0
+                                    };
+                                    (
+                                        *width,
+                                        *height,
+                                        *pivot_x,
+                                        *pivot_y,
+                                        fa,
+                                        *stroke_width,
+                                        stroke_direction.as_str(),
+                                    )
+                                }
+                                crate::scene::AmLayerSpec::SpriteShape {
+                                    width, height, ..
+                                } => (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered"),
+                                _ => (
+                                    mask.half_size.x * 2.0 / mask.scale.x,
+                                    mask.half_size.y * 2.0 / mask.scale.y,
+                                    0.0,
+                                    0.0,
+                                    1.0,
+                                    0.0,
+                                    "centered",
+                                ),
+                            };
 
-                                let local_time = animated.calc_local_time(playback.current_time_ms);
-                                let layer_time = animated.calc_layer_time(local_time);
+                            let local_time = animated.calc_local_time(playback.current_time_ms);
+                            let layer_time = animated.calc_layer_time(local_time);
 
-                                let mask_opacity =
-                                    interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-                                let current_sw =
-                                    interpolate_float(&animated.stroke_width, layer_time)
-                                        .unwrap_or(initial_sw);
+                            let mask_opacity =
+                                interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+                            let current_sw = interpolate_float(&animated.stroke_width, layer_time)
+                                .unwrap_or(initial_sw);
 
-                                let rotation_deg =
-                                    interpolate_float(&animated.rotation, layer_time)
-                                        .unwrap_or(0.0);
-                                let rotation_rad = (-rotation_deg).to_radians();
+                            let rotation_deg =
+                                interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                            let rotation_rad = (-rotation_deg).to_radians();
 
-                                let [scale_x, scale_y] =
-                                    interpolate_vec2(&animated.scale, layer_time)
-                                        .unwrap_or([1.0, 1.0]);
+                            let [scale_x, scale_y] =
+                                interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
-                                let mask_translation = mask_global_transform.translation();
+                            let mask_translation = mask_global_transform.translation();
 
-                                let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
-                                let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
+                            let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
+                            let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
 
-                                let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
-                                    - scaled_offset_y * rotation_rad.sin();
-                                let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
-                                    + scaled_offset_y * rotation_rad.cos();
+                            let rotated_offset_x = scaled_offset_x * rotation_rad.cos()
+                                - scaled_offset_y * rotation_rad.sin();
+                            let rotated_offset_y = scaled_offset_x * rotation_rad.sin()
+                                + scaled_offset_y * rotation_rad.cos();
 
-                                let center_x = mask_translation.x + rotated_offset_x;
-                                let center_y = mask_translation.y + rotated_offset_y;
+                            let center_x = mask_translation.x + rotated_offset_x;
+                            let center_y = mask_translation.y + rotated_offset_y;
 
-                                let [anim_size_x, anim_size_y] =
-                                    interpolate_vec2(&animated.size, layer_time)
-                                        .unwrap_or([base_width, base_height]);
+                            let [anim_size_x, anim_size_y] =
+                                interpolate_vec2(&animated.size, layer_time)
+                                    .unwrap_or([base_width, base_height]);
 
-                                let ext = |sw: f32| match stroke_dir {
-                                    "inside" => 0.0,
-                                    "outside" => sw,
-                                    _ => sw * 0.5,
-                                };
-                                let stroke_delta = ext(current_sw) - ext(initial_sw);
-                                let initial_stroke_ext_x =
-                                    mask.half_size.x - base_width / 2.0 * mask.scale.x;
-                                let initial_stroke_ext_y =
-                                    mask.half_size.y - base_height / 2.0 * mask.scale.y;
-                                let half_width = (anim_size_x / 2.0 * scale_x
-                                    + initial_stroke_ext_x
-                                    + stroke_delta)
+                            let ext = |sw: f32| match stroke_dir {
+                                "inside" => 0.0,
+                                "outside" => sw,
+                                _ => sw * 0.5,
+                            };
+                            let stroke_delta = ext(current_sw) - ext(initial_sw);
+                            let initial_stroke_ext_x =
+                                mask.half_size.x - base_width / 2.0 * mask.scale.x;
+                            let initial_stroke_ext_y =
+                                mask.half_size.y - base_height / 2.0 * mask.scale.y;
+                            let half_width =
+                                (anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta)
                                     * fit_scale;
-                                let half_height = (anim_size_y / 2.0 * scale_y
-                                    + initial_stroke_ext_y
-                                    + stroke_delta)
+                            let half_height =
+                                (anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta)
                                     * fit_scale;
 
-                                let sw_world = current_sw * fit_scale;
+                            let sw_world = current_sw * fit_scale;
 
-                                return (
-                                    Vec2::new(center_x, center_y),
-                                    Vec2::new(half_width, half_height),
-                                    rotation_rad,
-                                    Vec3::new(fill_alpha, mask_opacity, sw_world),
-                                );
-                            }
+                            return (
+                                Vec2::new(center_x, center_y),
+                                Vec2::new(half_width, half_height),
+                                rotation_rad,
+                                Vec3::new(fill_alpha, mask_opacity, sw_world),
+                            );
                         }
                         // Fallback
                         (

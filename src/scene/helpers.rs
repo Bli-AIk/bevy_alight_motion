@@ -481,15 +481,15 @@ pub(crate) fn get_shape_float_property(
 ) -> f32 {
     for prop in properties {
         if prop.name == name && prop.prop_type == "float" {
-            if !prop.value.is_empty() {
-                if let Ok(v) = prop.value.parse::<f32>() {
-                    return v;
-                }
+            if !prop.value.is_empty()
+                && let Ok(v) = prop.value.parse::<f32>()
+            {
+                return v;
             }
-            if let Some(kf) = prop.keyframes.first() {
-                if let Ok(v) = kf.value.parse::<f32>() {
-                    return v;
-                }
+            if let Some(kf) = prop.keyframes.first()
+                && let Ok(v) = kf.value.parse::<f32>()
+            {
+                return v;
             }
         }
     }
@@ -530,15 +530,15 @@ pub(crate) fn get_shape_vec2_property(
 ) -> [f32; 2] {
     for prop in properties {
         if prop.name == name && prop.prop_type == "vec2" {
-            if !prop.value.is_empty() {
-                if let Ok(v) = crate::schema::parse_vec2(&prop.value) {
-                    return v;
-                }
+            if !prop.value.is_empty()
+                && let Ok(v) = crate::schema::parse_vec2(&prop.value)
+            {
+                return v;
             }
-            if let Some(kf) = prop.keyframes.first() {
-                if let Ok(v) = crate::schema::parse_vec2(&kf.value) {
-                    return v;
-                }
+            if let Some(kf) = prop.keyframes.first()
+                && let Ok(v) = crate::schema::parse_vec2(&kf.value)
+            {
+                return v;
             }
         }
     }

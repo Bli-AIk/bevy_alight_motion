@@ -33,7 +33,7 @@ fn test_6ex_layer_hierarchy() {
                 match layer {
                     bevy_alight_motion::schema::AmLayer::Nullobj(null) => {
                         let rot_val = null.transform.rotation.value.unwrap_or(0.0);
-                        let loc_val = null.transform.location.value.clone().unwrap_or_default();
+                        let loc_val = null.transform.location.value.unwrap_or_default();
                         let loc_kf_count = null.transform.location.keyframes.len();
                         println!(
                             "NULLOBJ: id={}, label='{}', parent={}, rot={:.1}°, loc={:?} ({} keyframes)",
@@ -55,16 +55,16 @@ fn test_6ex_layer_hierarchy() {
 
             // Verify that 空2 layers have 90 degree rotation
             for layer in &scene.layers {
-                if let bevy_alight_motion::schema::AmLayer::Nullobj(null) = layer {
-                    if null.label.contains("空 2") {
-                        let rot = null.transform.rotation.value.unwrap_or(0.0);
-                        assert!(
-                            (rot - 90.0).abs() < 0.01,
-                            "空2 should have 90° rotation, got {}°",
-                            rot
-                        );
-                        println!("\n✓ Verified: '{}' has correct 90° rotation", null.label);
-                    }
+                if let bevy_alight_motion::schema::AmLayer::Nullobj(null) = layer
+                    && null.label.contains("空 2")
+                {
+                    let rot = null.transform.rotation.value.unwrap_or(0.0);
+                    assert!(
+                        (rot - 90.0).abs() < 0.01,
+                        "空2 should have 90° rotation, got {}°",
+                        rot
+                    );
+                    println!("\n✓ Verified: '{}' has correct 90° rotation", null.label);
                 }
             }
         }

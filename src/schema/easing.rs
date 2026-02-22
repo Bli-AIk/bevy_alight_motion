@@ -290,10 +290,10 @@ fn am_cyclic(
     let pct_in_step = (t % safe_step) / safe_step;
 
     // Helper: cosine interpolation within step
-    let cos_interp = 1.0 - ((((t / safe_step) * std::f32::consts::PI * 2.0).cos() + 1.0) / 2.0);
+    let _cos_interp = 1.0 - ((((t / safe_step) * std::f32::consts::PI * 2.0).cos() + 1.0) / 2.0);
 
     // Helper: saw/triangle interpolation within step
-    let saw_interp = 1.0 - ((pct_in_step - 0.5).abs() * 2.0);
+    let _saw_interp = 1.0 - ((pct_in_step - 0.5).abs() * 2.0);
 
     // Helper: skew interpolation - adjusts t based on skew parameter
     let skew_factor = if pct_in_step < skew {
@@ -347,7 +347,7 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
 
     // Find t for given x using Newton's method
     // AM uses more iterations for values near edges
-    let iterations = if x < 0.05 || x > 0.95 { 24 } else { 8 };
+    let iterations = if !(0.05..=0.95).contains(&x) { 24 } else { 8 };
 
     let mut t = x;
     let mut last_slope = 1000.0_f32;
@@ -360,7 +360,13 @@ fn cubic_bezier_y_for_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
 
         // AM's early termination: if slope change is very small after initial iterations
         if i > 2
-            && (slope - last_slope).abs() < 0.01 / (if x < 0.05 || x > 0.95 { 3.0 } else { 1.0 })
+            && (slope - last_slope).abs()
+                < 0.01
+                    / (if !(0.05..=0.95).contains(&x) {
+                        3.0
+                    } else {
+                        1.0
+                    })
         {
             break;
         }

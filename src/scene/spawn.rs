@@ -109,23 +109,23 @@ pub fn spawn_scene(
                     path_repeat_effect.has_effect(),
                     prev_layer_info.as_ref().map(|(e, id, _)| (*e, *id))
                 );
-                if path_repeat_effect.has_effect() {
-                    if let Some((prev_entity, prev_id, ref prev_shape)) = prev_layer_info {
-                        bevy::log::warn!(
-                            "[Spawn] Inserting AmPathRepeat on entity {:?}, source={:?}",
-                            entity,
-                            prev_entity
-                        );
-                        commands
-                            .entity(entity)
-                            .insert(crate::animation::AmPathRepeat {
-                                source_entity: prev_entity,
-                                copy_entities: Vec::new(),
-                                source_shape_type: prev_shape.clone(),
-                                source_layer_id: prev_id,
-                                source_animated: Default::default(),
-                            });
-                    }
+                if path_repeat_effect.has_effect()
+                    && let Some((prev_entity, prev_id, ref prev_shape)) = prev_layer_info
+                {
+                    bevy::log::warn!(
+                        "[Spawn] Inserting AmPathRepeat on entity {:?}, source={:?}",
+                        entity,
+                        prev_entity
+                    );
+                    commands
+                        .entity(entity)
+                        .insert(crate::animation::AmPathRepeat {
+                            source_entity: prev_entity,
+                            copy_entities: Vec::new(),
+                            source_shape_type: prev_shape.clone(),
+                            source_layer_id: prev_id,
+                            source_animated: Default::default(),
+                        });
                 }
                 prev_layer_info = Some((entity, shape.id, shape.shape_type.clone()));
             }

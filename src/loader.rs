@@ -121,7 +121,7 @@ async fn load_amproj(
             file.read_to_end(&mut data)?;
             // Store with amproj: prefix for lookup
             let uri = format!("amproj:{}", name);
-            bevy::log::debug!("Loaded embedded image: {}", uri);
+            debug!("Loaded embedded image: {}", uri);
             embedded_images.insert(uri, data);
         } else if name.ends_with(".ttf") || name.ends_with(".otf") {
             let mut data = Vec::new();
@@ -177,9 +177,9 @@ async fn load_amproj(
         ) {
             let handle = load_context.add_labeled_asset(label.to_string(), image);
             images.insert(uri.clone(), handle);
-            bevy::log::debug!("Loaded image: {} (detected format: {})", uri, format);
+            debug!("Loaded image: {} (detected format: {})", uri, format);
         } else {
-            bevy::log::warn!("Failed to load image: {} (tried format: {})", uri, format);
+            warn!("Failed to load image: {} (tried format: {})", uri, format);
         }
     }
 
@@ -193,7 +193,7 @@ async fn load_amproj(
         let mut test_db = fontdb::Database::new();
         test_db.load_font_data(data.clone());
         if test_db.faces().count() == 0 {
-            bevy::log::warn!(
+            warn!(
                 "Font '{}' failed fontdb validation, skipping to avoid text pipeline panic",
                 name
             );
@@ -224,12 +224,9 @@ async fn load_amproj(
                     units_per_em: upm,
                 },
             );
-            bevy::log::trace!(
+            trace!(
                 "Font '{}' metrics: win_ascent={:.4}, win_descent={:.4}, upm={}",
-                name,
-                win_ascent,
-                win_descent,
-                upm
+                name, win_ascent, win_descent, upm
             );
         }
 
@@ -253,48 +250,48 @@ async fn load_amproj(
             if fonts.contains_key(&font_ref) {
                 continue;
             }
-            if let Some(path) = resolve_google_font_to_system(&font_ref) {
-                if let Ok(data) = std::fs::read(&path) {
-                    // Validate with fontdb
-                    let mut test_db = fontdb::Database::new();
-                    test_db.load_font_data(data.clone());
-                    if test_db.faces().count() == 0 {
-                        bevy::log::warn!("System font at '{}' failed fontdb validation", path);
-                        continue;
+            if let Some(path) = resolve_google_font_to_system(&font_ref)
+                && let Ok(data) = std::fs::read(&path)
+            {
+                // Validate with fontdb
+                let mut test_db = fontdb::Database::new();
+                test_db.load_font_data(data.clone());
+                if test_db.faces().count() == 0 {
+                    warn!("System font at '{}' failed fontdb validation", path);
+                    continue;
+                }
+                // Extract metrics
+                if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+                    let upm = face.units_per_em();
+                    let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+                        (
+                            os2.windows_ascender() as f32 / upm as f32,
+                            (-os2.windows_descender()) as f32 / upm as f32,
+                        )
+                    } else {
+                        (
+                            face.ascender() as f32 / upm as f32,
+                            (-face.descender()) as f32 / upm as f32,
+                        )
+                    };
+                    font_metrics.insert(
+                        font_ref.clone(),
+                        FontMetrics {
+                            win_ascent,
+                            win_descent,
+                            units_per_em: upm,
+                        },
+                    );
+                }
+                match Font::try_from_bytes(data) {
+                    Ok(font) => {
+                        let label = format!("font_system_{}", font_ref);
+                        let handle = load_context.add_labeled_asset(label, font);
+                        fonts.insert(font_ref.clone(), handle);
+                        info!("Resolved '{}' to system font: {}", font_ref, path);
                     }
-                    // Extract metrics
-                    if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
-                        let upm = face.units_per_em();
-                        let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
-                            (
-                                os2.windows_ascender() as f32 / upm as f32,
-                                (-os2.windows_descender()) as f32 / upm as f32,
-                            )
-                        } else {
-                            (
-                                face.ascender() as f32 / upm as f32,
-                                (-face.descender()) as f32 / upm as f32,
-                            )
-                        };
-                        font_metrics.insert(
-                            font_ref.clone(),
-                            FontMetrics {
-                                win_ascent,
-                                win_descent,
-                                units_per_em: upm,
-                            },
-                        );
-                    }
-                    match Font::try_from_bytes(data) {
-                        Ok(font) => {
-                            let label = format!("font_system_{}", font_ref);
-                            let handle = load_context.add_labeled_asset(label, font);
-                            fonts.insert(font_ref.clone(), handle);
-                            bevy::log::info!("Resolved '{}' to system font: {}", font_ref, path);
-                        }
-                        Err(e) => {
-                            bevy::log::warn!("Failed to load system font '{}': {:?}", path, e);
-                        }
+                    Err(e) => {
+                        warn!("Failed to load system font '{}': {:?}", path, e);
                     }
                 }
             }
@@ -396,12 +393,11 @@ fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
     if let Ok(output) = std::process::Command::new("fc-match")
         .args(["-f", "%{file}", &format!("{}:weight={}", font_name, weight)])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).to_string();
-            if std::path::Path::new(&path).exists() && path.contains(font_name) {
-                return Some(path);
-            }
+        let path = String::from_utf8_lossy(&output.stdout).to_string();
+        if std::path::Path::new(&path).exists() && path.contains(font_name) {
+            return Some(path);
         }
     }
 

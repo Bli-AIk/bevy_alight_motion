@@ -272,7 +272,7 @@ pub(crate) fn spawn_text(
     commands: &mut Commands,
     text: &AmText,
     fonts: &HashMap<String, Handle<Font>>,
-    font_metrics: &HashMap<String, FontMetrics>,
+    _font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {

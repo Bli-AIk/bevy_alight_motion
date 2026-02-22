@@ -233,9 +233,9 @@ pub fn update_sdf_mask_system(
                 && let Some(material) = materials.get_mut(&material_handle.0)
             {
                 // Log child SDF entity's world position for debugging
-                let child_translation = child_global_transform.translation();
-                let child_scale = child_global_transform.to_scale_rotation_translation().0;
-                let frame_half = material.uniform_data.frame_half;
+                let _child_translation = child_global_transform.translation();
+                let _child_scale = child_global_transform.to_scale_rotation_translation().0;
+                let _frame_half = material.uniform_data.frame_half;
 
                 if active_masks.is_empty() {
                     // No active masks - disable masking (content visible without clipping)

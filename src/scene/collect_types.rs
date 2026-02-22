@@ -998,7 +998,7 @@ pub(crate) fn collect_embed_scene(
 pub(crate) fn collect_text(
     text: &AmText,
     _fonts: &HashMap<String, Handle<Font>>,
-    font_metrics: &HashMap<String, FontMetrics>,
+    _font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Option<PendingLayer> {
@@ -1022,7 +1022,7 @@ pub(crate) fn collect_text(
     };
 
     // AM text position is at the CENTER of the wrapWidth box for all alignments.
-    let wrap_width = text.wrap_width;
+    let _wrap_width = text.wrap_width;
     let wrap_offset_x = 0.0;
 
     let font_y_offset = 0.0;
@@ -1698,12 +1698,11 @@ pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec
                 if i + 2 < tokens.len() {
                     if let (Ok(x), Ok(y)) =
                         (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>())
+                        && vertices.len() < 26
                     {
-                        if vertices.len() < 26 {
-                            // 13 vertices max (26 floats)
-                            vertices.push(x);
-                            vertices.push(y);
-                        }
+                        // 13 vertices max (26 floats)
+                        vertices.push(x);
+                        vertices.push(y);
                     }
                     i += 3;
                 } else {
@@ -1715,16 +1714,15 @@ pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec
             }
             _ => {
                 // Try parsing as coordinate pair (implicit L command)
-                if i + 1 < tokens.len() {
-                    if let (Ok(x), Ok(y)) = (tokens[i].parse::<f32>(), tokens[i + 1].parse::<f32>())
-                    {
-                        if vertices.len() < 26 {
-                            vertices.push(x);
-                            vertices.push(y);
-                        }
-                        i += 2;
-                        continue;
+                if i + 1 < tokens.len()
+                    && let (Ok(x), Ok(y)) = (tokens[i].parse::<f32>(), tokens[i + 1].parse::<f32>())
+                {
+                    if vertices.len() < 26 {
+                        vertices.push(x);
+                        vertices.push(y);
                     }
+                    i += 2;
+                    continue;
                 }
                 i += 1;
             }

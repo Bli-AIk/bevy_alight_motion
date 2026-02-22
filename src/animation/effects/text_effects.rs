@@ -190,6 +190,8 @@ pub fn animate_text_spacing_system(
         ),
         With<Text2d>,
     >,
+    debug_q: Query<Entity, (With<AmAnimated>, With<Text2d>)>,
+    debug_q2: Query<Entity, With<Text2d>>,
 ) {
     if playback.force_stopped {
         return;
@@ -197,8 +199,14 @@ pub fn animate_text_spacing_system(
 
     let global_time = playback.current_time_ms;
 
-    if global_time < 500.0 || global_time > 1900.0 {
-        eprintln!("DBG_SPACING gt={:.0}", global_time);
+    if global_time < 200.0 {
+        eprintln!(
+            "DBG_SPACING gt={:.0} full={} am+t2d={} t2d={}",
+            global_time,
+            query.iter().count(),
+            debug_q.iter().count(),
+            debug_q2.iter().count()
+        );
     }
 
     for (entity, animated, spec, mut layout_info, computed, orig_glyphs) in query.iter_mut() {
@@ -216,7 +224,8 @@ pub fn animate_text_spacing_system(
         if global_time < 100.0 {
             eprintln!(
                 "DBG_INNER gt={:.0} has_letter={} kf={} glyphs={}",
-                global_time, has_letter,
+                global_time,
+                has_letter,
                 animated.textspacing_letter.keyframes.len(),
                 layout_info.glyphs.len()
             );
@@ -264,7 +273,7 @@ pub fn animate_text_spacing_system(
                 .glyphs
                 .iter()
                 .map(|g| {
-                    let (advance, layout_x, layout_line_y) = layout_map
+                    let (_advance, layout_x, layout_line_y) = layout_map
                         .get(&(g.line_index, g.byte_index))
                         .copied()
                         .unwrap_or((g.size.x, 0.0, 0.0));
@@ -324,7 +333,7 @@ pub fn animate_text_spacing_system(
             owned_originals = glyphs
                 .iter()
                 .map(|g| {
-                    let (advance, layout_x, layout_line_y) = layout_map
+                    let (_advance, layout_x, layout_line_y) = layout_map
                         .get(&(g.line_index, g.byte_index))
                         .copied()
                         .unwrap_or((g.size.x, 0.0, 0.0));
@@ -624,10 +633,10 @@ pub fn animate_text_progress_system(
 
         let local_time = animated.calc_local_time(global_time);
         if !animated.is_active(local_time) {
-            if let Some(cref) = cursor_ref {
-                if let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0) {
-                    *vis = Visibility::Hidden;
-                }
+            if let Some(cref) = cursor_ref
+                && let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0)
+            {
+                *vis = Visibility::Hidden;
             }
             continue;
         }
@@ -696,12 +705,10 @@ pub fn animate_text_progress_system(
         };
 
         // Restore previously-hidden glyphs to original positions.
-        if !has_spacing {
-            if let Some(orig) = orig_glyphs {
-                for i in visible_start..visible_end.min(total) {
-                    if glyphs[i].position.x <= -9999.0 {
-                        glyphs[i].position = orig.data[i].position;
-                    }
+        if !has_spacing && let Some(orig) = orig_glyphs {
+            for i in visible_start..visible_end.min(total) {
+                if glyphs[i].position.x <= -9999.0 {
+                    glyphs[i].position = orig.data[i].position;
                 }
             }
         }
@@ -780,10 +787,10 @@ pub fn animate_text_progress_system(
                     .entity(entity)
                     .insert(AmProgressCursorRef(cursor_e));
             }
-        } else if let Some(cref) = cursor_ref {
-            if let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0) {
-                *vis = Visibility::Hidden;
-            }
+        } else if let Some(cref) = cursor_ref
+            && let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0)
+        {
+            *vis = Visibility::Hidden;
         }
     }
 }

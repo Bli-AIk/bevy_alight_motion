@@ -76,8 +76,8 @@ fn repeat_with_easing(count: i32, params: &PathRepeatParams, layer_time: f32) ->
                     let range = end_val - start;
                     if range > 0.0 {
                         let normalized = ((mid - start) / range - 0.5) * 2.0 * std::f32::consts::PI;
-                        (std::f64::consts::E.powf(-(normalized as f64 * normalized as f64) / 2.0)
-                            as f32)
+                        std::f64::consts::E.powf(-(normalized as f64 * normalized as f64) / 2.0)
+                            as f32
                     } else {
                         0.0
                     }
@@ -132,9 +132,9 @@ fn repeat_with_easing(count: i32, params: &PathRepeatParams, layer_time: f32) ->
 
 /// Simple cubic bezier easing approximation.
 fn cubic_bezier_ease(t: f32, ease_in: f32, ease_out: f32) -> f32 {
-    let p1x = (ease_in / 2.0).max(0.0);
+    let _p1x = (ease_in / 2.0).max(0.0);
     let p1y = ((-ease_in) / 2.0).max(0.0);
-    let p2x = 1.0 - (ease_out / 2.0).max(0.0);
+    let _p2x = 1.0 - (ease_out / 2.0).max(0.0);
     let p2y = 1.0 - ((-ease_out) / 2.0).max(0.0);
 
     // Simple approximation: evaluate bezier Y at parameter t
@@ -204,7 +204,7 @@ pub fn animate_path_repeat_system(
     };
     let current_time = playback.current_time_ms;
 
-    for (entity, mut path_repeat, animated, transform, mut visibility, child_of) in
+    for (_entity, mut path_repeat, animated, transform, mut visibility, child_of) in
         path_repeat_query.iter_mut()
     {
         let path_params = match &animated.path_repeat {
@@ -402,19 +402,19 @@ pub fn animate_path_repeat_system(
 
                 // Compute color with blend
                 let mut color = base_color;
-                if blend > 0.0 {
-                    if let Some(fc) = &fill_color_srgb {
-                        let fc_color = Color::srgba(fc.x, fc.y, fc.z, fc.w);
-                        let t = (blend * ease).clamp(0.0, 1.0);
-                        let base_linear = color.to_linear();
-                        let fill_linear = fc_color.to_linear();
-                        color = Color::LinearRgba(LinearRgba::new(
-                            base_linear.red * (1.0 - t) + fill_linear.red * t,
-                            base_linear.green * (1.0 - t) + fill_linear.green * t,
-                            base_linear.blue * (1.0 - t) + fill_linear.blue * t,
-                            1.0,
-                        ));
-                    }
+                if blend > 0.0
+                    && let Some(fc) = &fill_color_srgb
+                {
+                    let fc_color = Color::srgba(fc.x, fc.y, fc.z, fc.w);
+                    let t = (blend * ease).clamp(0.0, 1.0);
+                    let base_linear = color.to_linear();
+                    let fill_linear = fc_color.to_linear();
+                    color = Color::LinearRgba(LinearRgba::new(
+                        base_linear.red * (1.0 - t) + fill_linear.red * t,
+                        base_linear.green * (1.0 - t) + fill_linear.green * t,
+                        base_linear.blue * (1.0 - t) + fill_linear.blue * t,
+                        1.0,
+                    ));
                 }
                 let a = copy_alpha.clamp(0.0, 1.0);
                 sprite.color = color.with_alpha(a);
