@@ -55,6 +55,7 @@ default = []
 debug = ["bevy-inspector-egui"]
 video-debug = []
 video-comparison = []
+frame-test = []
 
 # Tracy profiling with minimal overhead (no GUI)
 # Tracy 性能分析，最小开销（无 GUI）

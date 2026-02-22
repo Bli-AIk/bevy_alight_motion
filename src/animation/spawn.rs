@@ -1019,6 +1019,35 @@ fn spawn_layer_entity(
             }, // pixelate_expansion
             global_time as u64,    // current playback time for mask initialization
             initial_replace_color, // replace color params
+            {
+                // Compute max animated scale for SDF mesh sizing
+                let mut max_s = initial_scale.0.abs().max(initial_scale.1.abs());
+                for kf in &layer.animated.scale.keyframes {
+                    let parts: Vec<&str> = kf.value.split(',').collect();
+                    if parts.len() >= 2 {
+                        if let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
+                            max_s = max_s.max(sx.abs()).max(sy.abs());
+                        }
+                    }
+                }
+                // Also account for max animated size relative to initial size
+                let base_half = match &layer.spec {
+                    crate::scene::AmLayerSpec::SdfShape { width, height, .. } => {
+                        (*width / 2.0).max(*height / 2.0).max(1.0)
+                    }
+                    _ => 1.0,
+                };
+                let mut max_size_ratio = 1.0f32;
+                for kf in &layer.animated.size.keyframes {
+                    let parts: Vec<&str> = kf.value.split(',').collect();
+                    if parts.len() >= 2 {
+                        if let (Ok(w), Ok(h)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
+                            max_size_ratio = max_size_ratio.max((w / 2.0).max(h / 2.0) / base_half);
+                        }
+                    }
+                }
+                max_s * max_size_ratio
+            }, // max_animated_scale
         );
     } else {
         bevy::log::trace!(

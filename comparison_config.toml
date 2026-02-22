@@ -136,3 +136,38 @@ min_frame_similarity = 0.25
 # 这集神了
 [overrides."private/USER_327/last"]
 skip = true
+
+# =============================================================================
+# Frame Test (FPS Performance) Configuration
+# 帧测试（FPS 性能）配置
+# =============================================================================
+# Used when running with --features frame-test
+# 当使用 --features frame-test 运行时使用
+
+[frame_test]
+# FPS thresholds / FPS 阈值
+# >= pass_fps: FULL PASS (green) / 完全通过（绿色）
+# >= fail_fps: WARNING (pass with warning, yellow) / 警告（通过但有警告，黄色）
+# < fail_fps: FAIL (red) / 失败（红色）
+pass_fps = 120.0
+fail_fps = 60.0
+
+# Maximum ratio of frames below fail_fps to still pass
+# 低于 fail_fps 的帧数最大占比（超过则失败）
+max_below_fail_rate = 0.05
+
+# Maximum ratio of frames below pass_fps to still get full pass (not warning)
+# 低于 pass_fps 的帧数最大占比（超过则降级为 warning）
+max_below_pass_rate = 0.20
+
+# Minimum number of frames to sample before reporting
+# 报告前最少采样帧数
+min_sample_frames = 30
+
+# Number of warmup frames to skip (loading, shader compilation, etc.)
+# 跳过的预热帧数（加载、着色器编译等）
+warmup_frames = 60
+
+# Duration in seconds to measure FPS after warmup
+# 预热后测量 FPS 的持续时间（秒）
+measure_duration_secs = 8.0

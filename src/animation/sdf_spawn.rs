@@ -53,6 +53,7 @@ pub fn spawn_sdf_visual(
     gradient_start_color: Vec4,
     gradient_end_color: Vec4,
     gradient_points: Vec4,
+    max_animated_scale: f32,
 ) {
     let fill = extract_fill_color(fill_color, no_fill);
     let stroke = if !stroke_color_value.is_empty() {
@@ -187,7 +188,7 @@ pub fn spawn_sdf_visual(
         }
         _ => target_half_width.max(target_half_height),
     };
-    let max_scale_factor = 100.0;
+    let max_scale_factor = max_animated_scale.max(1.0) * 2.0;
     let frame_half = (shape_extent.max(target_half_width.max(target_half_height))
         * max_scale_factor)
         + stroke_width * 2.0;

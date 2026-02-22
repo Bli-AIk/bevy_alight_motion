@@ -54,6 +54,7 @@ pub(crate) fn add_visual_components(
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
+    max_animated_scale: f32, // Max scale from animation keyframes for SDF mesh sizing
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
@@ -697,6 +698,7 @@ pub(crate) fn add_visual_components(
                 *gradient_start_color,
                 *gradient_end_color,
                 *gradient_points,
+                max_animated_scale,
             );
         }
         AmLayerSpec::Image {
