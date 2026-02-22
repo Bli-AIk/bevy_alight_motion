@@ -295,6 +295,20 @@ pub struct AmAnimated {
     // Path Repeat effect (com.alightcreative.effects.repeat.path)
     /// Path repeat params (None = no effect)
     pub path_repeat: Option<PathRepeatParams>,
+    // Text Spacing effect (com.alightcreative.effects.textspacing)
+    /// Letter spacing in em units (0.0 = default)
+    pub textspacing_letter: AmAnimatedFloat,
+    /// Line spacing multiplier (1.0 = default)
+    pub textspacing_line: AmAnimatedFloat,
+    // Text Progress effect (com.alightcreative.effects.textprogress)
+    /// Text progress start (0.0-1.0)
+    pub textprogress_start: AmAnimatedFloat,
+    /// Text progress end (0.0-1.0)
+    pub textprogress_end: AmAnimatedFloat,
+    /// Text progress cursor style (0-3)
+    pub textprogress_cursor: i32,
+    /// Text progress blink enabled
+    pub textprogress_blink: bool,
     // Shape-specific animated properties
     /// Generic shape float properties (up to 4).
     /// Meaning depends on shape_type:

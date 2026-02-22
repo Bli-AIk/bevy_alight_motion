@@ -463,6 +463,18 @@ pub(crate) fn collect_shape(
                 let pr = extract_path_repeat_effect(&shape.effects);
                 if pr.has_effect() { Some(pr) } else { None }
             },
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
             shape_props,
             shape_points,
         },
@@ -666,6 +678,18 @@ pub(crate) fn collect_null(
             solid_color_blend_mode: solid_color_effect.blend_mode,
             base_fill_color: [0.0; 4],
             path_repeat: None,
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -936,6 +960,18 @@ pub(crate) fn collect_embed_scene(
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
             path_repeat: None,
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -985,31 +1021,14 @@ pub(crate) fn collect_text(
         48.0
     };
 
-    // Calculate wrap offset for text positioning
+    // AM text position is at the CENTER of the wrapWidth box for all alignments.
     let wrap_width = text.wrap_width;
-    let wrap_offset_x = if has_parent {
-        0.0
-    } else {
-        match text.align.as_str() {
-            "left" => -wrap_width / 2.0,
-            "right" => wrap_width / 2.0,
-            _ => 0.0,
-        }
-    };
+    let wrap_offset_x = 0.0;
 
-    // Calculate Y offset based on font metrics
-    const REFERENCE_WIN_ASCENT: f32 = 1.1285;
-    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
-        let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
-        ascent_diff * font_size * 0.43
-    } else {
-        0.0
-    };
-
-    let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
+    let font_y_offset = 0.0;
 
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
@@ -1188,6 +1207,12 @@ pub(crate) fn collect_text(
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
             path_repeat: None,
+            textspacing_letter: extract_text_spacing_effect(&text.effects).letter_spacing,
+            textspacing_line: extract_text_spacing_effect(&text.effects).line_spacing,
+            textprogress_start: extract_text_progress_effect(&text.effects).start,
+            textprogress_end: extract_text_progress_effect(&text.effects).end,
+            textprogress_cursor: extract_text_progress_effect(&text.effects).cursor,
+            textprogress_blink: extract_text_progress_effect(&text.effects).blink,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -1398,6 +1423,18 @@ pub(crate) fn collect_image(
             solid_color_blend_mode: solid_color_effect.blend_mode,
             base_fill_color: [0.0; 4],
             path_repeat: None,
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },

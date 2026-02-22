@@ -228,6 +228,18 @@ pub(crate) fn spawn_image(
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: [0.0; 4],
                 path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -272,19 +284,9 @@ pub(crate) fn spawn_text(
 
     let wrap_width = text.wrap_width;
 
-    // Calculate wrap offset for text positioning
-    // AM text position is at the CENTER of the wrapWidth box.
-    // With Anchor::CENTER_LEFT, entity position is the LEFT edge of the text box.
-    // So we offset by -wrapWidth/2 for left-aligned text (moving from center to left edge).
-    let wrap_offset_x = if has_parent {
-        0.0
-    } else {
-        match text.align.as_str() {
-            "left" => -wrap_width / 2.0,
-            "right" => wrap_width / 2.0,
-            _ => 0.0,
-        }
-    };
+    // AM text position is at the CENTER of the wrapWidth box for all alignments.
+    // Use Anchor::CENTER and no position offset.
+    let wrap_offset_x = 0.0;
 
     // Get font size (default to 16.0 if not specified)
     const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
@@ -301,14 +303,7 @@ pub(crate) fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
-    // Calculate Y offset based on font metrics
-    const REFERENCE_WIN_ASCENT: f32 = 1.1285;
-    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
-        let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
-        ascent_diff * font_size * 0.43
-    } else {
-        0.0
-    };
+    let font_y_offset = 0.0;
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -323,11 +318,8 @@ pub(crate) fn spawn_text(
         Color::srgba(1.0, 1.0, 1.0, opacity)
     };
 
-    // Only apply font_y_offset to root text layers; child text inherits offset from parent
-    let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
-
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
@@ -513,6 +505,18 @@ pub(crate) fn spawn_text(
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
             path_repeat: None,
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
         },
@@ -554,13 +558,8 @@ pub(crate) fn spawn_text(
         _ => bevy::text::Justify::Left,
     };
 
-    // Set anchor based on alignment:
-    // Left: position maps to left edge, Center: to center, Right: to right edge
-    let anchor = match text.align.as_str() {
-        "right" => bevy::sprite::Anchor(Vec2::new(0.5, 0.0)),
-        "center" => bevy::sprite::Anchor::CENTER,
-        _ => bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
-    };
+    // AM text element position is always the CENTER of the text box
+    let anchor = bevy::sprite::Anchor::CENTER;
 
     // Text layers have visual components spawned immediately but use visibility for lifecycle
     entity.insert((
@@ -568,7 +567,7 @@ pub(crate) fn spawn_text(
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        bevy::text::TextBounds::new_horizontal(wrap_width * TEXT_SIZE_MULTIPLIER),
+        bevy::text::TextBounds::new_horizontal(wrap_width),
         anchor,
         AmLayerSpec::Text {
             content: text.content.clone(),

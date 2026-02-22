@@ -614,3 +614,85 @@ pub(crate) fn extract_pixelate_effect(effects: &[AmEffect]) -> PixelateParams {
 
     params
 }
+
+// --- Text Spacing Effect ---
+
+/// Text spacing effect parameters (letter spacing and line spacing).
+#[derive(Debug, Clone, Default)]
+pub struct TextSpacingParams {
+    /// Letter spacing in em units (0.0 = default)
+    pub letter_spacing: AmAnimatedFloat,
+    /// Line spacing multiplier (1.0 = default)
+    pub line_spacing: AmAnimatedFloat,
+}
+
+/// Extract text spacing params from effects.
+pub(crate) fn extract_text_spacing_effect(effects: &[AmEffect]) -> TextSpacingParams {
+    let mut params = TextSpacingParams::default();
+    params.line_spacing.value = Some(1.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.textspacing" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "letterspacing" => {
+                        crate::scene::effects::extract_float_prop(prop, &mut params.letter_spacing);
+                    }
+                    "linespacing" => {
+                        crate::scene::effects::extract_float_prop(prop, &mut params.line_spacing);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+// --- Text Progress Effect ---
+
+/// Text progress effect parameters.
+#[derive(Debug, Clone, Default)]
+pub struct TextProgressParams {
+    /// Start of visible text range (0.0-1.0)
+    pub start: AmAnimatedFloat,
+    /// End of visible text range (0.0-1.0)
+    pub end: AmAnimatedFloat,
+    /// Cursor style (0=none, 1=line, 2=block, 3=underscore)
+    pub cursor: i32,
+    /// Whether cursor blinks
+    pub blink: bool,
+}
+
+/// Extract text progress params from effects.
+pub(crate) fn extract_text_progress_effect(effects: &[AmEffect]) -> TextProgressParams {
+    let mut params = TextProgressParams::default();
+    params.end.value = Some(1.0);
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.textprogress" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "start" => {
+                        crate::scene::effects::extract_float_prop(prop, &mut params.start);
+                    }
+                    "end" => {
+                        crate::scene::effects::extract_float_prop(prop, &mut params.end);
+                    }
+                    "cursor" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.cursor = v as i32;
+                        }
+                    }
+                    "blink" => {
+                        params.blink = prop.value == "true" || prop.value == "1";
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}

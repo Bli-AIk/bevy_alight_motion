@@ -627,6 +627,18 @@ pub(crate) fn spawn_shape(
                 } else {
                     None
                 },
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -850,6 +862,18 @@ pub(crate) fn spawn_null(
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: [0.0; 4],
                 path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },
@@ -1067,6 +1091,18 @@ pub(crate) fn spawn_embed_scene(
                 solid_color_blend_mode: 0,
                 base_fill_color: [0.0; 4],
                 path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
             },

@@ -241,6 +241,66 @@ async fn load_amproj(
         fonts.insert(name, handle);
     }
 
+    // Resolve Google Fonts references to system fonts
+    // Parse "googlefonts?name=FontName&weight=N" and try to find matching system font
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let google_font_refs: Vec<String> = collect_google_font_refs(&scene.layers)
+            .into_iter()
+            .collect();
+
+        for font_ref in google_font_refs {
+            if fonts.contains_key(&font_ref) {
+                continue;
+            }
+            if let Some(path) = resolve_google_font_to_system(&font_ref) {
+                if let Ok(data) = std::fs::read(&path) {
+                    // Validate with fontdb
+                    let mut test_db = fontdb::Database::new();
+                    test_db.load_font_data(data.clone());
+                    if test_db.faces().count() == 0 {
+                        bevy::log::warn!("System font at '{}' failed fontdb validation", path);
+                        continue;
+                    }
+                    // Extract metrics
+                    if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+                        let upm = face.units_per_em();
+                        let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+                            (
+                                os2.windows_ascender() as f32 / upm as f32,
+                                (-os2.windows_descender()) as f32 / upm as f32,
+                            )
+                        } else {
+                            (
+                                face.ascender() as f32 / upm as f32,
+                                (-face.descender()) as f32 / upm as f32,
+                            )
+                        };
+                        font_metrics.insert(
+                            font_ref.clone(),
+                            FontMetrics {
+                                win_ascent,
+                                win_descent,
+                                units_per_em: upm,
+                            },
+                        );
+                    }
+                    match Font::try_from_bytes(data) {
+                        Ok(font) => {
+                            let label = format!("font_system_{}", font_ref);
+                            let handle = load_context.add_labeled_asset(label, font);
+                            fonts.insert(font_ref.clone(), handle);
+                            bevy::log::info!("Resolved '{}' to system font: {}", font_ref, path);
+                        }
+                        Err(e) => {
+                            bevy::log::warn!("Failed to load system font '{}': {:?}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Validate the scene and generate report
     let validation_report = crate::validation::ValidationReport::validate(&scene);
     #[cfg(not(target_arch = "wasm32"))]
@@ -256,6 +316,96 @@ async fn load_amproj(
         embedded_images,
         validation_report,
     })
+}
+
+/// Collect unique Google Fonts references from all text layers (including nested scenes).
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_google_font_refs(
+    layers: &[crate::schema::AmLayer],
+) -> std::collections::HashSet<String> {
+    use crate::schema::AmLayer;
+    let mut refs = std::collections::HashSet::new();
+    for layer in layers {
+        match layer {
+            AmLayer::Text(t) if t.font.starts_with("googlefonts?") => {
+                refs.insert(t.font.clone());
+            }
+            AmLayer::EmbedScene(e) => {
+                refs.extend(collect_google_font_refs(&e.scene.layers));
+            }
+            _ => {}
+        }
+    }
+    refs
+}
+
+/// Resolve a "googlefonts?name=FontName&weight=N" reference to a system font path.
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
+    let query = font_ref.strip_prefix("googlefonts?")?;
+    let mut name = None;
+    let mut weight = 400u16;
+    for param in query.split('&') {
+        if let Some(val) = param.strip_prefix("name=") {
+            name = Some(val);
+        } else if let Some(val) = param.strip_prefix("weight=") {
+            weight = val.parse().unwrap_or(400);
+        }
+    }
+    let font_name = name?;
+
+    // Map weight to font suffix
+    let suffix = match weight {
+        100 => "Thin",
+        200 => "ExtraLight",
+        300 => "Light",
+        400 => "Regular",
+        500 => "Medium",
+        600 => "SemiBold",
+        700 => "Bold",
+        800 => "ExtraBold",
+        900 => "Black",
+        _ => "Regular",
+    };
+
+    // Try common system font paths
+    let candidates = [
+        format!("/usr/share/fonts/TTF/{}-{}.ttf", font_name, suffix),
+        format!(
+            "/usr/share/fonts/truetype/{}/{}-{}.ttf",
+            font_name.to_lowercase(),
+            font_name,
+            suffix
+        ),
+        format!(
+            "/usr/share/fonts/google-{}/{}-{}.ttf",
+            font_name.to_lowercase(),
+            font_name,
+            suffix
+        ),
+        format!("/usr/share/fonts/TTF/{}.ttf", font_name),
+    ];
+
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.clone());
+        }
+    }
+
+    // Try fc-match as last resort
+    if let Ok(output) = std::process::Command::new("fc-match")
+        .args(["-f", "%{file}", &format!("{}:weight={}", font_name, weight)])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).to_string();
+            if std::path::Path::new(&path).exists() && path.contains(font_name) {
+                return Some(path);
+            }
+        }
+    }
+
+    None
 }
 
 /// Load from standalone .xml file.

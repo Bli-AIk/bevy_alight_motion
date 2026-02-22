@@ -819,12 +819,13 @@ pub(crate) fn add_visual_components(
                 .cloned()
                 .unwrap_or_else(Handle::default);
 
-            // Set anchor based on alignment
-            let anchor = match align.as_str() {
-                "right" => bevy::sprite::Anchor(Vec2::new(0.5, 0.0)),
-                "center" => bevy::sprite::Anchor::CENTER,
-                _ => bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
-            };
+            // AM text element position is always the CENTER of the text box
+            let anchor = bevy::sprite::Anchor::CENTER;
+
+            // Android's Roboto hhea metrics: ascent=1900, descent=500, unitsPerEm=2048
+            // line_height_ratio = (1900+500)/2048 = 1.1719
+            // Bevy default is 1.2 which causes progressive vertical offset vs AM
+            let line_height = bevy::text::LineHeight::RelativeToFont(1.172);
 
             commands.entity(entity).insert((
                 Text2d::new(content.clone()),
@@ -835,7 +836,8 @@ pub(crate) fn add_visual_components(
                 },
                 TextLayout::new_with_justify(justify),
                 TextColor(color),
-                bevy::text::TextBounds::new_horizontal(wrap_width * 3.0),
+                bevy::text::TextBounds::new_horizontal(*wrap_width),
+                line_height,
                 anchor,
                 AmVisualSpawned,
             ));
