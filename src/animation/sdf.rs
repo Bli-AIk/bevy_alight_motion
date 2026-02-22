@@ -547,6 +547,26 @@ pub fn animate_sdf_scale_system(
             }
         }
 
+        // Apply transform2 posz as additive offset from identity (1.0)
+        let mut posz_offset = 0.0_f32;
+        if let Some(mut posz) = interpolate_float(&animated.effect_posz, layer_time) {
+            if animated.effect_zinv {
+                posz = 2.0 - posz;
+            }
+            posz_offset += posz - 1.0;
+        }
+        for extra in &animated.extra_transform2 {
+            if let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) {
+                if extra.zinv {
+                    posz = 2.0 - posz;
+                }
+                posz_offset += posz - 1.0;
+            }
+        }
+        let combined_posz = 1.0 + posz_offset;
+        anim_scale[0] *= combined_posz;
+        anim_scale[1] *= combined_posz;
+
         // Get animated stroke width (or use base value from sdf_params if no animation)
         let stroke_width_animated = if !animated.stroke_width.keyframes.is_empty() {
             interpolate_float(&animated.stroke_width, layer_time).unwrap_or(0.0)

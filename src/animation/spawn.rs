@@ -526,11 +526,32 @@ fn spawn_layer_entity(
         }
 
         // Apply effect position offsets (transform2 effect)
-        if let Some(effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+        if let Some(mut effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+            if animated.effect_xinv {
+                effect_x = -effect_x;
+            }
             bx += effect_x;
         }
-        if let Some(effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+        if let Some(mut effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+            if animated.effect_yinv {
+                effect_y = -effect_y;
+            }
             by -= effect_y; // Y is inverted
+        }
+        // Apply extra stacked transform2 position offsets
+        for extra in &animated.extra_transform2 {
+            if let Some(mut ex) = interpolate_float(&extra.pos_x, layer_time) {
+                if extra.xinv {
+                    ex = -ex;
+                }
+                bx += ex;
+            }
+            if let Some(mut ey) = interpolate_float(&extra.pos_y, layer_time) {
+                if extra.yinv {
+                    ey = -ey;
+                }
+                by -= ey;
+            }
         }
 
         // Apply font Y offset for text layers (to compensate for different font metrics)

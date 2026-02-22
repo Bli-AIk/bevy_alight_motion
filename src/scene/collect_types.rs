@@ -38,7 +38,13 @@ pub(crate) fn collect_shape(
         tx,
         ty
     );
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&shape.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
@@ -329,8 +335,15 @@ pub(crate) fn collect_shape(
             canvas_height: config.canvas_height,
             has_parent,
             parent_layer_id: shape.parent,
-            effect_pos_x,
-            effect_pos_y,
+            effect_pos_x: transform2.pos_x,
+            effect_pos_y: transform2.pos_y,
+            effect_posz: transform2.pos_z,
+            effect_angle: transform2.angle,
+            effect_xinv: transform2.xinv,
+            effect_yinv: transform2.yinv,
+            effect_zinv: transform2.zinv,
+            effect_ainv: transform2.ainv,
+            extra_transform2,
             font_y_offset: 0.0,
             size: size_animation,
             anchor_offset,
@@ -508,7 +521,13 @@ pub(crate) fn collect_null(
     let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&null.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
@@ -555,8 +574,15 @@ pub(crate) fn collect_null(
             canvas_height: config.canvas_height,
             has_parent,
             parent_layer_id: null.parent,
-            effect_pos_x,
-            effect_pos_y,
+            effect_pos_x: transform2.pos_x,
+            effect_pos_y: transform2.pos_y,
+            effect_posz: transform2.pos_z,
+            effect_angle: transform2.angle,
+            effect_xinv: transform2.xinv,
+            effect_yinv: transform2.yinv,
+            effect_zinv: transform2.zinv,
+            effect_ainv: transform2.ainv,
+            extra_transform2,
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
@@ -800,6 +826,15 @@ pub(crate) fn collect_embed_scene(
     // Process mask relationships within this embed scene
     apply_mask_to_children(&mut children);
 
+    // Extract transform2 effects from embed
+    let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
+    let embed_transform2 = if all_embed_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_embed_transform2.remove(0)
+    };
+    let embed_extra_transform2 = all_embed_transform2;
+
     PendingLayer {
         id: embed.id,
         label: embed.label.clone(),
@@ -822,8 +857,15 @@ pub(crate) fn collect_embed_scene(
             canvas_height: config.canvas_height,
             has_parent,
             parent_layer_id: embed.parent,
-            effect_pos_x: AmAnimatedFloat::default(),
-            effect_pos_y: AmAnimatedFloat::default(),
+            effect_pos_x: embed_transform2.pos_x,
+            effect_pos_y: embed_transform2.pos_y,
+            effect_posz: embed_transform2.pos_z,
+            effect_angle: embed_transform2.angle,
+            effect_xinv: embed_transform2.xinv,
+            effect_yinv: embed_transform2.yinv,
+            effect_zinv: embed_transform2.zinv,
+            effect_ainv: embed_transform2.ainv,
+            extra_transform2: embed_extra_transform2,
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
@@ -1071,6 +1113,13 @@ pub(crate) fn collect_text(
             parent_layer_id: text.parent,
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
+            effect_posz: AmAnimatedFloat::default(),
+            effect_angle: AmAnimatedFloat::default(),
+            effect_xinv: false,
+            effect_yinv: false,
+            effect_zinv: false,
+            effect_ainv: false,
+            extra_transform2: vec![],
             font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
@@ -1302,6 +1351,13 @@ pub(crate) fn collect_image(
             parent_layer_id: image.parent,
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
+            effect_posz: AmAnimatedFloat::default(),
+            effect_angle: AmAnimatedFloat::default(),
+            effect_xinv: false,
+            effect_yinv: false,
+            effect_zinv: false,
+            effect_ainv: false,
+            extra_transform2: vec![],
             font_y_offset: 0.0,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::new(comp_x, comp_y),

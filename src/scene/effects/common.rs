@@ -4,11 +4,21 @@ use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect};
 
-pub(crate) fn extract_effect_animations(
-    effects: &[AmEffect],
-) -> (AmAnimatedFloat, AmAnimatedFloat) {
-    let mut pos_x = AmAnimatedFloat::default();
-    let mut pos_y = AmAnimatedFloat::default();
+/// All extracted transform2 effect parameters.
+#[derive(Debug, Clone, Default)]
+pub struct Transform2Params {
+    pub pos_x: AmAnimatedFloat,
+    pub pos_y: AmAnimatedFloat,
+    pub pos_z: AmAnimatedFloat,
+    pub angle: AmAnimatedFloat,
+    pub xinv: bool,
+    pub yinv: bool,
+    pub zinv: bool,
+    pub ainv: bool,
+}
+
+pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
+    let mut params = Transform2Params::default();
 
     for effect in effects {
         if effect.id == "com.alightcreative.effects.transform2" {
@@ -16,17 +26,43 @@ pub(crate) fn extract_effect_animations(
                 match prop.name.as_str() {
                     "posx" => {
                         if !prop.keyframes.is_empty() {
-                            pos_x.keyframes = prop.keyframes.clone();
+                            params.pos_x.keyframes = prop.keyframes.clone();
                         } else if let Ok(v) = prop.value.parse::<f32>() {
-                            pos_x.value = Some(v);
+                            params.pos_x.value = Some(v);
                         }
                     }
                     "posy" => {
                         if !prop.keyframes.is_empty() {
-                            pos_y.keyframes = prop.keyframes.clone();
+                            params.pos_y.keyframes = prop.keyframes.clone();
                         } else if let Ok(v) = prop.value.parse::<f32>() {
-                            pos_y.value = Some(v);
+                            params.pos_y.value = Some(v);
                         }
+                    }
+                    "posz" => {
+                        if !prop.keyframes.is_empty() {
+                            params.pos_z.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.pos_z.value = Some(v);
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "xinv" => {
+                        params.xinv = prop.value == "true";
+                    }
+                    "yinv" => {
+                        params.yinv = prop.value == "true";
+                    }
+                    "zinv" => {
+                        params.zinv = prop.value == "true";
+                    }
+                    "ainv" => {
+                        params.ainv = prop.value == "true";
                     }
                     _ => {}
                 }
@@ -34,7 +70,66 @@ pub(crate) fn extract_effect_animations(
         }
     }
 
-    (pos_x, pos_y)
+    params
+}
+
+/// Extract ALL transform2 effects (supports multiple stacked instances).
+pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transform2Params> {
+    let mut result = Vec::new();
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.transform2" {
+            let mut params = Transform2Params::default();
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "posx" => {
+                        if !prop.keyframes.is_empty() {
+                            params.pos_x.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.pos_x.value = Some(v);
+                        }
+                    }
+                    "posy" => {
+                        if !prop.keyframes.is_empty() {
+                            params.pos_y.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.pos_y.value = Some(v);
+                        }
+                    }
+                    "posz" => {
+                        if !prop.keyframes.is_empty() {
+                            params.pos_z.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.pos_z.value = Some(v);
+                        }
+                    }
+                    "angle" => {
+                        if !prop.keyframes.is_empty() {
+                            params.angle.keyframes = prop.keyframes.clone();
+                        } else if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle.value = Some(v);
+                        }
+                    }
+                    "xinv" => {
+                        params.xinv = prop.value == "true";
+                    }
+                    "yinv" => {
+                        params.yinv = prop.value == "true";
+                    }
+                    "zinv" => {
+                        params.zinv = prop.value == "true";
+                    }
+                    "ainv" => {
+                        params.ainv = prop.value == "true";
+                    }
+                    _ => {}
+                }
+            }
+            result.push(params);
+        }
+    }
+
+    result
 }
 #[derive(Debug, Clone, Default)]
 pub struct WipeEffectParams {

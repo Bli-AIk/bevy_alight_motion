@@ -29,7 +29,13 @@ pub(crate) fn spawn_image(
     let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&image.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&image.effects);
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
@@ -104,8 +110,15 @@ pub(crate) fn spawn_image(
                 canvas_height: config.canvas_height,
                 has_parent,
                 parent_layer_id: image.parent,
-                effect_pos_x,
-                effect_pos_y,
+                effect_pos_x: transform2.pos_x,
+                effect_pos_y: transform2.pos_y,
+                effect_posz: transform2.pos_z,
+                effect_angle: transform2.angle,
+                effect_xinv: transform2.xinv,
+                effect_yinv: transform2.yinv,
+                effect_zinv: transform2.zinv,
+                effect_ainv: transform2.ainv,
+                extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::new(comp_x, comp_y),
@@ -368,6 +381,13 @@ pub(crate) fn spawn_text(
             parent_layer_id: text.parent,
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
+            effect_posz: AmAnimatedFloat::default(),
+            effect_angle: AmAnimatedFloat::default(),
+            effect_xinv: false,
+            effect_yinv: false,
+            effect_zinv: false,
+            effect_ainv: false,
+            extra_transform2: vec![],
             font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,

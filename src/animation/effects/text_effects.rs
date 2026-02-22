@@ -190,24 +190,12 @@ pub fn animate_text_spacing_system(
         ),
         With<Text2d>,
     >,
-    debug_q: Query<Entity, (With<AmAnimated>, With<Text2d>)>,
-    debug_q2: Query<Entity, With<Text2d>>,
 ) {
     if playback.force_stopped {
         return;
     }
 
     let global_time = playback.current_time_ms;
-
-    if global_time < 200.0 {
-        eprintln!(
-            "DBG_SPACING gt={:.0} full={} am+t2d={} t2d={}",
-            global_time,
-            query.iter().count(),
-            debug_q.iter().count(),
-            debug_q2.iter().count()
-        );
-    }
 
     for (entity, animated, spec, mut layout_info, computed, orig_glyphs) in query.iter_mut() {
         let local_time = animated.calc_local_time(global_time);

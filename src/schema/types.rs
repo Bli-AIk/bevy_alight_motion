@@ -630,6 +630,10 @@ pub struct AmEmbedScene {
     #[serde(rename = "fillColor", default)]
     pub fill_color: Option<AmFillColor>,
 
+    /// Effects applied to this embed.
+    #[serde(rename = "effect", default)]
+    pub effects: Vec<AmEffect>,
+
     /// Nested scene.
     pub scene: Box<AmScene>,
 }

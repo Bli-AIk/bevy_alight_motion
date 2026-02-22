@@ -71,6 +71,20 @@ pub struct AmAnimated {
     pub effect_pos_x: AmAnimatedFloat,
     /// Effect position Y offset (from transform2 effect).
     pub effect_pos_y: AmAnimatedFloat,
+    /// Effect scale (from transform2 posz, default 1.0).
+    pub effect_posz: AmAnimatedFloat,
+    /// Effect rotation angle in degrees (from transform2 angle).
+    pub effect_angle: AmAnimatedFloat,
+    /// Transform2 X inversion flag.
+    pub effect_xinv: bool,
+    /// Transform2 Y inversion flag.
+    pub effect_yinv: bool,
+    /// Transform2 Z (scale) inversion flag.
+    pub effect_zinv: bool,
+    /// Transform2 angle inversion flag.
+    pub effect_ainv: bool,
+    /// Additional stacked transform2 effects (beyond the first).
+    pub extra_transform2: Vec<crate::scene::effects::Transform2Params>,
     /// Font Y offset for text layers (to compensate for different font metrics).
     pub font_y_offset: f32,
     /// Size animation data (for shapes). AM size is half-extents, stored as full dimensions.

@@ -240,7 +240,13 @@ pub(crate) fn spawn_shape(
     let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&shape.transform.rotation);
     let (sx, sy) = get_initial_scale(&shape.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&shape.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&shape.effects);
     let stretch_segment = extract_stretch_segment_effect(&shape.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
@@ -499,8 +505,15 @@ pub(crate) fn spawn_shape(
                 canvas_height: config.canvas_height,
                 has_parent,
                 parent_layer_id: shape.parent,
-                effect_pos_x,
-                effect_pos_y,
+                effect_pos_x: transform2.pos_x,
+                effect_pos_y: transform2.pos_y,
+                effect_posz: transform2.pos_z,
+                effect_angle: transform2.angle,
+                effect_xinv: transform2.xinv,
+                effect_yinv: transform2.yinv,
+                effect_zinv: transform2.zinv,
+                effect_ainv: transform2.ainv,
+                extra_transform2,
                 font_y_offset: 0.0,
                 size: get_shape_size_animation(&shape.properties),
                 anchor_offset,
@@ -677,7 +690,13 @@ pub(crate) fn spawn_null(
     let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&null.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
@@ -738,8 +757,15 @@ pub(crate) fn spawn_null(
                 canvas_height: config.canvas_height,
                 has_parent,
                 parent_layer_id: null.parent,
-                effect_pos_x,
-                effect_pos_y,
+                effect_pos_x: transform2.pos_x,
+                effect_pos_y: transform2.pos_y,
+                effect_posz: transform2.pos_z,
+                effect_angle: transform2.angle,
+                effect_xinv: transform2.xinv,
+                effect_yinv: transform2.yinv,
+                effect_zinv: transform2.zinv,
+                effect_ainv: transform2.ainv,
+                extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
@@ -927,6 +953,26 @@ pub(crate) fn spawn_embed_scene(
         config.time_offset
     );
 
+    // Extract transform2 effects from embed
+    let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
+    bevy::log::info!(
+        "[EMBED_T2] '{}' (id={}): {} effects parsed, {} transform2 extracted, primary posz kf={}",
+        embed.label,
+        embed.id,
+        embed.effects.len(),
+        all_embed_transform2.len(),
+        all_embed_transform2
+            .first()
+            .map(|t| t.pos_z.keyframes.len())
+            .unwrap_or(0)
+    );
+    let embed_transform2 = if all_embed_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_embed_transform2.remove(0)
+    };
+    let embed_extra_transform2 = all_embed_transform2;
+
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
@@ -958,8 +1004,15 @@ pub(crate) fn spawn_embed_scene(
                 canvas_height: config.canvas_height,
                 has_parent,
                 parent_layer_id: embed.parent,
-                effect_pos_x: AmAnimatedFloat::default(),
-                effect_pos_y: AmAnimatedFloat::default(),
+                effect_pos_x: embed_transform2.pos_x,
+                effect_pos_y: embed_transform2.pos_y,
+                effect_posz: embed_transform2.pos_z,
+                effect_angle: embed_transform2.angle,
+                effect_xinv: embed_transform2.xinv,
+                effect_yinv: embed_transform2.yinv,
+                effect_zinv: embed_transform2.zinv,
+                effect_ainv: embed_transform2.ainv,
+                extra_transform2: embed_extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,

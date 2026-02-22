@@ -86,6 +86,7 @@ pub fn animate_transform_system(
 
         // Use local time for visibility check (affected by speed)
         // This ensures child layers respect parent's speed for start/end time
+
         if !animated.is_active(local_time) {
             continue;
         }
@@ -144,6 +145,27 @@ pub fn animate_transform_system(
                 _ => {}
             }
         }
+
+        // Apply transform2 posz as additive offset from identity (1.0).
+        // Stacked transform2 effects contribute additively: combined = 1.0 + Σ(posz_i - 1.0)
+        let mut posz_offset = 0.0_f32;
+        if let Some(mut posz) = interpolate_float(&animated.effect_posz, layer_time) {
+            if animated.effect_zinv {
+                posz = 2.0 - posz;
+            }
+            posz_offset += posz - 1.0;
+        }
+        for extra in &animated.extra_transform2 {
+            if let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) {
+                if extra.zinv {
+                    posz = 2.0 - posz;
+                }
+                posz_offset += posz - 1.0;
+            }
+        }
+        let combined_posz = 1.0 + posz_offset;
+        actual_scale[0] *= combined_posz;
+        actual_scale[1] *= combined_posz;
 
         let current_scale = if sdf_parent.is_some() || effect_marker.is_some() {
             [1.0_f32, 1.0_f32]
@@ -257,11 +279,32 @@ pub fn animate_transform_system(
             }
 
             // Apply effect position offsets (transform2 effect)
-            if let Some(effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+            if let Some(mut effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+                if animated.effect_xinv {
+                    effect_x = -effect_x;
+                }
                 bx += effect_x;
             }
-            if let Some(effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+            if let Some(mut effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+                if animated.effect_yinv {
+                    effect_y = -effect_y;
+                }
                 by -= effect_y; // Y is inverted
+            }
+            // Apply extra stacked transform2 position offsets
+            for extra in &animated.extra_transform2 {
+                if let Some(mut ex) = interpolate_float(&extra.pos_x, layer_time) {
+                    if extra.xinv {
+                        ex = -ex;
+                    }
+                    bx += ex;
+                }
+                if let Some(mut ey) = interpolate_float(&extra.pos_y, layer_time) {
+                    if extra.yinv {
+                        ey = -ey;
+                    }
+                    by -= ey;
+                }
             }
 
             // Apply font Y offset for text layers (to compensate for different font metrics)
@@ -483,23 +526,29 @@ pub fn animate_transform_system(
             final_rotation -= spin_angle;
         }
 
-        transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
-
-        // DEBUG: Log rotation for 空2 layers to verify correct value
-        if _marker.label.contains("空 2") {
-            bevy::log::info!(
-                "[DEBUG_ROT] '{}' (id={}): base_rotation={:.1}°, final_rotation={:.1}°, transform.rotation={:?}",
-                _marker.label,
-                animated.layer_id,
-                base_rotation,
-                final_rotation,
-                transform.rotation
-            );
+        // Apply transform2 effect angle (additional rotation in degrees)
+        if let Some(mut effect_angle) = interpolate_float(&animated.effect_angle, layer_time) {
+            if animated.effect_ainv {
+                effect_angle = -effect_angle;
+            }
+            final_rotation -= effect_angle; // Negate for Bevy's coordinate system
         }
+        // Apply extra stacked transform2 angles
+        for extra in &animated.extra_transform2 {
+            if let Some(mut ea) = interpolate_float(&extra.angle, layer_time) {
+                if extra.ainv {
+                    ea = -ea;
+                }
+                final_rotation -= ea;
+            }
+        }
+
+        transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
         // Interpolate scale
         // Skip for SDF shapes (handled by animate_sdf_scale)
         // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
+        // However, transform2 posz/angle/position must also be applied via Transform
         if sdf_parent.is_none() && effect_marker.is_none() {
             transform.scale = Vec3::new(
                 current_scale[0] * oscillate_z_zoom,
@@ -507,11 +556,18 @@ pub fn animate_transform_system(
                 1.0,
             );
         } else if effect_marker.is_some() {
-            // Effect sprites: apply only the sign of scale for flipping
-            // The magnitude is already baked into the mesh by animate_unified_effect_system
+            // Effect sprites: base scale magnitude is baked into mesh by unified effect system.
+            // But transform2 effects (posz) still need to be applied via Transform.scale,
+            // since the unified effect system doesn't know about transform2.
             let sign_x = actual_scale[0].signum();
             let sign_y = actual_scale[1].signum();
-            transform.scale = Vec3::new(sign_x, sign_y, 1.0);
+
+            // Use the already-computed combined_posz (additive across stacked effects)
+            transform.scale = Vec3::new(
+                sign_x * combined_posz * oscillate_z_zoom,
+                sign_y * combined_posz * oscillate_z_zoom,
+                1.0,
+            );
         }
     }
 }

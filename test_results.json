@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-22T12:25:09.711029+08:00",
+  "timestamp": "2026-02-22T23:14:40.201845+08:00",
   "summary": {
-    "passed": 75,
+    "passed": 78,
     "skipped": 2,
     "failed": 21
   },
@@ -49,6 +49,9 @@
       "status": "pass"
     },
     "basic/group/resolution/ex2": {
+      "status": "pass"
+    },
+    "basic/in_time/negative": {
       "status": "pass"
     },
     "basic/mask/child": {
@@ -221,6 +224,12 @@
       "avg_similarity": 0.5555
     },
     "effects/threshold/basic": {
+      "status": "pass"
+    },
+    "effects/transform/complex1": {
+      "status": "pass"
+    },
+    "effects/transform/complex2": {
       "status": "pass"
     },
     "private/USER_327/last": {
