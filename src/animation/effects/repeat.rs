@@ -294,8 +294,7 @@ pub(super) fn process_linear_repeat_effect(
             Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
         material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
             let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
-            let (state_lo_bits, state_hi_bits) =
-                compute_java_random_state_packed(seed);
+            let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
             Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
         } else {
             Vec4::new(0.0, 0.0, 0.0, 0.0)
@@ -338,8 +337,7 @@ pub(super) fn process_linear_repeat_effect(
             material.uniform_data.linear_repeat2_params4 = Vec4::new(ei2, eo2, bl2, sia2 as f32);
             material.uniform_data.linear_repeat2_params5 = if lr2.random_order {
                 let lr2_seed = interpolate_float(&lr2.seed, layer_time).unwrap_or(0.0);
-                let (state_lo_bits, state_hi_bits) =
-                    compute_java_random_state_packed(lr2_seed);
+                let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(lr2_seed);
                 Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
             } else {
                 Vec4::new(0.0, 0.0, 0.0, 0.0)

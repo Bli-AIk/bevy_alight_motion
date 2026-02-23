@@ -144,11 +144,18 @@ fn apply_stretch2(uv: vec2<f32>) -> vec2<f32> {
     return unrotated + vec2<f32>(0.5);
 }
 
+// Smooth minimum (cubic polynomial) - matches AM's sminCubic
+fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * h * k * (1.0 / 6.0);
+}
+
 // Apply stretch segment effect - returns modified UV
 fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let angle = uniforms.stretch_params.x;
     let stretch_px = uniforms.stretch_params.y;
     let offset_px = uniforms.stretch_params.z;
+    let smooth_param = uniforms.stretch_params.w;
     
     let orig_width = uniforms.original_size.x;
     let orig_height = uniforms.original_size.y;
@@ -168,12 +175,10 @@ fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
     let rotated_pixel = rotate_vec(pixel_coord, angle);
     let shifted_x = rotated_pixel.x + offset_px;
     
-    var sample_rotated_x: f32;
-    if abs(shifted_x) < half_gap {
-        sample_rotated_x = -offset_px;
-    } else {
-        sample_rotated_x = rotated_pixel.x - sign(shifted_x) * half_gap;
-    }
+    // Use sminCubic for smooth blending (matches AM's stretchsegment shader)
+    let smooth_k = max(0.00001, smooth_param * half_gap);
+    let d = smin_cubic(half_gap, abs(shifted_x), smooth_k);
+    let sample_rotated_x = rotated_pixel.x + d * -sign(shifted_x);
     
     let final_rotated = vec2<f32>(sample_rotated_x, rotated_pixel.y);
     let unrotated_pixel = rotate_vec(final_rotated, -angle);
