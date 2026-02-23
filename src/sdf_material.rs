@@ -149,8 +149,10 @@ pub struct SdfMaterialUniform {
     pub gradient_end_color: Vec4,
     /// Gradient points: (start_x, start_y, end_x, end_y) in shape UV [0,1] space.
     pub gradient_points: Vec4,
-    /// Gradient config: (gradient_type, 0, 0, 0)
+    /// Gradient config: (gradient_type, pixelate_threshold, 0, 0)
     /// gradient_type: 0=none, 1=linear, 2=radial, 3=sweep
+    /// pixelate_threshold: 0=disabled, >0 = threshold value for pixelate2 effect
+    ///   (pixels with sRGB luminance below this become transparent)
     pub gradient_config: Vec4,
     /// Mask 1 blend parameters: (fill_alpha, opacity, stroke_width, 0)
     /// fill_alpha: the mask shape's fill alpha (0.0 = transparent fill, 1.0 = opaque)

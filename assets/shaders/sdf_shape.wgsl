@@ -781,6 +781,24 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
 
+    // Pixelate2 threshold: make sub-threshold pixels transparent.
+    // AM pixelates first (mixing thin stroke into surrounding fill), then thresholds.
+    // For dark-filled shapes, pixelation makes even the stroke pixels fall below threshold,
+    // so the entire shape becomes transparent. No-fill shapes (color.a ≈ 0) keep their stroke.
+    let pix_threshold = material.gradient_config.y;
+    if pix_threshold > 0.001 && material.color.a > 0.5 {
+        let fc = material.color.rgb;
+        let srgb_fill = vec3<f32>(
+            select(1.055 * pow(fc.r, 1.0 / 2.4) - 0.055, fc.r * 12.92, fc.r <= 0.0031308),
+            select(1.055 * pow(fc.g, 1.0 / 2.4) - 0.055, fc.g * 12.92, fc.g <= 0.0031308),
+            select(1.055 * pow(fc.b, 1.0 / 2.4) - 0.055, fc.b * 12.92, fc.b <= 0.0031308),
+        );
+        let fill_lum = dot(srgb_fill, vec3<f32>(0.2126, 0.7152, 0.0722));
+        if fill_lum < pix_threshold {
+            discard;
+        }
+    }
+
     // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
     // Convert alpha from sRGB to linear so GPU's linear blend approximates AM's sRGB result.
     if final_color.a > 0.001 && final_color.a < 0.999 {
