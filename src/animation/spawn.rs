@@ -1025,7 +1025,8 @@ fn spawn_layer_entity(
                 for kf in &layer.animated.scale.keyframes {
                     let parts: Vec<&str> = kf.value.split(',').collect();
                     if parts.len() >= 2 {
-                        if let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
+                        if let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
+                        {
                             max_s = max_s.max(sx.abs()).max(sy.abs());
                         }
                     }

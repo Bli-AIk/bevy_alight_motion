@@ -82,8 +82,16 @@ pub fn animate_unified_effect_system(
         .unwrap_or(1.0)
         .max(0.001);
 
-    for (entity, animated, material_handle, transform, global_transform, _mesh2d, embed_marker, repeat_bounds) in
-        query.iter()
+    for (
+        entity,
+        animated,
+        material_handle,
+        transform,
+        global_transform,
+        _mesh2d,
+        embed_marker,
+        repeat_bounds,
+    ) in query.iter()
     {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);

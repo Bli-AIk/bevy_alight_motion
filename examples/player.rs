@@ -1785,11 +1785,10 @@ mod frame_test_systems {
         state.project_name = project_name.clone();
 
         // Load config
-        let config_content = std::fs::read_to_string(
-            "crates/bevy_alight_motion/comparison_config.toml",
-        )
-        .or_else(|_| std::fs::read_to_string("comparison_config.toml"))
-        .ok();
+        let config_content =
+            std::fs::read_to_string("crates/bevy_alight_motion/comparison_config.toml")
+                .or_else(|_| std::fs::read_to_string("comparison_config.toml"))
+                .ok();
 
         if let Some(content) = config_content {
             if let Ok(cfg) = toml::from_str::<ConfigFile>(&content) {
@@ -1809,7 +1808,11 @@ mod frame_test_systems {
 
         println!(
             "[FRAME-TEST] Config for '{}': pass_fps={:.0}, fail_fps={:.0}, warmup={}, measure={:.0}s",
-            project_name, state.pass_fps, state.fail_fps, state.warmup_frames, state.measure_duration_secs
+            project_name,
+            state.pass_fps,
+            state.fail_fps,
+            state.warmup_frames,
+            state.measure_duration_secs
         );
     }
 
@@ -1926,11 +1929,7 @@ mod frame_test_systems {
             .iter()
             .copied()
             .fold(f64::INFINITY, f64::min);
-        let max_dt = state
-            .frame_times
-            .iter()
-            .copied()
-            .fold(0.0_f64, f64::max);
+        let max_dt = state.frame_times.iter().copied().fold(0.0_f64, f64::max);
         let max_fps = 1.0 / min_dt;
         let min_fps = 1.0 / max_dt;
 
@@ -1993,10 +1992,7 @@ mod frame_test_systems {
             } else {
                 format!("avg {:.1} FPS < {:.0}", avg_fps, state.fail_fps)
             };
-            println!(
-                "{}",
-                format!("RESULT: FAIL ❌ ({})", reason).red().bold()
-            );
+            println!("{}", format!("RESULT: FAIL ❌ ({})", reason).red().bold());
             exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
         } else if avg_fps >= state.pass_fps as f64
             && below_pass_rate <= state.max_below_pass_rate as f64
