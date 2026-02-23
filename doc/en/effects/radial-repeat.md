@@ -1,11 +1,11 @@
 # Radial Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-22 12:25:09
+> Last tested: 2026-02-23 18:55:44
 
 Creates multiple copies of the layer along a circular path with configurable radius, sweep angle, scale, and more.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Count (count)**: ✅ Implemented (Number of copies)
 - **Radius (radius)**: ✅ Implemented (Radius of the circular path)
@@ -32,7 +32,7 @@ Creates multiple copies of the layer along a circular path with configurable rad
 - **Seed (seed)**: ✅ Implemented (Random seed)
 
 **Related Test Files:**
-- `effects/radial-repeat/basic.amproj` ✅
+- `effects/radial-repeat/basic.amproj` ❌
 
 ---
 

@@ -1358,7 +1358,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             st.y = 1.0 - st.y;
         }
         st -= vec2<f32>(0.5);
-        st -= grid_pos / 1000.0;
+        st -= vec2<f32>(grid_pos.x, -grid_pos.y) / 1000.0;
 
         // GLSL mod: x - y * floor(x/y) — always positive result
         let px_cell = (st.x - grid_spacing * floor(st.x / grid_spacing)) / grid_spacing;
