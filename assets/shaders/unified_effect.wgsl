@@ -976,7 +976,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let center = vec2<f32>(0.5, 0.5);
         let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
         
-        var accumulated_color = vec4<f32>(0.0);
+        // AM composites in sRGB space; accumulate in sRGB premultiplied alpha
+        let rp_gamma = vec3<f32>(2.2);
+        let rp_inv_gamma = vec3<f32>(1.0 / 2.2);
+        var acc_srgb = vec4<f32>(0.0);
         
         for (var i = 0; i < repeat_count; i = i + 1) {
             let fi = f32(i);
@@ -1026,12 +1029,20 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     copy_color = textureSample(base_texture, base_sampler, copy_uv);
                 }
                 
-                copy_color.a *= cumulative_alpha;
-                accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+                // Composite in sRGB premultiplied alpha (matches AM's Canvas)
+                let final_a = copy_color.a * cumulative_alpha;
+                let copy_srgb = pow(copy_color.rgb, rp_inv_gamma);
+                let premult = vec4<f32>(copy_srgb * final_a, final_a);
+                acc_srgb = premult + acc_srgb * (1.0 - final_a);
             }
         }
         
-        tex_color = accumulated_color;
+        // Convert back to linear
+        if acc_srgb.a > 0.001 {
+            tex_color = vec4<f32>(pow(acc_srgb.rgb / acc_srgb.a, rp_gamma) * acc_srgb.a, acc_srgb.a);
+        } else {
+            tex_color = vec4<f32>(0.0);
+        }
     } else if linear_repeat_enabled {
         // Linear repeat effect: render multiple copies arranged in a line
         // pixel_coord is Y-down (matching AM convention), no Y-flips needed.
@@ -1041,7 +1052,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let center = vec2<f32>(0.5, 0.5);
         let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
         
-        var accumulated_color = vec4<f32>(0.0);
+        // AM composites in sRGB space; accumulate in sRGB premultiplied alpha
+        let lr_gamma = vec3<f32>(2.2);
+        let lr_inv_gamma = vec3<f32>(1.0 / 2.2);
+        var acc_lr_srgb = vec4<f32>(0.0);
         
         // Effect 2 iteration count (1 if no second effect)
         let total_copies2 = select(1, lr2_count, lr2_enabled);
@@ -1135,57 +1149,64 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                         copy_color = textureSample(base_texture, base_sampler, copy_uv);
                     }
                     
-                    // Color blending from effect 1
+                    // Convert to sRGB for AM-compatible compositing
+                    var copy_srgb = pow(copy_color.rgb, lr_inv_gamma);
+                    
+                    // Color blending from effect 1 (in sRGB space)
                     if linear_repeat_blend > 0.001 {
-                        let base_rgb = uniforms.color.rgb;
-                        let fill_rgb = uniforms.linear_repeat_fill_color.rgb;
+                        let base_srgb = pow(uniforms.color.rgb, lr_inv_gamma);
+                        let fill_srgb = pow(uniforms.linear_repeat_fill_color.rgb, lr_inv_gamma);
                         var should_blend = true;
                         if linear_repeat_color_alt && (i % 2 == 1) {
                             should_blend = false;
                         }
                         if should_blend {
-                            var start_color = base_rgb;
+                            var start_color = base_srgb;
                             var end_color: vec3<f32>;
                             if linear_repeat_blend <= 1.0 {
-                                end_color = mix(base_rgb, fill_rgb, linear_repeat_blend);
+                                end_color = mix(base_srgb, fill_srgb, linear_repeat_blend);
                             } else {
-                                start_color = mix(base_rgb, fill_rgb, linear_repeat_blend - 1.0);
-                                end_color = fill_rgb;
+                                start_color = mix(base_srgb, fill_srgb, linear_repeat_blend - 1.0);
+                                end_color = fill_srgb;
                             }
-                            let final_rgb = mix(start_color, end_color, interp_progress);
-                            copy_color = vec4<f32>(final_rgb, copy_color.a);
+                            copy_srgb = mix(start_color, end_color, interp_progress);
                         }
                     }
                     
-                    // Color blending from effect 2
+                    // Color blending from effect 2 (in sRGB space)
                     if lr2_enabled && lr2_blend > 0.001 {
-                        let base_rgb2 = copy_color.rgb;
-                        let fill_rgb2 = uniforms.linear_repeat2_fill_color.rgb;
+                        let fill_srgb2 = pow(uniforms.linear_repeat2_fill_color.rgb, lr_inv_gamma);
                         var should_blend2 = true;
                         if lr2_color_alt && (j % 2 == 1) {
                             should_blend2 = false;
                         }
                         if should_blend2 {
-                            var start_color2 = base_rgb2;
+                            var start_color2 = copy_srgb;
                             var end_color2: vec3<f32>;
                             if lr2_blend <= 1.0 {
-                                end_color2 = mix(base_rgb2, fill_rgb2, lr2_blend);
+                                end_color2 = mix(copy_srgb, fill_srgb2, lr2_blend);
                             } else {
-                                start_color2 = mix(base_rgb2, fill_rgb2, lr2_blend - 1.0);
-                                end_color2 = fill_rgb2;
+                                start_color2 = mix(copy_srgb, fill_srgb2, lr2_blend - 1.0);
+                                end_color2 = fill_srgb2;
                             }
-                            let final_rgb2 = mix(start_color2, end_color2, interp2);
-                            copy_color = vec4<f32>(final_rgb2, copy_color.a);
+                            copy_srgb = mix(start_color2, end_color2, interp2);
                         }
                     }
                     
-                    copy_color.a *= combined_alpha;
-                    accumulated_color = copy_color + accumulated_color * (1.0 - copy_color.a);
+                    // Composite in sRGB premultiplied alpha (matches AM's Canvas)
+                    let final_a = copy_color.a * combined_alpha;
+                    let premult = vec4<f32>(copy_srgb * final_a, final_a);
+                    acc_lr_srgb = premult + acc_lr_srgb * (1.0 - final_a);
                 }
             }
         }
         
-        tex_color = accumulated_color;
+        // Convert back to linear
+        if acc_lr_srgb.a > 0.001 {
+            tex_color = vec4<f32>(pow(acc_lr_srgb.rgb / acc_lr_srgb.a, lr_gamma) * acc_lr_srgb.a, acc_lr_srgb.a);
+        } else {
+            tex_color = vec4<f32>(0.0);
+        }
         linear_repeat_color_applied = linear_repeat_blend > 0.001 || (lr2_enabled && lr2_blend > 0.001);
     } else if rr_enabled {
         // Radial repeat: AM's transform chain (TransformKt.transform on Canvas):

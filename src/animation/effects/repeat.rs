@@ -6,11 +6,12 @@ use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
 /// Compute Java Random initial state from AM seed value.
-/// Returns (state_hi_16bits, state_lo_32bits) packed as f32 via bitcast.
-/// Uses f64 precision for seed formula to match Java's double arithmetic.
+/// Returns (state_lo_32bits, state_hi_16bits) packed as f32 via bitcast.
+/// Uses f32 arithmetic to match Java's `(long)(15234322 + 35432882176L * seedValue)`
+/// where seedValue is a Java float. In Java, long*float promotes long to float first,
+/// so the entire computation happens in float32 space (matching AM's precision loss).
 fn compute_java_random_state_packed(seed: f32) -> (f32, f32) {
-    let seed_f64 = seed as f64;
-    let am_seed = (15234322.0_f64 + 35432882176.0_f64 * seed_f64) as i64;
+    let am_seed = (15234322.0_f32 + 35432882176.0_f32 * seed) as i64;
     let multiplier: i64 = 0x5DEECE66D;
     let init_state = ((am_seed ^ multiplier) as u64) & ((1u64 << 48) - 1);
     let state_hi = ((init_state >> 32) & 0xFFFF) as u32;
@@ -231,62 +232,7 @@ pub(super) fn process_linear_repeat_effect(
         // Use round for count to get integer copy counts
         let count_rounded = count.round();
 
-        // Debug: log count calculation for specific time ranges
-        // Frame 39 corresponds to layer_time around 0.062-0.065
-        if layer_time > 0.060 && layer_time < 0.070 {
-            bevy::log::info!(
-                "[LinearRepeat DEBUG] layer={} layer_time={:.6} count_raw={:.4} count_rounded={:.0}",
-                animated.layer_id,
-                layer_time,
-                count,
-                count_rounded
-            );
-        }
-
-        bevy::log::debug!(
-            "[LinearRepeat] layer={} time={:.2} count={:.1} position=({:.1},{:.1}) offset=({:.1},{:.1}) angle={:.1} scale={:.2} alpha={:.2}",
-            animated.layer_id,
-            layer_time,
-            count,
-            position[0],
-            position[1],
-            offset[0],
-            offset[1],
-            angle,
-            scale,
-            alpha
-        );
-
-        // Debug for frame 42 region (layer_time ~0.068)
-        if layer_time > 0.065 && layer_time < 0.075 {
-            bevy::log::info!(
-                "[LinearRepeat FRAME42 DEBUG] layer={} layer_time={:.4} count={:.1} position=({:.1},{:.1})",
-                animated.layer_id,
-                layer_time,
-                count,
-                position[0],
-                position[1]
-            );
-        }
-
-        // Debug for frame 454 region (layer_time ~0.728)
-        if layer_time > 0.725 && layer_time < 0.735 {
-            bevy::log::info!(
-                "[LinearRepeat FRAME454 DEBUG] layer={} layer_time={:.4} count={:.0} position=({:.1},{:.1}) offset=({:.1},{:.1}) phase={:.2} easeIn={:.2} easeOut={:.2}",
-                animated.layer_id,
-                layer_time,
-                count,
-                position[0],
-                position[1],
-                offset[0],
-                offset[1],
-                phase,
-                ease_in,
-                ease_out
-            );
-        }
-
-        material.uniform_data.linear_repeat_params1 =
+                material.uniform_data.linear_repeat_params1 =
             Vec4::new(count_rounded, position[0], position[1], angle);
         material.uniform_data.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
         material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);

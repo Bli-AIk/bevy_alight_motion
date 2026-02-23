@@ -34,7 +34,8 @@ fn repeat_with_easing(count: i32, params: &PathRepeatParams, layer_time: f32) ->
 
     // Build index list (potentially shuffled for random order)
     let indices: Vec<i32> = if params.random_order {
-        let seed = (15234322.0 + 35432882176.0 * params.seed) as u64;
+        // Match Java's f32 arithmetic: (long)(15234322 + 35432882176L * seedValue)
+        let seed = (15234322.0_f32 + 35432882176.0_f32 * params.seed) as u64;
         let mut idx_list: Vec<i32> = (0..count).collect();
         // Simple Fisher-Yates shuffle with deterministic seed
         let mut rng = seed;

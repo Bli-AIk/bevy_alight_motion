@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-24T02:37:08.263058+08:00",
+  "timestamp": "2026-02-24T03:19:08.994427+08:00",
   "summary": {
     "passed": 80,
     "warnings": 0,
@@ -275,7 +275,7 @@
     },
     "private/USER_71/3_ex3": {
       "status": "fail",
-      "avg_similarity": 0.9611
+      "avg_similarity": 0.541
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
