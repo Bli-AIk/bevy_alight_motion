@@ -1047,7 +1047,38 @@ fn spawn_layer_entity(
                         }
                     }
                 }
-                max_s * max_size_ratio
+                // Account for border/stroke expansion in mesh sizing
+                let stroke_expansion = {
+                    let mut max_stroke = layer.animated.stroke_width.value.unwrap_or(0.0);
+                    for kf in &layer.animated.stroke_width.keyframes {
+                        if let Ok(v) = kf.value.parse::<f32>() {
+                            max_stroke = max_stroke.max(v);
+                        }
+                    }
+                    let direction = match &layer.spec {
+                        crate::scene::AmLayerSpec::SdfShape { stroke_direction, .. } => stroke_direction.as_str(),
+                        _ => "inside",
+                    };
+                    match direction {
+                        "outside" => max_stroke,
+                        "centered" => max_stroke * 0.5,
+                        _ => 0.0,
+                    }
+                };
+                // Also account for border2 (static)
+                let border2_expansion = match &layer.spec {
+                    crate::scene::AmLayerSpec::SdfShape { border2_width, border2_direction, .. } => {
+                        match border2_direction.as_str() {
+                            "outside" => *border2_width,
+                            "centered" => *border2_width * 0.5,
+                            _ => 0.0,
+                        }
+                    }
+                    _ => 0.0,
+                };
+                let total_expansion = stroke_expansion + border2_expansion;
+                let expansion_ratio = if base_half > 0.0 { (base_half + total_expansion) / base_half } else { 1.0 };
+                max_s * max_size_ratio * expansion_ratio
             }, // max_animated_scale
         );
     } else {

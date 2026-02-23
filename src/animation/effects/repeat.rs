@@ -5,26 +5,6 @@ use bevy::prelude::*;
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
-/// Cached mesh bounding box to avoid recreating the mesh every frame.
-/// Only recreated when the bounding box changes significantly.
-#[derive(Component, Default)]
-pub(crate) struct RepeatMeshBounds {
-    pub min_x: f32,
-    pub max_x: f32,
-    pub min_y: f32,
-    pub max_y: f32,
-}
-
-impl RepeatMeshBounds {
-    fn matches(&self, min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> bool {
-        const EPSILON: f32 = 0.5;
-        (self.min_x - min_x).abs() < EPSILON
-            && (self.max_x - max_x).abs() < EPSILON
-            && (self.min_y - min_y).abs() < EPSILON
-            && (self.max_y - max_y).abs() < EPSILON
-    }
-}
-
 /// Process the repeat effect for an entity, updating material params and mesh bounds.
 pub(super) fn process_repeat_effect(
     animated: &AmAnimated,
@@ -35,7 +15,6 @@ pub(super) fn process_repeat_effect(
     entity: Entity,
     meshes: &mut Assets<Mesh>,
     commands: &mut Commands,
-    existing_bounds: Option<&RepeatMeshBounds>,
 ) {
     let has_repeat = animated.repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -124,13 +103,6 @@ pub(super) fn process_repeat_effect(
         min_y -= padding;
         max_y += padding;
 
-        // Skip mesh recreation if bounds haven't changed significantly
-        if let Some(bounds) = existing_bounds {
-            if bounds.matches(min_x, max_x, min_y, max_y) {
-                return;
-            }
-        }
-
         bevy::log::debug!(
             "[RepeatEffect] mesh bounds: ({:.1},{:.1}) to ({:.1},{:.1})",
             min_x,
@@ -182,13 +154,7 @@ pub(super) fn process_repeat_effect(
         let new_mesh_handle = meshes.add(new_mesh);
         commands
             .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle))
-            .insert(RepeatMeshBounds {
-                min_x,
-                max_x,
-                min_y,
-                max_y,
-            });
+            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
     } else {
         // Reset repeat params when effect is disabled
         material.uniform_data.repeat_params1 = Vec4::ZERO;
@@ -206,7 +172,6 @@ pub(super) fn process_linear_repeat_effect(
     entity: Entity,
     meshes: &mut Assets<Mesh>,
     commands: &mut Commands,
-    existing_bounds: Option<&RepeatMeshBounds>,
 ) {
     let has_linear_repeat = animated.linear_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -500,13 +465,6 @@ pub(super) fn process_linear_repeat_effect(
         material.uniform_data.original_size =
             Vec4::new(orig_width, orig_height, new_width, new_height);
 
-        // Skip mesh recreation if bounds haven't changed significantly
-        if let Some(bounds) = existing_bounds {
-            if bounds.matches(min_x, max_x, min_y, max_y) {
-                return;
-            }
-        }
-
         // UV mapping: match standard mesh Y-flip convention
         let uv_min_x = min_x / orig_width + 0.5;
         let uv_max_x = max_x / orig_width + 0.5;
@@ -546,14 +504,10 @@ pub(super) fn process_linear_repeat_effect(
         let new_mesh_handle = meshes.add(new_mesh);
         commands
             .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle))
-            .insert(RepeatMeshBounds {
-                min_x,
-                max_x,
-                min_y,
-                max_y,
-            });
+            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
     } else {
+        // Reset linear repeat params when effect is disabled
+        // Use count=-1.0 to indicate "not activated" (distinguishes from count=0 which means "activated but hide")
         material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
         material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
@@ -579,7 +533,6 @@ pub(super) fn process_radial_repeat_effect(
     entity: Entity,
     meshes: &mut Assets<Mesh>,
     commands: &mut Commands,
-    existing_bounds: Option<&RepeatMeshBounds>,
 ) {
     let has_radial_repeat = animated.radial_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -675,13 +628,6 @@ pub(super) fn process_radial_repeat_effect(
         material.uniform_data.original_size =
             Vec4::new(orig_width, orig_height, new_width, new_height);
 
-        // Skip mesh recreation if bounds haven't changed significantly
-        if let Some(bounds) = existing_bounds {
-            if bounds.matches(min_x, max_x, min_y, max_y) {
-                return;
-            }
-        }
-
         let uv_min_x = min_x / orig_width + 0.5;
         let uv_max_x = max_x / orig_width + 0.5;
         let uv_at_bottom = 0.5 - min_y / orig_height;
@@ -720,13 +666,7 @@ pub(super) fn process_radial_repeat_effect(
         let new_mesh_handle = meshes.add(new_mesh);
         commands
             .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle))
-            .insert(RepeatMeshBounds {
-                min_x,
-                max_x,
-                min_y,
-                max_y,
-            });
+            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
     } else {
         material.uniform_data.radial_repeat_params1 = Vec4::ZERO;
         material.uniform_data.radial_repeat_params2 = Vec4::new(360.0, 1.0, 0.0, 1.0);

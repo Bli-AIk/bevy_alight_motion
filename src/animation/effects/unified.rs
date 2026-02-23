@@ -65,7 +65,6 @@ pub fn animate_unified_effect_system(
         &GlobalTransform,
         &bevy::mesh::Mesh2d,
         Option<&crate::scene::AmEmbedContentMarker>,
-        Option<&super::repeat::RepeatMeshBounds>,
     )>,
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
@@ -82,16 +81,8 @@ pub fn animate_unified_effect_system(
         .unwrap_or(1.0)
         .max(0.001);
 
-    for (
-        entity,
-        animated,
-        material_handle,
-        transform,
-        global_transform,
-        _mesh2d,
-        embed_marker,
-        repeat_bounds,
-    ) in query.iter()
+    for (entity, animated, material_handle, transform, global_transform, _mesh2d, embed_marker) in
+        query.iter()
     {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
@@ -846,7 +837,6 @@ pub fn animate_unified_effect_system(
                 entity,
                 &mut meshes,
                 &mut commands,
-                repeat_bounds,
             );
 
             super::repeat::process_linear_repeat_effect(
@@ -858,7 +848,6 @@ pub fn animate_unified_effect_system(
                 entity,
                 &mut meshes,
                 &mut commands,
-                repeat_bounds,
             );
 
             super::repeat::process_radial_repeat_effect(
@@ -870,7 +859,6 @@ pub fn animate_unified_effect_system(
                 entity,
                 &mut meshes,
                 &mut commands,
-                repeat_bounds,
             );
         }
     }

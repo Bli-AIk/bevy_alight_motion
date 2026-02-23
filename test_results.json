@@ -1,7 +1,8 @@
 {
-  "timestamp": "2026-02-22T23:14:40.201845+08:00",
+  "timestamp": "2026-02-23T19:30:36.532920+08:00",
   "summary": {
     "passed": 78,
+    "warnings": 0,
     "skipped": 2,
     "failed": 21
   },
@@ -237,7 +238,7 @@
     },
     "private/USER_5p/neo_test": {
       "status": "fail",
-      "avg_similarity": 0.7189
+      "avg_similarity": 0.7353
     },
     "private/USER_71/2_ex": {
       "status": "fail",
@@ -279,7 +280,7 @@
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
-      "avg_similarity": 0.6549
+      "avg_similarity": 0.7115
     },
     "private/USER_chen_pi/distrust/13_ex": {
       "status": "pass"
