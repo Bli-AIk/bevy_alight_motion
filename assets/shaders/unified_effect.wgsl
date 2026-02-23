@@ -574,45 +574,78 @@ fn apply_am_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {
     return cubic_bezier_2d(progress, p1x, p1y, p2x, p2y);
 }
 
-// Linear Congruential Generator matching Java's Random
-// Returns a value in [0, bound)
-fn java_random_next_int(seed_state: ptr<function, u32>, bound: i32) -> i32 {
-    // Java Random uses: seed = (seed * 0x5DEECE66D + 0xB) & mask
-    // We simulate the effect for Fisher-Yates shuffle
-    let mask: u32 = 0xFFFFFFFFu;
-    let mult: u32 = 0x5DEECE66u; // simplified multiplier
-    let inc: u32 = 0xBu;
-    
-    *seed_state = ((*seed_state) * mult + inc) & mask;
-    let val = (*seed_state >> 16u) % u32(bound);
-    return i32(val);
+// 48-bit Java Random implementation (matching java.util.Random exactly)
+// State is represented as (hi: u16, lo: u32) where full state = hi << 32 | lo
+
+// Multiply two u32 values, return (hi, lo) of 64-bit result
+fn mul_u32_wide(a: u32, b: u32) -> vec2<u32> {
+    let a_lo = a & 0xFFFFu;
+    let a_hi = a >> 16u;
+    let b_lo = b & 0xFFFFu;
+    let b_hi = b >> 16u;
+    let ll = a_lo * b_lo;
+    let lh = a_lo * b_hi;
+    let hl = a_hi * b_lo;
+    let hh = a_hi * b_hi;
+    let mid_sum = (ll >> 16u) + (lh & 0xFFFFu) + (hl & 0xFFFFu);
+    let lo = (ll & 0xFFFFu) | ((mid_sum & 0xFFFFu) << 16u);
+    let hi = hh + (lh >> 16u) + (hl >> 16u) + (mid_sum >> 16u);
+    return vec2<u32>(hi, lo);
 }
 
-// Compute the shuffled index for Fisher-Yates shuffle
-// This computes what index position would be at after shuffling
-fn get_shuffled_index(original_index: i32, count: i32, seed: f32) -> i32 {
-    // Convert AM seed formula: 15234322 + (35432882176 * seed)
-    let am_seed = u32(15234322u) + u32(35432882176.0 * seed) % 0xFFFFFFFFu;
-    
-    // Build the permutation array by simulating Fisher-Yates
-    // For small counts (up to 100), we can compute this directly
+// Step the 48-bit LCG: state = (state * 0x5DEECE66D + 0xB) & ((1<<48)-1)
+fn java_random_step(state_hi: ptr<function, u32>, state_lo: ptr<function, u32>) {
+    let mult_hi: u32 = 5u;          // upper 16 bits of 0x5DEECE66D
+    let mult_lo: u32 = 0xDEECE66Du; // lower 32 bits
+    let prod = mul_u32_wide(*state_lo, mult_lo);
+    let cross = (*state_hi) * mult_lo + (*state_lo) * mult_hi;
+    let new_lo = prod.y + 0xBu;
+    let carry = select(0u, 1u, new_lo < prod.y);
+    *state_lo = new_lo;
+    *state_hi = (prod.x + cross + carry) & 0xFFFFu;
+}
+
+// Java Random.next(31): advance state and return top 31 bits
+fn java_random_next31(state_hi: ptr<function, u32>, state_lo: ptr<function, u32>) -> u32 {
+    java_random_step(state_hi, state_lo);
+    return ((*state_hi) << 15u) | ((*state_lo) >> 17u);
+}
+
+// Java Random.nextInt(bound) with rejection sampling
+fn java_random_next_int(state_hi: ptr<function, u32>, state_lo: ptr<function, u32>, bound: u32) -> u32 {
+    if (bound & (bound - 1u)) == 0u {
+        // Power of two: ((long)bound * (long)next(31)) >> 31
+        let bits = java_random_next31(state_hi, state_lo);
+        let prod = mul_u32_wide(bound, bits);
+        return (prod.x << 1u) | (prod.y >> 31u);
+    }
+    // Rejection sampling for non-power-of-two
+    for (var attempt = 0; attempt < 100; attempt = attempt + 1) {
+        let bits = java_random_next31(state_hi, state_lo);
+        let val = bits % bound;
+        if (bits - val + bound - 1u) < 0x80000000u {
+            return val;
+        }
+    }
+    return 0u;
+}
+
+// Fisher-Yates shuffle using pre-computed Java Random initial state.
+// state_lo/state_hi are the initial 48-bit state after seed initialization,
+// passed from CPU via bitcast<u32> on uniform floats.
+fn get_shuffled_index(original_index: i32, count: i32, init_state_lo: u32, init_state_hi: u32) -> i32 {
     var perm: array<i32, 100>;
     for (var i = 0; i < count && i < 100; i = i + 1) {
         perm[i] = i;
     }
-    
-    var state = am_seed;
-    // Fisher-Yates shuffle from end to start
+    var s_hi = init_state_hi;
+    var s_lo = init_state_lo;
     for (var i = count - 1; i > 0; i = i - 1) {
-        // Get random index in [0, i]
-        let j = java_random_next_int(&state, i + 1);
-        // Swap perm[i] and perm[j]
+        let j = i32(java_random_next_int(&s_hi, &s_lo, u32(i + 1)));
         let temp = perm[i];
         perm[i] = perm[j];
         perm[j] = temp;
     }
-    
-    // Return the value at original_index
     if original_index >= 0 && original_index < count && original_index < 100 {
         return perm[original_index];
     }
@@ -633,14 +666,15 @@ fn calc_linear_repeat_progress(
     ease_in: f32,
     ease_out: f32,
     random_order: bool,
-    seed: f32
+    rng_state_lo: u32,
+    rng_state_hi: u32
 ) -> vec2<f32> {
     // Get shuffled index if random_order is enabled
     // The shuffled index is used for position calculation (base_position)
     // while original index is used for baseProgress (rendering order)
     var shuffled_index = index;
     if random_order {
-        shuffled_index = get_shuffled_index(index, count, seed);
+        shuffled_index = get_shuffled_index(index, count, rng_state_lo, rng_state_hi);
     }
     
     let fi_shuffled = f32(shuffled_index);
@@ -766,7 +800,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
     let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
     let linear_repeat_random_order = uniforms.linear_repeat_params5.x > 0.5;
-    let linear_repeat_seed = uniforms.linear_repeat_params5.y;
+    let linear_repeat_rng_lo = bitcast<u32>(uniforms.linear_repeat_params5.y);
+    let linear_repeat_rng_hi = bitcast<u32>(uniforms.linear_repeat_params5.z);
     // Linear repeat activation states:
     // - count < 0: effect not activated, render original
     // - count == 0: effect activated but count=0, render nothing (hide)
@@ -793,7 +828,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let lr2_invert = (lr2_sia / 10) % 10 == 1;
     let lr2_color_alt = lr2_sia % 10 == 1;
     let lr2_random_order = uniforms.linear_repeat2_params5.x > 0.5;
-    let lr2_seed = uniforms.linear_repeat2_params5.y;
+    let lr2_rng_lo = bitcast<u32>(uniforms.linear_repeat2_params5.y);
+    let lr2_rng_hi = bitcast<u32>(uniforms.linear_repeat2_params5.z);
     let lr2_enabled = lr2_count > 0;
     
     // Extract radial repeat effect params
@@ -824,6 +860,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let rr_seed_raw = uniforms.radial_repeat_params5.w;
     let rr_random_order = fract(rr_seed_raw) > 0.3;
     let rr_seed = floor(rr_seed_raw);
+    // Compute Java Random state from seed for radial repeat (approximate, uses f32)
+    // For typical integer seeds (0, 1, ...) this is exact
+    let rr_am_seed = u32(15234322.0 + 35432882176.0 * rr_seed);
+    let rr_init = rr_am_seed ^ 0xDEECE66Du; // XOR with lower 32 bits of 0x5DEECE66D
+    let rr_init_hi = (((rr_am_seed >> 16u) ^ 5u) & 0xFFFFu); // approximate upper bits XOR
+    let rr_rng_lo = rr_init;
+    let rr_rng_hi = rr_init_hi;
 
     // Extract pixelate effect params
     let pixelate_enabled = uniforms.pixelate_flags.x > 0.5;
@@ -1009,7 +1052,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 let progress2 = calc_linear_repeat_progress(
                     j, lr2_count, lr2_start, lr2_end, lr2_phase, lr2_overlap,
                     lr2_shape, lr2_invert, lr2_ease_in, lr2_ease_out,
-                    lr2_random_order, lr2_seed
+                    lr2_random_order, lr2_rng_lo, lr2_rng_hi
                 );
                 let base2 = progress2.x;
                 interp2 = progress2.y;
@@ -1028,7 +1071,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     i, total_copies, linear_repeat_start, linear_repeat_end,
                     linear_repeat_phase, linear_repeat_overlap, linear_repeat_shape,
                     linear_repeat_invert, linear_repeat_ease_in, linear_repeat_ease_out,
-                    linear_repeat_random_order, linear_repeat_seed
+                    linear_repeat_random_order, linear_repeat_rng_lo, linear_repeat_rng_hi
                 );
                 let base_progress = progress.x;
                 let interp_progress = progress.y;
@@ -1161,7 +1204,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             let progress = calc_linear_repeat_progress(
                 i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
                 rr_shape, rr_invert, rr_ease_in, rr_ease_out,
-                rr_random_order, rr_seed
+                rr_random_order, rr_rng_lo, rr_rng_hi
             );
             let base_progress = progress.x;
             let interp_progress = progress.y;

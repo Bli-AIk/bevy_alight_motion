@@ -5,6 +5,19 @@ use bevy::prelude::*;
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
+/// Compute Java Random initial state from AM seed value.
+/// Returns (state_hi_16bits, state_lo_32bits) packed as f32 via bitcast.
+/// Uses f64 precision for seed formula to match Java's double arithmetic.
+fn compute_java_random_state_packed(seed: f32) -> (f32, f32) {
+    let seed_f64 = seed as f64;
+    let am_seed = (15234322.0_f64 + 35432882176.0_f64 * seed_f64) as i64;
+    let multiplier: i64 = 0x5DEECE66D;
+    let init_state = ((am_seed ^ multiplier) as u64) & ((1u64 << 48) - 1);
+    let state_hi = ((init_state >> 32) & 0xFFFF) as u32;
+    let state_lo = (init_state & 0xFFFFFFFF) as u32;
+    (f32::from_bits(state_lo), f32::from_bits(state_hi))
+}
+
 /// Process the repeat effect for an entity, updating material params and mesh bounds.
 pub(super) fn process_repeat_effect(
     animated: &AmAnimated,
@@ -279,16 +292,14 @@ pub(super) fn process_linear_repeat_effect(
         material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
         material.uniform_data.linear_repeat_params4 =
             Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
-        material.uniform_data.linear_repeat_params5 = Vec4::new(
-            if animated.linear_repeat_random_order {
-                1.0
-            } else {
-                0.0
-            },
-            animated.linear_repeat_seed,
-            0.0,
-            0.0,
-        );
+        material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
+            let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
+            let (state_lo_bits, state_hi_bits) =
+                compute_java_random_state_packed(seed);
+            Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+        } else {
+            Vec4::new(0.0, 0.0, 0.0, 0.0)
+        };
         material.uniform_data.linear_repeat_fill_color = fill_color;
 
         // Process second linear repeat effect if present
@@ -325,8 +336,14 @@ pub(super) fn process_linear_repeat_effect(
             material.uniform_data.linear_repeat2_params2 = Vec4::new(o2[0], o2[1], s2, al2);
             material.uniform_data.linear_repeat2_params3 = Vec4::new(st2, en2, ph2, ov2);
             material.uniform_data.linear_repeat2_params4 = Vec4::new(ei2, eo2, bl2, sia2 as f32);
-            material.uniform_data.linear_repeat2_params5 =
-                Vec4::new(if lr2.random_order { 1.0 } else { 0.0 }, lr2.seed, 0.0, 0.0);
+            material.uniform_data.linear_repeat2_params5 = if lr2.random_order {
+                let lr2_seed = interpolate_float(&lr2.seed, layer_time).unwrap_or(0.0);
+                let (state_lo_bits, state_hi_bits) =
+                    compute_java_random_state_packed(lr2_seed);
+                Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+            } else {
+                Vec4::new(0.0, 0.0, 0.0, 0.0)
+            };
             material.uniform_data.linear_repeat2_fill_color = fc2;
             (true, c2r, p2, o2, a2, s2)
         } else {

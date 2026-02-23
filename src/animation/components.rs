@@ -204,7 +204,7 @@ pub struct AmAnimated {
     /// Linear repeat effect: random order flag
     pub linear_repeat_random_order: bool,
     /// Linear repeat effect: random seed
-    pub linear_repeat_seed: f32,
+    pub linear_repeat_seed: AmAnimatedFloat,
     /// Second linear repeat effect (for stacked/dual effects)
     pub linear_repeat2: Option<Box<crate::scene::effects::LinearRepeatParams>>,
     // Radial Repeat effect (com.alightcreative.effects.repeat.radial)

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-23T20:43:40.059665+08:00",
+  "timestamp": "2026-02-23T21:27:27.866074+08:00",
   "summary": {
     "passed": 79,
     "warnings": 0,
@@ -131,26 +131,26 @@
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.8809
+      "avg_similarity": 0.9072
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.9283
+      "avg_similarity": 0.9343
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.8633
+      "avg_similarity": 0.8952
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.9103
+      "avg_similarity": 0.9035
     },
     "effects/linear-repeat/random_generated2/1": {
       "status": "pass"
     },
     "effects/linear-repeat/random_generated2/2": {
       "status": "fail",
-      "avg_similarity": 0.8813
+      "avg_similarity": 0.846
     },
     "effects/linear-repeat/random_generated2/3": {
       "status": "pass"

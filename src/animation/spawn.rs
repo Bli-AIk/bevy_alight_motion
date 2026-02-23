@@ -1056,7 +1056,9 @@ fn spawn_layer_entity(
                         }
                     }
                     let direction = match &layer.spec {
-                        crate::scene::AmLayerSpec::SdfShape { stroke_direction, .. } => stroke_direction.as_str(),
+                        crate::scene::AmLayerSpec::SdfShape {
+                            stroke_direction, ..
+                        } => stroke_direction.as_str(),
                         _ => "inside",
                     };
                     match direction {
@@ -1067,17 +1069,23 @@ fn spawn_layer_entity(
                 };
                 // Also account for border2 (static)
                 let border2_expansion = match &layer.spec {
-                    crate::scene::AmLayerSpec::SdfShape { border2_width, border2_direction, .. } => {
-                        match border2_direction.as_str() {
-                            "outside" => *border2_width,
-                            "centered" => *border2_width * 0.5,
-                            _ => 0.0,
-                        }
-                    }
+                    crate::scene::AmLayerSpec::SdfShape {
+                        border2_width,
+                        border2_direction,
+                        ..
+                    } => match border2_direction.as_str() {
+                        "outside" => *border2_width,
+                        "centered" => *border2_width * 0.5,
+                        _ => 0.0,
+                    },
                     _ => 0.0,
                 };
                 let total_expansion = stroke_expansion + border2_expansion;
-                let expansion_ratio = if base_half > 0.0 { (base_half + total_expansion) / base_half } else { 1.0 };
+                let expansion_ratio = if base_half > 0.0 {
+                    (base_half + total_expansion) / base_half
+                } else {
+                    1.0
+                };
                 max_s * max_size_ratio * expansion_ratio
             }, // max_animated_scale
         );

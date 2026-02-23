@@ -143,7 +143,7 @@ pub struct LinearRepeatParams {
     /// Whether to randomize copy order
     pub random_order: bool,
     /// Random seed
-    pub seed: f32,
+    pub seed: AmAnimatedFloat,
 }
 
 impl LinearRepeatParams {
@@ -302,8 +302,10 @@ fn parse_linear_repeat_properties(effect: &AmEffect) -> LinearRepeatParams {
                 params.random_order = prop.value == "true";
             }
             "seed" => {
-                if let Ok(v) = prop.value.parse::<f32>() {
-                    params.seed = v;
+                if !prop.keyframes.is_empty() {
+                    params.seed.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.seed.value = Some(v);
                 }
             }
             _ => {}

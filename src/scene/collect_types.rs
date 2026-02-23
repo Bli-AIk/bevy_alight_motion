@@ -933,7 +933,7 @@ pub(crate) fn collect_embed_scene(
             linear_repeat_shape: 0,
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
-            linear_repeat_seed: 0.0,
+            linear_repeat_seed: AmAnimatedFloat::default(),
             linear_repeat2: None,
             // Radial repeat effect (defaults)
             radial_repeat_count: AmAnimatedFloat::default(),
@@ -1187,7 +1187,7 @@ pub(crate) fn collect_text(
             linear_repeat_shape: 0,
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
-            linear_repeat_seed: 0.0,
+            linear_repeat_seed: AmAnimatedFloat::default(),
             linear_repeat2: None,
             // Radial repeat effect (defaults)
             radial_repeat_count: AmAnimatedFloat::default(),
