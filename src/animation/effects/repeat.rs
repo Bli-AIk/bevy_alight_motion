@@ -232,7 +232,7 @@ pub(super) fn process_linear_repeat_effect(
         // Use round for count to get integer copy counts
         let count_rounded = count.round();
 
-                material.uniform_data.linear_repeat_params1 =
+        material.uniform_data.linear_repeat_params1 =
             Vec4::new(count_rounded, position[0], position[1], angle);
         material.uniform_data.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
         material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);

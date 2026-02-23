@@ -404,8 +404,8 @@ pub fn animate_sdf_opacity_system(
                     }
 
                     // Pass pixelate2 threshold to shader via gradient_config.y
-                    let pix_thresh = interpolate_float(&animated.pixelate_threshold, layer_time)
-                        .unwrap_or(0.0);
+                    let pix_thresh =
+                        interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.0);
                     material.uniform_data.gradient_config.y = pix_thresh;
                 }
             }

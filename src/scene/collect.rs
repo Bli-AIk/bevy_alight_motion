@@ -580,16 +580,21 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             if layer.mask_info.is_some() {
                 continue; // Already has masks
             }
-            // Check if this layer's parent has masks
-            if layer.parent != 0
-                && let Some(parent_masks) = layer_masks.get(&layer.parent)
-            {
+            // Check if this layer's parent or containing embed has masks
+            let source_masks = if layer.parent != 0 {
+                layer_masks.get(&layer.parent).cloned()
+            } else if layer.containing_embed_id != 0 {
+                layer_masks.get(&layer.containing_embed_id).cloned()
+            } else {
+                None
+            };
+            if let Some(masks) = source_masks {
                 layer.mask_info = Some(AmMaskInfo {
-                    masks: parent_masks.clone(),
+                    masks: masks.clone(),
                 });
                 bevy::log::debug!(
                     "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
-                    parent_masks.len(),
+                    masks.len(),
                     layer.label,
                     layer.id
                 );

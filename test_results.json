@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-02-24T03:19:08.994427+08:00",
+  "timestamp": "2026-02-24T07:20:57.312369+08:00",
   "summary": {
-    "passed": 80,
+    "passed": 81,
     "warnings": 0,
     "skipped": 2,
-    "failed": 19
+    "failed": 18
   },
   "results": {
     "basic/bezier/bezier": {
@@ -131,26 +131,25 @@
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.9072
+      "avg_similarity": 0.9594
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.9343
+      "avg_similarity": 0.9492
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.8952
+      "avg_similarity": 0.915
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.9035
+      "avg_similarity": 0.9308
     },
     "effects/linear-repeat/random_generated2/1": {
       "status": "pass"
     },
     "effects/linear-repeat/random_generated2/2": {
-      "status": "fail",
-      "avg_similarity": 0.846
+      "status": "pass"
     },
     "effects/linear-repeat/random_generated2/3": {
       "status": "pass"
@@ -237,11 +236,11 @@
     },
     "private/USER_5p/neo_test": {
       "status": "fail",
-      "avg_similarity": 0.7353
+      "avg_similarity": 0.7189
     },
     "private/USER_71/2_ex": {
       "status": "fail",
-      "avg_similarity": 0.9579
+      "avg_similarity": 0.958
     },
     "private/USER_71/2_ex1": {
       "status": "fail",
@@ -263,7 +262,7 @@
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8854
+      "avg_similarity": 0.8853
     },
     "private/USER_71/3_ex2": {
       "status": "fail",
@@ -275,7 +274,7 @@
     },
     "private/USER_71/3_ex3": {
       "status": "fail",
-      "avg_similarity": 0.541
+      "avg_similarity": 0.9611
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",

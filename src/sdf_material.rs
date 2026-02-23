@@ -681,8 +681,8 @@ mod tests {
         println!("SdfMaterialUniform min_size = {}", size);
         assert_eq!(
             size.get(),
-            160,
-            "SdfMaterialUniform size mismatch! Expected 160 bytes"
+            320,
+            "SdfMaterialUniform size mismatch! Expected 320 bytes"
         );
     }
 
