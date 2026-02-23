@@ -649,8 +649,19 @@ pub fn animate_opacity_system(
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
         // e.g., if fillColor has alpha=0, the sprite should remain invisible regardless of opacity animation
-        let final_alpha = opacity * animated.base_alpha;
-        sprite.color.set_alpha(final_alpha.clamp(0.0, 1.0));
+        let final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        // AM composites opacity in sRGB space; Bevy blends in linear space.
+        // Convert alpha sRGB→linear so GPU blend approximates AM's result.
+        let corrected = if final_alpha > 0.001 && final_alpha < 0.999 {
+            if final_alpha <= 0.04045 {
+                final_alpha / 12.92
+            } else {
+                ((final_alpha + 0.055) / 1.055).powf(2.4)
+            }
+        } else {
+            final_alpha
+        };
+        sprite.color.set_alpha(corrected);
     }
 }
 

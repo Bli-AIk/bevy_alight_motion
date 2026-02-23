@@ -780,6 +780,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             final_color.a,
         );
     }
+
+    // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
+    // Convert alpha from sRGB to linear so GPU's linear blend approximates AM's sRGB result.
+    if final_color.a > 0.001 && final_color.a < 0.999 {
+        final_color.a = select(
+            pow((final_color.a + 0.055) / 1.055, 2.4),
+            final_color.a / 12.92,
+            final_color.a <= 0.04045
+        );
+    }
+
     if final_color.a < 0.005 {
         discard;
     }

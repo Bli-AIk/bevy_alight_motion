@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-02-23T22:26:16.015468+08:00",
+  "timestamp": "2026-02-23T23:48:32.280684+08:00",
   "summary": {
-    "passed": 79,
+    "passed": 80,
     "warnings": 0,
     "skipped": 2,
-    "failed": 20
+    "failed": 19
   },
   "results": {
     "basic/bezier/bezier": {
@@ -327,8 +327,7 @@
       "status": "pass"
     },
     "private/USER_chen_pi/misc/simple_gb": {
-      "status": "fail",
-      "avg_similarity": 0.9764
+      "status": "pass"
     }
   }
 }
