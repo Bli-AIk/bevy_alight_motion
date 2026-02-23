@@ -30,7 +30,7 @@ zip = { version = "7.4", default-features = false, features = ["deflate"] }
 thiserror = "2.0"
 ttf-parser = "0.25"
 fontdb = "0.23"
-owo-colors = "4.0"
+owo-colors = "4.3"
 bevy-inspector-egui = { version = "0.36.0", optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 
