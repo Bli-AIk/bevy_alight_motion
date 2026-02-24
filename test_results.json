@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-02-24T12:21:34.067467+08:00",
+  "timestamp": "2026-02-25T00:22:39.745682+08:00",
   "summary": {
-    "passed": 82,
+    "passed": 85,
     "warnings": 0,
     "skipped": 2,
-    "failed": 18
+    "failed": 26
   },
   "results": {
     "basic/bezier/bezier": {
@@ -330,6 +330,47 @@
     },
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "pass"
+    },
+    "test/group-split": {
+      "status": "pass"
+    },
+    "test/group-split/0-30": {
+      "status": "fail",
+      "avg_similarity": 0.6246
+    },
+    "test/group-split/120-150": {
+      "status": "fail",
+      "avg_similarity": 0.6176
+    },
+    "test/group-split/150-180": {
+      "status": "pass"
+    },
+    "test/group-split/180-210": {
+      "status": "fail",
+      "avg_similarity": 0.6654
+    },
+    "test/group-split/210-240": {
+      "status": "fail",
+      "avg_similarity": 0.969
+    },
+    "test/group-split/240-270": {
+      "status": "fail",
+      "avg_similarity": 0.6291
+    },
+    "test/group-split/270-300": {
+      "status": "fail",
+      "avg_similarity": 0.9489
+    },
+    "test/group-split/30-60": {
+      "status": "fail",
+      "avg_similarity": 0.5653
+    },
+    "test/group-split/60-90": {
+      "status": "pass"
+    },
+    "test/group-split/90-120": {
+      "status": "fail",
+      "avg_similarity": 0.8967
     }
   }
 }
