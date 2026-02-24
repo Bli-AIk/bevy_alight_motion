@@ -125,6 +125,43 @@ impl Easing {
         }
     }
 
+    /// Convert easing back to AM format string.
+    /// Returns `None` for `Linear` (AM uses absence of easing attribute for linear).
+    pub fn to_am_string(&self) -> Option<String> {
+        match self {
+            Easing::Linear => None,
+            Easing::Step { x, y } => Some(format!("step {} {}", x, y)),
+            Easing::CubicBezier { x1, y1, x2, y2 } => {
+                Some(format!("cubicBezier {} {} {} {}", x1, y1, x2, y2))
+            }
+            Easing::Bounce { p1, p2 } => Some(format!("bounce {} {}", p1, p2)),
+            Easing::ReverseBounce { p1, p2 } => Some(format!("reverse bounce {} {}", p1, p2)),
+            Easing::Cyclic {
+                step_length,
+                sharpness,
+                skew,
+                decay,
+                reserved,
+            } => Some(format!(
+                "cyclic {} {} {} {} {}",
+                step_length, sharpness, skew, decay, reserved
+            )),
+            Easing::Elastic {
+                step_length,
+                attack,
+                decay,
+                magnitude,
+            } => Some(format!(
+                "elastic {} {} {} {}",
+                step_length, attack, decay, magnitude
+            )),
+            Easing::ElasticStep {
+                step_length,
+                magnitude,
+            } => Some(format!("elasticStep {} {}", step_length, magnitude)),
+        }
+    }
+
     /// Evaluate the easing function at normalized time t (0.0-1.0).
     pub fn evaluate(&self, t: f32) -> f32 {
         match self {

@@ -42,6 +42,8 @@ pub struct AmProject {
     pub font_metrics: HashMap<String, FontMetrics>,
     /// Raw image data for embedded images (before loading).
     pub embedded_images: HashMap<String, Vec<u8>>,
+    /// Raw font data for embedded fonts (for round-trip write-back).
+    pub embedded_fonts: HashMap<String, Vec<u8>>,
     /// Validation report about supported/unsupported features.
     pub validation_report: crate::validation::ValidationReport,
 }
@@ -186,7 +188,8 @@ async fn load_amproj(
     // Load embedded fonts as labeled assets and extract metrics
     let mut fonts = HashMap::new();
     let mut font_metrics = HashMap::new();
-    for (name, data) in embedded_fonts {
+    let mut preserved_fonts: HashMap<String, Vec<u8>> = HashMap::new();
+    for (name, data) in &embedded_fonts {
         // Try loading font with fontdb first to check if it's valid
         // fontdb is what Bevy's text pipeline uses internally
         // 先用 fontdb 测试字体是否有效，fontdb 是 Bevy 文本管线内部使用的
@@ -200,8 +203,11 @@ async fn load_amproj(
             continue;
         }
 
+        // Preserve raw font data for round-trip write-back
+        preserved_fonts.insert(name.clone(), data.clone());
+
         // Extract font metrics using ttf-parser
-        if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+        if let Ok(face) = ttf_parser::Face::parse(data, 0) {
             let upm = face.units_per_em();
             let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
                 (
@@ -235,7 +241,7 @@ async fn load_amproj(
         })?;
         let label = format!("font_{}", name);
         let handle = load_context.add_labeled_asset(label, font);
-        fonts.insert(name, handle);
+        fonts.insert(name.clone(), handle);
     }
 
     // Resolve Google Fonts references to system fonts
@@ -311,6 +317,7 @@ async fn load_amproj(
         fonts,
         font_metrics,
         embedded_images,
+        embedded_fonts: preserved_fonts,
         validation_report,
     })
 }
@@ -422,6 +429,7 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
         fonts: HashMap::new(),
         font_metrics: HashMap::new(),
         embedded_images: HashMap::new(),
+        embedded_fonts: HashMap::new(),
         validation_report,
     })
 }

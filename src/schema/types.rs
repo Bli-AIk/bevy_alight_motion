@@ -8,12 +8,12 @@
 //! This module provides strongly-typed representations of AM project files,
 //! with robust handling of optional fields and defaults.
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::parsing::{parse_vec2, parse_vec3};
 
 /// Root scene node containing project metadata and layers.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename = "scene")]
 pub struct AmScene {
     /// Project title.
@@ -82,7 +82,7 @@ fn default_bgcolor() -> String {
 }
 
 /// Media resource definition.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmMedia {
     /// Resource URI (e.g., "amproj:filename.png").
     #[serde(rename = "@uri", default)]
@@ -114,7 +114,7 @@ pub struct AmMedia {
 }
 
 /// Layer types in the scene.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::large_enum_variant)]
 pub enum AmLayer {
@@ -139,7 +139,7 @@ pub enum AmLayer {
 }
 
 /// Bookmark marker for timeline organization (non-visual).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmBookmark {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -159,7 +159,7 @@ pub struct AmBookmark {
 }
 
 /// Text layer.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmText {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -223,7 +223,7 @@ pub struct AmText {
 }
 
 /// Audio layer (non-visual, for audio playback).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmAudio {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -263,7 +263,7 @@ fn default_volume() -> f32 {
 }
 
 /// Camera layer.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmCamera {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -299,7 +299,7 @@ pub struct AmCamera {
 }
 
 /// Image layer (standalone image, similar to shape with media fill).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmImage {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -343,7 +343,7 @@ pub struct AmImage {
 }
 
 /// Video layer.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmVideo {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -387,7 +387,7 @@ pub struct AmVideo {
 }
 
 /// Common layer properties.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmLayerBase {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -415,7 +415,7 @@ pub struct AmLayerBase {
 }
 
 /// Shape layer (visible object).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmShape {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -496,7 +496,7 @@ pub struct AmShape {
 }
 
 /// Stroke/border properties for shapes.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmStroke {
     /// Stroke direction ("centered", "inside", "outside").
     #[serde(rename = "@direction", default)]
@@ -528,7 +528,7 @@ pub struct AmStroke {
 }
 
 /// Stroke color element.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmStrokeColor {
     /// Color value in #AARRGGBB format.
     #[serde(rename = "@value", default)]
@@ -536,7 +536,7 @@ pub struct AmStrokeColor {
 }
 
 /// Stroke size element (can be static or animated).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmStrokeSize {
     /// Static size value (if not animated).
     #[serde(rename = "@value", default)]
@@ -548,7 +548,7 @@ pub struct AmStrokeSize {
 }
 
 /// Null object (invisible parent controller).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmNullObj {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -584,7 +584,7 @@ pub struct AmNullObj {
 }
 
 /// Embedded sub-scene (pre-composition).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmEmbedScene {
     /// Unique identifier.
     #[serde(rename = "@id", default)]
@@ -643,7 +643,7 @@ fn default_speed() -> f32 {
 }
 
 /// Fill color definition (can be static or animated).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmFillColor {
     /// Static color value in #AARRGGBB format.
     #[serde(rename = "@value", default)]
@@ -655,7 +655,7 @@ pub struct AmFillColor {
 }
 
 /// Transform container with animated properties.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmTransform {
     /// Lock aspect ratio flag.
     #[serde(rename = "@lockAspectRatio", default)]
@@ -683,10 +683,15 @@ pub struct AmTransform {
 }
 
 /// Animated Vec3 property (x, y, z).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmAnimatedVec3 {
     /// Static value (if not animated).
-    #[serde(rename = "@value", default, deserialize_with = "deserialize_vec3_opt")]
+    #[serde(
+        rename = "@value",
+        default,
+        deserialize_with = "deserialize_vec3_opt",
+        serialize_with = "serialize_vec3_opt"
+    )]
     pub value: Option<[f32; 3]>,
 
     /// Keyframes (if animated).
@@ -695,10 +700,15 @@ pub struct AmAnimatedVec3 {
 }
 
 /// Animated Vec2 property (x, y).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmAnimatedVec2 {
     /// Static value (if not animated).
-    #[serde(rename = "@value", default, deserialize_with = "deserialize_vec2_opt")]
+    #[serde(
+        rename = "@value",
+        default,
+        deserialize_with = "deserialize_vec2_opt",
+        serialize_with = "serialize_vec2_opt"
+    )]
     pub value: Option<[f32; 2]>,
 
     /// Keyframes (if animated).
@@ -707,7 +717,7 @@ pub struct AmAnimatedVec2 {
 }
 
 /// Animated float property.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmAnimatedFloat {
     /// Static value (if not animated).
     #[serde(rename = "@value", default)]
@@ -719,7 +729,7 @@ pub struct AmAnimatedFloat {
 }
 
 /// Animated color (Vec4 RGBA).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmAnimatedColor {
     /// Static value (if not animated).
     pub value: Option<bevy::prelude::Vec4>,
@@ -730,7 +740,7 @@ pub struct AmAnimatedColor {
 }
 
 /// Keyframe definition.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmKeyframe {
     /// Normalized time (0.0-1.0).
     #[serde(rename = "@t", default)]
@@ -746,7 +756,7 @@ pub struct AmKeyframe {
 }
 
 /// Property definition (e.g., size).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmProperty {
     /// Property name.
     #[serde(rename = "@name", default)]
@@ -766,7 +776,7 @@ pub struct AmProperty {
 }
 
 /// Effect definition.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AmEffect {
     /// Effect type ID.
     #[serde(rename = "@id", default)]
@@ -781,7 +791,7 @@ pub struct AmEffect {
     pub properties: Vec<AmProperty>,
 }
 
-// Custom deserializers for vector types
+// Custom deserializers/serializers for vector types
 
 fn deserialize_vec3_opt<'de, D>(deserializer: D) -> Result<Option<[f32; 3]>, D::Error>
 where
@@ -791,6 +801,16 @@ where
     match opt {
         Some(s) if !s.is_empty() => parse_vec3(&s).map(Some).map_err(serde::de::Error::custom),
         _ => Ok(None),
+    }
+}
+
+fn serialize_vec3_opt<S>(value: &Option<[f32; 3]>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some([x, y, z]) => serializer.serialize_some(&format!("{},{},{}", x, y, z)),
+        None => serializer.serialize_none(),
     }
 }
 
@@ -805,8 +825,18 @@ where
     }
 }
 
+fn serialize_vec2_opt<S>(value: &Option<[f32; 2]>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some([x, y]) => serializer.serialize_some(&format!("{},{}", x, y)),
+        None => serializer.serialize_none(),
+    }
+}
+
 /// Gradient fill data for shapes with fillType="gradient".
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmGradient {
     /// Gradient type: "linear", "radial", "sweep"
     #[serde(rename = "@type", default)]
@@ -821,16 +851,26 @@ pub struct AmGradient {
     pub end_color: String,
 
     /// Start point (UV coordinates, 0-1)
-    #[serde(rename = "@start", default, deserialize_with = "deserialize_vec2_opt")]
+    #[serde(
+        rename = "@start",
+        default,
+        deserialize_with = "deserialize_vec2_opt",
+        serialize_with = "serialize_vec2_opt"
+    )]
     pub start: Option<[f32; 2]>,
 
     /// End point (UV coordinates, 0-1)
-    #[serde(rename = "@end", default, deserialize_with = "deserialize_vec2_opt")]
+    #[serde(
+        rename = "@end",
+        default,
+        deserialize_with = "deserialize_vec2_opt",
+        serialize_with = "serialize_vec2_opt"
+    )]
     pub end: Option<[f32; 2]>,
 }
 
 /// SVG path element for freeform shapes.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmPathElement {
     /// SVG path data string (e.g., "M 0 0 L 100 100")
     #[serde(rename = "@d", default)]
