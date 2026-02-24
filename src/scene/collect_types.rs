@@ -826,6 +826,23 @@ pub(crate) fn collect_embed_scene(
     // Process mask relationships within this embed scene
     apply_mask_to_children(&mut children);
 
+    // Propagate embed's replaceColor effect to children that don't have their own.
+    // In AM, group effects apply after compositing children into an FBO.
+    // For direct rendering, we approximate by applying the embed's replaceColor to each child.
+    let embed_replace = extract_replace_color_effect(&embed.effects);
+    if embed_replace.old_color != Vec4::ZERO {
+        for child in &mut children {
+            if child.animated.replace_old_color == Vec4::ZERO {
+                child.animated.replace_old_color = embed_replace.old_color;
+                child.animated.replace_new_color = embed_replace.new_color.clone();
+                child.animated.replace_threshold = embed_replace.threshold.clone();
+                child.animated.replace_feather = embed_replace.feather.clone();
+                child.animated.replace_alpha = embed_replace.alpha.clone();
+                child.animated.replace_lock_luminance = embed_replace.lock_luminance;
+            }
+        }
+    }
+
     // Extract transform2 effects from embed
     let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
     let embed_transform2 = if all_embed_transform2.is_empty() {
