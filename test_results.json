@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-24T07:20:57.312369+08:00",
+  "timestamp": "2026-02-24T12:21:34.067467+08:00",
   "summary": {
-    "passed": 81,
+    "passed": 82,
     "warnings": 0,
     "skipped": 2,
     "failed": 18
@@ -279,6 +279,9 @@
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
       "avg_similarity": 0.9089
+    },
+    "private/USER_chen_pi/bullet_train/0_min": {
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/13_ex": {
       "status": "pass"
