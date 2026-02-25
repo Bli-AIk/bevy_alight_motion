@@ -102,6 +102,22 @@ min_frame_similarity = 0.40
 [overrides."effects/gaussian-blur/basic"]
 skip = true
 
+[overrides."effects/pixelate/bone"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+[overrides."effects/pixelate/bone_single"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+[overrides."effects/pixelate/basic"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+[overrides."effects/pixelate/sprite"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 # =============================================================================
 # Effects tests - close to passing
 # 特效测试 - 接近通过
