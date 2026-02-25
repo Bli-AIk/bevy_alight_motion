@@ -180,48 +180,6 @@ pub(crate) fn process_pending_layers(
         }
     }
 
-    // TEMP: diagnostic logging
-    if global_time > 11000.0 && global_time < 11200.0 {
-        let spawned_count = pending.spawned_entities.len();
-        let active_count = pending
-            .layers
-            .iter()
-            .filter(|l| {
-                let lt = l.animated.calc_local_time(global_time);
-                lt >= l.start_time as f32 && lt < l.end_time as f32
-            })
-            .count();
-        let embed_children_spawned = pending
-            .layers
-            .iter()
-            .filter(|l| {
-                l.containing_embed_id != 0
-                    && l.label.contains("长方形")
-                    && pending.spawned_entities.contains_key(&l.id)
-            })
-            .count();
-        let embed_children_active = pending
-            .layers
-            .iter()
-            .filter(|l| {
-                l.containing_embed_id != 0 && l.label.contains("长方形") && {
-                    let lt = l.animated.calc_local_time(global_time);
-                    lt >= l.start_time as f32 && lt < l.end_time as f32
-                }
-            })
-            .count();
-        eprintln!(
-            "[DIAG] t={:.0} spawned={}/{} total, bar_spawned={}/{} active, to_spawn={}, to_despawn={}",
-            global_time,
-            spawned_count,
-            active_count,
-            embed_children_spawned,
-            embed_children_active,
-            to_spawn.len(),
-            to_despawn.len()
-        );
-    }
-
     // Despawn entities that are no longer active
     for layer_id in to_despawn {
         if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
@@ -502,12 +460,6 @@ fn spawn_layer_entity(
         animated.time_offset,
         animated.speed_multiplier
     );
-
-    // For embed content, add 0.5 frame offset to match AM's internal timing
-    if layer.containing_embed_id != 0 && animated.speed_multiplier != 0.0 {
-        let frame_duration_ms = 1000.0 / 30.0;
-        local_time += frame_duration_ms * 0.5;
-    }
 
     // Calculate normalized time within layer duration
     let layer_time = animated.calc_layer_time(local_time);
