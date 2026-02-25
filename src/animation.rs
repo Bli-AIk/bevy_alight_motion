@@ -39,9 +39,8 @@ pub use sdf::{
     update_sdf_mask_system,
 };
 pub use systems::{
-    advance_playback_system, animate_am_camera_system, animate_embed_opacity_system,
-    animate_opacity_system, animate_size_system, animate_text_opacity_system,
-    animate_transform_system,
+    advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,
+    animate_text_opacity_system, animate_transform_system,
 };
 
 // Re-export interpolation functions

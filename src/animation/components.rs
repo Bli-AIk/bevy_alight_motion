@@ -117,6 +117,8 @@ pub struct AmAnimated {
     /// Affects keyframe interpolation rate: layer_time = raw_layer_time * element_speed.
     /// Does NOT affect visibility timing (start/end).
     pub element_speed: f32,
+    /// Scene FPS for timing calculations (from the scene's fps attribute).
+    pub scene_fps: f32,
     /// Embed parent offset (Bevy coords) for coordinate adjustment.
     /// When this layer is a child of an embed scene, this stores the embed's
     /// Bevy position so the animation system can compensate for it.
@@ -354,10 +356,11 @@ impl AmAnimated {
     }
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
+    /// Applies element_speed: with speed=0.5, animation plays at half rate.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
         let duration = (self.end_time - self.start_time) as f32;
         if duration > 0.0 {
-            (local_time - self.start_time as f32) / duration
+            (local_time - self.start_time as f32) / duration * self.element_speed
         } else {
             0.0
         }

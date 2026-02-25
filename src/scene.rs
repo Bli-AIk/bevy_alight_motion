@@ -70,6 +70,7 @@ mod tests {
             speed_multiplier: 1.0,
             nesting_depth: 0,
             lifecycle_offset: 0,
+            scene_fps: 30.0,
         };
 
         // Center of AM canvas should be at Bevy origin

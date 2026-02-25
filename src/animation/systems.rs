@@ -72,7 +72,22 @@ pub fn animate_transform_system(
     ) in query.iter_mut()
     {
         // Calculate local time for animation interpolation (accounting for speed)
-        let local_time = animated.calc_local_time(global_time);
+        let mut local_time = animated.calc_local_time(global_time);
+
+        // For embed content, add 0.5 frame offset to match AM's internal timing
+        // This compensates for the difference between video frame edges and centers
+        // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
+        let is_embed_content = embed_content_marker.is_some();
+        if is_embed_content && animated.speed_multiplier != 0.0 {
+            let fps = if animated.scene_fps > 0.0 {
+                animated.scene_fps
+            } else {
+                30.0
+            };
+            let frame_duration_ms = 1000.0 / fps;
+            let offset = frame_duration_ms * 0.35;
+            local_time += offset;
+        }
 
         // Use local time for visibility check (affected by speed)
         // This ensures child layers respect parent's speed for start/end time
@@ -606,67 +621,6 @@ fn debug_global_transform_system(
                     g_scale.x,
                     g_scale.y
                 );
-            }
-        }
-    }
-}
-
-/// System to propagate embed (group) opacity to Visibility.
-/// When an embed entity's opacity becomes 0, sets Visibility::Hidden,
-/// which propagates to all children via Bevy's visibility inheritance.
-/// AM renders groups to FBO then applies group opacity; we approximate by hiding.
-///
-/// 将编组（embed）的不透明度传播到 Visibility 组件。
-/// 当编组实体的不透明度为 0 时，设置 Visibility::Hidden，
-/// 通过 Bevy 的可见性继承机制传播到所有子实体。
-pub fn animate_embed_opacity_system(
-    playback: Res<AmPlayback>,
-    mut query: Query<(
-        &AmAnimated,
-        &crate::scene::AmLayerSpec,
-        &mut Visibility,
-        &crate::scene::AmLayerMarker,
-        Option<&Children>,
-    )>,
-    mut vis_query: Query<&mut Visibility, Without<crate::scene::AmLayerSpec>>,
-) {
-    if playback.force_stopped {
-        return;
-    }
-    let global_time = playback.current_time_ms;
-
-    for (animated, spec, mut visibility, _marker, children) in query.iter_mut() {
-        if !matches!(spec, crate::scene::AmLayerSpec::EmbedScene) {
-            continue;
-        }
-        let local_time = animated.calc_local_time(global_time);
-        if !animated.is_active(local_time) {
-            continue;
-        }
-        let layer_time = animated.calc_layer_time(local_time);
-        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-
-        if opacity <= 0.001 {
-            if *visibility != Visibility::Hidden {
-                *visibility = Visibility::Hidden;
-                // Also hide all children explicitly for immediate effect
-                if let Some(kids) = children {
-                    for child in kids.iter() {
-                        if let Ok(mut child_vis) = vis_query.get_mut(child) {
-                            *child_vis = Visibility::Hidden;
-                        }
-                    }
-                }
-            }
-        } else if *visibility == Visibility::Hidden {
-            *visibility = Visibility::Inherited;
-            // Restore children visibility
-            if let Some(kids) = children {
-                for child in kids.iter() {
-                    if let Ok(mut child_vis) = vis_query.get_mut(child) {
-                        *child_vis = Visibility::Inherited;
-                    }
-                }
             }
         }
     }

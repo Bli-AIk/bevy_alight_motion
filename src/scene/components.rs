@@ -414,18 +414,20 @@ impl AmMaskInfo {
     /// Get the active mask for the given time (ms).
     /// Returns None if no mask is active at this time.
     pub fn get_active_mask(&self, time_ms: u64) -> Option<&AmMaskEntry> {
+        let t = time_ms as i64;
         self.masks
             .iter()
-            .find(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
+            .find(|m| t >= m.start_time as i64 && t < m.end_time as i64)
     }
 
     /// Get all active masks for the given time (ms).
     /// Returns masks sorted by z-order (lowest first).
     /// Multiple masks can be active simultaneously for composite effects.
     pub fn get_active_masks(&self, time_ms: u64) -> Vec<&AmMaskEntry> {
+        let t = time_ms as i64;
         self.masks
             .iter()
-            .filter(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
+            .filter(|m| t >= m.start_time as i64 && t < m.end_time as i64)
             .collect()
     }
 }
@@ -493,6 +495,8 @@ pub struct AmSceneConfig {
     pub speed_multiplier: f32,
     /// Nesting depth (0 = root scene, 1 = first level embed, etc.)
     pub nesting_depth: u32,
+    /// Scene FPS (frames per second) for timing calculations.
+    pub scene_fps: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -506,6 +510,7 @@ impl Default for AmSceneConfig {
             lifecycle_offset: 0,
             speed_multiplier: 1.0,
             nesting_depth: 0,
+            scene_fps: 30.0,
         }
     }
 }

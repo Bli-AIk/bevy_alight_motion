@@ -358,6 +358,7 @@ pub(crate) fn collect_shape(
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: shape.speed,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: stroke_width_anim,
@@ -597,6 +598,7 @@ pub(crate) fn collect_null(
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
@@ -818,6 +820,7 @@ pub(crate) fn collect_embed_scene(
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: nested_speed,
+        scene_fps: embed.scene.fps as f32,
         ..config.clone()
     };
 
@@ -925,6 +928,7 @@ pub(crate) fn collect_embed_scene(
             blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
@@ -1179,6 +1183,7 @@ pub(crate) fn collect_text(
             blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
@@ -1414,6 +1419,7 @@ pub(crate) fn collect_image(
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
@@ -1608,6 +1614,7 @@ pub(crate) fn collect_camera(
             parent_layer_id: camera.parent,
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
+            scene_fps: config.scene_fps,
             ..Default::default()
         },
         spec: AmLayerSpec::Camera {

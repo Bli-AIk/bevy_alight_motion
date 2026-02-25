@@ -178,7 +178,10 @@ async fn load_amproj(
             RenderAssetUsages::all(),
         ) {
             let handle = load_context.add_labeled_asset(label.to_string(), image);
-            images.insert(uri.clone(), handle);
+            images.insert(uri.clone(), handle.clone());
+            // Also store with "am:" prefix so real AM exports (fillImage="am:...") work
+            let am_uri = format!("am:{}", label);
+            images.insert(am_uri, handle);
             debug!("Loaded image: {} (detected format: {})", uri, format);
         } else {
             warn!("Failed to load image: {} (tried format: {})", uri, format);
