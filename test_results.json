@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-25T22:49:39.227516+08:00",
+  "timestamp": "2026-02-26T02:05:39.492756+08:00",
   "summary": {
     "passed": 96,
     "warnings": 0,
@@ -168,11 +168,11 @@
     },
     "effects/pixelate/bone": {
       "status": "fail",
-      "avg_similarity": 0.9453
+      "avg_similarity": 0.9063
     },
     "effects/pixelate/bone_single": {
       "status": "fail",
-      "avg_similarity": 0.9776
+      "avg_similarity": 0.9986
     },
     "effects/pixelate/sprite": {
       "status": "pass"

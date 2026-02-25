@@ -105,10 +105,13 @@ skip = true
 [overrides."effects/pixelate/bone"]
 avg_threshold = 0.98
 frame_threshold = 0.98
+max_failed_rate = 0
 
+# 此示例存在严重不匹配的问题，且当前的帧对比算法必须设为0.999才能保证肉眼看不出差别。不能修改这里的阈值
 [overrides."effects/pixelate/bone_single"]
-avg_threshold = 0.98
-frame_threshold = 0.98
+avg_threshold = 0.9985
+frame_threshold = 0.9985
+max_failed_rate = 0
 
 [overrides."effects/pixelate/basic"]
 avg_threshold = 0.98

@@ -847,16 +847,18 @@ pub(crate) fn collect_embed_scene(
     }
 
     // Propagate embed's pixelate effect to children.
-    // In AM, the embed renders children to FBO then applies its own pixelate,
-    // creating double-pixelation (e.g. child 2×2 blocks become 4×4 effective blocks).
-    // We approximate by multiplying child pixelate_size by embed's pixelate_size.
+    // In AM, the embed renders children to FBO then applies its own pixelate as a post-process.
+    // For children that already have their own pixelate with the same grid origin (centered shapes),
+    // the group pixelation on the composited FBO doesn't change already-uniform cells.
+    // We keep the child's own size rather than multiplying, which is more accurate for aligned grids.
     let embed_pixelate = extract_pixelate_effect(&embed.effects);
     if let Some(embed_pix_size) = embed_pixelate.size.value {
         if embed_pix_size > 1.0 {
             for child in &mut children {
-                if let Some(child_pix_size) = child.animated.pixelate_size.value {
-                    // Child already has pixelate: multiply sizes for double-pixelation effect
-                    child.animated.pixelate_size.value = Some(child_pix_size * embed_pix_size);
+                if child.animated.pixelate_size.value.is_some() {
+                    // Child already has pixelate: keep child's own size.
+                    // When both grids share the same origin (common for centered shapes),
+                    // the group re-pixelation on aligned uniform cells is a no-op.
                 } else if child.animated.pixelate_size.keyframes.is_empty() {
                     // Child has no pixelate: apply embed's pixelate directly
                     child.animated.pixelate_size = embed_pixelate.size.clone();

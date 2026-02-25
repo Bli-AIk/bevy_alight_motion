@@ -69,6 +69,7 @@ pub fn animate_unified_effect_system(
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
+    embed_gt_query: Query<&GlobalTransform>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -804,26 +805,19 @@ pub fn animate_unified_effect_system(
                     saturation,
                 );
 
-                // Compute AM-scene parent scale (excluding FitWindow root scale).
+                // Store scene_scale for potential future use; currently unused in shader
+                // as pixelation uses inner-scene-space coordinates.
                 let origin = global_transform.translation();
                 let local_x_world = global_transform.transform_point(Vec3::X) - origin;
                 let local_y_world = global_transform.transform_point(Vec3::Y) - origin;
                 let scene_scale_x = local_x_world.length() / root_scale;
                 let scene_scale_y = local_y_world.length() / root_scale;
-                let scene_rotation = local_x_world.y.atan2(local_x_world.x);
-                debug!(
-                    "[Pixelate] layer={} orig_size=({:.1},{:.1}) sprite_size=({:.1},{:.1}) scale=({:.4},{:.4}) rot={:.4}",
-                    animated.layer_id,
-                    orig_width,
-                    orig_height,
-                    sprite_size[0],
-                    sprite_size[1],
-                    scale[0],
-                    scale[1],
-                    scene_rotation
-                );
                 material.uniform_data.pixelate_flags.z = scene_scale_x;
                 material.uniform_data.pixelate_flags.w = scene_scale_y;
+
+                // Compute parent rotation for grid angle compensation.
+                let local_x_world = global_transform.transform_point(Vec3::X) - origin;
+                let scene_rotation = local_x_world.y.atan2(local_x_world.x);
                 material.uniform_data.pixelate_params2.w = scene_rotation;
             }
 
