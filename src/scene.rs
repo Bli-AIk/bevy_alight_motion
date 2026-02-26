@@ -9,11 +9,14 @@
 //! AM 场景加载、实体生成和图层管理。
 
 mod collect;
+mod collect_embed;
+mod collect_shape;
 mod collect_types;
 mod components;
 pub(crate) mod effects;
 mod helpers;
 mod spawn;
+mod spawn_shape;
 mod spawn_visual;
 
 // Re-export public types

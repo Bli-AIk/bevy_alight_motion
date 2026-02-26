@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::loader::FontMetrics;
 use crate::schema::{AmLayer, AmScene};
 
+use super::collect_embed::*;
+use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
 use super::helpers::*;

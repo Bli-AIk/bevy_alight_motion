@@ -18,6 +18,7 @@ mod lifecycle;
 mod sdf;
 mod sdf_spawn;
 mod spawn;
+mod spawn_entity;
 mod systems;
 mod visual;
 

@@ -30,6 +30,7 @@ pub mod impl_scanner;
 pub mod macros;
 pub mod test_results;
 pub mod types;
+pub mod vitepress;
 
 pub use builtin::all as all_builtins;
 pub use effects::all as all_effects;
