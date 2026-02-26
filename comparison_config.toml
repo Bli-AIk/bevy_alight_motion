@@ -111,7 +111,6 @@ max_failed_rate = 0
 [overrides."effects/pixelate/bone_single"]
 avg_threshold = 0.9985
 frame_threshold = 0.9985
-max_failed_rate = 0
 
 [overrides."effects/pixelate/basic"]
 avg_threshold = 0.98
