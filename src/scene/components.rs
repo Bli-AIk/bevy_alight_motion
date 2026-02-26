@@ -497,6 +497,8 @@ pub struct AmSceneConfig {
     pub nesting_depth: u32,
     /// Scene FPS (frames per second) for timing calculations.
     pub scene_fps: f32,
+    /// Retime info to propagate to children of a retimed embed scene.
+    pub retime: Option<crate::animation::AmRetimeInfo>,
 }
 
 impl Default for AmSceneConfig {
@@ -511,6 +513,7 @@ impl Default for AmSceneConfig {
             speed_multiplier: 1.0,
             nesting_depth: 0,
             scene_fps: 30.0,
+            retime: None,
         }
     }
 }

@@ -450,6 +450,7 @@ pub(crate) fn spawn_shape(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                retime: config.retime.clone(),
             },
             layer_spec,
             transform,

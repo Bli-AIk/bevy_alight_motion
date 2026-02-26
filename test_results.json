@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-26T12:08:35.961465+08:00",
+  "timestamp": "2026-02-26T19:50:04.492196+08:00",
   "summary": {
-    "passed": 96,
+    "passed": 97,
     "warnings": 0,
     "skipped": 2,
     "failed": 43
@@ -29,6 +29,9 @@
       "status": "pass"
     },
     "basic/group/cutoff": {
+      "status": "pass"
+    },
+    "basic/group/loop/basic": {
       "status": "pass"
     },
     "basic/group/mask": {

@@ -489,6 +489,7 @@ pub(crate) fn collect_shape(
             textprogress_blink: false,
             shape_props,
             shape_points,
+            retime: config.retime.clone(),
         },
         spec,
         z_index: z,

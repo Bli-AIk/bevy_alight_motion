@@ -226,6 +226,7 @@ pub(crate) fn collect_null(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            retime: config.retime.clone(),
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -475,6 +476,7 @@ pub(crate) fn collect_text(
             textprogress_blink: extract_text_progress_effect(&text.effects).blink,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            retime: config.retime.clone(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -705,6 +707,7 @@ pub(crate) fn collect_image(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            retime: config.retime.clone(),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
@@ -779,6 +782,7 @@ pub(crate) fn collect_camera(
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
             scene_fps: config.scene_fps,
+            retime: config.retime.clone(),
             ..Default::default()
         },
         spec: AmLayerSpec::Camera {

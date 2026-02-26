@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::animation::AmAnimated;
+use crate::animation::{AmAnimated, AmRetimeInfo, RetimeMode};
 use crate::loader::FontMetrics;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 
@@ -84,6 +84,32 @@ pub(crate) fn collect_embed_scene(
     // It does NOT mean freeze animations. The parent's speed still applies.
     let nested_speed = effective_speed;
 
+    // Parse retime mode from the nested scene.
+    // When retime is active, children get AmRetimeInfo so their time is remapped.
+    let retime_mode = RetimeMode::from_str(&embed.scene.retime);
+    let retime_info = if retime_mode != RetimeMode::Off {
+        let container_duration = (embed.end_time - embed.start_time) as f32;
+        let nested_total = embed.scene.total_time as f32;
+        bevy::log::debug!(
+            "  [Retime] embed '{}': mode={:?}, container={}, total={}, speed={}",
+            embed.label,
+            retime_mode,
+            container_duration,
+            nested_total,
+            effective_speed,
+        );
+        Some(AmRetimeInfo {
+            mode: retime_mode,
+            embed_global_start: global_start,
+            container_duration_ms: container_duration,
+            nested_total_time_ms: nested_total,
+            embed_speed: effective_speed,
+        })
+    } else {
+        // Inherit retime from parent config (for deeply nested scenes within a retimed embed)
+        config.retime.clone()
+    };
+
     bevy::log::trace!(
         "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
@@ -105,6 +131,7 @@ pub(crate) fn collect_embed_scene(
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: nested_speed,
         scene_fps: embed.scene.fps as f32,
+        retime: retime_info,
         ..config.clone()
     };
 
@@ -348,6 +375,7 @@ pub(crate) fn collect_embed_scene(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            retime: config.retime.clone(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,

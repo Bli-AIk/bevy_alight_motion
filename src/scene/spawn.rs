@@ -448,6 +448,7 @@ pub(crate) fn spawn_null(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                retime: config.retime.clone(),
             },
             AmLayerSpec::Null,
             transform,
@@ -705,6 +706,7 @@ pub(crate) fn spawn_embed_scene(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                retime: config.retime.clone(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)
@@ -760,6 +762,23 @@ pub(crate) fn spawn_embed_scene(
     // Lifecycle offset also needs to account for parent speed
     let lifecycle_offset_with_in_time = global_start - in_time;
     let nested_z_spacing = config.z_spacing / 100.0;
+
+    // Parse retime mode (same as collect path)
+    let retime_mode = crate::animation::RetimeMode::from_str(&embed.scene.retime);
+    let retime_info = if retime_mode != crate::animation::RetimeMode::Off {
+        let container_duration = (embed.end_time - embed.start_time) as f32;
+        let nested_total = embed.scene.total_time as f32;
+        Some(crate::animation::AmRetimeInfo {
+            mode: retime_mode,
+            embed_global_start: global_start,
+            container_duration_ms: container_duration,
+            nested_total_time_ms: nested_total,
+            embed_speed: effective_speed,
+        })
+    } else {
+        config.retime.clone()
+    };
+
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
@@ -769,6 +788,7 @@ pub(crate) fn spawn_embed_scene(
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: effective_speed,
         scene_fps: embed.scene.fps as f32,
+        retime: retime_info,
         ..config.clone()
     };
 

@@ -24,8 +24,9 @@ mod visual;
 
 // Re-export components
 pub use components::{
-    AmAnimated, AmCameraLayer, AmPathRepeat, AmPlayback, AmSdfFillParams, AmSdfParams,
-    AmSdfShapeParent, AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
+    AmAnimated, AmCameraLayer, AmPathRepeat, AmPlayback, AmRetimeInfo, AmSdfFillParams,
+    AmSdfParams, AmSdfShapeParent, AmSdfStrokeParams, RetimeMode,
+    DEBUG_NEGATIVE_HEIGHT_SCALE,
 };
 
 // Re-export systems

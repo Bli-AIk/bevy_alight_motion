@@ -256,6 +256,7 @@ pub(crate) fn spawn_image(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                retime: config.retime.clone(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -541,6 +542,7 @@ pub(crate) fn spawn_text(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            retime: config.retime.clone(),
         },
         transform,
         GlobalTransform::default(),
