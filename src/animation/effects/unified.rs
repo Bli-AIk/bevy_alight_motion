@@ -69,7 +69,7 @@ pub fn animate_unified_effect_system(
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
-    embed_gt_query: Query<&GlobalTransform>,
+    _embed_gt_query: Query<&GlobalTransform>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {

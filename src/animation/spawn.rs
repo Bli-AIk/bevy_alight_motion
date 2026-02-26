@@ -448,7 +448,7 @@ fn spawn_layer_entity(
     let animated = &layer.animated;
 
     // Calculate local time for animation interpolation
-    let mut local_time = animated.calc_local_time(global_time);
+    let local_time = animated.calc_local_time(global_time);
 
     bevy::log::trace!(
         "[SpawnTime] '{}' global_time={:.1}, local_time={:.1}, start_time={}, end_time={}, time_offset={:.1}, speed={:.2}",
@@ -1018,11 +1018,10 @@ fn spawn_layer_entity(
                 let mut max_s = initial_scale.0.abs().max(initial_scale.1.abs());
                 for kf in &layer.animated.scale.keyframes {
                     let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2 {
-                        if let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
-                        {
-                            max_s = max_s.max(sx.abs()).max(sy.abs());
-                        }
+                    if parts.len() >= 2
+                        && let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
+                    {
+                        max_s = max_s.max(sx.abs()).max(sy.abs());
                     }
                 }
                 // Also account for max animated size relative to initial size
@@ -1035,10 +1034,10 @@ fn spawn_layer_entity(
                 let mut max_size_ratio = 1.0f32;
                 for kf in &layer.animated.size.keyframes {
                     let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2 {
-                        if let (Ok(w), Ok(h)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
-                            max_size_ratio = max_size_ratio.max((w / 2.0).max(h / 2.0) / base_half);
-                        }
+                    if parts.len() >= 2
+                        && let (Ok(w), Ok(h)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
+                    {
+                        max_size_ratio = max_size_ratio.max((w / 2.0).max(h / 2.0) / base_half);
                     }
                 }
                 // Account for border/stroke expansion in mesh sizing

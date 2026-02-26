@@ -852,23 +852,23 @@ pub(crate) fn collect_embed_scene(
     // the group pixelation on the composited FBO doesn't change already-uniform cells.
     // We keep the child's own size rather than multiplying, which is more accurate for aligned grids.
     let embed_pixelate = extract_pixelate_effect(&embed.effects);
-    if let Some(embed_pix_size) = embed_pixelate.size.value {
-        if embed_pix_size > 1.0 {
-            for child in &mut children {
-                if child.animated.pixelate_size.value.is_some() {
-                    // Child already has pixelate: keep child's own size.
-                    // When both grids share the same origin (common for centered shapes),
-                    // the group re-pixelation on aligned uniform cells is a no-op.
-                } else if child.animated.pixelate_size.keyframes.is_empty() {
-                    // Child has no pixelate: apply embed's pixelate directly
-                    child.animated.pixelate_size = embed_pixelate.size.clone();
-                    child.animated.pixelate_stretch = embed_pixelate.stretch.clone();
-                    child.animated.pixelate_angle = embed_pixelate.angle.clone();
-                    child.animated.pixelate_vignette = embed_pixelate.vignette.clone();
-                    child.animated.pixelate_threshold = embed_pixelate.threshold.clone();
-                    child.animated.pixelate_saturation = embed_pixelate.saturation.clone();
-                    child.animated.pixelate_screen_space = embed_pixelate.screen_space;
-                }
+    if let Some(embed_pix_size) = embed_pixelate.size.value
+        && embed_pix_size > 1.0
+    {
+        for child in &mut children {
+            if child.animated.pixelate_size.value.is_some() {
+                // Child already has pixelate: keep child's own size.
+                // When both grids share the same origin (common for centered shapes),
+                // the group re-pixelation on aligned uniform cells is a no-op.
+            } else if child.animated.pixelate_size.keyframes.is_empty() {
+                // Child has no pixelate: apply embed's pixelate directly
+                child.animated.pixelate_size = embed_pixelate.size.clone();
+                child.animated.pixelate_stretch = embed_pixelate.stretch.clone();
+                child.animated.pixelate_angle = embed_pixelate.angle.clone();
+                child.animated.pixelate_vignette = embed_pixelate.vignette.clone();
+                child.animated.pixelate_threshold = embed_pixelate.threshold.clone();
+                child.animated.pixelate_saturation = embed_pixelate.saturation.clone();
+                child.animated.pixelate_screen_space = embed_pixelate.screen_space;
             }
         }
     }
