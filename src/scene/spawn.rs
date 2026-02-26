@@ -12,12 +12,13 @@ use std::collections::HashMap;
 use crate::animation::AmAnimated;
 use crate::effects::NeedsStrategyEvaluation;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmLayer, AmScene, AmShape};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmLayer, AmScene};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;
 use super::effects::*;
 use super::helpers::*;
+use super::spawn_shape::spawn_shape;
 use super::spawn_visual::{spawn_image, spawn_text};
 
 #[allow(clippy::too_many_arguments)]
@@ -56,6 +57,8 @@ pub fn spawn_scene(
     };
 
     // First pass: create all entities and collect parent relationships
+    // Also track previous layer for path-repeat linking
+    let mut prev_layer_info: Option<(Entity, u64, String)> = None; // (entity, layer_id, shape_type)
     for (idx, layer) in scene.layers.iter().enumerate() {
         // Simple sequential z allocation
         let z = z_base + idx as f32 * config.z_spacing;
@@ -98,6 +101,34 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                // Link path-repeat to previous layer
+                let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
+                eprintln!(
+                    "[Spawn] shape {}: effects_count={}, has_path_repeat={}, prev_layer={:?}",
+                    shape.id,
+                    shape.effects.len(),
+                    path_repeat_effect.has_effect(),
+                    prev_layer_info.as_ref().map(|(e, id, _)| (*e, *id))
+                );
+                if path_repeat_effect.has_effect()
+                    && let Some((prev_entity, prev_id, ref prev_shape)) = prev_layer_info
+                {
+                    bevy::log::warn!(
+                        "[Spawn] Inserting AmPathRepeat on entity {:?}, source={:?}",
+                        entity,
+                        prev_entity
+                    );
+                    commands
+                        .entity(entity)
+                        .insert(crate::animation::AmPathRepeat {
+                            source_entity: prev_entity,
+                            copy_entities: Vec::new(),
+                            source_shape_type: prev_shape.clone(),
+                            source_layer_id: prev_id,
+                            source_animated: Default::default(),
+                        });
+                }
+                prev_layer_info = Some((entity, shape.id, shape.shape_type.clone()));
             }
             AmLayer::Nullobj(null) => {
                 let entity = spawn_null(commands, null, config, z);
@@ -107,6 +138,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, null.id, String::new()));
             }
             AmLayer::EmbedScene(embed) => {
                 let entity = spawn_embed_scene(
@@ -127,6 +159,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, embed.id, String::new()));
             }
             AmLayer::Bookmark(_) => {
                 // Bookmarks are non-visual timeline markers, skip them
@@ -139,6 +172,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, text.id, String::new()));
             }
             AmLayer::Audio(audio) => {
                 // TODO: Audio playback is not yet implemented, skip for now
@@ -164,6 +198,7 @@ pub fn spawn_scene(
                 } else {
                     commands.entity(parent).add_child(entity);
                 }
+                prev_layer_info = Some((entity, image.id, String::new()));
             }
             AmLayer::Video(video) => {
                 // TODO: Video playback is not yet implemented, skip for now
@@ -189,298 +224,6 @@ pub fn spawn_scene(
     entity_map
 }
 
-/// Spawn a shape layer (lazy - visual components spawned later by lifecycle system).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_shape(
-    commands: &mut Commands,
-    _shaders: &mut Assets<Shader>,
-    shape: &AmShape,
-    _images: &HashMap<String, Handle<Image>>,
-    _white_pixel: &Handle<Image>,
-    _sdf_shaders: &AmSdfShaders,
-    config: &AmSceneConfig,
-    z: f32,
-) -> Entity {
-    // Get initial transform values - use local coords if has parent
-    let has_parent = shape.parent != 0;
-    let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
-    let rotation = get_initial_rotation(&shape.transform.rotation);
-    let (sx, sy) = get_initial_scale(&shape.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&shape.effects);
-    let wipe_effect = extract_wipe_effect(&shape.effects);
-    let stretch_segment = extract_stretch_segment_effect(&shape.effects);
-    let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
-    let scale_assist = extract_scale_assist_effect(&shape.effects);
-    let repeat_effect = extract_repeat_effect(&shape.effects);
-    let linear_repeat_effect = extract_linear_repeat_effect(&shape.effects);
-    let swing_effect = extract_swing_effect(&shape.effects);
-    let threshold_effect = extract_threshold_effect(&shape.effects);
-    let grid_effect = extract_grid_effect(&shape.effects);
-    let pixelate_effect = extract_pixelate_effect(&shape.effects);
-    let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
-
-    // Get size from properties
-    let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
-
-    // AM location points to object CENTER, not pivot. No position compensation needed.
-    // Pivot only affects rotation/scale center, which is handled by Anchor.
-    bevy::log::trace!(
-        "Registering shape '{}' (id={}, parent={}): pos=({:.1},{:.1}), z={:.1}, scale=({:.2},{:.2}), size=({:.0},{:.0}), pivot=({:.1},{:.1}), fill={}, image={}",
-        shape.label,
-        shape.id,
-        shape.parent,
-        tx,
-        ty,
-        z,
-        sx,
-        sy,
-        width,
-        height,
-        pivot_x,
-        pivot_y,
-        shape.fill_type,
-        shape.fill_image
-    );
-
-    // Create entity name for inspector identification
-    let entity_name = format!("Shape[{}]: {}", shape.id, shape.label);
-
-    // Check if this is a stroked shape that needs SDF rendering
-    // Also use SDF for circles (better quality than sprite rect)
-    // fillType="none" also needs SDF for stroke-only rendering (no fill)
-    let needs_sdf = (shape.fill_type == "color" || shape.fill_type == "none")
-        && (shape.shape_type == ".circle"
-            || shape.stroke.as_ref().is_some_and(|s| {
-                // Check if stroke has a size > 0 (either via <size> element or @end-size attribute)
-                s.size
-                    .as_ref()
-                    .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-                    || s.end_size > 0.0
-            }));
-
-    // Calculate anchor and position compensation for non-SDF shapes
-    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
-
-    // For SpriteShape, we need to compensate position when anchor is not CENTER
-    // because Bevy draws sprite with anchor point at translation position
-    // For SDF shapes, parent should be at pivot point (for rotation/scale around pivot)
-    let (final_tx, final_ty) = if needs_sdf {
-        // SDF parent is at pivot point: AM center + pivot offset (with Y flip)
-        (tx + pivot_x, ty - pivot_y)
-    } else {
-        // SpriteShape: compensate position so center stays at AM location
-        (tx + comp_x, ty + comp_y)
-    };
-
-    let transform = Transform {
-        translation: Vec3::new(final_tx, final_ty, z),
-        rotation: Quat::from_rotation_z(rotation.to_radians()),
-        scale: Vec3::new(sx, sy, 1.0),
-    };
-
-    // Create the layer spec for lazy spawning
-    let layer_spec = if needs_sdf {
-        let default_stroke = crate::schema::AmStroke::default();
-        let stroke = shape.stroke.as_ref().unwrap_or(&default_stroke);
-        // Get initial stroke width: first check <size> element, then fall back to @end-size attribute
-        let stroke_width = stroke
-            .size
-            .as_ref()
-            .and_then(|s| {
-                // Prefer static value, fall back to first keyframe value
-                s.value
-                    .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
-            })
-            .unwrap_or({
-                // Fall back to @end-size attribute if no <size> element
-                // Note: end-size appears to use a different scale than <size> element
-                // AM shows stroke=2.0 as minimum visible, suggesting end-size needs scaling
-                // Scale by ~20x to match <size> element behavior
-                if stroke.end_size > 0.0 {
-                    stroke.end_size * 1.5
-                } else {
-                    0.0
-                }
-            });
-        let stroke_color_value = stroke
-            .color
-            .as_ref()
-            .map(|c| c.value.clone())
-            .unwrap_or_default();
-
-        // Track whether this is a "no fill" shape (fillType="none")
-        // This is different from having no fillColor value (defaults to white)
-        let no_fill = shape.fill_type == "none";
-
-        AmLayerSpec::SdfShape {
-            fill_color: shape.fill_color.clone(),
-            stroke_color_value,
-            stroke_width,
-            stroke_join: stroke.join.clone(),
-            width,
-            height,
-            pivot_x,
-            pivot_y,
-            shape_type: shape.shape_type.clone(),
-            no_fill,
-        }
-    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
-        AmLayerSpec::SpriteShape {
-            image_uri: shape.fill_image.clone(),
-            is_media: true,
-            fill_color: None,
-            width,
-            height,
-            anchor,
-        }
-    } else {
-        // Color fill
-        AmLayerSpec::SpriteShape {
-            image_uri: String::new(),
-            is_media: false,
-            fill_color: shape.fill_color.clone(),
-            width,
-            height,
-            anchor,
-        }
-    };
-
-    // Spawn the layer entity without visual components (they'll be added by lifecycle system)
-    // For SDF shapes, anchor_offset moves parent from center to pivot point
-    // For SpriteShape, use the computed compensation
-    let anchor_offset = if needs_sdf {
-        // SDF parent needs to be offset from center to pivot point
-        Vec2::new(pivot_x, -pivot_y)
-    } else {
-        Vec2::new(comp_x, comp_y)
-    };
-
-    let stroke_width_anim = get_stroke_width_animation(shape.stroke.as_ref());
-    let no_fill = shape.fill_type == "none";
-    let base_alpha = get_base_alpha(&shape.fill_color, no_fill);
-    let palette_map = extract_palette_map_effect(&shape.effects);
-    let replace_color = extract_replace_color_effect(&shape.effects);
-
-    let entity = commands
-        .spawn((
-            Name::new(entity_name),
-            AmLayerMarker {
-                id: shape.id,
-                label: shape.label.clone(),
-            },
-            AmAnimated {
-                layer_id: shape.id,
-                start_time: shape.start_time,
-                end_time: shape.end_time,
-                time_offset: config.time_offset,
-                lifecycle_offset: config.lifecycle_offset,
-                location: shape.transform.location.clone(),
-                pivot: shape.transform.pivot.clone(),
-                rotation: shape.transform.rotation.clone(),
-                scale: shape.transform.scale.clone(),
-                opacity: shape.transform.opacity.clone(),
-                canvas_width: config.canvas_width,
-                canvas_height: config.canvas_height,
-                has_parent,
-                effect_pos_x,
-                effect_pos_y,
-                font_y_offset: 0.0,
-                size: get_shape_size_animation(&shape.properties),
-                anchor_offset,
-                wipe_start: wipe_effect.start,
-                wipe_end: wipe_effect.end,
-                wipe_angle: wipe_effect.angle,
-                wipe_feather: wipe_effect.feather,
-                stretch_angle: stretch_segment.angle,
-                stretch_amount: stretch_segment.stretch,
-                stretch_offset: stretch_segment.offset,
-                stretch_smooth: stretch_segment.smooth,
-                blur_strength: gaussian_blur.strength,
-                speed_multiplier: config.speed_multiplier,
-                embed_offset: Vec2::ZERO,
-                inv_fit_scale: 1.0,
-                stroke_width: stroke_width_anim,
-                base_alpha,
-                palette_alpha: palette_map.alpha.clone(),
-                scale_assist: scale_assist.scale,
-                scale_assist_damp: scale_assist.damp,
-                scale_assist_axis: scale_assist.axis,
-                replace_old_color: replace_color.old_color,
-                replace_new_color: replace_color.new_color,
-                replace_threshold: replace_color.threshold,
-                replace_feather: replace_color.feather,
-                replace_alpha: replace_color.alpha,
-                replace_lock_luminance: replace_color.lock_luminance,
-                repeat_count: repeat_effect.count,
-                repeat_offset: repeat_effect.offset,
-                repeat_angle: repeat_effect.angle,
-                repeat_scale: repeat_effect.scale,
-                repeat_alpha: repeat_effect.alpha,
-                // Linear repeat effect
-                linear_repeat_count: linear_repeat_effect.count,
-                linear_repeat_position: linear_repeat_effect.position,
-                linear_repeat_offset: linear_repeat_effect.offset,
-                linear_repeat_angle: linear_repeat_effect.angle,
-                linear_repeat_scale: linear_repeat_effect.scale,
-                linear_repeat_alpha: linear_repeat_effect.alpha,
-                linear_repeat_fill_color: linear_repeat_effect.fill_color,
-                linear_repeat_blend: linear_repeat_effect.blend,
-                linear_repeat_color_alt_copies: linear_repeat_effect.color_alt_copies,
-                linear_repeat_start: linear_repeat_effect.start,
-                linear_repeat_end: linear_repeat_effect.end,
-                linear_repeat_phase: linear_repeat_effect.phase,
-                linear_repeat_ease_in: linear_repeat_effect.ease_in,
-                linear_repeat_ease_out: linear_repeat_effect.ease_out,
-                linear_repeat_overlap: linear_repeat_effect.overlap,
-                linear_repeat_shape: linear_repeat_effect.shape,
-                linear_repeat_invert: linear_repeat_effect.invert,
-                // Swing effect
-                swing_freq: swing_effect.freq,
-                swing_a1: swing_effect.a1,
-                swing_a2: swing_effect.a2,
-                swing_phase: swing_effect.phase,
-                swing_type: swing_effect.swing_type,
-                // Threshold effect
-                threshold_value: threshold_effect.threshold,
-                threshold_feather: threshold_effect.feather,
-                threshold_invert: threshold_effect.invert,
-                threshold_blend_mode: threshold_effect.blend_mode,
-                // Grid effect
-                grid_position: grid_effect.position,
-                grid_spacing: grid_effect.spacing,
-                grid_width: grid_effect.width,
-                grid_color: grid_effect.color,
-                grid_punchout: grid_effect.punchout,
-                grid_smoothing: grid_effect.smoothing,
-                grid_screen_space: grid_effect.screen_space,
-                // Pixelate effect
-                pixelate_size: pixelate_effect.size,
-                pixelate_stretch: pixelate_effect.stretch,
-                pixelate_angle: pixelate_effect.angle,
-                pixelate_vignette: pixelate_effect.vignette,
-                pixelate_threshold: pixelate_effect.threshold,
-                pixelate_saturation: pixelate_effect.saturation,
-                pixelate_screen_space: pixelate_effect.screen_space,
-            },
-            layer_spec,
-            transform,
-            GlobalTransform::default(),
-            Visibility::Hidden, // Start hidden, lifecycle system will show when active
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-        ))
-        .id();
-
-    // Add palette map params if effect is present
-    if palette_map.has_effect() {
-        commands
-            .entity(entity)
-            .insert(AmPaletteMapParams::from_params(&palette_map));
-    }
-
-    entity
-}
-
 /// Spawn a null object.
 pub(crate) fn spawn_null(
     commands: &mut Commands,
@@ -492,18 +235,30 @@ pub(crate) fn spawn_null(
     let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&null.transform.rotation);
     let (sx, sy) = get_initial_scale(&null.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&null.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&null.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&null.effects);
     let stretch_segment = extract_stretch_segment_effect(&null.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
+    let stretch2_effect = extract_stretch2_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
     let repeat_effect = extract_repeat_effect(&null.effects);
-    let linear_repeat_effect = extract_linear_repeat_effect(&null.effects);
+    let (linear_repeat_effect, linear_repeat_effect2) =
+        extract_linear_repeat_effects(&null.effects);
+    let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
+    let oscillate_effect = extract_oscillate_effect(&null.effects);
+    let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
+    let solid_color_effect = extract_solid_color_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -546,8 +301,16 @@ pub(crate) fn spawn_null(
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,
                 has_parent,
-                effect_pos_x,
-                effect_pos_y,
+                parent_layer_id: null.parent,
+                effect_pos_x: transform2.pos_x,
+                effect_pos_y: transform2.pos_y,
+                effect_posz: transform2.pos_z,
+                effect_angle: transform2.angle,
+                effect_xinv: transform2.xinv,
+                effect_yinv: transform2.yinv,
+                effect_zinv: transform2.zinv,
+                effect_ainv: transform2.ainv,
+                extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
@@ -561,6 +324,8 @@ pub(crate) fn spawn_null(
                 stretch_smooth: stretch_segment.smooth,
                 blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
+                element_speed: 1.0,
+                scene_fps: config.scene_fps,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
@@ -569,6 +334,9 @@ pub(crate) fn spawn_null(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                stretch2_scale: stretch2_effect.scale,
+                stretch2_angle: stretch2_effect.angle,
+                stretch2_content_only: stretch2_effect.content_only,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -598,12 +366,48 @@ pub(crate) fn spawn_null(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                linear_repeat_random_order: linear_repeat_effect.random_order,
+                linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat2: linear_repeat_effect2.map(Box::new),
+                // Radial repeat effect
+                radial_repeat_count: radial_repeat_effect.count,
+                radial_repeat_radius: radial_repeat_effect.radius,
+                radial_repeat_orientation: radial_repeat_effect.orientation,
+                radial_repeat_start_angle: radial_repeat_effect.start_angle,
+                radial_repeat_sweep: radial_repeat_effect.sweep,
+                radial_repeat_base_scale: radial_repeat_effect.base_scale,
+                radial_repeat_offset: radial_repeat_effect.offset,
+                radial_repeat_angle: radial_repeat_effect.angle,
+                radial_repeat_scale: radial_repeat_effect.scale,
+                radial_repeat_alpha: radial_repeat_effect.alpha,
+                radial_repeat_fill_color: radial_repeat_effect.fill_color,
+                radial_repeat_blend: radial_repeat_effect.blend,
+                radial_repeat_color_alt_copies: radial_repeat_effect.color_alt_copies,
+                radial_repeat_start: radial_repeat_effect.start,
+                radial_repeat_end: radial_repeat_effect.end,
+                radial_repeat_phase: radial_repeat_effect.phase,
+                radial_repeat_ease_in: radial_repeat_effect.ease_in,
+                radial_repeat_ease_out: radial_repeat_effect.ease_out,
+                radial_repeat_overlap: radial_repeat_effect.overlap,
+                radial_repeat_shape: radial_repeat_effect.shape,
+                radial_repeat_invert: radial_repeat_effect.invert,
+                radial_repeat_random_order: radial_repeat_effect.random_order,
+                radial_repeat_seed: radial_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Oscillate effect
+                oscillate_direction: oscillate_effect.direction,
+                oscillate_angle: oscillate_effect.angle,
+                oscillate_freq: oscillate_effect.freq,
+                oscillate_mag: oscillate_effect.mag,
+                oscillate_wave_type: oscillate_effect.wave_type,
+                oscillate_phase: oscillate_effect.phase,
+                // Spin effect
+                spin_rpm,
                 // Threshold effect
                 threshold_value: threshold_effect.threshold,
                 threshold_feather: threshold_effect.feather,
@@ -625,6 +429,25 @@ pub(crate) fn spawn_null(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                solid_color: solid_color_effect.color,
+                solid_color_alpha: solid_color_effect.alpha,
+                solid_color_blend_mode: solid_color_effect.blend_mode,
+                base_fill_color: [0.0; 4],
+                path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::Null,
             transform,
@@ -676,6 +499,26 @@ pub(crate) fn spawn_embed_scene(
         config.time_offset
     );
 
+    // Extract transform2 effects from embed
+    let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
+    bevy::log::info!(
+        "[EMBED_T2] '{}' (id={}): {} effects parsed, {} transform2 extracted, primary posz kf={}",
+        embed.label,
+        embed.id,
+        embed.effects.len(),
+        all_embed_transform2.len(),
+        all_embed_transform2
+            .first()
+            .map(|t| t.pos_z.keyframes.len())
+            .unwrap_or(0)
+    );
+    let embed_transform2 = if all_embed_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_embed_transform2.remove(0)
+    };
+    let embed_extra_transform2 = all_embed_transform2;
+
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
@@ -706,8 +549,16 @@ pub(crate) fn spawn_embed_scene(
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,
                 has_parent,
-                effect_pos_x: AmAnimatedFloat::default(),
-                effect_pos_y: AmAnimatedFloat::default(),
+                parent_layer_id: embed.parent,
+                effect_pos_x: embed_transform2.pos_x,
+                effect_pos_y: embed_transform2.pos_y,
+                effect_posz: embed_transform2.pos_z,
+                effect_angle: embed_transform2.angle,
+                effect_xinv: embed_transform2.xinv,
+                effect_yinv: embed_transform2.yinv,
+                effect_zinv: embed_transform2.zinv,
+                effect_ainv: embed_transform2.ainv,
+                extra_transform2: embed_extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::ZERO,
@@ -724,6 +575,8 @@ pub(crate) fn spawn_embed_scene(
                 stretch_smooth: AmAnimatedFloat::default(),
                 blur_strength: AmAnimatedFloat::default(),
                 speed_multiplier: config.speed_multiplier,
+                element_speed: 1.0,
+                scene_fps: config.scene_fps,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
@@ -732,6 +585,9 @@ pub(crate) fn spawn_embed_scene(
                 scale_assist: AmAnimatedFloat::default(),
                 scale_assist_damp: AmAnimatedFloat::default(),
                 scale_assist_axis: 0,
+                stretch2_scale: AmAnimatedFloat::default(),
+                stretch2_angle: AmAnimatedFloat::default(),
+                stretch2_content_only: false,
                 replace_old_color: Vec4::ZERO,
                 replace_new_color: crate::schema::AmAnimatedColor::default(),
                 replace_threshold: AmAnimatedFloat::default(),
@@ -764,12 +620,51 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_overlap: AmAnimatedFloat::default(),
                 linear_repeat_shape: 0,
                 linear_repeat_invert: false,
+                linear_repeat_random_order: false,
+                linear_repeat_seed: AmAnimatedFloat::default(),
+                linear_repeat2: None,
+                // Radial repeat effect (defaults for embed scene)
+                radial_repeat_count: AmAnimatedFloat::default(),
+                radial_repeat_radius: AmAnimatedFloat::default(),
+                radial_repeat_orientation: AmAnimatedFloat::default(),
+                radial_repeat_start_angle: AmAnimatedFloat::default(),
+                radial_repeat_sweep: AmAnimatedFloat::default(),
+                radial_repeat_base_scale: AmAnimatedFloat::default(),
+                radial_repeat_offset: AmAnimatedVec2::default(),
+                radial_repeat_angle: AmAnimatedFloat::default(),
+                radial_repeat_scale: AmAnimatedFloat::default(),
+                radial_repeat_alpha: AmAnimatedFloat::default(),
+                radial_repeat_fill_color: crate::schema::AmAnimatedColor::default(),
+                radial_repeat_blend: AmAnimatedFloat::default(),
+                radial_repeat_color_alt_copies: false,
+                radial_repeat_start: AmAnimatedFloat::default(),
+                radial_repeat_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    ..Default::default()
+                },
+                radial_repeat_phase: AmAnimatedFloat::default(),
+                radial_repeat_ease_in: AmAnimatedFloat::default(),
+                radial_repeat_ease_out: AmAnimatedFloat::default(),
+                radial_repeat_overlap: AmAnimatedFloat::default(),
+                radial_repeat_shape: 0,
+                radial_repeat_invert: false,
+                radial_repeat_random_order: false,
+                radial_repeat_seed: 0.0,
                 // Swing effect (defaults for embed scene)
                 swing_freq: AmAnimatedFloat::default(),
                 swing_a1: AmAnimatedFloat::default(),
                 swing_a2: AmAnimatedFloat::default(),
                 swing_phase: AmAnimatedFloat::default(),
                 swing_type: 0,
+                // Oscillate effect (defaults for embed scene)
+                oscillate_direction: 0,
+                oscillate_angle: AmAnimatedFloat::default(),
+                oscillate_freq: AmAnimatedFloat::default(),
+                oscillate_mag: AmAnimatedFloat::default(),
+                oscillate_wave_type: 0,
+                oscillate_phase: AmAnimatedFloat::default(),
+                // Spin effect (defaults for embed scene)
+                spin_rpm: AmAnimatedFloat::default(),
                 // Threshold effect (defaults for embed scene)
                 threshold_value: AmAnimatedFloat::default(),
                 threshold_feather: AmAnimatedFloat::default(),
@@ -791,6 +686,25 @@ pub(crate) fn spawn_embed_scene(
                 pixelate_threshold: AmAnimatedFloat::default(),
                 pixelate_saturation: AmAnimatedFloat::default(),
                 pixelate_screen_space: false,
+                solid_color: Default::default(),
+                solid_color_alpha: Default::default(),
+                solid_color_blend_mode: 0,
+                base_fill_color: [0.0; 4],
+                path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)
@@ -854,6 +768,7 @@ pub(crate) fn spawn_embed_scene(
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: effective_speed,
+        scene_fps: embed.scene.fps as f32,
         ..config.clone()
     };
 
@@ -924,4 +839,38 @@ pub(crate) fn calculate_pivot_compensation(
     };
 
     (comp_x, comp_y)
+}
+
+/// Extract gradient data from an AmGradient into uniform-ready values.
+/// Returns (gradient_type, start_color, end_color, points).
+pub(crate) fn extract_gradient_data(
+    gradient: &Option<crate::schema::AmGradient>,
+) -> (u8, bevy::math::Vec4, bevy::math::Vec4, bevy::math::Vec4) {
+    use bevy::math::Vec4;
+    if let Some(g) = gradient {
+        let grad_type = match g.gradient_type.as_str() {
+            "linear" => 1u8,
+            "radial" => 2u8,
+            "sweep" => 3u8,
+            _ => 0u8,
+        };
+        if grad_type == 0 {
+            return (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO);
+        }
+        let start_color = crate::schema::parse_color(&g.start_color)
+            .map(|c| {
+                // Store in sRGB space for sRGB-space interpolation (matching AM's NanoVG)
+                Vec4::new(c[0], c[1], c[2], c[3])
+            })
+            .unwrap_or(Vec4::ZERO);
+        let end_color = crate::schema::parse_color(&g.end_color)
+            .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+            .unwrap_or(Vec4::ZERO);
+        let start_pt = g.start.unwrap_or([0.0, 0.0]);
+        let end_pt = g.end.unwrap_or([1.0, 1.0]);
+        let points = Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]);
+        (grad_type, start_color, end_color, points)
+    } else {
+        (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO)
+    }
 }

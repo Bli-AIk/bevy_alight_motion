@@ -1,7 +1,7 @@
 # Circle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-18 10:29:09
+> Last tested: 2026-02-23 18:55:44
 
 Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipses.
 
@@ -23,9 +23,6 @@ Basic circle shape using SDF rendering. Supports non-uniform scaling for ellipse
 <shape id="1" label="圆形 1" startTime="0" endTime="1000" fillType="color" s=".circle">
     <transform>
         <location value="640.0,480.0,0.0" />
-        <rotation value="0.0" />
-        <scale value="1.0,1.0" />
-        <opacity value="1.0" />
     </transform>
     <property name="size" type="vec2" value="100.0,100.0" />
     <fillColor value="#ff00ff00" />

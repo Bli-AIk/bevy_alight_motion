@@ -435,16 +435,27 @@ mod tests {
 
     #[test]
     fn test_scan_effects() {
-        let path = Path::new("src/scene/effects.rs");
-        if path.exists() {
-            let results = scan_effects_rs(path).unwrap();
-            assert!(!results.is_empty());
+        // effects.rs was refactored into a directory with sub-files
+        let effect_files = [
+            "src/scene/effects/common.rs",
+            "src/scene/effects/other.rs",
+            "src/scene/effects/repeat.rs",
+        ];
 
-            // 验证 transform2 效果 / Verify transform2 effect
-            if let Some(transform2) = results.get("com.alightcreative.effects.transform2") {
-                assert!(transform2.implemented_fields.contains(&"posx".to_string()));
-                assert!(transform2.implemented_fields.contains(&"posy".to_string()));
+        let mut all_results: HashMap<String, EffectImpl> = HashMap::new();
+        for file in &effect_files {
+            let path = Path::new(file);
+            if path.exists() {
+                let results = scan_effects_rs(path).unwrap();
+                all_results.extend(results);
             }
+        }
+        assert!(!all_results.is_empty());
+
+        // 验证 transform2 效果 / Verify transform2 effect
+        if let Some(transform2) = all_results.get("com.alightcreative.effects.transform2") {
+            assert!(transform2.implemented_fields.contains(&"posx".to_string()));
+            assert!(transform2.implemented_fields.contains(&"posy".to_string()));
         }
     }
 }

@@ -260,13 +260,20 @@ pub struct ComparisonResult {
 }
 
 /// Compare two images and return detailed similarity metrics and a diff image.
+///
+/// `img1` = rendered shot (sRGB), `img2` = reference from video.
+///
+/// **Dark-pixel compression tolerance**: H.264/H.265 quantization is very
+/// aggressive at low luminance (especially for blue, which has only 7.2%
+/// weight in the BT.709 luma formula, and chroma is subsampled 4:2:0).
+/// A per-pixel tolerance proportional to darkness is subtracted from the
+/// diff before accumulation, preventing compression artifacts in dark areas
+/// from penalising the content similarity score.
 #[cfg(feature = "video-comparison")]
 pub fn compare_images(
     img1: &image::RgbaImage,
     img2: &image::RgbaImage,
 ) -> (ComparisonResult, image::RgbaImage) {
-    use image::Pixel;
-
     let width = img1.width().min(img2.width());
     let height = img1.height().min(img2.height());
 
@@ -275,38 +282,41 @@ pub fn compare_images(
     let mut total_diff_global: u64 = 0;
     let mut total_max_global: u64 = 0;
 
-    let mut total_diff_content: u64 = 0;
-    let mut total_max_content: u64 = 0;
+    // Use f64 accumulators for content similarity (tolerance is fractional)
+    let mut total_diff_content: f64 = 0.0;
+    let mut total_max_content: f64 = 0.0;
 
     let mut matching_pixels: u64 = 0;
     let mut differing_pixels: u64 = 0;
 
     // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
-    // Small noise tolerance (e.g., compression artifacts)
     const MATCH_THRESHOLD: u64 = 10;
+
+    // Dark-pixel compression tolerance parameters.
+    // Pixels with perceptual luminance below DARK_LUM_CUTOFF get a tolerance
+    // that linearly increases as luminance decreases, up to MAX_TOLERANCE.
+    const DARK_LUM_CUTOFF: f64 = 40.0;
+    const MAX_COMPRESSION_TOLERANCE: f64 = 60.0;
 
     // Helper function to check if a pixel is "empty" (transparent or black)
     let is_empty =
         |p: &image::Rgba<u8>| -> bool { p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0) };
 
     // Helper function to check if a pixel is on the edge of content
-    // (has at least one empty neighbor within 2-pixel radius)
-    // Extended radius helps handle small position offsets between images
+    // (has at least one empty neighbor within 3-pixel Manhattan radius)
     let is_edge_pixel = |img: &image::RgbaImage, x: u32, y: u32| -> bool {
         let p = img.get_pixel(x, y);
         if is_empty(p) {
-            return false; // Empty pixels are not edges
+            return false;
         }
-        // Check neighbors within 2-pixel radius (Manhattan distance)
         let w = img.width();
         let h = img.height();
-        for dx in -2i32..=2 {
-            for dy in -2i32..=2 {
+        for dx in -3i32..=3 {
+            for dy in -3i32..=3 {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
-                // Only check within Manhattan distance 2
-                if dx.abs() + dy.abs() > 2 {
+                if dx.abs() + dy.abs() > 3 {
                     continue;
                 }
                 let nx = x as i32 + dx;
@@ -337,21 +347,34 @@ pub fn compare_images(
             total_diff_global += pixel_diff;
             total_max_global += 255 * 4;
 
-            // Check if pixel is on edge in either image (ignore edge pixels for content comparison)
             let p1_edge = is_edge_pixel(img1, x, y);
             let p2_edge = is_edge_pixel(img2, x, y);
             let is_edge = p1_edge || p2_edge;
 
-            // Check if pixel is "empty"
             let p1_empty = is_empty(p1);
             let p2_empty = is_empty(p2);
 
             let is_content = !p1_empty || !p2_empty;
 
-            // Only count non-edge content pixels for content similarity
+            // Content similarity with dark-pixel compression tolerance
             if is_content && !is_edge {
-                total_diff_content += pixel_diff;
-                total_max_content += 255 * 4;
+                // Perceptual luminance (BT.709/sRGB coefficients)
+                let lum1 = 0.2126 * p1[0] as f64 + 0.7152 * p1[1] as f64 + 0.0722 * p1[2] as f64;
+                let lum2 = 0.2126 * p2[0] as f64 + 0.7152 * p2[1] as f64 + 0.0722 * p2[2] as f64;
+                let max_lum = lum1.max(lum2);
+
+                // Video codecs quantize dark areas aggressively (especially
+                // chroma at 4:2:0 subsampling), so we forgive noise proportional
+                // to darkness.
+                let tolerance = if max_lum < DARK_LUM_CUTOFF {
+                    MAX_COMPRESSION_TOLERANCE * (1.0 - max_lum / DARK_LUM_CUTOFF)
+                } else {
+                    0.0
+                };
+
+                let effective_diff = (pixel_diff as f64 - tolerance).max(0.0);
+                total_diff_content += effective_diff;
+                total_max_content += 1020.0;
             }
 
             // Match rate (still count all pixels)
@@ -363,16 +386,13 @@ pub fn compare_images(
 
             // Generate diff pixel (emphasize difference)
             if pixel_diff > MATCH_THRESHOLD {
-                // Red scale based on diff (lighter for edge pixels)
                 let intensity = (pixel_diff.min(255) as u8).max(50);
                 if is_edge {
-                    // Lighter red for edge pixels
                     diff_image.put_pixel(x, y, image::Rgba([intensity / 2, 0, 0, 128]));
                 } else {
                     diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
                 }
             } else {
-                // Transparent
                 diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
             }
         }
@@ -384,10 +404,9 @@ pub fn compare_images(
         1.0
     };
 
-    let content_similarity = if total_max_content > 0 {
+    let content_similarity = if total_max_content > 0.0 {
         1.0 - (total_diff_content as f32 / total_max_content as f32)
     } else {
-        // If both images are completely empty, they are identical
         1.0
     };
 

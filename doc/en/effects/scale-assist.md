@@ -1,7 +1,7 @@
 # Scale Assist
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-18 10:29:09
+> Last tested: 2026-02-23 18:55:44
 
 Automatically adjusts layer size to fit the canvas based on the selected axis.
 

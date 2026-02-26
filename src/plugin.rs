@@ -25,11 +25,12 @@ use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback_system, animate_opacity_system, animate_rtt_blur_system,
-    animate_sdf_opacity_system, animate_sdf_scale_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, animate_unified_effect_system,
-    apply_mask_clipping_system, manage_layer_lifecycle_system, update_sdf_mask_system,
-    update_unified_mask_system,
+    AmPlayback, advance_playback_system, animate_am_camera_system, animate_opacity_system,
+    animate_path_repeat_system, animate_rtt_blur_system, animate_sdf_opacity_system,
+    animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
+    animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
+    animate_unified_effect_system, apply_mask_clipping_system, fix_rtl_line_alignment_system,
+    manage_layer_lifecycle_system, update_sdf_mask_system, update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -84,6 +85,7 @@ impl Plugin for AlightMotionPlugin {
             // Note: AmEntitySpawned uses EntityEvent derive, no need for add_event registration
             // 用户可以通过 commands.add_observer() 或 app.add_observer() 来监听事件
             .add_systems(Startup, setup_white_pixel_system)
+            .add_systems(Startup, load_system_fonts_for_fallback)
             .add_systems(
                 Update,
                 (
@@ -108,12 +110,17 @@ impl Plugin for AlightMotionPlugin {
                 Update,
                 (
                     animate_transform_system,
-                    animate_size_system, // Update size from size property animation
+                    animate_am_camera_system, // Animate Bevy camera from AM camera layer
+                    animate_size_system,      // Update size from size property animation
                     animate_sdf_scale_system, // Update SDF dimensions based on scale animation
                     animate_opacity_system,
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
+                    fix_rtl_line_alignment_system, // Fix RTL line alignment before spacing
+                    animate_text_spacing_system,   // Text spacing post-layout modification
+                    animate_text_progress_system,  // Text progress visibility
                     animate_unified_effect_system, // Unified effect system (RTT-ready)
+                    animate_path_repeat_system,    // Path repeat copy positioning
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers
                     hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
@@ -154,6 +161,22 @@ fn setup_white_pixel_system(mut commands: Commands, mut images: ResMut<Assets<Im
 
     let handle = images.add(white_pixel);
     commands.insert_resource(AmWhitePixel(handle));
+}
+
+/// Load system fonts into the CosmicFontSystem for font fallback.
+/// This enables rendering of CJK, Arabic, Hindi, and other scripts
+/// even when the primary font doesn't have those glyphs.
+#[cfg(not(target_arch = "wasm32"))]
+fn load_system_fonts_for_fallback(mut font_system: ResMut<bevy::text::CosmicFontSystem>) {
+    // Load system fonts from common directories
+    font_system.0.db_mut().load_system_fonts();
+    let count = font_system.0.db().faces().count();
+    bevy::log::info!("Loaded {} system font faces for fallback", count);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_system_fonts_for_fallback() {
+    // No system fonts on WASM
 }
 
 /// System to collect pending layers when a project finishes loading.
@@ -250,6 +273,7 @@ fn spawn_loaded_projects_system(
             let config = AmSceneConfig {
                 canvas_width: project.scene.width as f32,
                 canvas_height: project.scene.height as f32,
+                scene_fps: project.scene.fps as f32,
                 ..Default::default()
             };
 

@@ -10,6 +10,7 @@
 
 use bevy::prelude::*;
 
+use crate::scene::effects::PathRepeatParams;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
 /// DEBUG: 拉伸效果乘数，用于调试编组内图片的拉伸计算
@@ -29,7 +30,7 @@ pub const DEBUG_NEGATIVE_HEIGHT_SCALE: f32 = 1.05;
 /// Component marking an entity as part of an AM animation.
 ///
 /// 标记实体为 AM 动画一部分的组件。
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Default)]
 pub struct AmAnimated {
     /// Unique layer ID from AM.
     ///
@@ -64,10 +65,26 @@ pub struct AmAnimated {
     pub canvas_height: f32,
     /// Whether this layer has a parent (uses local coordinates).
     pub has_parent: bool,
+    /// Parent layer's ID (0 if no parent). Used for AM-style transform computation.
+    pub parent_layer_id: u64,
     /// Effect position X offset (from transform2 effect).
     pub effect_pos_x: AmAnimatedFloat,
     /// Effect position Y offset (from transform2 effect).
     pub effect_pos_y: AmAnimatedFloat,
+    /// Effect scale (from transform2 posz, default 1.0).
+    pub effect_posz: AmAnimatedFloat,
+    /// Effect rotation angle in degrees (from transform2 angle).
+    pub effect_angle: AmAnimatedFloat,
+    /// Transform2 X inversion flag.
+    pub effect_xinv: bool,
+    /// Transform2 Y inversion flag.
+    pub effect_yinv: bool,
+    /// Transform2 Z (scale) inversion flag.
+    pub effect_zinv: bool,
+    /// Transform2 angle inversion flag.
+    pub effect_ainv: bool,
+    /// Additional stacked transform2 effects (beyond the first).
+    pub extra_transform2: Vec<crate::scene::effects::Transform2Params>,
     /// Font Y offset for text layers (to compensate for different font metrics).
     pub font_y_offset: f32,
     /// Size animation data (for shapes). AM size is half-extents, stored as full dimensions.
@@ -96,6 +113,12 @@ pub struct AmAnimated {
     /// Speed multiplier from parent embed scenes.
     /// Local time = (global_time - time_offset) * speed_multiplier
     pub speed_multiplier: f32,
+    /// Element-level speed (from shape/nullobj `speed` attribute, default 1.0).
+    /// Affects keyframe interpolation rate: layer_time = raw_layer_time * element_speed.
+    /// Does NOT affect visibility timing (start/end).
+    pub element_speed: f32,
+    /// Scene FPS for timing calculations (from the scene's fps attribute).
+    pub scene_fps: f32,
     /// Embed parent offset (Bevy coords) for coordinate adjustment.
     /// When this layer is a child of an embed scene, this stores the embed's
     /// Bevy position so the animation system can compensate for it.
@@ -117,6 +140,12 @@ pub struct AmAnimated {
     pub scale_assist_damp: AmAnimatedFloat,
     /// Scale assist effect axis (1=X, 2=Y, 3=XY).
     pub scale_assist_axis: i32,
+    /// Stretch2 effect scale (animated).
+    pub stretch2_scale: AmAnimatedFloat,
+    /// Stretch2 effect angle in degrees (animated).
+    pub stretch2_angle: AmAnimatedFloat,
+    /// Stretch2 contentOnly flag.
+    pub stretch2_content_only: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)
@@ -174,6 +203,49 @@ pub struct AmAnimated {
     pub linear_repeat_shape: i32,
     /// Linear repeat effect: invert flag
     pub linear_repeat_invert: bool,
+    /// Linear repeat effect: random order flag
+    pub linear_repeat_random_order: bool,
+    /// Linear repeat effect: random seed
+    pub linear_repeat_seed: AmAnimatedFloat,
+    /// Second linear repeat effect (for stacked/dual effects)
+    pub linear_repeat2: Option<Box<crate::scene::effects::LinearRepeatParams>>,
+    // Radial Repeat effect (com.alightcreative.effects.repeat.radial)
+    pub radial_repeat_count: AmAnimatedFloat,
+    pub radial_repeat_radius: AmAnimatedFloat,
+    pub radial_repeat_orientation: AmAnimatedFloat,
+    pub radial_repeat_start_angle: AmAnimatedFloat,
+    pub radial_repeat_sweep: AmAnimatedFloat,
+    pub radial_repeat_base_scale: AmAnimatedFloat,
+    pub radial_repeat_offset: AmAnimatedVec2,
+    pub radial_repeat_angle: AmAnimatedFloat,
+    pub radial_repeat_scale: AmAnimatedFloat,
+    pub radial_repeat_alpha: AmAnimatedFloat,
+    pub radial_repeat_fill_color: crate::schema::AmAnimatedColor,
+    pub radial_repeat_blend: AmAnimatedFloat,
+    pub radial_repeat_color_alt_copies: bool,
+    pub radial_repeat_start: AmAnimatedFloat,
+    pub radial_repeat_end: AmAnimatedFloat,
+    pub radial_repeat_phase: AmAnimatedFloat,
+    pub radial_repeat_ease_in: AmAnimatedFloat,
+    pub radial_repeat_ease_out: AmAnimatedFloat,
+    pub radial_repeat_overlap: AmAnimatedFloat,
+    pub radial_repeat_shape: i32,
+    pub radial_repeat_invert: bool,
+    pub radial_repeat_random_order: bool,
+    pub radial_repeat_seed: f32,
+    // Oscillate effect (com.alightcreative.effects.oscillate3)
+    /// Oscillate effect: direction mode (0=angle, 1=depth/z, 2=orbit)
+    pub oscillate_direction: i32,
+    /// Oscillate effect: movement angle (degrees)
+    pub oscillate_angle: AmAnimatedFloat,
+    /// Oscillate effect: frequency (Hz)
+    pub oscillate_freq: AmAnimatedFloat,
+    /// Oscillate effect: magnitude (pixels)
+    pub oscillate_mag: AmAnimatedFloat,
+    /// Oscillate effect: wave type (0=sine, 1=triangle)
+    pub oscillate_wave_type: i32,
+    /// Oscillate effect: phase offset
+    pub oscillate_phase: AmAnimatedFloat,
     // Swing effect (com.alightcreative.effects.swing2)
     /// Swing effect: oscillation frequency (per second)
     pub swing_freq: AmAnimatedFloat,
@@ -185,6 +257,9 @@ pub struct AmAnimated {
     pub swing_phase: AmAnimatedFloat,
     /// Swing effect: swing type (0 = sine, 1 = triangle)
     pub swing_type: i32,
+    // Spin effect (com.alightcreative.effects.spin)
+    /// Spin effect: RPM (revolutions per minute)
+    pub spin_rpm: AmAnimatedFloat,
     // Threshold effect (com.alightcreative.effects.threshold)
     /// Threshold effect: threshold value (0.0-1.0)
     pub threshold_value: AmAnimatedFloat,
@@ -224,6 +299,44 @@ pub struct AmAnimated {
     pub pixelate_saturation: AmAnimatedFloat,
     /// Pixelate effect: use screen space coordinates
     pub pixelate_screen_space: bool,
+    // Solid color effect (com.alightcreative.solidcolor)
+    /// Solid color: overlay color (animated)
+    pub solid_color: crate::schema::AmAnimatedColor,
+    /// Solid color: blend alpha (0.0-1.0)
+    pub solid_color_alpha: AmAnimatedFloat,
+    /// Solid color: blend mode (0=normal, 1=multiply, 2=screen)
+    pub solid_color_blend_mode: i32,
+    /// Base fill color (stored for solidcolor mixing)
+    pub base_fill_color: [f32; 4],
+    // Path Repeat effect (com.alightcreative.effects.repeat.path)
+    /// Path repeat params (None = no effect)
+    pub path_repeat: Option<PathRepeatParams>,
+    // Text Spacing effect (com.alightcreative.effects.textspacing)
+    /// Letter spacing in em units (0.0 = default)
+    pub textspacing_letter: AmAnimatedFloat,
+    /// Line spacing multiplier (1.0 = default)
+    pub textspacing_line: AmAnimatedFloat,
+    // Text Progress effect (com.alightcreative.effects.textprogress)
+    /// Text progress start (0.0-1.0)
+    pub textprogress_start: AmAnimatedFloat,
+    /// Text progress end (0.0-1.0)
+    pub textprogress_end: AmAnimatedFloat,
+    /// Text progress cursor style (0-3)
+    pub textprogress_cursor: i32,
+    /// Text progress blink enabled
+    pub textprogress_blink: bool,
+    // Shape-specific animated properties
+    /// Generic shape float properties (up to 4).
+    /// Meaning depends on shape_type:
+    /// RoundRect: [cornerRadius, _, _, _]
+    /// Polygon: [sideCount, radius, offsetAngle, _]
+    /// Star/Multifoil: [pointCount, outerRadius, innerRadius, offsetAngle]
+    /// Pie/Arc: [startAngle, endAngle, radius, _]
+    /// Plus: [stemSize, _, _, _]
+    pub shape_props: [AmAnimatedFloat; 4],
+    /// Generic shape vec2 properties (up to 5 points).
+    /// Used by Line, Triangle, Quad, Penta for vertex animation.
+    pub shape_points: [AmAnimatedVec2; 5],
 }
 
 impl AmAnimated {
@@ -243,10 +356,11 @@ impl AmAnimated {
     }
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
+    /// Applies element_speed: with speed=0.5, animation plays at half rate.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
         let duration = (self.end_time - self.start_time) as f32;
         if duration > 0.0 {
-            (local_time - self.start_time as f32) / duration
+            (local_time - self.start_time as f32) / duration * self.element_speed
         } else {
             0.0
         }
@@ -327,6 +441,12 @@ pub struct AmSdfParams {
     pub base_pivot_x: f32,
     /// Base pivot Y in pixels
     pub base_pivot_y: f32,
+    /// Border 2 width (static, 0 if no second border)
+    pub border2_width: f32,
+    /// Border 2 packed color
+    pub border2_packed_color: f32,
+    /// Border 2 mode (0=centered, 1=inside, -1=outside)
+    pub border2_mode: f32,
 }
 
 // Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere
@@ -358,3 +478,36 @@ pub struct AmSdfStrokeParams {
 /// Used to skip scale animation in animate_transform (scale is handled by animate_sdf_scale).
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmSdfShapeParent;
+
+/// Camera layer data for AM perspective camera animation.
+/// Stores FOV animation and base parameters needed to compute 2D pan/zoom from 3D camera.
+#[derive(Component, Debug, Clone)]
+pub struct AmCameraLayer {
+    /// FOV animation in degrees.
+    pub fov: AmAnimatedFloat,
+    /// Initial Z distance (negative, e.g. -1247).
+    pub base_z: f32,
+    /// Scene width in pixels.
+    pub scene_width: f32,
+    /// Scene height in pixels.
+    pub scene_height: f32,
+}
+
+/// Component linking a path-repeat entity to its path source (previous layer).
+/// The source entity provides the shape outline along which copies are placed.
+/// Source animation data is stored directly so it remains available even after
+/// the source entity is despawned.
+#[derive(Component, Debug)]
+pub struct AmPathRepeat {
+    /// The entity whose shape outline defines the path.
+    pub source_entity: Entity,
+    /// Entities spawned as copies (managed by the path-repeat system).
+    pub copy_entities: Vec<Entity>,
+    /// Shape type of source (e.g. ".rect")
+    pub source_shape_type: String,
+    /// Layer ID of the source (for logging)
+    pub source_layer_id: u64,
+    /// Cloned source animation data so we can compute path positions
+    /// even when the source entity has been despawned.
+    pub source_animated: AmAnimated,
+}

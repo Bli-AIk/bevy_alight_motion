@@ -1,11 +1,11 @@
 # Transform2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-18 10:29:09
+> Last tested: 2026-02-23 18:55:44
 
 Provides additional transform controls similar to the base transform properties.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ⚠️ Partially Supported
 
 - **X Offset (posx)**: ✅ Implemented (Additional horizontal offset)
 - **Y Offset (posy)**: ✅ Implemented (Additional vertical offset)
@@ -15,6 +15,10 @@ Provides additional transform controls similar to the base transform properties.
 - **Y Invert (yinv)**: ❌ Not implemented (Vertical flip)
 - **Z Invert (zinv)**: ❌ Not implemented (Scale inversion)
 - **Angle Invert (ainv)**: ❌ Not implemented (Angle inversion)
+
+**Related Test Files:**
+- `effects/transform/complex1.amproj` ✅
+- `effects/transform/complex2.amproj` ✅
 
 ---
 

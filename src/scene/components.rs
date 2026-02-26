@@ -288,6 +288,7 @@ pub struct AmRttCamerasContainer;
 
 /// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
 #[derive(Component, Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum AmLayerSpec {
     /// Shape with sprite (media or color fill without stroke)
     SpriteShape {
@@ -304,6 +305,14 @@ pub enum AmLayerSpec {
         stroke_color_value: String,
         stroke_width: f32,
         stroke_join: String,
+        /// Border 1 direction: "centered", "inside", "outside"
+        stroke_direction: String,
+        /// Border 2 color (empty if no second border)
+        border2_color_value: String,
+        /// Border 2 width (0 if no second border)
+        border2_width: f32,
+        /// Border 2 direction: "centered", "inside", "outside"
+        border2_direction: String,
         width: f32,
         height: f32,
         pivot_x: f32,
@@ -312,6 +321,22 @@ pub enum AmLayerSpec {
         /// Whether the shape has no fill (fillType="none").
         /// When true, fill is transparent. When false, fill defaults to white if fill_color is None.
         no_fill: bool,
+        /// Shape-specific extra parameters (initial values)
+        shape_extra: bevy::math::Vec4,
+        shape_extra2: bevy::math::Vec4,
+        shape_extra3: bevy::math::Vec4,
+        shape_extra4: bevy::math::Vec4,
+        shape_extra5: bevy::math::Vec4,
+        shape_extra6: bevy::math::Vec4,
+        shape_extra7: bevy::math::Vec4,
+        /// Gradient fill type: 0=none, 1=linear, 2=radial, 3=sweep
+        gradient_type: u8,
+        /// Gradient start color (linear RGBA)
+        gradient_start_color: bevy::math::Vec4,
+        /// Gradient end color (linear RGBA)
+        gradient_end_color: bevy::math::Vec4,
+        /// Gradient start/end points in shape UV [0,1] space
+        gradient_points: bevy::math::Vec4,
     },
     /// Text layer
     Text {
@@ -320,6 +345,7 @@ pub enum AmLayerSpec {
         font_size: f32,
         align: String,
         fill_color: Option<crate::schema::AmFillColor>,
+        wrap_width: f32,
     },
     /// Image layer  
     Image {
@@ -332,6 +358,13 @@ pub enum AmLayerSpec {
     Null,
     /// Embedded scene container (children managed separately)
     EmbedScene,
+    /// Camera layer (no visual, controls Bevy Camera2d)
+    Camera {
+        /// FOV animation in degrees.
+        fov: crate::schema::AmAnimatedFloat,
+        /// Initial Z distance (negative).
+        base_z: f32,
+    },
 }
 
 /// Blending mode for layers.
@@ -381,18 +414,20 @@ impl AmMaskInfo {
     /// Get the active mask for the given time (ms).
     /// Returns None if no mask is active at this time.
     pub fn get_active_mask(&self, time_ms: u64) -> Option<&AmMaskEntry> {
+        let t = time_ms as i64;
         self.masks
             .iter()
-            .find(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
+            .find(|m| t >= m.start_time as i64 && t < m.end_time as i64)
     }
 
     /// Get all active masks for the given time (ms).
     /// Returns masks sorted by z-order (lowest first).
     /// Multiple masks can be active simultaneously for composite effects.
     pub fn get_active_masks(&self, time_ms: u64) -> Vec<&AmMaskEntry> {
+        let t = time_ms as i64;
         self.masks
             .iter()
-            .filter(|m| time_ms >= m.start_time as u64 && time_ms < m.end_time as u64)
+            .filter(|m| t >= m.start_time as i64 && t < m.end_time as i64)
             .collect()
     }
 }
@@ -460,6 +495,8 @@ pub struct AmSceneConfig {
     pub speed_multiplier: f32,
     /// Nesting depth (0 = root scene, 1 = first level embed, etc.)
     pub nesting_depth: u32,
+    /// Scene FPS (frames per second) for timing calculations.
+    pub scene_fps: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -473,38 +510,198 @@ impl Default for AmSceneConfig {
             lifecycle_offset: 0,
             speed_multiplier: 1.0,
             nesting_depth: 0,
+            scene_fps: 30.0,
         }
     }
 }
 
 /// Component to store palette map effect parameters for animation.
+/// Colors are stored in sRGB space (matching AM's processing).
 #[derive(Component, Debug, Clone)]
 pub struct AmPaletteMapParams {
-    /// Number of colors to use (1-8)
+    /// Number of colors in the resolved palette
     pub count: u8,
-    /// Whether to enable shade variations
-    pub shades: bool,
-    /// Palette colors (up to 8)
+    /// Resolved palette colors (up to 16, stored as pairs of 8 for GPU)
     pub colors: [Vec4; 8],
     /// Initial alpha value from the effect
     pub initial_alpha: f32,
 }
 
 impl AmPaletteMapParams {
-    /// Create from extracted PaletteMapParams
+    /// Create from extracted PaletteMapParams, resolving palette_id to actual colors.
+    /// AM hardcodes predefined palettes (0-5, 10) in the shader; custom palettes (6-9)
+    /// use colors from XML. Shades add 0.667x darker variants.
     pub fn from_params(params: &super::effects::PaletteMapParams) -> Self {
-        // Get initial alpha from keyframes if available, otherwise from static value
         let initial_alpha = if !params.alpha.keyframes.is_empty() {
-            // Use the first keyframe's value as initial
             params.alpha.keyframes[0].value.parse().unwrap_or(0.0)
         } else {
             params.alpha.value.unwrap_or(1.0)
         };
 
+        let c = &params.custom_colors;
+        // Helper to create sRGB color Vec4 from f32 components
+        let v = |r: f32, g: f32, b: f32| Vec4::new(r, g, b, 1.0);
+
+        // Resolve palette_id to colors and count (matching AM's shader)
+        let (mut colors, count) = match (params.palette_id, params.shades) {
+            // CGA Green/Red/Yellow
+            (0, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 1.0, 0.333);
+                arr[2] = v(1.0, 0.333, 0.333);
+                arr[3] = v(1.0, 1.0, 0.333);
+                (arr, 4u8)
+            }
+            // CGA Cyan/Magenta/White
+            (1, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 1.0, 1.0);
+                arr[2] = v(1.0, 0.333, 1.0);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // CGA Blue/Cyan/Magenta/White
+            (10, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.333, 0.333, 1.0);
+                arr[1] = v(0.333, 1.0, 1.0);
+                arr[2] = v(1.0, 0.333, 1.0);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // 3-bit RGB
+            (4, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 0.333, 1.0);
+                arr[2] = v(0.333, 1.0, 0.333);
+                arr[3] = v(0.333, 1.0, 1.0);
+                arr[4] = v(1.0, 0.333, 0.333);
+                arr[5] = v(1.0, 0.333, 1.0);
+                arr[6] = v(1.0, 1.0, 0.333);
+                arr[7] = v(1.0, 1.0, 1.0);
+                (arr, 8)
+            }
+            // 2-bit gray
+            (5, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = v(0.0, 0.0, 0.0);
+                arr[1] = v(0.333, 0.333, 0.333);
+                arr[2] = v(0.667, 0.667, 0.667);
+                arr[3] = v(1.0, 1.0, 1.0);
+                (arr, 4)
+            }
+            // Custom 3-color
+            (6, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                (arr, 3)
+            }
+            (6, true) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                // AM skips index 3 (zero), shade copies at 4,5,6
+                arr[3] = Vec4::ZERO;
+                arr[4] = c[0] * 0.667;
+                arr[5] = c[1] * 0.667;
+                arr[6] = c[2] * 0.667;
+                // Fix alpha for shade colors
+                arr[4].w = c[0].w;
+                arr[5].w = c[1].w;
+                arr[6].w = c[2].w;
+                (arr, 7) // AM uses ncolors=6 but checks indices 0-5; we use 7 to include index 6
+            }
+            // Custom 4-color
+            (7, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                (arr, 4)
+            }
+            (7, true) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                arr[4] = c[0] * 0.667;
+                arr[5] = c[1] * 0.667;
+                arr[6] = c[2] * 0.667;
+                arr[7] = c[3] * 0.667;
+                arr[4].w = c[0].w;
+                arr[5].w = c[1].w;
+                arr[6].w = c[2].w;
+                arr[7].w = c[3].w;
+                (arr, 8)
+            }
+            // Custom 6-color (no shades variant exceeds 8 GPU slots)
+            (8, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[0] = c[0];
+                arr[1] = c[1];
+                arr[2] = c[2];
+                arr[3] = c[3];
+                arr[4] = c[4];
+                arr[5] = c[5];
+                (arr, 6)
+            }
+            // Custom 8-color
+            (9, false) => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[..8].copy_from_slice(&c[..8]);
+                (arr, 8)
+            }
+            // EGA palettes (2, 3) - these need 16 colors, we only have 8 GPU slots
+            // For now, use the first 8 colors; full support would need GPU changes
+            (2, _) | (3, _) => {
+                let mut arr = [Vec4::ZERO; 8];
+                if params.palette_id == 2 {
+                    arr[0] = v(0.0, 0.0, 0.0);
+                    arr[1] = v(0.0, 0.0, 0.667);
+                    arr[2] = v(0.0, 0.667, 0.0);
+                    arr[3] = v(0.0, 0.667, 0.667);
+                    arr[4] = v(0.667, 0.0, 0.0);
+                    arr[5] = v(0.667, 0.0, 0.667);
+                    arr[6] = v(0.667, 0.333, 0.0);
+                    arr[7] = v(0.667, 0.667, 0.667);
+                } else {
+                    arr[0] = v(0.0, 0.0, 0.0);
+                    arr[1] = v(0.0, 0.0, 0.667);
+                    arr[2] = v(0.0, 0.667, 0.0);
+                    arr[3] = v(0.333, 0.667, 1.0);
+                    arr[4] = v(0.667, 0.0, 0.0);
+                    arr[5] = v(0.667, 0.0, 0.667);
+                    arr[6] = v(0.333, 0.667, 0.0);
+                    arr[7] = v(0.667, 0.667, 0.667);
+                }
+                (arr, 8) // Only first 8 of 16
+            }
+            // Fallback: custom shades variants that exceed 8 slots
+            _ => {
+                let mut arr = [Vec4::ZERO; 8];
+                arr[..8].copy_from_slice(&c[..8]);
+                (arr, 8)
+            }
+        };
+
+        // Ensure alpha is preserved correctly for sRGB colors
+        for color in colors.iter_mut().take(count as usize) {
+            if color.w == 0.0 {
+                color.w = 1.0;
+            }
+        }
+
         Self {
-            count: params.count,
-            shades: params.shades,
-            colors: params.colors,
+            count,
+            colors,
             initial_alpha,
         }
     }

@@ -29,18 +29,30 @@ pub(crate) fn spawn_image(
     let (tx, ty) = get_initial_location(&image.transform.location, config, has_parent);
     let rotation = get_initial_rotation(&image.transform.rotation);
     let (sx, sy) = get_initial_scale(&image.transform.scale);
-    let (effect_pos_x, effect_pos_y) = extract_effect_animations(&image.effects);
+    let mut all_transform2 = extract_all_transform2_effects(&image.effects);
+    let transform2 = if all_transform2.is_empty() {
+        Transform2Params::default()
+    } else {
+        all_transform2.remove(0)
+    };
+    let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&image.effects);
     let stretch_segment = extract_stretch_segment_effect(&image.effects);
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
+    let stretch2_effect = extract_stretch2_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
     let repeat_effect = extract_repeat_effect(&image.effects);
-    let linear_repeat_effect = extract_linear_repeat_effect(&image.effects);
+    let (linear_repeat_effect, linear_repeat_effect2) =
+        extract_linear_repeat_effects(&image.effects);
+    let radial_repeat_effect = extract_radial_repeat_effect(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
+    let oscillate_effect = extract_oscillate_effect(&image.effects);
+    let spin_rpm = extract_spin_rpm(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
     let pixelate_effect = extract_pixelate_effect(&image.effects);
+    let solid_color_effect = extract_solid_color_effect(&image.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let palette_map = extract_palette_map_effect(&image.effects);
 
@@ -97,8 +109,16 @@ pub(crate) fn spawn_image(
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,
                 has_parent,
-                effect_pos_x,
-                effect_pos_y,
+                parent_layer_id: image.parent,
+                effect_pos_x: transform2.pos_x,
+                effect_pos_y: transform2.pos_y,
+                effect_posz: transform2.pos_z,
+                effect_angle: transform2.angle,
+                effect_xinv: transform2.xinv,
+                effect_yinv: transform2.yinv,
+                effect_zinv: transform2.zinv,
+                effect_ainv: transform2.ainv,
+                extra_transform2,
                 font_y_offset: 0.0,
                 size: AmAnimatedVec2::default(),
                 anchor_offset: Vec2::new(comp_x, comp_y),
@@ -112,6 +132,8 @@ pub(crate) fn spawn_image(
                 stretch_smooth: stretch_segment.smooth,
                 blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
+                element_speed: 1.0,
+                scene_fps: config.scene_fps,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
@@ -120,6 +142,9 @@ pub(crate) fn spawn_image(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                stretch2_scale: stretch2_effect.scale,
+                stretch2_angle: stretch2_effect.angle,
+                stretch2_content_only: stretch2_effect.content_only,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -149,12 +174,48 @@ pub(crate) fn spawn_image(
                 linear_repeat_overlap: linear_repeat_effect.overlap,
                 linear_repeat_shape: linear_repeat_effect.shape,
                 linear_repeat_invert: linear_repeat_effect.invert,
+                linear_repeat_random_order: linear_repeat_effect.random_order,
+                linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat2: linear_repeat_effect2.map(Box::new),
+                // Radial repeat effect
+                radial_repeat_count: radial_repeat_effect.count,
+                radial_repeat_radius: radial_repeat_effect.radius,
+                radial_repeat_orientation: radial_repeat_effect.orientation,
+                radial_repeat_start_angle: radial_repeat_effect.start_angle,
+                radial_repeat_sweep: radial_repeat_effect.sweep,
+                radial_repeat_base_scale: radial_repeat_effect.base_scale,
+                radial_repeat_offset: radial_repeat_effect.offset,
+                radial_repeat_angle: radial_repeat_effect.angle,
+                radial_repeat_scale: radial_repeat_effect.scale,
+                radial_repeat_alpha: radial_repeat_effect.alpha,
+                radial_repeat_fill_color: radial_repeat_effect.fill_color,
+                radial_repeat_blend: radial_repeat_effect.blend,
+                radial_repeat_color_alt_copies: radial_repeat_effect.color_alt_copies,
+                radial_repeat_start: radial_repeat_effect.start,
+                radial_repeat_end: radial_repeat_effect.end,
+                radial_repeat_phase: radial_repeat_effect.phase,
+                radial_repeat_ease_in: radial_repeat_effect.ease_in,
+                radial_repeat_ease_out: radial_repeat_effect.ease_out,
+                radial_repeat_overlap: radial_repeat_effect.overlap,
+                radial_repeat_shape: radial_repeat_effect.shape,
+                radial_repeat_invert: radial_repeat_effect.invert,
+                radial_repeat_random_order: radial_repeat_effect.random_order,
+                radial_repeat_seed: radial_repeat_effect.seed,
                 // Swing effect
                 swing_freq: swing_effect.freq,
                 swing_a1: swing_effect.a1,
                 swing_a2: swing_effect.a2,
                 swing_phase: swing_effect.phase,
                 swing_type: swing_effect.swing_type,
+                // Oscillate effect
+                oscillate_direction: oscillate_effect.direction,
+                oscillate_angle: oscillate_effect.angle,
+                oscillate_freq: oscillate_effect.freq,
+                oscillate_mag: oscillate_effect.mag,
+                oscillate_wave_type: oscillate_effect.wave_type,
+                oscillate_phase: oscillate_effect.phase,
+                // Spin effect
+                spin_rpm,
                 // Threshold effect
                 threshold_value: threshold_effect.threshold,
                 threshold_feather: threshold_effect.feather,
@@ -176,6 +237,25 @@ pub(crate) fn spawn_image(
                 pixelate_threshold: pixelate_effect.threshold,
                 pixelate_saturation: pixelate_effect.saturation,
                 pixelate_screen_space: pixelate_effect.screen_space,
+                solid_color: solid_color_effect.color,
+                solid_color_alpha: solid_color_effect.alpha,
+                solid_color_blend_mode: solid_color_effect.blend_mode,
+                base_fill_color: [0.0; 4],
+                path_repeat: None,
+                textspacing_letter: Default::default(),
+                textspacing_line: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_start: Default::default(),
+                textprogress_end: AmAnimatedFloat {
+                    value: Some(1.0),
+                    keyframes: vec![],
+                },
+                textprogress_cursor: 0,
+                textprogress_blink: false,
+                shape_props: Default::default(),
+                shape_points: Default::default(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -206,7 +286,7 @@ pub(crate) fn spawn_text(
     commands: &mut Commands,
     text: &AmText,
     fonts: &HashMap<String, Handle<Font>>,
-    font_metrics: &HashMap<String, FontMetrics>,
+    _font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -216,26 +296,13 @@ pub(crate) fn spawn_text(
     let (sx, sy) = get_initial_scale(&text.transform.scale);
     let opacity = get_initial_opacity(&text.transform.opacity);
 
-    // AM text position is based on the CENTER of the wrapWidth box
-    // We need to offset to get the LEFT edge for left-aligned text
-    // 在AM中，文本位置是基于wrapWidth框的中心
-    // 对于左对齐文本，我们需要偏移到左边缘
-    // But for text with parent, don't apply wrap offset since position is relative
-    // 但是对于有父对象的文本，不应用wrapWidth偏移，因为位置是相对的
     let wrap_width = text.wrap_width;
-    let wrap_offset_x = if has_parent {
-        0.0 // Child text uses relative positioning, no wrap offset
-    } else {
-        match text.align.as_str() {
-            "left" => -wrap_width / 2.0, // Move left by half of wrapWidth
-            "right" => wrap_width / 2.0, // Move right by half of wrapWidth
-            _ => 0.0,                    // Center - no offset needed
-        }
-    };
+
+    // AM text position is at the CENTER of the wrapWidth box for all alignments.
+    // Use Anchor::CENTER and no position offset.
+    let wrap_offset_x = 0.0;
 
     // Get font size (default to 16.0 if not specified)
-    // AM font sizes appear to be in a different scale - use a larger multiplier
-    // 文本大小乘数 - 调整这个值来修改字体大小
     const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
     let font_size = if text.size > 0.0 {
         text.size * TEXT_SIZE_MULTIPLIER
@@ -250,51 +317,7 @@ pub(crate) fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
-    // Calculate Y offset based on font metrics
-    // 基于字体度量计算 Y 偏移
-    //
-    // AM 的文本定位似乎基于某个参考字体的 win_ascent 值
-    // 当字体的 win_ascent 与参考值不同时，需要根据差值调整 Y 位置
-    //
-    // 通过实验确定：
-    // - 8-bit Operator + Bold (win_ascent=1.1285) 显示位置正确
-    // - Mars Needs Cunnilingus (win_ascent=0.7500) 需要向下偏移约 16.3px (font_size=48)
-    // - 偏移量 = (REFERENCE_WIN_ASCENT - win_ascent) * font_size * factor
-    //
-    // 经计算: factor ≈ 0.897 使得两个字体都能正确显示
-    // 但为了简化，使用 (1.1285 - win_ascent) / 2 * font_size 作为偏移
-    const REFERENCE_WIN_ASCENT: f32 = 1.1285; // 8-bit Operator + Bold 作为参考
-    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
-        // 当 win_ascent 小于参考值时，文本需要向下移动（负Y方向）
-        // offset 为正值时减去它会使 Y 变小（向下）
-        let ascent_diff = REFERENCE_WIN_ASCENT - metrics.win_ascent;
-        let offset = ascent_diff * font_size * 0.43; // factor 经验值
-
-        // 计算基础Y位置（未应用偏移）
-        let base_y = ty;
-        let final_y = base_y - offset;
-
-        bevy::log::trace!(
-            "  Font metrics for '{}': win_ascent={:.4}, win_descent={:.4}",
-            font_name,
-            metrics.win_ascent,
-            metrics.win_descent
-        );
-        bevy::log::trace!(
-            "  Y calculation: base_y={:.2}, ascent_diff={:.4}, offset={:.2}, final_y={:.2}",
-            base_y,
-            ascent_diff,
-            offset,
-            final_y
-        );
-        offset
-    } else {
-        bevy::log::trace!(
-            "  No font metrics found for '{}', using offset=0",
-            font_name
-        );
-        0.0
-    };
+    let font_y_offset = 0.0;
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -309,41 +332,23 @@ pub(crate) fn spawn_text(
         Color::srgba(1.0, 1.0, 1.0, opacity)
     };
 
-    bevy::log::trace!(
-        "Spawning text '{}' (id={}, parent={}): pos=({:.1},{:.1}), wrapWidth={:.1}, wrapOffset={:.1}, size={:.1}, font={}, y_offset={:.1}, content='{}'",
-        text.label,
-        text.id,
-        text.parent,
-        tx,
-        ty,
-        wrap_width,
-        wrap_offset_x,
-        font_size,
-        font_name,
-        font_y_offset,
-        text.content
-    );
-
-    // Only apply font_y_offset to root text layers; child text inherits offset from parent
-    let y_offset_to_apply = if has_parent { 0.0 } else { font_y_offset };
-
     let transform = Transform {
-        translation: Vec3::new(tx + wrap_offset_x, ty - y_offset_to_apply, z),
+        translation: Vec3::new(tx + wrap_offset_x, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    // Create a modified location with wrap_offset applied (no Y offset)
-    // 创建一个带有wrapWidth偏移的location副本（无Y偏移）
+    // Apply wrap_offset to animated location for keyframe-based animations
     let mut modified_location = text.transform.location.clone();
-    if let Some(ref mut val) = modified_location.value {
-        val[0] += wrap_offset_x;
-    }
-    // Also modify keyframes if present
-    for kf in &mut modified_location.keyframes {
-        if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
-            parsed[0] += wrap_offset_x;
-            kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+    if wrap_offset_x != 0.0 {
+        if let Some(ref mut val) = modified_location.value {
+            val[0] += wrap_offset_x;
+        }
+        for kf in &mut modified_location.keyframes {
+            if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+                parsed[0] += wrap_offset_x;
+                kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+            }
         }
     }
 
@@ -374,8 +379,16 @@ pub(crate) fn spawn_text(
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
             has_parent,
+            parent_layer_id: text.parent,
             effect_pos_x: AmAnimatedFloat::default(),
             effect_pos_y: AmAnimatedFloat::default(),
+            effect_posz: AmAnimatedFloat::default(),
+            effect_angle: AmAnimatedFloat::default(),
+            effect_xinv: false,
+            effect_yinv: false,
+            effect_zinv: false,
+            effect_ainv: false,
+            extra_transform2: vec![],
             font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
@@ -392,6 +405,8 @@ pub(crate) fn spawn_text(
             stretch_smooth: AmAnimatedFloat::default(),
             blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
+            element_speed: 1.0,
+            scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
@@ -400,6 +415,9 @@ pub(crate) fn spawn_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            stretch2_scale: AmAnimatedFloat::default(),
+            stretch2_angle: AmAnimatedFloat::default(),
+            stretch2_content_only: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -438,12 +456,51 @@ pub(crate) fn spawn_text(
             linear_repeat_overlap: AmAnimatedFloat::default(),
             linear_repeat_shape: 0,
             linear_repeat_invert: false,
+            linear_repeat_random_order: false,
+            linear_repeat_seed: AmAnimatedFloat::default(),
+            linear_repeat2: None,
+            // Radial repeat effect (defaults for text)
+            radial_repeat_count: AmAnimatedFloat::default(),
+            radial_repeat_radius: AmAnimatedFloat::default(),
+            radial_repeat_orientation: AmAnimatedFloat::default(),
+            radial_repeat_start_angle: AmAnimatedFloat::default(),
+            radial_repeat_sweep: AmAnimatedFloat::default(),
+            radial_repeat_base_scale: AmAnimatedFloat::default(),
+            radial_repeat_offset: AmAnimatedVec2::default(),
+            radial_repeat_angle: AmAnimatedFloat::default(),
+            radial_repeat_scale: AmAnimatedFloat::default(),
+            radial_repeat_alpha: AmAnimatedFloat::default(),
+            radial_repeat_fill_color: crate::schema::AmAnimatedColor::default(),
+            radial_repeat_blend: AmAnimatedFloat::default(),
+            radial_repeat_color_alt_copies: false,
+            radial_repeat_start: AmAnimatedFloat::default(),
+            radial_repeat_end: AmAnimatedFloat {
+                value: Some(1.0),
+                ..Default::default()
+            },
+            radial_repeat_phase: AmAnimatedFloat::default(),
+            radial_repeat_ease_in: AmAnimatedFloat::default(),
+            radial_repeat_ease_out: AmAnimatedFloat::default(),
+            radial_repeat_overlap: AmAnimatedFloat::default(),
+            radial_repeat_shape: 0,
+            radial_repeat_invert: false,
+            radial_repeat_random_order: false,
+            radial_repeat_seed: 0.0,
             // Swing effect (defaults for text)
             swing_freq: AmAnimatedFloat::default(),
             swing_a1: AmAnimatedFloat::default(),
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
+            // Oscillate effect (defaults for text)
+            oscillate_direction: 0,
+            oscillate_angle: AmAnimatedFloat::default(),
+            oscillate_freq: AmAnimatedFloat::default(),
+            oscillate_mag: AmAnimatedFloat::default(),
+            oscillate_wave_type: 0,
+            oscillate_phase: AmAnimatedFloat::default(),
+            // Spin effect (defaults for text)
+            spin_rpm: AmAnimatedFloat::default(),
             // Threshold effect (defaults for text)
             threshold_value: AmAnimatedFloat::default(),
             threshold_feather: AmAnimatedFloat::default(),
@@ -465,6 +522,25 @@ pub(crate) fn spawn_text(
             pixelate_threshold: AmAnimatedFloat::default(),
             pixelate_saturation: AmAnimatedFloat::default(),
             pixelate_screen_space: false,
+            solid_color: Default::default(),
+            solid_color_alpha: Default::default(),
+            solid_color_blend_mode: 0,
+            base_fill_color: [0.0; 4],
+            path_repeat: None,
+            textspacing_letter: Default::default(),
+            textspacing_line: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_start: Default::default(),
+            textprogress_end: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: vec![],
+            },
+            textprogress_cursor: 0,
+            textprogress_blink: false,
+            shape_props: Default::default(),
+            shape_points: Default::default(),
         },
         transform,
         GlobalTransform::default(),
@@ -504,23 +580,26 @@ pub(crate) fn spawn_text(
         _ => bevy::text::Justify::Left,
     };
 
+    // AM text element position is always the CENTER of the text box
+    let anchor = bevy::sprite::Anchor::CENTER;
+
     // Text layers have visual components spawned immediately but use visibility for lifecycle
     entity.insert((
         Text2d::new(&text.content),
         text_font,
         TextColor(color),
         TextLayout::new_with_justify(justify),
-        // Use left-center anchor for text - AM uses center Y as the reference point
-        // With center anchor, the Y coordinate points to the vertical center of the text
-        bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+        bevy::text::TextBounds::new_horizontal(wrap_width),
+        anchor,
         AmLayerSpec::Text {
             content: text.content.clone(),
             font_name: font_name.clone(),
             font_size,
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
+            wrap_width: text.wrap_width,
         },
-        AmVisualSpawned, // Mark as already spawned
+        AmVisualSpawned,
     ));
 
     entity.id()

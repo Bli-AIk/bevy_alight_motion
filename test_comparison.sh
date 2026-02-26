@@ -25,6 +25,9 @@
 #   ./test_comparison.sh effects/     # Run only effects/* tests
 #   ./test_comparison.sh complex/     # Run only complex/* tests
 #   ./test_comparison.sh effects/stretch  # Run tests matching effects/stretch*
+#   ./test_comparison.sh --frame-test              # Run FPS benchmark on basic/* tests
+#   ./test_comparison.sh --frame-test --all        # Run FPS benchmark on all tests
+#   ./test_comparison.sh --frame-test effects/     # Run FPS benchmark on effects/* tests
 #   PARALLEL_JOBS=8 ./test_comparison.sh  # More parallel frame extraction jobs
 #
 # Note: Rendering tests run sequentially to avoid GPU resource contention.
@@ -36,9 +39,23 @@ PARALLEL_JOBS=${PARALLEL_JOBS:-4}  # Default 4 parallel jobs (for frame extracti
 # Parse command line arguments
 FILTER_PATTERN=""
 RUN_ALL=false
+FRAME_TEST=false
 
 if [ "$1" == "--all" ]; then
     RUN_ALL=true
+    shift
+elif [ "$1" == "--frame-test" ]; then
+    FRAME_TEST=true
+    shift
+    # After --frame-test, accept optional filter pattern
+    if [ "$1" == "--all" ]; then
+        RUN_ALL=true
+        shift
+    elif [ -n "$1" ]; then
+        FILTER_PATTERN="$1"
+    else
+        FILTER_PATTERN="basic/"
+    fi
 elif [ -n "$1" ]; then
     FILTER_PATTERN="$1"
 else
@@ -58,10 +75,16 @@ else
     exit 1
 fi
 
-echo "========================================"
-echo "Video Comparison Test Suite"
-echo "========================================"
-echo "Frame extraction parallelism: $PARALLEL_JOBS"
+if [ "$FRAME_TEST" = true ]; then
+    echo "========================================"
+    echo "Frame Test (FPS Benchmark) Suite"
+    echo "========================================"
+else
+    echo "========================================"
+    echo "Video Comparison Test Suite"
+    echo "========================================"
+    echo "Frame extraction parallelism: $PARALLEL_JOBS"
+fi
 if [ "$RUN_ALL" = true ]; then
     echo "Mode: Running ALL tests (basic_*, fx_*, complex_*)"
 elif [ -n "$FILTER_PATTERN" ]; then
@@ -70,8 +93,13 @@ fi
 echo ""
 
 # Build player example first
-echo "Building player example..."
-cargo build -p bevy_alight_motion --example player --features video-comparison --release
+if [ "$FRAME_TEST" = true ]; then
+    echo "Building player example (frame-test)..."
+    cargo build -p bevy_alight_motion --example player --features frame-test --release
+else
+    echo "Building player example (video-comparison)..."
+    cargo build -p bevy_alight_motion --example player --features video-comparison --release
+fi
 if [ $? -ne 0 ]; then
     echo "Build failed!"
     exit 1
@@ -88,8 +116,15 @@ fi
 
 echo "Using binary: $PLAYER_BIN"
 
-# Get all matching amproj files that have corresponding videos
-# New structure: assets/projects/{category}/{subcategory}/name.amproj + name.mp4
+# GPU cooldown after build to prevent thermal throttling on first tests
+if [ "$FRAME_TEST" = "true" ]; then
+    echo "Waiting 5s for GPU cooldown after build..."
+    sleep 5
+fi
+
+# Get all matching amproj files
+# In frame-test mode: all amproj files (no video needed)
+# In comparison mode: only amproj files with corresponding .mp4 videos
 EXAMPLES=""
 while IFS= read -r amproj; do
     # Get the path relative to PROJECTS_DIR (e.g., basic/shape/shape.amproj)
@@ -105,23 +140,28 @@ while IFS= read -r amproj; do
     if echo "$test_id" | grep -qE '^(showcase/|_video_frames)'; then
         continue
     fi
-    
-    # Apply category filter (basic/, effects/, complex/)
-    if [ "$RUN_ALL" = true ]; then
-        if [ -f "$video_path" ]; then
+
+    # Check if this test should be included
+    has_video=false
+    [ -f "$video_path" ] && has_video=true
+
+    # In comparison mode, require video; in frame-test mode, any amproj works
+    if [ "$FRAME_TEST" = true ]; then
+        should_include=true
+    else
+        should_include=$has_video
+    fi
+
+    if [ "$should_include" = true ]; then
+        # Apply category filter
+        if [ "$RUN_ALL" = true ]; then
             EXAMPLES="$EXAMPLES $test_id"
-        fi
-    elif [ -n "$FILTER_PATTERN" ]; then
-        # Filter can be category (basic, effects, complex) or subcategory
-        if echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
-            if [ -f "$video_path" ]; then
+        elif [ -n "$FILTER_PATTERN" ]; then
+            if echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
                 EXAMPLES="$EXAMPLES $test_id"
             fi
-        fi
-    else
-        # Default: only run basic/* tests
-        if echo "$test_id" | grep -q "^basic/"; then
-            if [ -f "$video_path" ]; then
+        else
+            if echo "$test_id" | grep -q "^basic/"; then
                 EXAMPLES="$EXAMPLES $test_id"
             fi
         fi
@@ -144,6 +184,8 @@ RESULTS_DIR=$(mktemp -d)
 trap "rm -rf $RESULTS_DIR" EXIT
 
 # Phase 1: Pre-extract video frames in parallel (CPU-bound)
+# Skip this phase in frame-test mode (no video comparison needed)
+if [ "$FRAME_TEST" != true ]; then
 echo "========================================"
 echo "Phase 1: Extracting video frames (parallel)"
 echo "========================================"
@@ -197,11 +239,18 @@ echo "$EXAMPLES" | tr ' ' '\n' | xargs -P "$PARALLEL_JOBS" -I {} bash -c 'extrac
 echo ""
 echo "Frame extraction complete!"
 echo ""
+fi  # end of frame-test skip
 
 # Phase 2: Run rendering tests (sequential to avoid GPU contention)
-echo "========================================"
-echo "Phase 2: Running comparison tests (sequential)"
-echo "========================================"
+if [ "$FRAME_TEST" = true ]; then
+    echo "========================================"
+    echo "Running frame tests (sequential)"
+    echo "========================================"
+else
+    echo "========================================"
+    echo "Phase 2: Running comparison tests (sequential)"
+    echo "========================================"
+fi
 echo "Note: Tests run sequentially to avoid GPU resource contention"
 echo ""
 
@@ -232,6 +281,10 @@ run_single_test() {
     if grep -q "RESULT: PASS" "$log_file"; then
         echo "PASS|$test_id|" > "$result_file"
         echo "✅ $test_id"
+    elif grep -q "RESULT: WARNING" "$log_file"; then
+        local warning_msg=$(grep "RESULT: WARNING" "$log_file" | head -1)
+        echo "WARNING|$test_id|$warning_msg" > "$result_file"
+        echo "⚠️  $test_id (WARNING)"
     elif grep -q "RESULT: SKIP" "$log_file"; then
         echo "SKIP|$test_id|" > "$result_file"
         echo "⚠️  $test_id (SKIP)"
@@ -250,6 +303,10 @@ run_single_test() {
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
 for example in $EXAMPLES; do
     run_single_test "$example"
+    # Cooldown between tests to mitigate GPU thermal throttling (especially on iGPUs)
+    if [ "$FRAME_TEST" = "true" ]; then
+        sleep 3
+    fi
 done
 
 echo ""
@@ -262,6 +319,7 @@ echo "-----------------------------------------+--------"
 PASSED_COUNT=0
 FAILED_COUNT=0
 SKIPPED_COUNT=0
+WARNING_COUNT=0
 FAILED_EXAMPLES=""
 
 for result_file in "$RESULTS_DIR"/*.result; do
@@ -270,6 +328,12 @@ for result_file in "$RESULTS_DIR"/*.result; do
         if [ "$status" == "PASS" ]; then
             printf "%-40s | \033[0;32m✅ PASS\033[0m\n" "$name"
             PASSED_COUNT=$((PASSED_COUNT + 1))
+        elif [ "$status" == "WARNING" ]; then
+            printf "%-40s | \033[1;33m⚠️ WARNING\033[0m\n" "$name"
+            if [ -n "$avg_details" ]; then
+                printf "%-40s   %s\n" "" "$avg_details"
+            fi
+            WARNING_COUNT=$((WARNING_COUNT + 1))
         elif [ "$status" == "SKIP" ]; then
             printf "%-40s | \033[0;33m⚠️ SKIP\033[0m\n" "$name"
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
@@ -294,9 +358,10 @@ echo ""
 echo "========================================"
 echo "TEST SUMMARY"
 echo "========================================"
-echo "Passed:  $PASSED_COUNT"
-echo "Skipped: $SKIPPED_COUNT"
-echo "Failed:  $FAILED_COUNT"
+echo "Passed:   $PASSED_COUNT"
+echo "Warnings: $WARNING_COUNT"
+echo "Skipped:  $SKIPPED_COUNT"
+echo "Failed:   $FAILED_COUNT"
 
 # Generate JSON results file (merge with existing results)
 JSON_OUTPUT="${BASE_DIR}/test_results.json"
@@ -307,19 +372,23 @@ for result_file in "$RESULTS_DIR"/*.result; do
     if [ -f "$result_file" ]; then
         IFS='|' read -r status name avg_details frame_details < "$result_file"
         
-        # Extract similarity value from avg_details if present
-        avg_sim=""
+        # Extract similarity value or FPS value from details if present
+        avg_val=""
         if [ -n "$avg_details" ]; then
-            avg_sim=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
+            avg_val=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
         fi
         
         # Convert status to lowercase
         status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
         
-        # Build JSON entry
+        # Build JSON entry with test-type-specific fields
         entry="\"$name\": { \"status\": \"$status_lower\""
-        if [ -n "$avg_sim" ]; then
-            entry="$entry, \"avg_similarity\": $avg_sim"
+        if [ -n "$avg_val" ]; then
+            if [ "$FRAME_TEST" = "true" ]; then
+                entry="$entry, \"avg_fps\": $avg_val"
+            else
+                entry="$entry, \"avg_similarity\": $avg_val"
+            fi
         fi
         entry="$entry }"
         
@@ -331,6 +400,13 @@ for result_file in "$RESULTS_DIR"/*.result; do
     fi
 done
 
+# Determine result key based on test type
+if [ "$FRAME_TEST" = "true" ]; then
+    RESULT_KEY="frame_test_results"
+else
+    RESULT_KEY="results"
+fi
+
 # Merge with existing results using Python (preserves old results, updates with new)
 python3 << EOF
 import json
@@ -338,6 +414,7 @@ import os
 from datetime import datetime
 
 json_output = "$JSON_OUTPUT"
+result_key = "$RESULT_KEY"
 new_results_json = '''{$NEW_RESULTS}'''
 
 # Parse new results
@@ -346,38 +423,43 @@ try:
 except json.JSONDecodeError:
     new_results = {}
 
-# Load existing results if file exists
-existing_results = {}
+# Load existing data if file exists
+existing_data = {}
 if os.path.exists(json_output):
     try:
         with open(json_output, 'r') as f:
             existing_data = json.load(f)
-            existing_results = existing_data.get('results', {})
     except (json.JSONDecodeError, IOError):
         pass  # Start fresh if file is corrupted
+
+# Get existing results for this result type
+existing_results = existing_data.get(result_key, {})
 
 # Merge: existing results + new results (new overwrites old for same keys)
 merged_results = {**existing_results, **new_results}
 
-# Recalculate summary from merged results
+# Recalculate summary for this result type
 passed = sum(1 for r in merged_results.values() if r.get('status') == 'pass')
 failed = sum(1 for r in merged_results.values() if r.get('status') == 'fail')
+warnings = sum(1 for r in merged_results.values() if r.get('status') == 'warning')
 skipped = sum(1 for r in merged_results.values() if r.get('status') in ('skip', 'cancelled'))
 
-# Build final JSON
-output = {
-    "timestamp": datetime.now().astimezone().isoformat(),
-    "summary": {
-        "passed": passed,
-        "skipped": skipped,
-        "failed": failed
-    },
-    "results": dict(sorted(merged_results.items()))
+# Build summary key
+summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
+
+# Update existing data with new results (preserving other test types)
+existing_data[result_key] = dict(sorted(merged_results.items()))
+existing_data[summary_key] = {
+    "passed": passed,
+    "warnings": warnings,
+    "skipped": skipped,
+    "failed": failed
 }
+existing_data["timestamp"] = datetime.now().astimezone().isoformat()
 
 # Write output
 with open(json_output, 'w') as f:
-    json.dump(output, f, indent=2)
+    json.dump(existing_data, f, indent=2)
 
 print(f"Merged {len(new_results)} new results with {len(existing_results)} existing results")
 print(f"Total: {len(merged_results)} results ({passed} passed, {failed} failed, {skipped} skipped)")

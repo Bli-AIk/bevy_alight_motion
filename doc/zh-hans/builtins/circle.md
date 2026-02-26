@@ -1,7 +1,7 @@
 # 圆形
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-18 10:29:09
+> 最近测试时间：2026-02-23 18:55:44
 
 基础圆形形状，使用 SDF 渲染。支持非均匀缩放形成椭圆。
 
@@ -23,9 +23,6 @@
 <shape id="1" label="圆形 1" startTime="0" endTime="1000" fillType="color" s=".circle">
     <transform>
         <location value="640.0,480.0,0.0" />
-        <rotation value="0.0" />
-        <scale value="1.0,1.0" />
-        <opacity value="1.0" />
     </transform>
     <property name="size" type="vec2" value="100.0,100.0" />
     <fillColor value="#ff00ff00" />
