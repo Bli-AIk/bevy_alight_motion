@@ -48,13 +48,18 @@ pub(crate) fn add_visual_components(
     has_repeat: bool,       // True if layer has repeat effect (needs UnifiedEffectMaterial)
     has_threshold: bool,    // True if layer has threshold effect (needs UnifiedEffectMaterial)
     has_grid: bool,         // True if layer has grid effect (needs UnifiedEffectMaterial)
+    has_pixelate: bool,     // True if layer has pixelate effect (needs UnifiedEffectMaterial)
+    has_stretch2: bool,     // True if layer has stretch2 effect (needs UnifiedEffectMaterial)
+    has_solidcolor: bool,   // True if layer has solidcolor effect (needs UnifiedEffectMaterial)
+    pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
+    max_animated_scale: f32, // Max scale from animation keyframes for SDF mesh sizing
 ) {
     use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
 
     bevy::log::debug!(
-        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}",
+        "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}, has_pixelate={}",
         label,
         id,
         std::mem::discriminant(spec),
@@ -62,7 +67,8 @@ pub(crate) fn add_visual_components(
         has_scale_assist,
         has_repeat,
         has_threshold,
-        has_grid
+        has_grid,
+        has_pixelate
     );
 
     // Determine which effects are needed
@@ -84,7 +90,10 @@ pub(crate) fn add_visual_components(
         || has_scale_assist
         || has_repeat
         || has_threshold
-        || has_grid;
+        || has_grid
+        || has_pixelate
+        || has_stretch2
+        || has_solidcolor;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -328,7 +337,7 @@ pub(crate) fn add_visual_components(
         if let Some(palette) = palette_params {
             material.uniform_data.palette_flags.x = 1.0; // enabled
             material.uniform_data.palette_flags.y = palette.count as f32;
-            material.uniform_data.palette_flags.z = if palette.shades { 1.0 } else { 0.0 };
+            material.uniform_data.palette_flags.z = 0.0; // shades already resolved into colors
             material.uniform_data.palette_flags.w = palette.initial_alpha;
             material.uniform_data.palette_color1 = palette.colors[0];
             material.uniform_data.palette_color2 = palette.colors[1];
@@ -416,10 +425,9 @@ pub(crate) fn add_visual_components(
                         let scaled_width = base_width * initial_scale.0.abs();
                         let scaled_height = base_height * initial_scale.1.abs();
 
-                        // Don't expand mesh statically - blur will work within original bounds
-                        // For proper glow effect, we'd need dynamic mesh resizing per frame
-                        // which is complex. For now, blur fades naturally at edges.
-                        let blur_expansion = 0.0;
+                        // Don't expand mesh statically for blur - blur will work within original bounds
+                        // For pixelate, expand mesh so edge blocks aren't clipped at layer boundary
+                        let blur_expansion = pixelate_expansion;
 
                         // Use initial stretch mesh bounds if provided (to prevent first frame jump)
                         let mesh = if let Some((min_x, max_x, min_y, max_y)) =
@@ -629,12 +637,27 @@ pub(crate) fn add_visual_components(
             stroke_color_value,
             stroke_width,
             stroke_join,
+            stroke_direction,
+            border2_color_value,
+            border2_width,
+            border2_direction,
             width,
             height,
             pivot_x,
             pivot_y,
             shape_type,
             no_fill,
+            shape_extra,
+            shape_extra2,
+            shape_extra3,
+            shape_extra4,
+            shape_extra5,
+            shape_extra6,
+            shape_extra7,
+            gradient_type,
+            gradient_start_color,
+            gradient_end_color,
+            gradient_points,
         } => {
             bevy::log::info!("[Visual] Spawning SdfShape for '{}'", label);
             spawn_sdf_visual(
@@ -646,6 +669,10 @@ pub(crate) fn add_visual_components(
                 stroke_color_value,
                 *stroke_width,
                 stroke_join,
+                stroke_direction,
+                border2_color_value,
+                *border2_width,
+                border2_direction,
                 *width,
                 *height,
                 *pivot_x,
@@ -660,6 +687,18 @@ pub(crate) fn add_visual_components(
                 global_time_ms,
                 fit_scale,
                 *no_fill,
+                *shape_extra,
+                *shape_extra2,
+                *shape_extra3,
+                *shape_extra4,
+                *shape_extra5,
+                *shape_extra6,
+                *shape_extra7,
+                *gradient_type,
+                *gradient_start_color,
+                *gradient_end_color,
+                *gradient_points,
+                max_animated_scale,
             );
         }
         AmLayerSpec::Image {
@@ -766,6 +805,7 @@ pub(crate) fn add_visual_components(
             font_size,
             align,
             fill_color,
+            wrap_width,
         } => {
             use bevy::text::Justify;
 
@@ -781,6 +821,14 @@ pub(crate) fn add_visual_components(
                 .cloned()
                 .unwrap_or_else(Handle::default);
 
+            // AM text element position is always the CENTER of the text box
+            let anchor = bevy::sprite::Anchor::CENTER;
+
+            // Android's Roboto hhea metrics: ascent=1900, descent=500, unitsPerEm=2048
+            // line_height_ratio = (1900+500)/2048 = 1.1719
+            // Bevy default is 1.2 which causes progressive vertical offset vs AM
+            let line_height = bevy::text::LineHeight::RelativeToFont(1.172);
+
             commands.entity(entity).insert((
                 Text2d::new(content.clone()),
                 TextFont {
@@ -790,7 +838,9 @@ pub(crate) fn add_visual_components(
                 },
                 TextLayout::new_with_justify(justify),
                 TextColor(color),
-                bevy::sprite::Anchor(Vec2::new(-0.5, 0.0)),
+                bevy::text::TextBounds::new_horizontal(*wrap_width),
+                line_height,
+                anchor,
                 AmVisualSpawned,
             ));
         }
@@ -825,6 +875,10 @@ pub(crate) fn add_visual_components(
                 );
                 commands.entity(entity).insert(AmVisualSpawned);
             }
+        }
+        AmLayerSpec::Camera { .. } => {
+            // Camera layers have no visual — marker only
+            commands.entity(entity).insert(AmVisualSpawned);
         }
     }
 }

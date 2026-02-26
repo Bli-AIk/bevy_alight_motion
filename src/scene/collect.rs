@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::loader::FontMetrics;
 use crate::schema::{AmLayer, AmScene};
 
+use super::collect_embed::*;
+use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
 use super::helpers::*;
@@ -372,8 +374,20 @@ pub(crate) fn collect_layer(
                 pending.push(pl);
             }
         }
+        AmLayer::Camera(camera) => {
+            if let Some(pl) = collect_camera(camera, config, z) {
+                bevy::log::trace!(
+                    "  Collected camera '{}' (id={}, time={}..{}ms)",
+                    camera.label,
+                    camera.id,
+                    camera.start_time,
+                    camera.end_time
+                );
+                pending.push(pl);
+            }
+        }
         // Ignore unsupported layer types
-        AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Camera(_) | AmLayer::Video(_) => {}
+        AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Video(_) => {}
     }
 }
 pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
@@ -568,16 +582,21 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             if layer.mask_info.is_some() {
                 continue; // Already has masks
             }
-            // Check if this layer's parent has masks
-            if layer.parent != 0
-                && let Some(parent_masks) = layer_masks.get(&layer.parent)
-            {
+            // Check if this layer's parent or containing embed has masks
+            let source_masks = if layer.parent != 0 {
+                layer_masks.get(&layer.parent).cloned()
+            } else if layer.containing_embed_id != 0 {
+                layer_masks.get(&layer.containing_embed_id).cloned()
+            } else {
+                None
+            };
+            if let Some(masks) = source_masks {
                 layer.mask_info = Some(AmMaskInfo {
-                    masks: parent_masks.clone(),
+                    masks: masks.clone(),
                 });
                 bevy::log::debug!(
                     "[MASK] Propagated {} mask(s) to child layer '{}' (id={})",
-                    parent_masks.len(),
+                    masks.len(),
                     layer.label,
                     layer.id
                 );
@@ -599,19 +618,27 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
 /// Extract mask geometry info from a layer's transform and spec.
 /// For animated scales (like SDF shapes), we need to get the scale at t=0 from the animation data.
 pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskEntry> {
-    let (width, height, pivot_x, pivot_y, is_circle) = match &layer.spec {
+    let (width, height, pivot_x, pivot_y, is_circle, stroke_extension) = match &layer.spec {
         AmLayerSpec::SdfShape {
             width,
             height,
             pivot_x,
             pivot_y,
             shape_type,
+            stroke_width,
+            stroke_direction,
             ..
         } => {
             let is_circle = shape_type == ".circle";
-            (*width, *height, *pivot_x, *pivot_y, is_circle)
+            // Mask visible area includes stroke that extends beyond fill
+            let ext = match stroke_direction.as_str() {
+                "inside" => 0.0,
+                "outside" => *stroke_width,
+                _ => *stroke_width * 0.5, // "centered"
+            };
+            (*width, *height, *pivot_x, *pivot_y, is_circle, ext)
         }
-        AmLayerSpec::SpriteShape { width, height, .. } => (*width, *height, 0.0, 0.0, false),
+        AmLayerSpec::SpriteShape { width, height, .. } => (*width, *height, 0.0, 0.0, false, 0.0),
         _ => return None,
     };
 
@@ -630,7 +657,7 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
     let center_y = layer.transform.translation.y + pivot_y * scale_y;
 
     bevy::log::debug!(
-        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1}), is_circle={}, time={}..{}, lifecycle_offset={}",
+        "[MASK] Extracting mask info: width={}, height={}, pivot=({:.1},{:.1}), scale=({:.3},{:.3}), translation=({:.1},{:.1}), center=({:.1},{:.1}), half_size=({:.1},{:.1}), stroke_ext={:.1}, is_circle={}, time={}..{}, lifecycle_offset={}",
         width,
         height,
         pivot_x,
@@ -641,8 +668,9 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
         layer.transform.translation.y,
         center_x,
         center_y,
-        width / 2.0 * scale_x,
-        height / 2.0 * scale_y,
+        width / 2.0 * scale_x + stroke_extension,
+        height / 2.0 * scale_y + stroke_extension,
+        stroke_extension,
         is_circle,
         layer.start_time,
         layer.end_time,
@@ -666,7 +694,10 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
 
     Some(AmMaskEntry {
         center: Vec2::new(center_x, center_y),
-        half_size: Vec2::new(width / 2.0 * scale_x, height / 2.0 * scale_y),
+        half_size: Vec2::new(
+            width / 2.0 * scale_x + stroke_extension,
+            height / 2.0 * scale_y + stroke_extension,
+        ),
         rotation: layer
             .transform
             .rotation

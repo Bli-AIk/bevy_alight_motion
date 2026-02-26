@@ -38,6 +38,12 @@ show_menu() {
     echo -e "  ${GREEN}5)${NC} 只更新部分测试"
     echo -e "     ${BLUE}Run specific tests only${NC}"
     echo ""
+    echo -e "  ${GREEN}6)${NC} 运行全部帧测试（FPS 性能基准）"
+    echo -e "     ${BLUE}Run all frame tests (FPS benchmark)${NC}"
+    echo ""
+    echo -e "  ${GREEN}7)${NC} 运行部分帧测试（FPS 性能基准）"
+    echo -e "     ${BLUE}Run specific frame tests (FPS benchmark)${NC}"
+    echo ""
     echo -e "  ${GREEN}q)${NC} 退出 / Exit"
     echo ""
 }
@@ -62,6 +68,28 @@ run_specific_tests() {
     ./test_comparison.sh $tests
     echo ""
     echo -e "${GREEN}✅ 指定测试完成 / Specific tests completed${NC}"
+}
+
+# 函数：运行全部帧测试 / Function: Run all frame tests
+run_all_frame_tests() {
+    echo ""
+    echo -e "${YELLOW}▶ 开始运行全部帧测试... / Running all frame tests...${NC}"
+    echo ""
+    ./test_comparison.sh --frame-test --all
+    echo ""
+    echo -e "${GREEN}✅ 全部帧测试完成 / All frame tests completed${NC}"
+}
+
+# 函数：运行部分帧测试 / Function: Run specific frame tests
+run_specific_frame_tests() {
+    local tests=$1
+    echo ""
+    echo -e "${YELLOW}▶ 开始运行指定帧测试: $tests${NC}"
+    echo -e "${YELLOW}  Running specific frame tests: $tests${NC}"
+    echo ""
+    ./test_comparison.sh --frame-test $tests
+    echo ""
+    echo -e "${GREEN}✅ 指定帧测试完成 / Specific frame tests completed${NC}"
 }
 
 # 函数：生成文档 / Function: Generate documentation
@@ -150,6 +178,15 @@ main() {
                 prompt_for_test_names
                 if [ $? -eq 0 ] && [ -n "$TEST_NAMES" ]; then
                     run_specific_tests "$TEST_NAMES"
+                fi
+                ;;
+            6)
+                run_all_frame_tests
+                ;;
+            7)
+                prompt_for_test_names
+                if [ $? -eq 0 ] && [ -n "$TEST_NAMES" ]; then
+                    run_specific_frame_tests "$TEST_NAMES"
                 fi
                 ;;
             q|Q)

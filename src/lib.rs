@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 //! # bevy_alight_motion
 //!
 //! A Bevy plugin for loading and playing Alight Motion (AM) project files.

@@ -42,6 +42,8 @@ pub struct AmProject {
     pub font_metrics: HashMap<String, FontMetrics>,
     /// Raw image data for embedded images (before loading).
     pub embedded_images: HashMap<String, Vec<u8>>,
+    /// Raw font data for embedded fonts (for round-trip write-back).
+    pub embedded_fonts: HashMap<String, Vec<u8>>,
     /// Validation report about supported/unsupported features.
     pub validation_report: crate::validation::ValidationReport,
 }
@@ -121,7 +123,7 @@ async fn load_amproj(
             file.read_to_end(&mut data)?;
             // Store with amproj: prefix for lookup
             let uri = format!("amproj:{}", name);
-            bevy::log::debug!("Loaded embedded image: {}", uri);
+            debug!("Loaded embedded image: {}", uri);
             embedded_images.insert(uri, data);
         } else if name.ends_with(".ttf") || name.ends_with(".otf") {
             let mut data = Vec::new();
@@ -176,32 +178,39 @@ async fn load_amproj(
             RenderAssetUsages::all(),
         ) {
             let handle = load_context.add_labeled_asset(label.to_string(), image);
-            images.insert(uri.clone(), handle);
-            bevy::log::debug!("Loaded image: {} (detected format: {})", uri, format);
+            images.insert(uri.clone(), handle.clone());
+            // Also store with "am:" prefix so real AM exports (fillImage="am:...") work
+            let am_uri = format!("am:{}", label);
+            images.insert(am_uri, handle);
+            debug!("Loaded image: {} (detected format: {})", uri, format);
         } else {
-            bevy::log::warn!("Failed to load image: {} (tried format: {})", uri, format);
+            warn!("Failed to load image: {} (tried format: {})", uri, format);
         }
     }
 
     // Load embedded fonts as labeled assets and extract metrics
     let mut fonts = HashMap::new();
     let mut font_metrics = HashMap::new();
-    for (name, data) in embedded_fonts {
+    let mut preserved_fonts: HashMap<String, Vec<u8>> = HashMap::new();
+    for (name, data) in &embedded_fonts {
         // Try loading font with fontdb first to check if it's valid
         // fontdb is what Bevy's text pipeline uses internally
         // 先用 fontdb 测试字体是否有效，fontdb 是 Bevy 文本管线内部使用的
         let mut test_db = fontdb::Database::new();
         test_db.load_font_data(data.clone());
         if test_db.faces().count() == 0 {
-            bevy::log::warn!(
+            warn!(
                 "Font '{}' failed fontdb validation, skipping to avoid text pipeline panic",
                 name
             );
             continue;
         }
 
+        // Preserve raw font data for round-trip write-back
+        preserved_fonts.insert(name.clone(), data.clone());
+
         // Extract font metrics using ttf-parser
-        if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+        if let Ok(face) = ttf_parser::Face::parse(data, 0) {
             let upm = face.units_per_em();
             let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
                 (
@@ -224,12 +233,9 @@ async fn load_amproj(
                     units_per_em: upm,
                 },
             );
-            bevy::log::trace!(
+            trace!(
                 "Font '{}' metrics: win_ascent={:.4}, win_descent={:.4}, upm={}",
-                name,
-                win_ascent,
-                win_descent,
-                upm
+                name, win_ascent, win_descent, upm
             );
         }
 
@@ -238,7 +244,67 @@ async fn load_amproj(
         })?;
         let label = format!("font_{}", name);
         let handle = load_context.add_labeled_asset(label, font);
-        fonts.insert(name, handle);
+        fonts.insert(name.clone(), handle);
+    }
+
+    // Resolve Google Fonts references to system fonts
+    // Parse "googlefonts?name=FontName&weight=N" and try to find matching system font
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let google_font_refs: Vec<String> = collect_google_font_refs(&scene.layers)
+            .into_iter()
+            .collect();
+
+        for font_ref in google_font_refs {
+            if fonts.contains_key(&font_ref) {
+                continue;
+            }
+            if let Some(path) = resolve_google_font_to_system(&font_ref)
+                && let Ok(data) = std::fs::read(&path)
+            {
+                // Validate with fontdb
+                let mut test_db = fontdb::Database::new();
+                test_db.load_font_data(data.clone());
+                if test_db.faces().count() == 0 {
+                    warn!("System font at '{}' failed fontdb validation", path);
+                    continue;
+                }
+                // Extract metrics
+                if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+                    let upm = face.units_per_em();
+                    let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+                        (
+                            os2.windows_ascender() as f32 / upm as f32,
+                            (-os2.windows_descender()) as f32 / upm as f32,
+                        )
+                    } else {
+                        (
+                            face.ascender() as f32 / upm as f32,
+                            (-face.descender()) as f32 / upm as f32,
+                        )
+                    };
+                    font_metrics.insert(
+                        font_ref.clone(),
+                        FontMetrics {
+                            win_ascent,
+                            win_descent,
+                            units_per_em: upm,
+                        },
+                    );
+                }
+                match Font::try_from_bytes(data) {
+                    Ok(font) => {
+                        let label = format!("font_system_{}", font_ref);
+                        let handle = load_context.add_labeled_asset(label, font);
+                        fonts.insert(font_ref.clone(), handle);
+                        info!("Resolved '{}' to system font: {}", font_ref, path);
+                    }
+                    Err(e) => {
+                        warn!("Failed to load system font '{}': {:?}", path, e);
+                    }
+                }
+            }
+        }
     }
 
     // Validate the scene and generate report
@@ -254,8 +320,98 @@ async fn load_amproj(
         fonts,
         font_metrics,
         embedded_images,
+        embedded_fonts: preserved_fonts,
         validation_report,
     })
+}
+
+/// Collect unique Google Fonts references from all text layers (including nested scenes).
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_google_font_refs(
+    layers: &[crate::schema::AmLayer],
+) -> std::collections::HashSet<String> {
+    use crate::schema::AmLayer;
+    let mut refs = std::collections::HashSet::new();
+    for layer in layers {
+        match layer {
+            AmLayer::Text(t) if t.font.starts_with("googlefonts?") => {
+                refs.insert(t.font.clone());
+            }
+            AmLayer::EmbedScene(e) => {
+                refs.extend(collect_google_font_refs(&e.scene.layers));
+            }
+            _ => {}
+        }
+    }
+    refs
+}
+
+/// Resolve a "googlefonts?name=FontName&weight=N" reference to a system font path.
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
+    let query = font_ref.strip_prefix("googlefonts?")?;
+    let mut name = None;
+    let mut weight = 400u16;
+    for param in query.split('&') {
+        if let Some(val) = param.strip_prefix("name=") {
+            name = Some(val);
+        } else if let Some(val) = param.strip_prefix("weight=") {
+            weight = val.parse().unwrap_or(400);
+        }
+    }
+    let font_name = name?;
+
+    // Map weight to font suffix
+    let suffix = match weight {
+        100 => "Thin",
+        200 => "ExtraLight",
+        300 => "Light",
+        400 => "Regular",
+        500 => "Medium",
+        600 => "SemiBold",
+        700 => "Bold",
+        800 => "ExtraBold",
+        900 => "Black",
+        _ => "Regular",
+    };
+
+    // Try common system font paths
+    let candidates = [
+        format!("/usr/share/fonts/TTF/{}-{}.ttf", font_name, suffix),
+        format!(
+            "/usr/share/fonts/truetype/{}/{}-{}.ttf",
+            font_name.to_lowercase(),
+            font_name,
+            suffix
+        ),
+        format!(
+            "/usr/share/fonts/google-{}/{}-{}.ttf",
+            font_name.to_lowercase(),
+            font_name,
+            suffix
+        ),
+        format!("/usr/share/fonts/TTF/{}.ttf", font_name),
+    ];
+
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.clone());
+        }
+    }
+
+    // Try fc-match as last resort
+    if let Ok(output) = std::process::Command::new("fc-match")
+        .args(["-f", "%{file}", &format!("{}:weight={}", font_name, weight)])
+        .output()
+        && output.status.success()
+    {
+        let path = String::from_utf8_lossy(&output.stdout).to_string();
+        if std::path::Path::new(&path).exists() && path.contains(font_name) {
+            return Some(path);
+        }
+    }
+
+    None
 }
 
 /// Load from standalone .xml file.
@@ -276,6 +432,7 @@ async fn load_xml(bytes: &[u8], _load_context: &mut LoadContext<'_>) -> Result<A
         fonts: HashMap::new(),
         font_metrics: HashMap::new(),
         embedded_images: HashMap::new(),
+        embedded_fonts: HashMap::new(),
         validation_report,
     })
 }

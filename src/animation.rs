@@ -18,18 +18,21 @@ mod lifecycle;
 mod sdf;
 mod sdf_spawn;
 mod spawn;
+mod spawn_entity;
 mod systems;
 mod visual;
 
 // Re-export components
 pub use components::{
-    AmAnimated, AmPlayback, AmSdfFillParams, AmSdfParams, AmSdfShapeParent, AmSdfStrokeParams,
-    DEBUG_NEGATIVE_HEIGHT_SCALE,
+    AmAnimated, AmCameraLayer, AmPathRepeat, AmPlayback, AmSdfFillParams, AmSdfParams,
+    AmSdfShapeParent, AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
 };
 
 // Re-export systems
 pub use effects::{
-    animate_rtt_blur_system, animate_unified_effect_system, update_unified_mask_system,
+    animate_path_repeat_system, animate_rtt_blur_system, animate_text_progress_system,
+    animate_text_spacing_system, animate_unified_effect_system, fix_rtl_line_alignment_system,
+    update_unified_mask_system,
 };
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use sdf::{
@@ -37,7 +40,7 @@ pub use sdf::{
     update_sdf_mask_system,
 };
 pub use systems::{
-    advance_playback_system, animate_opacity_system, animate_size_system,
+    advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,
     animate_text_opacity_system, animate_transform_system,
 };
 

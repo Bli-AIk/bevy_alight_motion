@@ -95,8 +95,47 @@ pub struct UnifiedEffectUniform {
     /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
     pub linear_repeat_params4: Vec4,
 
+    /// Linear repeat params5: (random_order, seed, 0, 0)
+    pub linear_repeat_params5: Vec4,
+
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
+
+    /// Second linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub linear_repeat2_params1: Vec4,
+
+    /// Second linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub linear_repeat2_params2: Vec4,
+
+    /// Second linear repeat params3: (start, end, phase, overlap)
+    pub linear_repeat2_params3: Vec4,
+
+    /// Second linear repeat params4: (ease_in, ease_out, blend, shape_invert_alt)
+    pub linear_repeat2_params4: Vec4,
+
+    /// Second linear repeat params5: (random_order, seed, 0, 0)
+    pub linear_repeat2_params5: Vec4,
+
+    /// Second linear repeat fill color (r, g, b, a)
+    pub linear_repeat2_fill_color: Vec4,
+
+    /// Radial repeat params1: (count, radius, orientation_deg, startAngle_deg)
+    pub radial_repeat_params1: Vec4,
+
+    /// Radial repeat params2: (sweep_deg, baseScale, angle_deg, scale)
+    pub radial_repeat_params2: Vec4,
+
+    /// Radial repeat params3: (alpha, offset_x, offset_y, blend)
+    pub radial_repeat_params3: Vec4,
+
+    /// Radial repeat params4: (start, end, phase, overlap)
+    pub radial_repeat_params4: Vec4,
+
+    /// Radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed)
+    pub radial_repeat_params5: Vec4,
+
+    /// Radial repeat fill color (r, g, b, a)
+    pub radial_repeat_fill_color: Vec4,
 
     /// Threshold effect params: (threshold, feather, invert, blendMode)
     pub threshold_params: Vec4,
@@ -121,6 +160,21 @@ pub struct UnifiedEffectUniform {
 
     /// Pixelate params2: (vignette, threshold, saturation, 0)
     pub pixelate_params2: Vec4,
+
+    /// Mask 1 blend params: (fill_alpha, opacity, stroke_width, 0)
+    pub mask_blend: Vec4,
+
+    /// Mask 2 blend params: (fill_alpha, opacity, stroke_width, 0)
+    pub mask2_blend: Vec4,
+
+    /// Stretch2 params: (scale, angle_radians, content_only, 0)
+    pub stretch2_params: Vec4,
+
+    /// Solidcolor params: (r, g, b, blend_mode)
+    pub solid_color_params: Vec4,
+
+    /// Solidcolor alpha: (alpha, 0, 0, 0)
+    pub solid_color_alpha: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -349,7 +403,20 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
+            linear_repeat_params5: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            linear_repeat2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            linear_repeat2_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            linear_repeat2_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            linear_repeat2_params4: Vec4::ZERO,
+            linear_repeat2_params5: Vec4::ZERO,
+            linear_repeat2_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            radial_repeat_params1: Vec4::ZERO,
+            radial_repeat_params2: Vec4::new(360.0, 1.0, 0.0, 1.0),
+            radial_repeat_params3: Vec4::new(1.0, 0.0, 0.0, 0.0),
+            radial_repeat_params4: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            radial_repeat_params5: Vec4::ZERO,
+            radial_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,
             grid_params1: Vec4::ZERO,
@@ -358,6 +425,11 @@ impl Default for UnifiedEffectUniform {
             pixelate_flags: Vec4::ZERO,
             pixelate_params1: Vec4::ZERO,
             pixelate_params2: Vec4::ZERO,
+            mask_blend: Vec4::ZERO,
+            mask2_blend: Vec4::ZERO,
+            stretch2_params: Vec4::ZERO,
+            solid_color_params: Vec4::ZERO,
+            solid_color_alpha: Vec4::ZERO,
         }
     }
 }

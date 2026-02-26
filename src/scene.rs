@@ -9,11 +9,14 @@
 //! AM 场景加载、实体生成和图层管理。
 
 mod collect;
+mod collect_embed;
+mod collect_shape;
 mod collect_types;
 mod components;
-mod effects;
+pub(crate) mod effects;
 mod helpers;
 mod spawn;
+mod spawn_shape;
 mod spawn_visual;
 
 // Re-export public types
@@ -70,6 +73,7 @@ mod tests {
             speed_multiplier: 1.0,
             nesting_depth: 0,
             lifecycle_offset: 0,
+            scene_fps: 30.0,
         };
 
         // Center of AM canvas should be at Bevy origin

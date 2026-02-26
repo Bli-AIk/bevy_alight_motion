@@ -23,6 +23,53 @@ pub enum SdfShapeType {
     BoxBevel,
     /// Circle or ellipse
     Circle,
+    /// Rectangle with explicit corner radius
+    RoundRect,
+    /// Regular N-sided polygon
+    Polygon,
+    /// Star shape
+    Star,
+    /// Pie/arc sector
+    Pie,
+    /// Plus/cross shape
+    Plus,
+    /// Multi-leaf/multifoil shape
+    Multifoil,
+    /// Line segment (fill=none, stroke only)
+    Line,
+    /// Arc (fill=none, stroke only)
+    Arc,
+    /// Triangle (3 arbitrary vertices)
+    Triangle,
+    /// Quadrilateral (4 arbitrary vertices)
+    Quad,
+    /// Pentagon (5 arbitrary vertices)
+    Penta,
+    /// Freeform path (rendered as mesh, not SDF)
+    Path,
+}
+
+impl SdfShapeType {
+    pub fn to_f32(self) -> f32 {
+        match self {
+            Self::BoxRound => 0.0,
+            Self::BoxMiter => 1.0,
+            Self::BoxBevel => 2.0,
+            Self::Circle => 3.0,
+            Self::RoundRect => 4.0,
+            Self::Polygon => 5.0,
+            Self::Star => 6.0,
+            Self::Pie => 7.0,
+            Self::Plus => 8.0,
+            Self::Multifoil => 9.0,
+            Self::Line => 10.0,
+            Self::Arc => 11.0,
+            Self::Triangle => 12.0,
+            Self::Quad => 13.0,
+            Self::Penta => 14.0,
+            Self::Path => 15.0,
+        }
+    }
 }
 
 /// Uniform data for SDF shader - must match the struct in the shader exactly
@@ -51,9 +98,69 @@ pub struct SdfMaterialUniform {
     pub mask_rotation: f32,
     /// Mask 2 rotation in radians
     pub mask2_rotation: f32,
-    /// Padding to ensure 16-byte alignment (4 floats = 16 bytes)
-    pub _padding1: f32,
-    pub _padding2: f32,
+    /// Border 1 direction mode: 0.0=centered, 1.0=inside, -1.0=outside
+    pub border_mode: f32,
+    /// Border 2 stroke width (0.0 = no second border)
+    pub border2_width: f32,
+    /// Border 2 packed stroke color (RGBA as u32 bits in f32)
+    pub border2_packed_color: f32,
+    /// Border 2 direction mode: 0.0=centered, 1.0=inside, -1.0=outside
+    pub border2_mode: f32,
+    /// Border anti-aliasing width in SDF units (matches AM's 1.5-step smoothstep)
+    pub border_aa_width: f32,
+    /// Base half-width at spawn time (used to compute scale for polygon shapes)
+    pub base_half_width: f32,
+    /// Shape-specific extra parameters (meaning depends on shape_type)
+    /// RoundRect: (cornerRadius, 0, 0, 0)
+    /// Polygon: (sideCount, radius, offsetAngle_deg, 0)
+    /// Star: (pointCount, outerRadius, innerRadius, offsetAngle_deg)
+    /// Pie: (startAngle_deg, endAngle_deg, radius, 0)
+    /// Plus: (stemSize, 0, 0, 0) [uses params.xy for half_size]
+    /// Multifoil: (pointCount, outerRadius, innerRadius, offsetAngle_deg)
+    /// Line: (p1.x, p1.y, p2.x, p2.y)
+    /// Arc: (startAngle_deg, endAngle_deg, radius, 0)
+    /// Triangle: (p1.x, p1.y, p2.x, p2.y)
+    /// Quad: (p1.x, p1.y, p2.x, p2.y)
+    /// Penta: (p1.x, p1.y, p2.x, p2.y)
+    pub shape_extra: Vec4,
+    /// Second shape-specific extra parameters
+    /// Triangle: (p3.x, p3.y, 0, 0)
+    /// Quad: (p3.x, p3.y, p4.x, p4.y)
+    /// Penta: (p3.x, p3.y, p4.x, p4.y)
+    pub shape_extra2: Vec4,
+    /// Third shape-specific extra parameters
+    /// Penta: (p5.x, p5.y, 0, 0)
+    pub shape_extra3: Vec4,
+    /// Fourth shape-specific extra parameters (for Path with many vertices)
+    /// Path: (p7.x, p7.y, p8.x, p8.y)
+    pub shape_extra4: Vec4,
+    /// Fifth shape-specific extra parameters
+    /// Path: (p9.x, p9.y, p10.x, p10.y)
+    pub shape_extra5: Vec4,
+    /// Sixth shape-specific extra parameters
+    /// Path: (p11.x, p11.y, p12.x, p12.y)
+    pub shape_extra6: Vec4,
+    /// Seventh shape-specific extra parameters
+    /// Path: (p13.x, p13.y, vertex_count, 0)
+    pub shape_extra7: Vec4,
+    /// Gradient start color (linear RGBA). All zeros when no gradient.
+    pub gradient_start_color: Vec4,
+    /// Gradient end color (linear RGBA).
+    pub gradient_end_color: Vec4,
+    /// Gradient points: (start_x, start_y, end_x, end_y) in shape UV [0,1] space.
+    pub gradient_points: Vec4,
+    /// Gradient config: (gradient_type, pixelate_threshold, 0, 0)
+    /// gradient_type: 0=none, 1=linear, 2=radial, 3=sweep
+    /// pixelate_threshold: 0=disabled, >0 = threshold value for pixelate2 effect
+    ///   (pixels with sRGB luminance below this become transparent)
+    pub gradient_config: Vec4,
+    /// Mask 1 blend parameters: (fill_alpha, opacity, stroke_width, 0)
+    /// fill_alpha: the mask shape's fill alpha (0.0 = transparent fill, 1.0 = opaque)
+    /// opacity: the mask element's current animated opacity (0..1)
+    /// stroke_width: the mask shape's stroke width in world units
+    pub mask_blend: Vec4,
+    /// Mask 2 blend parameters: (fill_alpha, opacity, stroke_width, 0)
+    pub mask2_blend: Vec4,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -145,8 +252,25 @@ impl Default for SdfMaterial {
                 frame_half: default_frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
-                _padding2: 0.0,
+                border_mode: 0.0,
+                border2_width: 0.0,
+                border2_packed_color: 0.0,
+                border2_mode: 0.0,
+                border_aa_width: 0.0,
+                base_half_width: 0.0,
+                shape_extra: Vec4::ZERO,
+                shape_extra2: Vec4::ZERO,
+                shape_extra3: Vec4::ZERO,
+                shape_extra4: Vec4::ZERO,
+                shape_extra5: Vec4::ZERO,
+                shape_extra6: Vec4::ZERO,
+                shape_extra7: Vec4::ZERO,
+                gradient_start_color: Vec4::ZERO,
+                gradient_end_color: Vec4::ZERO,
+                gradient_points: Vec4::ZERO,
+                gradient_config: Vec4::ZERO,
+                mask_blend: Vec4::ZERO,
+                mask2_blend: Vec4::ZERO,
             },
         }
     }
@@ -192,19 +316,31 @@ impl SdfMaterial {
                 params: Vec4::new(half_width, half_height, stroke_width, packed_stroke),
                 mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
                 mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
-                shape_type: match shape_type {
-                    SdfShapeType::BoxRound => 0.0,
-                    SdfShapeType::BoxMiter => 1.0,
-                    SdfShapeType::BoxBevel => 2.0,
-                    SdfShapeType::Circle => 3.0,
-                },
+                shape_type: shape_type.to_f32(),
                 mask_type: 0.0,
                 mask2_type: 0.0,
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
-                _padding2: 0.0,
+                border_mode: 0.0,
+                border2_width: 0.0,
+                border2_packed_color: 0.0,
+                border2_mode: 0.0,
+                border_aa_width: 0.0,
+                base_half_width: 0.0,
+                shape_extra: Vec4::ZERO,
+                shape_extra2: Vec4::ZERO,
+                shape_extra3: Vec4::ZERO,
+                shape_extra4: Vec4::ZERO,
+                shape_extra5: Vec4::ZERO,
+                shape_extra6: Vec4::ZERO,
+                shape_extra7: Vec4::ZERO,
+                gradient_start_color: Vec4::ZERO,
+                gradient_end_color: Vec4::ZERO,
+                gradient_points: Vec4::ZERO,
+                gradient_config: Vec4::ZERO,
+                mask_blend: Vec4::ZERO,
+                mask2_blend: Vec4::ZERO,
             },
         }
     }
@@ -273,19 +409,31 @@ impl SdfMaterial {
                     mask_half_size.y,
                 ),
                 mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0), // disabled by default
-                shape_type: match shape_type {
-                    SdfShapeType::BoxRound => 0.0,
-                    SdfShapeType::BoxMiter => 1.0,
-                    SdfShapeType::BoxBevel => 2.0,
-                    SdfShapeType::Circle => 3.0,
-                },
+                shape_type: shape_type.to_f32(),
                 mask_type,
                 mask2_type: 0.0,
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
-                _padding2: 0.0,
+                border_mode: 0.0,
+                border2_width: 0.0,
+                border2_packed_color: 0.0,
+                border2_mode: 0.0,
+                border_aa_width: 0.0,
+                base_half_width: 0.0,
+                shape_extra: Vec4::ZERO,
+                shape_extra2: Vec4::ZERO,
+                shape_extra3: Vec4::ZERO,
+                shape_extra4: Vec4::ZERO,
+                shape_extra5: Vec4::ZERO,
+                shape_extra6: Vec4::ZERO,
+                shape_extra7: Vec4::ZERO,
+                gradient_start_color: Vec4::ZERO,
+                gradient_end_color: Vec4::ZERO,
+                gradient_points: Vec4::ZERO,
+                gradient_config: Vec4::ZERO,
+                mask_blend: Vec4::ZERO,
+                mask2_blend: Vec4::ZERO,
             },
         }
     }
@@ -304,8 +452,25 @@ impl SdfMaterial {
                 frame_half,
                 mask_rotation: 0.0,
                 mask2_rotation: 0.0,
-                _padding1: 0.0,
-                _padding2: 0.0,
+                border_mode: 0.0,
+                border2_width: 0.0,
+                border2_packed_color: 0.0,
+                border2_mode: 0.0,
+                border_aa_width: 0.0,
+                base_half_width: 0.0,
+                shape_extra: Vec4::ZERO,
+                shape_extra2: Vec4::ZERO,
+                shape_extra3: Vec4::ZERO,
+                shape_extra4: Vec4::ZERO,
+                shape_extra5: Vec4::ZERO,
+                shape_extra6: Vec4::ZERO,
+                shape_extra7: Vec4::ZERO,
+                gradient_start_color: Vec4::ZERO,
+                gradient_end_color: Vec4::ZERO,
+                gradient_points: Vec4::ZERO,
+                gradient_config: Vec4::ZERO,
+                mask_blend: Vec4::ZERO,
+                mask2_blend: Vec4::ZERO,
             },
         }
     }
@@ -507,6 +672,18 @@ mod tests {
         assert_eq!((bits >> 16) & 0xFF, 0); // G
         assert_eq!((bits >> 8) & 0xFF, 0); // B
         assert!((bits & 0xFF) >= 254, "A should be ~255"); // A
+    }
+
+    #[test]
+    fn test_sdf_uniform_size() {
+        use bevy::render::render_resource::ShaderType;
+        let size = SdfMaterialUniform::min_size();
+        println!("SdfMaterialUniform min_size = {}", size);
+        assert_eq!(
+            size.get(),
+            320,
+            "SdfMaterialUniform size mismatch! Expected 320 bytes"
+        );
     }
 
     #[test]
