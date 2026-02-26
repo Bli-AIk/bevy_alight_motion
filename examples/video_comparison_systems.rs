@@ -278,9 +278,7 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
     // So we skip frame_000001 and start from frame_000002
     if !frame_paths.is_empty() {
         frame_paths.remove(0);
-        println!(
-            "[COMPARISON] Skipped first reference frame (AM video export timing mismatch)"
-        );
+        println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
     }
 
     state.frame_paths = frame_paths;
@@ -418,8 +416,7 @@ pub fn comparison_loop(
                 .and_then(|s| s.parse::<usize>().ok());
             let frame_limit = max_frames.unwrap_or(state.frame_paths.len());
 
-            if state.current_frame >= state.frame_paths.len()
-                || state.current_frame >= frame_limit
+            if state.current_frame >= state.frame_paths.len() || state.current_frame >= frame_limit
             {
                 state.stage = TestStage::Finished;
                 return;
@@ -603,8 +600,7 @@ pub fn comparison_loop(
 
             let failed_count = failed_frames.len();
             let critical_failed_count = critical_failed_frames.len();
-            let max_allowed_failed =
-                (total_frames as f32 * state.max_failed_rate).ceil() as usize;
+            let max_allowed_failed = (total_frames as f32 * state.max_failed_rate).ceil() as usize;
             let max_allowed_critical =
                 (total_frames as f32 * state.max_critical_rate).ceil() as usize;
 

@@ -224,7 +224,6 @@ pub fn spawn_scene(
     entity_map
 }
 
-
 /// Spawn a null object.
 pub(crate) fn spawn_null(
     commands: &mut Commands,

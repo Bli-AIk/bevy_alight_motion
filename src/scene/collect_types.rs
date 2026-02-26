@@ -18,8 +18,6 @@ use super::components::*;
 use super::effects::*;
 use super::helpers::*;
 
-
-
 /// Collect a null object's data.
 pub(crate) fn collect_null(
     null: &crate::schema::AmNullObj,
@@ -240,8 +238,6 @@ pub(crate) fn collect_null(
         from_deeply_nested_scene: config.nesting_depth > 1,
     })
 }
-
-
 
 /// Apply mask information to layers that are below mask layers.
 /// A mask layer affects all layers with lower z-index (parent=0 only) until end of scope.

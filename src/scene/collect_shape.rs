@@ -510,7 +510,6 @@ pub(crate) fn collect_shape(
     })
 }
 
-
 /// Extract shape-specific extra parameters based on shape type.
 /// Returns (shape_extra, shape_extra2, ..., shape_extra7) as Vec4 values.
 pub(crate) fn extract_shape_extras(

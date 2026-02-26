@@ -17,7 +17,6 @@ use super::components::*;
 use super::effects::*;
 use super::helpers::*;
 
-
 /// Collect an embed scene's data recursively.
 pub(crate) fn collect_embed_scene(
     embed: &crate::schema::AmEmbedScene,

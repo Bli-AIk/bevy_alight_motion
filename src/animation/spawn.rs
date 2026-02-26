@@ -378,4 +378,3 @@ pub(crate) fn process_pending_layers(
         }
     }
 }
-

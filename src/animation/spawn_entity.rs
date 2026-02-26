@@ -11,8 +11,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::scene::{
-    AmBlendingMode, AmElement, AmElementType, AmEntitySpawned, AmLayerMarker,
-    AmLayerName, PendingLayer,
+    AmBlendingMode, AmElement, AmElementType, AmEntitySpawned, AmLayerMarker, AmLayerName,
+    PendingLayer,
 };
 use crate::sdf_material::SdfMaterial;
 
