@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.3.0...v0.3.1) - 2026-02-26
+
+### Added
+
+- add multiple new effects and comprehensive repeat support ([#26](https://github.com/Bli-AIk/bevy_alight_motion/pull/26))
+- implement pixelate effect and fix video resolution mismatch
+
+### Miscellaneous Tasks
+
+- *(test, docs)* update test results and documentation timestamps
+
+### Refactor
+
+- *(animation)* fix linear repeat offset and add debug logs
+
 ## [0.3.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.2.0...v0.3.0) - 2026-02-11
 
 ### Added
