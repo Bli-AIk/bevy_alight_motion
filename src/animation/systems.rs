@@ -86,7 +86,7 @@ pub fn animate_transform_system(
                 30.0
             };
             let frame_duration_ms = 1000.0 / fps;
-            let offset = frame_duration_ms * 0.35;
+            let offset = frame_duration_ms * 0.50;
             local_time += offset;
         }
 
