@@ -1,7 +1,7 @@
 # Transform2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-28 00:21:36
+> Last tested: 2026-02-28 00:52:13
 
 Provides additional transform controls similar to the base transform properties.
 
@@ -18,7 +18,7 @@ Provides additional transform controls similar to the base transform properties.
 
 **Related Test Files:**
 - `effects/pixelate/bone.amproj` ❌
-- `effects/pixelate/bone_single.amproj` ❌
+- `effects/pixelate/bone_single.amproj` ✅
 - `effects/transform/complex1.amproj` ✅
 - `effects/transform/complex2.amproj` ✅
 

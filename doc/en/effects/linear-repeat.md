@@ -1,7 +1,7 @@
 # Linear Repeat
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-28 00:21:36
+> Last tested: 2026-02-28 00:52:13
 
 Creates copies of the layer arranged in a line with advanced controls for position, offset, rotation, scale, alpha, and color blending.
 
@@ -37,7 +37,7 @@ Creates copies of the layer arranged in a line with advanced controls for positi
 - `effects/linear-repeat/random_generated1/3.amproj` ❌
 - `effects/linear-repeat/random_generated2/1.amproj` ✅
 - `effects/linear-repeat/random_generated2/2.amproj` ✅
-- `effects/linear-repeat/random_generated2/3.amproj` ❌
+- `effects/linear-repeat/random_generated2/3.amproj` ✅
 
 ---
 

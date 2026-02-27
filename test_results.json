@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-02-28T00:21:36.176102+08:00",
+  "timestamp": "2026-02-28T00:52:13.272691+08:00",
   "summary": {
-    "passed": 102,
+    "passed": 104,
     "warnings": 0,
     "skipped": 2,
-    "failed": 43
+    "failed": 41
   },
   "results": {
     "basic/bezier/bezier": {
@@ -126,7 +126,7 @@
     },
     "effects/echo-keyframes/basic": {
       "status": "fail",
-      "avg_similarity": 0.9596
+      "avg_similarity": 0.9442
     },
     "effects/gaussian-blur/basic": {
       "status": "skip"
@@ -148,19 +148,19 @@
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.9594
+      "avg_similarity": 0.9662
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.9492
+      "avg_similarity": 0.958
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.915
+      "avg_similarity": 0.9219
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.9308
+      "avg_similarity": 0.9382
     },
     "effects/linear-repeat/random_generated2/1": {
       "status": "pass"
@@ -169,8 +169,7 @@
       "status": "pass"
     },
     "effects/linear-repeat/random_generated2/3": {
-      "status": "fail",
-      "avg_similarity": 0.7366
+      "status": "pass"
     },
     "effects/palette/basic": {
       "status": "pass"
@@ -186,11 +185,10 @@
     },
     "effects/pixelate/bone": {
       "status": "fail",
-      "avg_similarity": 0.9063
+      "avg_similarity": 0.9076
     },
     "effects/pixelate/bone_single": {
-      "status": "fail",
-      "avg_similarity": 0.9986
+      "status": "pass"
     },
     "effects/pixelate/sprite": {
       "status": "pass"
@@ -245,11 +243,11 @@
     },
     "effects/text-progress/basic": {
       "status": "fail",
-      "avg_similarity": 0.4179
+      "avg_similarity": 0.426
     },
     "effects/text-spacing/basic": {
       "status": "fail",
-      "avg_similarity": 0.5555
+      "avg_similarity": 0.5624
     },
     "effects/threshold/basic": {
       "status": "pass"

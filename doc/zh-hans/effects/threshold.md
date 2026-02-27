@@ -1,7 +1,7 @@
 # 阈值 (Threshold)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-28 00:21:36
+> 最近测试时间：2026-02-28 00:52:13
 
 将图像转换为只有黑色和白色的高对比度图像。
 
@@ -14,7 +14,7 @@
 
 **关联测试文件：**
 - `effects/pixelate/bone.amproj` ❌
-- `effects/pixelate/bone_single.amproj` ❌
+- `effects/pixelate/bone_single.amproj` ✅
 - `effects/threshold/basic.amproj` ✅
 
 ---

@@ -1,7 +1,7 @@
 # Pentagon
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-28 00:21:36
+> Last tested: 2026-02-28 00:52:13
 
 Regular pentagon shape using SDF rendering.
 
