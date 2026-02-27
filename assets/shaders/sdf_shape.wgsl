@@ -425,14 +425,15 @@ fn compute_border_alpha(dist: f32, width: f32, mode: f32, aa: f32) -> f32 {
         let inward = -dist;  // positive = deeper inside
         // Sharp clip at shape edge (no AA bleed outside shape)
         let edge_clip = step(0.0, inward);
-        // Hard edge at inner extent (pixel-perfect)
-        let inner_fade = step(width, inward);
+        // Border ring: 1.0 when inward < width (within the border), 0.0 beyond
+        let inner_fade = 1.0 - step(width, inward);
         return edge_clip * inner_fade;
     } else if mode < -0.5 {
         // OUTSIDE border: extends from dist=0 (edge) to dist=+width (outward)
         let outward = dist;  // positive = further outside
         let edge_clip = step(0.0, outward);
-        let outer_fade = step(width, outward);
+        // Border ring: 1.0 when outward < width (within the border), 0.0 beyond
+        let outer_fade = 1.0 - step(width, outward);
         return edge_clip * outer_fade;
     } else {
         // CENTERED border: rendered via NanoVG path stroke, crisp edges
