@@ -1003,15 +1003,19 @@ pub fn animate_am_camera_system(
 
 /// Runtime system for updating echokf echo entities with dynamic (keyframed) parameters.
 /// Evaluates count/seconds/alpha keyframes per frame and updates echo time shifts and visibility.
+/// Propagates updated values to all descendant entities in each echo subtree.
 pub fn update_echo_runtime_system(
     playback: Res<AmPlayback>,
     mut echo_query: Query<(
+        Entity,
         &super::components::AmEchoRuntime,
         &mut AmAnimated,
         &mut Visibility,
     )>,
+    children_query: Query<&Children>,
+    mut child_animated_query: Query<&mut AmAnimated, Without<super::components::AmEchoRuntime>>,
 ) {
-    for (echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
+    for (entity, echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
         // Compute parent element's fractional time (0-1)
         let global_time = playback.current_time_ms as f32;
         let parent_local = (global_time - echo_rt.embed_time_offset) * echo_rt.embed_speed;
@@ -1039,37 +1043,21 @@ pub fn update_echo_runtime_system(
         let current_seconds = interpolate_float(&echo_rt.seconds_kf, frac_t).unwrap_or(0.5);
 
         // Compute echo fraction and time shift based on current count
-        let r0 = if echo_rt.mode == 0 {
-            // Mode 0 (atop): echo_index maps to (count-1-i)/count in AM's loop
-            // Our echo_index is stored as the AM loop index i, where
-            // i=0 → echo_index = count-1-0 in descending order
-            // Actually our code stores: echo_index = (max_count - 1 - i) for mode 0
-            // We need the fraction for the current count, not max count
-            if current_count > 0 {
-                echo_rt.echo_index as f32 / current_count as f32
-            } else {
-                0.0
-            }
+        let r0 = if current_count > 0 {
+            echo_rt.echo_index as f32 / current_count as f32
         } else {
-            // Mode 1 (behind)
-            if current_count > 0 {
-                echo_rt.echo_index as f32 / current_count as f32
-            } else {
-                0.0
-            }
+            0.0
         };
 
         let time_shift_ms = (1.0 - r0) * current_seconds * 1000.0;
 
-        // Update echo_time_shift_ms (base shift from parent config is already included)
-        // We need to set the TOTAL shift, not add to it. Store the base offset and add runtime.
+        // Update root entity
         animated.echo_time_shift_ms = time_shift_ms;
 
-        // Evaluate keyframed alpha and update echo_alpha_config
+        // Evaluate keyframed alpha and build echo_alpha_config
         let current_alpha = interpolate_float(&echo_rt.alpha_kf, frac_t).unwrap_or(1.0);
         let mix = current_alpha * (1.0 - r0) + r0;
-        // Store the evaluated mix directly in a simplified echo_alpha_config
-        animated.echo_alpha_config = Some(super::components::EchoAlphaConfig {
+        let echo_cfg = super::components::EchoAlphaConfig {
             alpha_keyframes: crate::schema::AmAnimatedFloat {
                 value: Some(mix),
                 keyframes: Vec::new(),
@@ -1079,6 +1067,43 @@ pub fn update_echo_runtime_system(
             parent_end: echo_rt.embed_end as i32,
             parent_time_offset: echo_rt.embed_time_offset as i32,
             parent_speed: echo_rt.embed_speed,
-        });
+        };
+        animated.echo_alpha_config = Some(echo_cfg.clone());
+
+        // Propagate to all descendant entities in the echo subtree
+        propagate_echo_to_descendants(
+            entity,
+            time_shift_ms,
+            &echo_cfg,
+            &children_query,
+            &mut child_animated_query,
+        );
+    }
+}
+
+/// Recursively propagate echo_time_shift_ms and echo_alpha_config to all descendants.
+fn propagate_echo_to_descendants(
+    parent: Entity,
+    time_shift_ms: f32,
+    echo_cfg: &super::components::EchoAlphaConfig,
+    children_query: &Query<&Children>,
+    child_animated_query: &mut Query<&mut AmAnimated, Without<super::components::AmEchoRuntime>>,
+) {
+    let Ok(children) = children_query.get(parent) else {
+        return;
+    };
+    for child in children.iter() {
+        if let Ok(mut child_animated) = child_animated_query.get_mut(child) {
+            child_animated.echo_time_shift_ms = time_shift_ms;
+            child_animated.echo_alpha_config = Some(echo_cfg.clone());
+        }
+        // Recurse into grandchildren
+        propagate_echo_to_descendants(
+            child,
+            time_shift_ms,
+            echo_cfg,
+            children_query,
+            child_animated_query,
+        );
     }
 }
