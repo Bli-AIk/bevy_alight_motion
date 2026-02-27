@@ -441,10 +441,12 @@ pub fn animate_sdf_opacity_system(
 /// Instead of using Transform.scale, we update SdfMaterial.params to change the SDF dimensions:
 /// - params.x = base_half_width * animation_scale_x
 /// - params.y = base_half_height * animation_scale_y
-/// - params.z = stroke_width (constant)
+/// - params.z = stroke_width (constant — AM scales path coordinates, not stroke)
 /// - params.w = packed_stroke_color (constant)
 ///
 /// This allows non-uniform scaling while keeping stroke width constant.
+/// Note: Stroke width is NOT scaled with shape animation because AM applies
+/// scale to path vertices directly, not through NanoVG's transform matrix.
 ///
 /// Also updates the child transform translation to account for pivot scaling.
 /// Since the parent (Pivot) is not scaled, we must move the child (Center)
@@ -633,11 +635,17 @@ pub fn animate_sdf_scale_system(
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
 
                 // Use animated stroke width if available, otherwise use base value
-                let final_stroke_width = if stroke_width_animated >= 0.0 {
+                let mut final_stroke_width = if stroke_width_animated >= 0.0 {
                     stroke_width_animated
                 } else {
                     sdf_params.stroke_width
                 };
+
+                // When shape is scaled to near-zero, hide stroke to prevent tiny dots
+                // (AM doesn't render shapes at scale 0; our SDF stroke would still be visible)
+                if scaled_half_width.abs() < 0.1 && scaled_half_height.abs() < 0.1 {
+                    final_stroke_width = 0.0;
+                }
 
                 // Update material params: (half_width, half_height, stroke_width, packed_stroke)
                 if let Some(material) = materials.get_mut(&material_handle.0) {

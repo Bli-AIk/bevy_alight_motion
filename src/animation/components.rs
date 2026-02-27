@@ -456,18 +456,18 @@ pub struct AmAnimated {
     // Jitter effect (com.alightcreative.effects.jitter)
     /// Jitter effect: whether it is enabled
     pub jitter_enabled: bool,
-    /// Jitter effect: movement angle (degrees)
-    pub jitter_angle: f32,
-    /// Jitter effect: quantization frequency (steps/sec)
-    pub jitter_freq: f32,
-    /// Jitter effect: displacement magnitude (pixels)
-    pub jitter_mag: f32,
-    /// Jitter effect: noise seed
-    pub jitter_seed: f32,
-    /// Jitter effect: perpendicular slack (0.0-1.0)
-    pub jitter_slack: f32,
-    /// Jitter effect: z-axis jitter magnitude
-    pub jitter_zjitter: f32,
+    /// Jitter effect: movement angle (degrees) - may be keyframed
+    pub jitter_angle: AmAnimatedFloat,
+    /// Jitter effect: quantization frequency (steps/sec) - may be keyframed
+    pub jitter_freq: AmAnimatedFloat,
+    /// Jitter effect: displacement magnitude (pixels) - may be keyframed
+    pub jitter_mag: AmAnimatedFloat,
+    /// Jitter effect: noise seed - may be keyframed
+    pub jitter_seed: AmAnimatedFloat,
+    /// Jitter effect: perpendicular slack (0.0-1.0) - may be keyframed
+    pub jitter_slack: AmAnimatedFloat,
+    /// Jitter effect: z-axis jitter magnitude - may be keyframed
+    pub jitter_zjitter: AmAnimatedFloat,
     /// Retime info for children of retimed embed scenes.
     /// When present, overrides linear time mapping with retime mode.
     pub retime: Option<AmRetimeInfo>,

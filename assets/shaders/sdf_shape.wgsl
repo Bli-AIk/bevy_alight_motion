@@ -390,7 +390,12 @@ fn compute_gradient_color(shape_uv: vec2<f32>) -> vec4<f32> {
     }
     // Mix in sRGB space (matching AM's NanoVG behavior), then convert to linear
     let srgb = mix(material.gradient_start_color, material.gradient_end_color, t);
-    return vec4<f32>(pow(srgb.rgb, vec3<f32>(2.2)), srgb.a);
+    let lin = vec3<f32>(
+        select(pow((srgb.r + 0.055) / 1.055, 2.4), srgb.r / 12.92, srgb.r <= 0.04045),
+        select(pow((srgb.g + 0.055) / 1.055, 2.4), srgb.g / 12.92, srgb.g <= 0.04045),
+        select(pow((srgb.b + 0.055) / 1.055, 2.4), srgb.b / 12.92, srgb.b <= 0.04045),
+    );
+    return vec4<f32>(lin, srgb.a);
 }
 
 // Unpack RGBA from u32 bits stored in f32
@@ -401,10 +406,11 @@ fn unpack_color(packed: f32) -> vec4<f32> {
     let b_srgb = f32((bits >> 8u) & 0xFFu) / 255.0;
     let a = f32(bits & 0xFFu) / 255.0;
     
-    // Convert sRGB to linear (gamma 2.2 approximation)
-    let r = pow(r_srgb, 2.2);
-    let g = pow(g_srgb, 2.2);
-    let b = pow(b_srgb, 2.2);
+    // Convert sRGB to linear using exact sRGB transfer function
+    // (matches Bevy's hardware sRGB surface for lossless round-trip)
+    let r = select(pow((r_srgb + 0.055) / 1.055, 2.4), r_srgb / 12.92, r_srgb <= 0.04045);
+    let g = select(pow((g_srgb + 0.055) / 1.055, 2.4), g_srgb / 12.92, g_srgb <= 0.04045);
+    let b = select(pow((b_srgb + 0.055) / 1.055, 2.4), b_srgb / 12.92, b_srgb <= 0.04045);
     
     return vec4<f32>(r, g, b, a);
 }
@@ -429,10 +435,10 @@ fn compute_border_alpha(dist: f32, width: f32, mode: f32, aa: f32) -> f32 {
         let outer_fade = 1.0 - smoothstep(width - aa * 1.5, width, outward);
         return edge_clip * outer_fade;
     } else {
-        // CENTERED border: rendered via NanoVG path stroke, crisp edges
+        // CENTERED border: rendered via NanoVG path stroke with anti-aliased edges
         let half = width * 0.5;
         let d = abs(dist);
-        return step(d, half);
+        return 1.0 - smoothstep(half - aa * 3.0, half + aa * 3.0, d);
     }
 }
 
@@ -802,14 +808,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
-    // Convert alpha from sRGB to linear so GPU's linear blend approximates AM's sRGB result.
-    if final_color.a > 0.001 && final_color.a < 0.999 {
-        final_color.a = select(
-            pow((final_color.a + 0.055) / 1.055, 2.4),
-            final_color.a / 12.92,
-            final_color.a <= 0.04045
-        );
-    }
+    // NOTE: sRGB alpha correction disabled — narrows AA fringes too aggressively.
 
     if final_color.a < 0.005 {
         discard;

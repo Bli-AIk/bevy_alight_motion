@@ -441,50 +441,79 @@ pub fn animate_transform_system(
             };
 
             // Apply jitter effect (simplex noise-based position displacement)
-            if animated.jitter_enabled && animated.jitter_freq > 0.0 {
-                // AM uses integer millisecond scene time (frameStartTimeFromFrameNumber
-                // computes frame*100000/fphs via integer division). Truncating our float ms
-                // to integer matches AM's precision and avoids quantization step mismatches.
-                let local_time_int = (local_time as f64).floor();
-                let global_time = (local_time_int - animated.start_time as f64) / 1000.0;
-                let freq = animated.jitter_freq as f64;
-                let t = (global_time * freq).floor() / freq;
+            if animated.jitter_enabled {
+                // AM uses integer millisecond scene time for both the jitter script
+                // and effect parameter evaluation. Truncate to integer ms to match.
+                let local_time_int = (local_time as f64).floor() as f32;
+                let duration = (animated.end_time - animated.start_time) as f32;
+                let am_layer_time = if duration > 0.0 {
+                    (local_time_int - animated.start_time as f32) / duration
+                } else {
+                    0.0
+                };
 
-                let a = (animated.jitter_angle as f64) * (std::f64::consts::PI / 180.0);
-                let seed = animated.jitter_seed as f64;
-                let mag = animated.jitter_mag as f64;
+                // Interpolate jitter parameters at AM's integer-ms-based layer_time
+                let jitter_freq_val =
+                    interpolate_float(&animated.jitter_freq, am_layer_time).unwrap_or(0.0);
+                let jitter_angle_val =
+                    interpolate_float(&animated.jitter_angle, am_layer_time).unwrap_or(0.0);
+                let jitter_mag_val =
+                    interpolate_float(&animated.jitter_mag, am_layer_time).unwrap_or(0.0);
+                let jitter_seed_val =
+                    interpolate_float(&animated.jitter_seed, am_layer_time).unwrap_or(0.0);
+                let jitter_slack_val =
+                    interpolate_float(&animated.jitter_slack, am_layer_time).unwrap_or(0.0);
+                let jitter_zjitter_val =
+                    interpolate_float(&animated.jitter_zjitter, am_layer_time).unwrap_or(0.0);
 
-                // Primary displacement along angle direction
-                let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
-                let dx_primary = (a.sin() * mag * m) as f32;
-                let dy_primary = (a.cos() * mag * m) as f32;
-                bx += dx_primary;
-                by -= dy_primary; // Y inverted for Bevy
+                if jitter_freq_val > 0.0 {
+                    // Replicate AM's f32 precision chain for globalTime:
+                    // AM: env.time = (float)(sceneTime-startTime) / (float)(endTime-startTime)  [f32]
+                    //     env.duration = (endTime-startTime) / 1000.0  [f64]
+                    //     globalTime = env.duration * (double)env.time  [f64 * f32→f64]
+                    // The f32 division causes slight rounding that affects floor(gt*freq)
+                    // at boundary frames (e.g., frame 5: 0.199999995 vs exact 0.2).
+                    let duration_sec = (animated.end_time - animated.start_time) as f64 / 1000.0;
+                    let global_time = duration_sec * (am_layer_time as f64);
+                    let freq = jitter_freq_val as f64;
+                    let t = (global_time * freq).floor() / freq;
 
-                // Perpendicular slack displacement
-                if animated.jitter_slack > 0.0 {
-                    let a2 = a + std::f64::consts::FRAC_PI_2;
-                    let m2 =
-                        simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
-                    let slack = animated.jitter_slack as f64;
-                    bx += (a2.sin() * mag * m2 * slack) as f32;
-                    by -= (a2.cos() * mag * m2 * slack) as f32;
-                }
+                    let a = (jitter_angle_val as f64) * (std::f64::consts::PI / 180.0);
+                    let seed = jitter_seed_val as f64;
+                    let mag = jitter_mag_val as f64;
 
-                // Z-axis jitter (affects perspective zoom like oscillate)
-                if animated.jitter_zjitter > 0.0 {
-                    let zm =
-                        simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
-                    let z_offset = (zm * animated.jitter_zjitter as f64) as f32;
-                    if z_offset != 0.0 {
-                        let cam_dist = animated.canvas_width.max(animated.canvas_height)
-                            / (2.0 * (30.0_f32).to_radians().tan());
-                        let denom = cam_dist + z_offset;
-                        if denom > 0.0 {
-                            let zoom = cam_dist / denom;
-                            bx *= zoom;
-                            by *= zoom;
-                            oscillate_z_zoom *= zoom;
+                    // Primary displacement along angle direction
+                    let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
+                    let dx_primary = (a.sin() * mag * m) as f32;
+                    let dy_primary = (a.cos() * mag * m) as f32;
+                    bx += dx_primary;
+                    by -= dy_primary; // Y inverted for Bevy
+
+                    // Perpendicular slack displacement
+                    if jitter_slack_val > 0.0 {
+                        let a2 = a + std::f64::consts::FRAC_PI_2;
+                        let m2 =
+                            simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
+                        let slack = jitter_slack_val as f64;
+                        bx += (a2.sin() * mag * m2 * slack) as f32;
+                        by -= (a2.cos() * mag * m2 * slack) as f32;
+                    }
+
+                    // Z-axis jitter (affects perspective zoom like oscillate)
+                    if jitter_zjitter_val > 0.0 {
+                        let zm =
+                            simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
+                        let z_offset = (zm * jitter_zjitter_val as f64) as f32;
+                        if z_offset != 0.0 {
+                            let cam_dist = animated.canvas_width.max(animated.canvas_height)
+                                / (2.0 * (30.0_f32).to_radians().tan());
+                            let denom = cam_dist + z_offset;
+                            if denom > 0.0 {
+                                let zoom = cam_dist / denom;
+                                bx *= zoom;
+                                by *= zoom;
+                                oscillate_z_zoom *= zoom;
+                            }
                         }
                     }
                 }

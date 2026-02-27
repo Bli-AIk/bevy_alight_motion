@@ -460,18 +460,18 @@ pub(crate) fn extract_oscillate_effect(effects: &[AmEffect]) -> OscillateParams 
 /// 抖动效果参数 - 基于 simplex 噪声的位置位移
 #[derive(Debug, Clone)]
 pub struct JitterParams {
-    /// Movement angle (degrees)
-    pub angle: f32,
-    /// Frequency (steps per second)
-    pub freq: f32,
-    /// Magnitude (pixels)
-    pub mag: f32,
-    /// Noise seed
-    pub seed: f32,
-    /// Perpendicular slack (0.0-1.0)
-    pub slack: f32,
-    /// Z-axis jitter magnitude
-    pub zjitter: f32,
+    /// Movement angle (degrees) - may be keyframed
+    pub angle: AmAnimatedFloat,
+    /// Frequency (steps per second) - may be keyframed
+    pub freq: AmAnimatedFloat,
+    /// Magnitude (pixels) - may be keyframed
+    pub mag: AmAnimatedFloat,
+    /// Noise seed - may be keyframed
+    pub seed: AmAnimatedFloat,
+    /// Perpendicular slack (0.0-1.0) - may be keyframed
+    pub slack: AmAnimatedFloat,
+    /// Z-axis jitter magnitude - may be keyframed
+    pub zjitter: AmAnimatedFloat,
     /// Whether the effect is present
     pub enabled: bool,
 }
@@ -479,12 +479,30 @@ pub struct JitterParams {
 impl Default for JitterParams {
     fn default() -> Self {
         Self {
-            angle: 45.0,
-            freq: 30.0,
-            mag: 25.0,
-            seed: 0.0,
-            slack: 0.0,
-            zjitter: 0.0,
+            angle: AmAnimatedFloat {
+                value: Some(45.0),
+                keyframes: Vec::new(),
+            },
+            freq: AmAnimatedFloat {
+                value: Some(30.0),
+                keyframes: Vec::new(),
+            },
+            mag: AmAnimatedFloat {
+                value: Some(25.0),
+                keyframes: Vec::new(),
+            },
+            seed: AmAnimatedFloat {
+                value: Some(0.0),
+                keyframes: Vec::new(),
+            },
+            slack: AmAnimatedFloat {
+                value: Some(0.0),
+                keyframes: Vec::new(),
+            },
+            zjitter: AmAnimatedFloat {
+                value: Some(0.0),
+                keyframes: Vec::new(),
+            },
             enabled: false,
         }
     }
@@ -504,40 +522,36 @@ pub(crate) fn extract_jitter_effect(effects: &[AmEffect]) -> JitterParams {
 
     params.enabled = true;
 
+    // Helper to parse a property as AmAnimatedFloat (with keyframe support)
+    fn parse_animated_float(prop: &crate::schema::AmProperty, default: f32) -> AmAnimatedFloat {
+        if !prop.keyframes.is_empty() {
+            AmAnimatedFloat {
+                value: prop.value.parse::<f32>().ok().or(Some(default)),
+                keyframes: prop.keyframes.clone(),
+            }
+        } else if let Ok(v) = prop.value.parse::<f32>() {
+            AmAnimatedFloat {
+                value: Some(v),
+                keyframes: Vec::new(),
+            }
+        } else {
+            AmAnimatedFloat {
+                value: Some(default),
+                keyframes: Vec::new(),
+            }
+        }
+    }
+
     for effect in effects {
         if effect.id == "com.alightcreative.effects.jitter" {
             for prop in &effect.properties {
                 match prop.name.as_str() {
-                    "angle" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle = v;
-                        }
-                    }
-                    "freq" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.freq = v;
-                        }
-                    }
-                    "mag" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.mag = v;
-                        }
-                    }
-                    "seed" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.seed = v;
-                        }
-                    }
-                    "slack" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.slack = v;
-                        }
-                    }
-                    "zjitter" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.zjitter = v;
-                        }
-                    }
+                    "angle" => params.angle = parse_animated_float(prop, 45.0),
+                    "freq" => params.freq = parse_animated_float(prop, 30.0),
+                    "mag" => params.mag = parse_animated_float(prop, 25.0),
+                    "seed" => params.seed = parse_animated_float(prop, 0.0),
+                    "slack" => params.slack = parse_animated_float(prop, 0.0),
+                    "zjitter" => params.zjitter = parse_animated_float(prop, 0.0),
                     _ => {}
                 }
             }
