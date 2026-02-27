@@ -425,20 +425,20 @@ fn compute_border_alpha(dist: f32, width: f32, mode: f32, aa: f32) -> f32 {
         let inward = -dist;  // positive = deeper inside
         // Sharp clip at shape edge (no AA bleed outside shape)
         let edge_clip = step(0.0, inward);
-        // Smooth fade at inner extent (matching AM's smoothstep pattern)
-        let inner_fade = 1.0 - smoothstep(width - aa * 1.5, width, inward);
+        // Hard edge at inner extent (pixel-perfect)
+        let inner_fade = step(width, inward);
         return edge_clip * inner_fade;
     } else if mode < -0.5 {
         // OUTSIDE border: extends from dist=0 (edge) to dist=+width (outward)
         let outward = dist;  // positive = further outside
         let edge_clip = step(0.0, outward);
-        let outer_fade = 1.0 - smoothstep(width - aa * 1.5, width, outward);
+        let outer_fade = step(width, outward);
         return edge_clip * outer_fade;
     } else {
-        // CENTERED border: rendered via NanoVG path stroke with anti-aliased edges
+        // CENTERED border: rendered via NanoVG path stroke, crisp edges
         let half = width * 0.5;
         let d = abs(dist);
-        return 1.0 - smoothstep(half - aa * 3.0, half + aa * 3.0, d);
+        return step(d, half);
     }
 }
 
@@ -480,9 +480,8 @@ fn compute_mask_blend_factor(
 
     // Compute mask rendered alpha: fill contribution + stroke contribution
     let fill_factor = select(0.0, fill_alpha, mask_sdf < 0.0);
-    // Stroke is solid within its width, with ~1px AA at the outer edge
-    let aa = min(1.0, sw * 0.5);
-    let stroke_factor = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+    // Stroke is solid within its width, hard edge for pixel-perfect rendering
+    let stroke_factor = select(0.0, step(abs(mask_sdf), sw * 0.5), sw > 0.01);
     let mask_alpha = min(max(fill_factor, stroke_factor), 1.0);
 
     // Apply mask formula
@@ -696,8 +695,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // - Inside/outside borders use pixel-scan effect with smoothstep at inner edge
     let aa = max(fwidth(dist), 0.5);
     
-    // Fill: inside the shape (dist <= 0), smooth anti-aliased edge to match AM's NanoVG rendering
-    let fill_alpha = 1.0 - smoothstep(-aa, aa, dist);
+    // Fill: inside the shape (dist <= 0), hard edge for pixel-perfect rendering
+    let fill_alpha = step(0.0, -dist);
     // Compute fill color: use gradient if enabled, otherwise solid color
     var fill_base_color = material.color;
     if material.gradient_config.x > 0.5 {
