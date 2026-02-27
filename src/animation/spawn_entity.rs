@@ -760,5 +760,10 @@ pub(super) fn spawn_layer_entity(
         commands.entity(parent_entity).add_child(entity);
     }
 
+    // Insert echo runtime component if present
+    if let Some(ref echo_runtime) = layer.echo_runtime {
+        commands.entity(entity).insert(echo_runtime.clone());
+    }
+
     entity
 }

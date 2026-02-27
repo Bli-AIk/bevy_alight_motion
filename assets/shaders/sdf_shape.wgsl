@@ -708,10 +708,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     
     // Handle stroke if stroke_width > 0
     var final_color: vec4<f32>;
+    var stroke_alpha_contrib: f32 = 0.0;
     if stroke_width > 0.0 {
         let stroke_color = unpack_color(packed_stroke);
         let stroke_alpha = compute_border_alpha(dist, stroke_width, material.border_mode, aa);
         let stroke_col = vec4<f32>(stroke_color.rgb, stroke_color.a * stroke_alpha);
+        stroke_alpha_contrib = stroke_col.a;
         
         // Composite: stroke over fill
         var out_a = stroke_col.a + fill_col.a * (1.0 - stroke_col.a);

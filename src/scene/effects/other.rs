@@ -455,6 +455,230 @@ pub(crate) fn extract_oscillate_effect(effects: &[AmEffect]) -> OscillateParams 
     params
 }
 
+/// Jitter effect parameters (com.alightcreative.effects.jitter)
+/// Simplex noise-based position displacement.
+/// 抖动效果参数 - 基于 simplex 噪声的位置位移
+#[derive(Debug, Clone)]
+pub struct JitterParams {
+    /// Movement angle (degrees)
+    pub angle: f32,
+    /// Frequency (steps per second)
+    pub freq: f32,
+    /// Magnitude (pixels)
+    pub mag: f32,
+    /// Noise seed
+    pub seed: f32,
+    /// Perpendicular slack (0.0-1.0)
+    pub slack: f32,
+    /// Z-axis jitter magnitude
+    pub zjitter: f32,
+    /// Whether the effect is present
+    pub enabled: bool,
+}
+
+impl Default for JitterParams {
+    fn default() -> Self {
+        Self {
+            angle: 45.0,
+            freq: 30.0,
+            mag: 25.0,
+            seed: 0.0,
+            slack: 0.0,
+            zjitter: 0.0,
+            enabled: false,
+        }
+    }
+}
+
+/// Extract jitter effect parameters from effects.
+/// 从效果中提取抖动效果参数
+pub(crate) fn extract_jitter_effect(effects: &[AmEffect]) -> JitterParams {
+    let mut params = JitterParams::default();
+
+    let has_effect = effects
+        .iter()
+        .any(|e| e.id == "com.alightcreative.effects.jitter");
+    if !has_effect {
+        return params;
+    }
+
+    params.enabled = true;
+
+    for effect in effects {
+        if effect.id == "com.alightcreative.effects.jitter" {
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "angle" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.angle = v;
+                        }
+                    }
+                    "freq" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.freq = v;
+                        }
+                    }
+                    "mag" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.mag = v;
+                        }
+                    }
+                    "seed" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.seed = v;
+                        }
+                    }
+                    "slack" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.slack = v;
+                        }
+                    }
+                    "zjitter" => {
+                        if let Ok(v) = prop.value.parse::<f32>() {
+                            params.zjitter = v;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    params
+}
+
+/// Echo keyframe effect parameters (com.alightcreative.effects.repeat.echokf)
+/// Creates time-shifted echo copies of an element.
+/// 回声关键帧效果参数 - 创建元素的时移回声副本
+#[derive(Debug, Clone)]
+pub struct EchokfParams {
+    /// Time spacing per echo (seconds) - may be keyframed
+    pub seconds: AmAnimatedFloat,
+    /// Number of echo copies - may be keyframed
+    pub count: AmAnimatedFloat,
+    /// Alpha keyframes for echo fade (evaluated at element's time)
+    pub alpha: AmAnimatedFloat,
+    /// Composite mode: 0=atop (echoes on top), 1=behind (echoes behind)
+    pub mode: i32,
+    /// Whether the effect is present
+    pub enabled: bool,
+}
+
+impl Default for EchokfParams {
+    fn default() -> Self {
+        Self {
+            seconds: AmAnimatedFloat {
+                value: Some(0.5),
+                keyframes: Vec::new(),
+            },
+            count: AmAnimatedFloat {
+                value: Some(1.0),
+                keyframes: Vec::new(),
+            },
+            alpha: AmAnimatedFloat::default(),
+            mode: 1,
+            enabled: false,
+        }
+    }
+}
+
+impl EchokfParams {
+    /// Get max count (for spawning the right number of echoes).
+    pub fn max_count(&self) -> u32 {
+        if self.count.keyframes.is_empty() {
+            self.count.value.unwrap_or(1.0) as u32
+        } else {
+            // Find maximum value across all keyframes
+            let mut max = self.count.value.unwrap_or(0.0);
+            for kf in &self.count.keyframes {
+                if let Ok(v) = kf.value.parse::<f32>() {
+                    if v > max {
+                        max = v;
+                    }
+                }
+            }
+            max.ceil() as u32
+        }
+    }
+
+    /// Get static seconds value (fallback for non-keyframed case).
+    pub fn static_seconds(&self) -> f32 {
+        self.seconds.value.unwrap_or(0.5)
+    }
+
+    /// Whether count or seconds are keyframed (need runtime updates).
+    pub fn is_dynamic(&self) -> bool {
+        !self.count.keyframes.is_empty() || !self.seconds.keyframes.is_empty()
+    }
+}
+
+/// Extract echokf effect parameters from effects.
+/// 从效果中提取回声关键帧效果参数
+pub(crate) fn extract_echokf_effect(effects: &[AmEffect]) -> EchokfParams {
+    let mut params = EchokfParams::default();
+
+    let effect = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.repeat.echokf");
+    let Some(effect) = effect else {
+        return params;
+    };
+
+    params.enabled = true;
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "seconds" => {
+                if !prop.keyframes.is_empty() {
+                    params.seconds = AmAnimatedFloat {
+                        value: prop.value.parse::<f32>().ok(),
+                        keyframes: prop.keyframes.clone(),
+                    };
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.seconds = AmAnimatedFloat {
+                        value: Some(v),
+                        keyframes: Vec::new(),
+                    };
+                }
+            }
+            "count" => {
+                if !prop.keyframes.is_empty() {
+                    params.count = AmAnimatedFloat {
+                        value: prop.value.parse::<f32>().ok(),
+                        keyframes: prop.keyframes.clone(),
+                    };
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.count = AmAnimatedFloat {
+                        value: Some(v),
+                        keyframes: Vec::new(),
+                    };
+                }
+            }
+            "alpha" => {
+                if !prop.keyframes.is_empty() {
+                    params.alpha = AmAnimatedFloat {
+                        value: prop.value.parse::<f32>().ok(),
+                        keyframes: prop.keyframes.clone(),
+                    };
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.alpha = AmAnimatedFloat {
+                        value: Some(v),
+                        keyframes: Vec::new(),
+                    };
+                }
+            }
+            "mode" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.mode = v;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    params
+}
+
 /// Solid color effect parameters (com.alightcreative.solidcolor)
 /// Overlays a solid color on the content
 /// 纯色效果参数

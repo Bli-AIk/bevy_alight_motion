@@ -141,25 +141,167 @@ pub fn spawn_scene(
                 prev_layer_info = Some((entity, null.id, String::new()));
             }
             AmLayer::EmbedScene(embed) => {
-                let entity = spawn_embed_scene(
-                    commands,
-                    shaders,
-                    embed,
-                    images,
-                    fonts,
-                    font_metrics,
-                    white_pixel,
-                    sdf_shaders,
-                    config,
-                    z,
-                );
-                entity_map.insert(embed.id, entity);
-                if embed.parent != 0 {
-                    parent_relations.push((entity, embed.parent));
+                // Check for echokf effect on this embed
+                let echokf = extract_echokf_effect(&embed.effects);
+
+                let max_count = echokf.max_count();
+                if echokf.enabled && max_count > 0 {
+                    let seconds = echokf.static_seconds();
+                    eprintln!(
+                        "[ECHOKF] embed '{}' id={}: max_count={}, seconds={:.3}, mode={}, alpha_kf={}",
+                        embed.label,
+                        embed.id,
+                        max_count,
+                        seconds,
+                        echokf.mode,
+                        echokf.alpha.keyframes.len()
+                    );
+
+                    // Build base echo alpha config with parent timing
+                    let base_echo_alpha = crate::animation::EchoAlphaConfig {
+                        alpha_keyframes: echokf.alpha.clone(),
+                        fraction: 0.0,
+                        parent_start: embed.start_time,
+                        parent_end: embed.end_time,
+                        parent_time_offset: config.time_offset,
+                        parent_speed: config.speed_multiplier,
+                    };
+
+                    if echokf.mode == 0 {
+                        // Mode 0 (atop): render original first (bottom), echoes on top
+                        let entity = spawn_embed_scene(
+                            commands,
+                            shaders,
+                            embed,
+                            images,
+                            fonts,
+                            font_metrics,
+                            white_pixel,
+                            sdf_shaders,
+                            config,
+                            z,
+                        );
+                        entity_map.insert(embed.id, entity);
+                        if embed.parent != 0 {
+                            parent_relations.push((entity, embed.parent));
+                        } else {
+                            commands.entity(parent).add_child(entity);
+                        }
+
+                        for i in 0..max_count {
+                            let echo_index = (max_count - 1 - i) as f32;
+                            let fraction = echo_index / max_count as f32;
+                            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+                            let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
+
+                            let mut echo_config = config.clone();
+                            echo_config.echo_time_shift_ms += time_shift_ms;
+                            echo_config.echo_alpha_config =
+                                Some(crate::animation::EchoAlphaConfig {
+                                    fraction,
+                                    ..base_echo_alpha.clone()
+                                });
+
+                            let echo_entity = spawn_embed_scene(
+                                commands,
+                                shaders,
+                                embed,
+                                images,
+                                fonts,
+                                font_metrics,
+                                white_pixel,
+                                sdf_shaders,
+                                &echo_config,
+                                echo_z,
+                            );
+                            if embed.parent != 0 {
+                                parent_relations.push((echo_entity, embed.parent));
+                            } else {
+                                commands.entity(parent).add_child(echo_entity);
+                            }
+                        }
+                    } else {
+                        // Mode 1 (behind): echoes first, then original on top
+                        for i in 0..max_count {
+                            let echo_index = i as f32;
+                            let fraction = echo_index / max_count as f32;
+                            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+                            let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
+
+                            let mut echo_config = config.clone();
+                            echo_config.echo_time_shift_ms += time_shift_ms;
+                            echo_config.echo_alpha_config =
+                                Some(crate::animation::EchoAlphaConfig {
+                                    fraction,
+                                    ..base_echo_alpha.clone()
+                                });
+
+                            let echo_entity = spawn_embed_scene(
+                                commands,
+                                shaders,
+                                embed,
+                                images,
+                                fonts,
+                                font_metrics,
+                                white_pixel,
+                                sdf_shaders,
+                                &echo_config,
+                                echo_z,
+                            );
+                            if embed.parent != 0 {
+                                parent_relations.push((echo_entity, embed.parent));
+                            } else {
+                                commands.entity(parent).add_child(echo_entity);
+                            }
+                        }
+
+                        let entity = spawn_embed_scene(
+                            commands,
+                            shaders,
+                            embed,
+                            images,
+                            fonts,
+                            font_metrics,
+                            white_pixel,
+                            sdf_shaders,
+                            config,
+                            z,
+                        );
+                        entity_map.insert(embed.id, entity);
+                        if embed.parent != 0 {
+                            parent_relations.push((entity, embed.parent));
+                        } else {
+                            commands.entity(parent).add_child(entity);
+                        }
+                    }
                 } else {
-                    commands.entity(parent).add_child(entity);
+                    let entity = spawn_embed_scene(
+                        commands,
+                        shaders,
+                        embed,
+                        images,
+                        fonts,
+                        font_metrics,
+                        white_pixel,
+                        sdf_shaders,
+                        config,
+                        z,
+                    );
+                    entity_map.insert(embed.id, entity);
+                    if embed.parent != 0 {
+                        parent_relations.push((entity, embed.parent));
+                    } else {
+                        commands.entity(parent).add_child(entity);
+                    }
                 }
-                prev_layer_info = Some((entity, embed.id, String::new()));
+                prev_layer_info = Some((
+                    entity_map
+                        .get(&embed.id)
+                        .copied()
+                        .unwrap_or(Entity::PLACEHOLDER),
+                    embed.id,
+                    String::new(),
+                ));
             }
             AmLayer::Bookmark(_) => {
                 // Bookmarks are non-visual timeline markers, skip them
@@ -448,7 +590,16 @@ pub(crate) fn spawn_null(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                jitter_enabled: false,
+                jitter_angle: 0.0,
+                jitter_freq: 0.0,
+                jitter_mag: 0.0,
+                jitter_seed: 0.0,
+                jitter_slack: 0.0,
+                jitter_zjitter: 0.0,
                 retime: config.retime.clone(),
+                echo_time_shift_ms: config.echo_time_shift_ms,
+                echo_alpha_config: config.echo_alpha_config.clone(),
             },
             AmLayerSpec::Null,
             transform,
@@ -706,7 +857,16 @@ pub(crate) fn spawn_embed_scene(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                jitter_enabled: false,
+                jitter_angle: 0.0,
+                jitter_freq: 0.0,
+                jitter_mag: 0.0,
+                jitter_seed: 0.0,
+                jitter_slack: 0.0,
+                jitter_zjitter: 0.0,
                 retime: config.retime.clone(),
+                echo_time_shift_ms: config.echo_time_shift_ms,
+                echo_alpha_config: config.echo_alpha_config.clone(),
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)
@@ -745,6 +905,7 @@ pub(crate) fn spawn_embed_scene(
     // Using /100 instead of /1000 for better numerical precision
     let in_time = embed.in_time.unwrap_or(0) as f32;
     let effective_speed = config.speed_multiplier * embed.speed;
+
     // embed.start_time is relative to PARENT's internal time, not global time.
     // When parent's internal time = embed.start_time, child should start.
     // Parent internal time = (global_time - parent_time_offset) * parent_speed
@@ -788,6 +949,7 @@ pub(crate) fn spawn_embed_scene(
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: effective_speed,
         scene_fps: embed.scene.fps as f32,
+        scene_total_time: embed.scene.total_time as f32,
         retime: retime_info,
         ..config.clone()
     };

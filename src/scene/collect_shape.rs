@@ -63,6 +63,7 @@ pub(crate) fn collect_shape(
     let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let oscillate_effect = extract_oscillate_effect(&shape.effects);
+    let jitter_effect = extract_jitter_effect(&shape.effects);
     let spin_rpm = extract_spin_rpm(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
@@ -489,7 +490,17 @@ pub(crate) fn collect_shape(
             textprogress_blink: false,
             shape_props,
             shape_points,
+            // Jitter effect
+            jitter_enabled: jitter_effect.enabled,
+            jitter_angle: jitter_effect.angle,
+            jitter_freq: jitter_effect.freq,
+            jitter_mag: jitter_effect.mag,
+            jitter_seed: jitter_effect.seed,
+            jitter_slack: jitter_effect.slack,
+            jitter_zjitter: jitter_effect.zjitter,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec,
         z_index: z,
@@ -508,6 +519,7 @@ pub(crate) fn collect_shape(
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     })
 }
 

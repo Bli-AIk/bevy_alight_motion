@@ -47,6 +47,7 @@ pub(crate) fn collect_null(
     let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
     let oscillate_effect = extract_oscillate_effect(&null.effects);
+    let jitter_effect = extract_jitter_effect(&null.effects);
     let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
@@ -226,7 +227,17 @@ pub(crate) fn collect_null(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            // Jitter effect
+            jitter_enabled: jitter_effect.enabled,
+            jitter_angle: jitter_effect.angle,
+            jitter_freq: jitter_effect.freq,
+            jitter_mag: jitter_effect.mag,
+            jitter_seed: jitter_effect.seed,
+            jitter_slack: jitter_effect.slack,
+            jitter_zjitter: jitter_effect.zjitter,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -237,6 +248,7 @@ pub(crate) fn collect_null(
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     })
 }
 
@@ -476,7 +488,17 @@ pub(crate) fn collect_text(
             textprogress_blink: extract_text_progress_effect(&text.effects).blink,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            // Jitter effect (not extracted for text - defaults)
+            jitter_enabled: false,
+            jitter_angle: 45.0,
+            jitter_freq: 30.0,
+            jitter_mag: 25.0,
+            jitter_seed: 0.0,
+            jitter_slack: 0.0,
+            jitter_zjitter: 0.0,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -494,6 +516,7 @@ pub(crate) fn collect_text(
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     })
 }
 
@@ -521,6 +544,7 @@ pub(crate) fn collect_image(
     let radial_repeat_effect = extract_radial_repeat_effect(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
     let oscillate_effect = extract_oscillate_effect(&image.effects);
+    let jitter_effect = extract_jitter_effect(&image.effects);
     let spin_rpm = extract_spin_rpm(&image.effects);
     let threshold_effect = extract_threshold_effect(&image.effects);
     let grid_effect = extract_grid_effect(&image.effects);
@@ -707,7 +731,17 @@ pub(crate) fn collect_image(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            // Jitter effect
+            jitter_enabled: jitter_effect.enabled,
+            jitter_angle: jitter_effect.angle,
+            jitter_freq: jitter_effect.freq,
+            jitter_mag: jitter_effect.mag,
+            jitter_seed: jitter_effect.seed,
+            jitter_slack: jitter_effect.slack,
+            jitter_zjitter: jitter_effect.zjitter,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
@@ -727,6 +761,7 @@ pub(crate) fn collect_image(
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     })
 }
 
@@ -783,6 +818,8 @@ pub(crate) fn collect_camera(
             element_speed: 1.0,
             scene_fps: config.scene_fps,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
             ..Default::default()
         },
         spec: AmLayerSpec::Camera {
@@ -797,5 +834,6 @@ pub(crate) fn collect_camera(
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     })
 }

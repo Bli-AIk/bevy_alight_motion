@@ -57,6 +57,9 @@ pub(crate) fn collect_embed_scene(
     // The formula for local_time in the animation system is:
     //   local_time = (global_time - time_offset) * speed_multiplier
     //
+    // For retime=OFF, AM uses: innerTimeMs = (parentTimeMs - embedStart) * speed + inTime
+    // This is a direct 1:1 mapping (no proportional scaling by totalTime).
+    //
     // embed.start_time is relative to PARENT's internal time, not global time.
     // When parent's internal time = embed.start_time, child should start.
     // Parent internal time = (global_time - parent_time_offset) * parent_speed
@@ -131,6 +134,7 @@ pub(crate) fn collect_embed_scene(
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: nested_speed,
         scene_fps: embed.scene.fps as f32,
+        scene_total_time: embed.scene.total_time as f32,
         retime: retime_info,
         ..config.clone()
     };
@@ -192,6 +196,9 @@ pub(crate) fn collect_embed_scene(
         all_embed_transform2.remove(0)
     };
     let embed_extra_transform2 = all_embed_transform2;
+
+    // Extract jitter effect from embed
+    let jitter_effect = extract_jitter_effect(&embed.effects);
 
     PendingLayer {
         id: embed.id,
@@ -375,7 +382,17 @@ pub(crate) fn collect_embed_scene(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            // Jitter effect
+            jitter_enabled: jitter_effect.enabled,
+            jitter_angle: jitter_effect.angle,
+            jitter_freq: jitter_effect.freq,
+            jitter_mag: jitter_effect.mag,
+            jitter_seed: jitter_effect.seed,
+            jitter_slack: jitter_effect.slack,
+            jitter_zjitter: jitter_effect.zjitter,
             retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -386,5 +403,6 @@ pub(crate) fn collect_embed_scene(
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
     }
 }

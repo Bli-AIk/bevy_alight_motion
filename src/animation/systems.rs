@@ -17,6 +17,7 @@ use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent}
 use super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
 };
+use super::simplex_noise::simplex_noise_3d;
 
 /// System to advance playback time.
 pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
@@ -439,6 +440,56 @@ pub fn animate_transform_system(
                 1.0
             };
 
+            // Apply jitter effect (simplex noise-based position displacement)
+            if animated.jitter_enabled && animated.jitter_freq > 0.0 {
+                // AM uses integer millisecond scene time (frameStartTimeFromFrameNumber
+                // computes frame*100000/fphs via integer division). Truncating our float ms
+                // to integer matches AM's precision and avoids quantization step mismatches.
+                let local_time_int = (local_time as f64).floor();
+                let global_time = (local_time_int - animated.start_time as f64) / 1000.0;
+                let freq = animated.jitter_freq as f64;
+                let t = (global_time * freq).floor() / freq;
+
+                let a = (animated.jitter_angle as f64) * (std::f64::consts::PI / 180.0);
+                let seed = animated.jitter_seed as f64;
+                let mag = animated.jitter_mag as f64;
+
+                // Primary displacement along angle direction
+                let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
+                let dx_primary = (a.sin() * mag * m) as f32;
+                let dy_primary = (a.cos() * mag * m) as f32;
+                bx += dx_primary;
+                by -= dy_primary; // Y inverted for Bevy
+
+                // Perpendicular slack displacement
+                if animated.jitter_slack > 0.0 {
+                    let a2 = a + std::f64::consts::FRAC_PI_2;
+                    let m2 =
+                        simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
+                    let slack = animated.jitter_slack as f64;
+                    bx += (a2.sin() * mag * m2 * slack) as f32;
+                    by -= (a2.cos() * mag * m2 * slack) as f32;
+                }
+
+                // Z-axis jitter (affects perspective zoom like oscillate)
+                if animated.jitter_zjitter > 0.0 {
+                    let zm =
+                        simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
+                    let z_offset = (zm * animated.jitter_zjitter as f64) as f32;
+                    if z_offset != 0.0 {
+                        let cam_dist = animated.canvas_width.max(animated.canvas_height)
+                            / (2.0 * (30.0_f32).to_radians().tan());
+                        let denom = cam_dist + z_offset;
+                        if denom > 0.0 {
+                            let zoom = cam_dist / denom;
+                            bx *= zoom;
+                            by *= zoom;
+                            oscillate_z_zoom *= zoom;
+                        }
+                    }
+                }
+            }
+
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
 
@@ -654,7 +705,11 @@ pub fn animate_opacity_system(
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
         // e.g., if fillColor has alpha=0, the sprite should remain invisible regardless of opacity animation
-        let final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        let mut final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        // Apply echo alpha (for echokf effect)
+        if let Some(ref echo_cfg) = animated.echo_alpha_config {
+            final_alpha *= echo_cfg.evaluate(global_time);
+        }
         // AM composites opacity in sRGB space; Bevy blends in linear space.
         // Convert alpha sRGB→linear so GPU blend approximates AM's result.
         let corrected = if final_alpha > 0.001 && final_alpha < 0.999 {
@@ -746,7 +801,11 @@ pub fn animate_text_opacity_system(
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
-        let final_alpha = opacity * animated.base_alpha;
+        let mut final_alpha = opacity * animated.base_alpha;
+        // Apply echo alpha (for echokf effect)
+        if let Some(ref echo_cfg) = animated.echo_alpha_config {
+            final_alpha *= echo_cfg.evaluate(global_time);
+        }
         text_color.0.set_alpha(final_alpha.clamp(0.0, 1.0));
     }
 }
@@ -910,5 +969,87 @@ pub fn animate_am_camera_system(
                 ortho.scale = zoom;
             }
         }
+    }
+}
+
+/// Runtime system for updating echokf echo entities with dynamic (keyframed) parameters.
+/// Evaluates count/seconds/alpha keyframes per frame and updates echo time shifts and visibility.
+pub fn update_echo_runtime_system(
+    playback: Res<AmPlayback>,
+    mut echo_query: Query<(
+        &super::components::AmEchoRuntime,
+        &mut AmAnimated,
+        &mut Visibility,
+    )>,
+) {
+    for (echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
+        // Compute parent element's fractional time (0-1)
+        let global_time = playback.current_time_ms as f32;
+        let parent_local = (global_time - echo_rt.embed_time_offset) * echo_rt.embed_speed;
+        let parent_duration = echo_rt.embed_end - echo_rt.embed_start;
+        let frac_t = if parent_duration > 0.0 {
+            ((parent_local - echo_rt.embed_start) / parent_duration).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        // Evaluate keyframed count
+        let current_count = interpolate_float(&echo_rt.count_kf, frac_t)
+            .unwrap_or(1.0)
+            .round() as u32;
+
+        // Hide echoes beyond current count
+        if echo_rt.echo_index >= current_count {
+            *visibility = Visibility::Hidden;
+            continue;
+        } else {
+            *visibility = Visibility::Inherited;
+        }
+
+        // Evaluate keyframed seconds
+        let current_seconds = interpolate_float(&echo_rt.seconds_kf, frac_t).unwrap_or(0.5);
+
+        // Compute echo fraction and time shift based on current count
+        let r0 = if echo_rt.mode == 0 {
+            // Mode 0 (atop): echo_index maps to (count-1-i)/count in AM's loop
+            // Our echo_index is stored as the AM loop index i, where
+            // i=0 → echo_index = count-1-0 in descending order
+            // Actually our code stores: echo_index = (max_count - 1 - i) for mode 0
+            // We need the fraction for the current count, not max count
+            if current_count > 0 {
+                echo_rt.echo_index as f32 / current_count as f32
+            } else {
+                0.0
+            }
+        } else {
+            // Mode 1 (behind)
+            if current_count > 0 {
+                echo_rt.echo_index as f32 / current_count as f32
+            } else {
+                0.0
+            }
+        };
+
+        let time_shift_ms = (1.0 - r0) * current_seconds * 1000.0;
+
+        // Update echo_time_shift_ms (base shift from parent config is already included)
+        // We need to set the TOTAL shift, not add to it. Store the base offset and add runtime.
+        animated.echo_time_shift_ms = time_shift_ms;
+
+        // Evaluate keyframed alpha and update echo_alpha_config
+        let current_alpha = interpolate_float(&echo_rt.alpha_kf, frac_t).unwrap_or(1.0);
+        let mix = current_alpha * (1.0 - r0) + r0;
+        // Store the evaluated mix directly in a simplified echo_alpha_config
+        animated.echo_alpha_config = Some(super::components::EchoAlphaConfig {
+            alpha_keyframes: crate::schema::AmAnimatedFloat {
+                value: Some(mix),
+                keyframes: Vec::new(),
+            },
+            fraction: 0.0, // Already computed into mix
+            parent_start: echo_rt.embed_start as i32,
+            parent_end: echo_rt.embed_end as i32,
+            parent_time_offset: echo_rt.embed_time_offset as i32,
+            parent_speed: echo_rt.embed_speed,
+        });
     }
 }

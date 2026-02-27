@@ -30,6 +30,18 @@ pub struct AmEmbedContentMarker {
     pub embed_id: u64,
 }
 
+/// Component for echokf echo entities.
+/// Stores alpha keyframes and mixing fraction for per-frame alpha evaluation.
+#[derive(Component, Debug, Clone)]
+pub struct AmEchoInfo {
+    /// Alpha keyframes from echokf effect (evaluated at element's time)
+    pub alpha_keyframes: crate::schema::AmAnimatedFloat,
+    /// Fraction (0..1) for alpha mixing: mix(alpha(t), 1.0, fraction)
+    pub fraction: f32,
+    /// Element duration in ms (for normalizing time to keyframe space)
+    pub element_duration_ms: f32,
+}
+
 /// Component bundle for an AM project root.
 #[derive(Bundle)]
 pub struct AmProjectBundle {
@@ -471,6 +483,8 @@ pub struct PendingLayer {
     /// Layers from deeply nested scenes should not be spatially decoupled at outer levels
     /// because they need to be Bevy children so transforms of intermediate embeds propagate.
     pub from_deeply_nested_scene: bool,
+    /// Optional echo runtime data (for entities that need per-frame echokf updates).
+    pub echo_runtime: Option<crate::animation::AmEchoRuntime>,
 }
 
 /// Configuration for scene building.
@@ -497,8 +511,16 @@ pub struct AmSceneConfig {
     pub nesting_depth: u32,
     /// Scene FPS (frames per second) for timing calculations.
     pub scene_fps: f32,
+    /// Total time of the parent scene in ms. Used to scale embed playback speed
+    /// so that inner content advances proportionally to the parent timeline,
+    /// matching AM's `nestedTimeFraction` behavior.
+    pub scene_total_time: f32,
     /// Retime info to propagate to children of a retimed embed scene.
     pub retime: Option<crate::animation::AmRetimeInfo>,
+    /// Echo time shift in ms (for echokf effect). Propagated to all children.
+    pub echo_time_shift_ms: f32,
+    /// Echo alpha config propagated to all entities in the echo subtree.
+    pub echo_alpha_config: Option<crate::animation::EchoAlphaConfig>,
 }
 
 impl Default for AmSceneConfig {
@@ -513,7 +535,10 @@ impl Default for AmSceneConfig {
             speed_multiplier: 1.0,
             nesting_depth: 0,
             scene_fps: 30.0,
+            scene_total_time: 0.0,
             retime: None,
+            echo_time_shift_ms: 0.0,
+            echo_alpha_config: None,
         }
     }
 }

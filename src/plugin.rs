@@ -30,7 +30,8 @@ use crate::animation::{
     animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
     animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
     animate_unified_effect_system, apply_mask_clipping_system, fix_rtl_line_alignment_system,
-    manage_layer_lifecycle_system, update_sdf_mask_system, update_unified_mask_system,
+    manage_layer_lifecycle_system, update_echo_runtime_system, update_sdf_mask_system,
+    update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -109,6 +110,8 @@ impl Plugin for AlightMotionPlugin {
             .add_systems(
                 Update,
                 (
+                    // Update echokf runtime before animation systems
+                    update_echo_runtime_system,
                     animate_transform_system,
                     animate_am_camera_system, // Animate Bevy camera from AM camera layer
                     animate_size_system,      // Update size from size property animation
@@ -274,6 +277,7 @@ fn spawn_loaded_projects_system(
                 canvas_width: project.scene.width as f32,
                 canvas_height: project.scene.height as f32,
                 scene_fps: project.scene.fps as f32,
+                scene_total_time: project.scene.total_time as f32,
                 ..Default::default()
             };
 

@@ -16,6 +16,20 @@ use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
 use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
+/// Convert alpha from sRGB to linear space so Bevy's linear blending approximates AM's sRGB blend.
+#[inline]
+fn srgb_alpha_to_linear(a: f32) -> f32 {
+    if a > 0.001 && a < 0.999 {
+        if a <= 0.04045 {
+            a / 12.92
+        } else {
+            ((a + 0.055) / 1.055).powf(2.4)
+        }
+    } else {
+        a
+    }
+}
+
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
 /// Now supports animated masks by reading GlobalTransform and AmAnimated from mask layer entities.
@@ -356,11 +370,19 @@ pub fn animate_sdf_opacity_system(
 
                 if let Some(material) = materials.get_mut(&material_handle.0) {
                     // Multiply by base_alpha to preserve original fill color transparency
-                    let final_alpha = opacity * animated.base_alpha;
+                    let mut final_alpha = opacity * animated.base_alpha;
+                    // Apply echo alpha (for echokf effect) to both fill and stroke
+                    let echo_mult = if let Some(ref echo_cfg) = animated.echo_alpha_config {
+                        echo_cfg.evaluate(global_time)
+                    } else {
+                        1.0
+                    };
+                    final_alpha *= echo_mult;
                     material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
 
-                    // Also update stroke alpha: base_stroke_alpha * opacity
-                    let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
+                    // Also update stroke alpha: base_stroke_alpha * opacity * echo_alpha
+                    let final_stroke_alpha =
+                        (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
                     material.uniform_data.params.w =
                         repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
 
