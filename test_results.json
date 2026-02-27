@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-02-27T18:33:56.822440+08:00",
+  "timestamp": "2026-02-28T00:21:36.176102+08:00",
   "summary": {
-    "passed": 100,
+    "passed": 102,
     "warnings": 0,
     "skipped": 2,
     "failed": 43
@@ -14,8 +14,7 @@
       "status": "pass"
     },
     "basic/bounce/box": {
-      "status": "fail",
-      "avg_similarity": 0.9499
+      "status": "pass"
     },
     "basic/camera/basic": {
       "status": "pass"
@@ -30,6 +29,12 @@
       "status": "pass"
     },
     "basic/group/cutoff": {
+      "status": "pass"
+    },
+    "basic/group/fill/basic": {
+      "status": "pass"
+    },
+    "basic/group/fill/gradient": {
       "status": "pass"
     },
     "basic/group/loop/basic": {
@@ -96,7 +101,8 @@
       "status": "pass"
     },
     "basic/shape/ex1": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.4763
     },
     "basic/shape/shape": {
       "status": "pass"

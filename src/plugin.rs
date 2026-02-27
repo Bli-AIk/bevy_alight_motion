@@ -35,6 +35,7 @@ use crate::animation::{
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
+use crate::group_fill::GroupFillMaterial;
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
@@ -76,6 +77,7 @@ impl Plugin for AlightMotionPlugin {
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurVMaterial>::default())
+            .add_plugins(Material2dPlugin::<GroupFillMaterial>::default())
             .add_plugins(EffectRenderPlugin)
             .add_plugins(GaussianBlurPlugin)
             .init_asset::<AmProject>()
@@ -127,8 +129,7 @@ impl Plugin for AlightMotionPlugin {
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers
                     hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
-                                                   // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
-                                                   // crate::effects::sync_rtt_camera_position_system,
+                    crate::effects::sync_rtt_camera_position_system,
                 )
                     .chain()
                     .after(crate::effects::fix_nested_embed_render_layers_system),

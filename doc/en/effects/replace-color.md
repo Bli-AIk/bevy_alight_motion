@@ -1,11 +1,11 @@
 # Replace Color
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-23 18:55:44
+> Last tested: 2026-02-28 00:21:36
 
 Replaces a source color with a target color within a given tolerance. Supports sRGB to linear color space conversion and animation keyframes.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ⚠️ Partially Supported
 
 - **Old Color (oldcolor)**: ✅ Implemented (The source color to replace)
 - **New Color (newcolor)**: ✅ Implemented (The target color to replace with)
@@ -15,6 +15,8 @@ Replaces a source color with a target color within a given tolerance. Supports s
 - **Lock Luminance (lockluminance)**: ✅ Implemented (Preserve original pixel luminance)
 
 **Related Test Files:**
+- `effects/pixelate/bone.amproj` ❌
+- `effects/pixelate/bone_single.amproj` ❌
 - `effects/replace-color/basic.amproj` ✅
 
 ---

@@ -1,7 +1,7 @@
 # Spin
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-23 18:55:44
+> Last tested: 2026-02-28 00:21:36
 
 Makes the layer continuously rotate at a specified speed.
 

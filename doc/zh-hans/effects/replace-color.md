@@ -1,11 +1,11 @@
 # 颜色替换 (Replace Color)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-23 18:55:44
+> 最近测试时间：2026-02-28 00:21:36
 
 在给定的容差范围内，将指定的源颜色替换为目标颜色。支持 sRGB 到线性颜色空间转换和动画关键帧。
 
-**支持状态**: ✅ 完全支持
+**支持状态**: ⚠️ 部分支持
 
 - **旧颜色 (oldcolor)**: ✅ 已实现 (要替换的源颜色)
 - **新颜色 (newcolor)**: ✅ 已实现 (替换后的目标颜色)
@@ -15,6 +15,8 @@
 - **锁定亮度 (lockluminance)**: ✅ 已实现 (保持原始像素的亮度)
 
 **关联测试文件：**
+- `effects/pixelate/bone.amproj` ❌
+- `effects/pixelate/bone_single.amproj` ❌
 - `effects/replace-color/basic.amproj` ✅
 
 ---

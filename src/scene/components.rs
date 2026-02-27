@@ -485,6 +485,8 @@ pub struct PendingLayer {
     pub from_deeply_nested_scene: bool,
     /// Optional echo runtime data (for entities that need per-frame echokf updates).
     pub echo_runtime: Option<crate::animation::AmEchoRuntime>,
+    /// Group fill data for embed scenes with fillType != "" (color/gradient/none).
+    pub group_fill: Option<crate::effects::AmGroupFill>,
 }
 
 /// Configuration for scene building.

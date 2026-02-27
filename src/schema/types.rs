@@ -634,6 +634,10 @@ pub struct AmEmbedScene {
     #[serde(rename = "effect", default)]
     pub effects: Vec<AmEffect>,
 
+    /// Gradient fill data (when fillType="gradient").
+    #[serde(default)]
+    pub gradient: Option<AmGradient>,
+
     /// Nested scene.
     pub scene: Box<AmScene>,
 }

@@ -200,6 +200,9 @@ pub(crate) fn collect_embed_scene(
     // Extract jitter effect from embed
     let jitter_effect = extract_jitter_effect(&embed.effects);
 
+    // Extract group fill data from embed's fillType
+    let group_fill = build_group_fill(embed);
+
     PendingLayer {
         id: embed.id,
         label: embed.label.clone(),
@@ -404,5 +407,82 @@ pub(crate) fn collect_embed_scene(
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
+        group_fill,
+    }
+}
+
+/// Build AmGroupFill from embed scene's fill type and color/gradient data.
+fn build_group_fill(embed: &crate::schema::AmEmbedScene) -> Option<crate::effects::AmGroupFill> {
+    use crate::effects::{AmGroupFill, GroupFillType};
+
+    match embed.fill_type.as_str() {
+        "" => None, // Normal rendering (INTRINSIC)
+        "none" => Some(AmGroupFill {
+            fill_type: GroupFillType::None,
+            fill_color: Vec4::ZERO,
+        }),
+        "color" => {
+            let color = if let Some(ref fc) = embed.fill_color {
+                if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                    // Convert sRGB to linear for shader
+                    let srgb = Color::srgba(c[0], c[1], c[2], c[3]);
+                    let linear = srgb.to_linear();
+                    Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
+                } else {
+                    Vec4::ONE
+                }
+            } else {
+                Vec4::ONE
+            };
+            Some(AmGroupFill {
+                fill_type: GroupFillType::Color,
+                fill_color: color,
+            })
+        }
+        "gradient" => {
+            if let Some(ref g) = embed.gradient {
+                let gradient_type = match g.gradient_type.as_str() {
+                    "linear" => 1u8,
+                    "radial" => 2u8,
+                    "sweep" => 3u8,
+                    _ => 1u8,
+                };
+                // Keep gradient colors in sRGB space (AM interpolates in sRGB)
+                let start_color = if let Ok(c) = crate::schema::parse_color(&g.start_color) {
+                    Vec4::new(c[0], c[1], c[2], c[3])
+                } else {
+                    Vec4::ZERO
+                };
+                let end_color = if let Ok(c) = crate::schema::parse_color(&g.end_color) {
+                    Vec4::new(c[0], c[1], c[2], c[3])
+                } else {
+                    Vec4::ONE
+                };
+                // AM default points: (0,0) → (1,1) (diagonal)
+                let start_pt = g.start.unwrap_or([0.0, 0.0]);
+                let end_pt = g.end.unwrap_or([1.0, 1.0]);
+                Some(AmGroupFill {
+                    fill_type: GroupFillType::Gradient {
+                        gradient_type,
+                        start_color,
+                        end_color,
+                        points: Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]),
+                    },
+                    fill_color: Vec4::ONE,
+                })
+            } else {
+                // AM default: LINEAR gradient from BLACK to WHITE, (0,0)→(1,1)
+                Some(AmGroupFill {
+                    fill_type: GroupFillType::Gradient {
+                        gradient_type: 1, // LINEAR
+                        start_color: Vec4::new(0.0, 0.0, 0.0, 1.0),
+                        end_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                        points: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                    },
+                    fill_color: Vec4::ONE,
+                })
+            }
+        }
+        _ => None,
     }
 }

@@ -1,7 +1,7 @@
 # 变换 (Transform2)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-02-23 18:55:44
+> 最近测试时间：2026-02-28 00:21:36
 
 可以复制类似变换、角度、缩放的设置，提供额外的位移控制。
 
@@ -17,6 +17,8 @@
 - **角度反转 (ainv)**: ❌ 未实现 (角度反转)
 
 **关联测试文件：**
+- `effects/pixelate/bone.amproj` ❌
+- `effects/pixelate/bone_single.amproj` ❌
 - `effects/transform/complex1.amproj` ✅
 - `effects/transform/complex2.amproj` ✅
 

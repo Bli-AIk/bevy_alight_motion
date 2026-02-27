@@ -711,6 +711,11 @@ pub(super) fn spawn_layer_entity(
                 max_s * max_size_ratio * expansion_ratio
             }, // max_animated_scale
         );
+
+        // Insert group fill component if present (for embed scenes with fillType)
+        if let Some(ref fill) = layer.group_fill {
+            commands.entity(entity).insert(fill.clone());
+        }
     } else {
         bevy::log::trace!(
             "[Lifecycle] Skipping visual for mask layer '{}' (id={})",

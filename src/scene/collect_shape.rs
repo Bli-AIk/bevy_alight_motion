@@ -520,6 +520,7 @@ pub(crate) fn collect_shape(
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
+        group_fill: None,
     })
 }
 

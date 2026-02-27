@@ -428,6 +428,37 @@ pub enum RenderStrategy {
 #[derive(Component, Debug, Default)]
 pub struct NeedsRenderStrategyEvaluation;
 
+/// Group fill type for embed scenes.
+/// Determines how the group's RTT output is rendered.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GroupFillType {
+    /// No fill - group is invisible (fillType="none").
+    None,
+    /// Solid color fill (fillType="color").
+    Color,
+    /// Gradient fill (fillType="gradient").
+    Gradient {
+        /// Gradient type: 1=linear, 2=radial, 3=sweep
+        gradient_type: u8,
+        /// Start color (linear RGBA)
+        start_color: Vec4,
+        /// End color (linear RGBA)
+        end_color: Vec4,
+        /// Start/end points in UV space: (start_x, start_y, end_x, end_y)
+        points: Vec4,
+    },
+}
+
+/// Component for embed scenes with fill applied.
+/// When attached, the group uses Composite (RTT) strategy and applies fill to the output.
+#[derive(Component, Debug, Clone)]
+pub struct AmGroupFill {
+    /// Fill type and parameters.
+    pub fill_type: GroupFillType,
+    /// Fill color (linear RGBA) - used for Color fill type.
+    pub fill_color: Vec4,
+}
+
 /// Component storing the computed render hierarchy info.
 /// Used by the propagation system to determine RenderLayers.
 #[derive(Component, Debug, Clone)]

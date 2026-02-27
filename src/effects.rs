@@ -17,10 +17,12 @@ mod types;
 // Re-export all public types
 #[allow(deprecated)]
 pub use types::{
+    AmGroupFill,
     EffectLayer,
     EffectOutputTexture,
     EffectSourceTexture,
     EffectType,
+    GroupFillType,
     MaskParams,
     NeedsRenderStrategyEvaluation,
     PingPongBuffer,
