@@ -296,7 +296,7 @@ pub(crate) fn spawn_text(
     commands: &mut Commands,
     text: &AmText,
     fonts: &HashMap<String, Handle<Font>>,
-    _font_metrics: &HashMap<String, FontMetrics>,
+    font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -327,7 +327,14 @@ pub(crate) fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
-    let font_y_offset = 0.0;
+    let font_y_offset = font_metrics
+        .get(&font_name)
+        .map(|m| {
+            let n_lines = text.content.chars().filter(|c| *c == '\n').count() as f32 + 1.0;
+            let damping = (2.0_f32 / n_lines).min(1.0);
+            m.include_pad_y_offset(font_size) * damping
+        })
+        .unwrap_or(0.0);
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -618,6 +625,10 @@ pub(crate) fn spawn_text(
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
             wrap_width: text.wrap_width,
+            line_height_ratio: font_metrics
+                .get(&font_name)
+                .map(|m| m.am_line_height_ratio(font_size))
+                .unwrap_or(1.2),
         },
         AmVisualSpawned,
     ));

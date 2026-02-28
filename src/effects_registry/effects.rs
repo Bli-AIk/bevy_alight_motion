@@ -17,6 +17,7 @@ pub mod scale_assist;
 pub mod spin;
 pub mod stretch_segment;
 pub mod swing;
+pub mod textprogress;
 pub mod threshold;
 pub mod transform2;
 pub mod wipe2;
@@ -41,6 +42,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &radial_repeat::EFFECT,
         &swing::EFFECT,
         &spin::EFFECT,
+        &textprogress::EFFECT,
     ]
 }
 

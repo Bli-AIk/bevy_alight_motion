@@ -358,6 +358,8 @@ pub enum AmLayerSpec {
         align: String,
         fill_color: Option<crate::schema::AmFillColor>,
         wrap_width: f32,
+        /// Line height ratio from font hhea metrics for AM-matching line spacing.
+        line_height_ratio: f32,
     },
     /// Image layer  
     Image {

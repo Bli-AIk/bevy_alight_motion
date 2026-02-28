@@ -264,7 +264,7 @@ pub(crate) fn collect_null(
 pub(crate) fn collect_text(
     text: &AmText,
     _fonts: &HashMap<String, Handle<Font>>,
-    _font_metrics: &HashMap<String, FontMetrics>,
+    font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Option<PendingLayer> {
@@ -291,7 +291,18 @@ pub(crate) fn collect_text(
     let _wrap_width = text.wrap_width;
     let wrap_offset_x = 0.0;
 
-    let font_y_offset = 0.0;
+    // Compensate for AM's StaticLayout includePad(true) centering vs Bevy's Anchor::CENTER.
+    // AM adds asymmetric padding (win metrics vs hhea metrics) at first/last lines,
+    // then centers the padded box. This shifts the visual text center.
+    // For multi-line multi-script text, font fallback changes the effective metrics,
+    // so we dampen the offset for text with many lines.
+    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
+        let n_lines = text.content.chars().filter(|c| *c == '\n').count() as f32 + 1.0;
+        let damping = (2.0_f32 / n_lines).min(1.0);
+        metrics.include_pad_y_offset(font_size) * damping
+    } else {
+        0.0
+    };
 
     let transform = Transform {
         translation: Vec3::new(tx + wrap_offset_x, ty, z),
@@ -503,11 +514,15 @@ pub(crate) fn collect_text(
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
-            font_name,
+            font_name: font_name.clone(),
             font_size,
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
             wrap_width: text.wrap_width,
+            line_height_ratio: font_metrics
+                .get(&font_name)
+                .map(|m| m.am_line_height_ratio(font_size))
+                .unwrap_or(1.2),
         },
         z_index: z,
         children: Vec::new(),

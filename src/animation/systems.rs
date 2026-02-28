@@ -319,6 +319,15 @@ pub fn animate_transform_system(
                 by -= animated.font_y_offset;
             }
 
+            // Compensate for cosmic-text vs Android StaticLayout horizontal glyph positioning.
+            // Android renders text to a bitmap with integer-pixel glyph positions, while
+            // cosmic-text uses sub-pixel positioning that results in a consistent ~1px rightward
+            // shift relative to AM's rendering. Apply correction scaled by inv_fit_scale to
+            // get exactly 1 screen pixel adjustment regardless of scene resolution.
+            if matches!(layer_spec, crate::scene::AmLayerSpec::Text { .. }) {
+                bx -= animated.inv_fit_scale;
+            }
+
             // Apply anchor offset compensation for SpriteShape with non-center pivot.
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
             // NOTE: Skip for SDF shapes - their pivot is already handled above via `by -= pivot_y`
