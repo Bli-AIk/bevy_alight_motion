@@ -1,7 +1,7 @@
 # Threshold
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-28 00:52:13
+> Last tested: 2026-03-01 17:45:43
 
 Converts the image to a high-contrast image with only black and white.
 
@@ -13,7 +13,7 @@ Converts the image to a high-contrast image with only black and white.
 - **Blend Mode (blendMode)**: ⚠️ Partial (Blend mode)
 
 **Related Test Files:**
-- `effects/pixelate/bone.amproj` ❌
+- `effects/pixelate/bone.amproj` ✅
 - `effects/pixelate/bone_single.amproj` ✅
 - `effects/threshold/basic.amproj` ✅
 

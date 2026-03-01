@@ -1,7 +1,7 @@
 # Transform2
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-02-28 00:52:13
+> Last tested: 2026-03-01 17:45:43
 
 Provides additional transform controls similar to the base transform properties.
 
@@ -17,7 +17,7 @@ Provides additional transform controls similar to the base transform properties.
 - **Angle Invert (ainv)**: ❌ Not implemented (Angle inversion)
 
 **Related Test Files:**
-- `effects/pixelate/bone.amproj` ❌
+- `effects/pixelate/bone.amproj` ✅
 - `effects/pixelate/bone_single.amproj` ✅
 - `effects/transform/complex1.amproj` ✅
 - `effects/transform/complex2.amproj` ✅

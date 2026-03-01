@@ -96,7 +96,7 @@ fn main() {
     println!("Loading project: {}", project_file);
 
     // Default resolution
-    let resolution = Vec2::new(1280.0, 960.0);
+    let mut resolution = Vec2::new(1280.0, 960.0);
 
     // In comparison mode, try to match video resolution
     #[cfg(feature = "video-comparison")]
