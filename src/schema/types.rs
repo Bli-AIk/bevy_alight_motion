@@ -410,7 +410,12 @@ pub struct AmLayerBase {
     pub parent: u64,
 
     /// Alternative out-point.
-    #[serde(rename = "@outTime", default)]
+    #[serde(
+        rename = "@outTime",
+        default,
+        deserialize_with = "deserialize_i32_opt",
+        serialize_with = "serialize_i32_opt"
+    )]
     pub out_time: Option<i32>,
 }
 
@@ -503,7 +508,12 @@ pub struct AmStroke {
     pub direction: String,
 
     /// Border ID (for multi-border shapes).
-    #[serde(rename = "@id", default)]
+    #[serde(
+        rename = "@id",
+        default,
+        deserialize_with = "deserialize_i32_opt",
+        serialize_with = "serialize_i32_opt"
+    )]
     pub id: Option<i32>,
 
     /// Line cap style ("square", "round", "butt").
@@ -539,7 +549,12 @@ pub struct AmStrokeColor {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmStrokeSize {
     /// Static size value (if not animated).
-    #[serde(rename = "@value", default)]
+    #[serde(
+        rename = "@value",
+        default,
+        deserialize_with = "deserialize_float_opt",
+        serialize_with = "serialize_float_opt"
+    )]
     pub value: Option<f32>,
 
     /// Keyframes (if animated).
@@ -611,11 +626,21 @@ pub struct AmEmbedScene {
     pub fill_type: String,
 
     /// Internal in-point for nested scene playback (clip start).
-    #[serde(rename = "@inTime", default)]
+    #[serde(
+        rename = "@inTime",
+        default,
+        deserialize_with = "deserialize_i32_opt",
+        serialize_with = "serialize_i32_opt"
+    )]
     pub in_time: Option<i32>,
 
     /// Internal out-point for nested scene playback (clip end).
-    #[serde(rename = "@outTime", default)]
+    #[serde(
+        rename = "@outTime",
+        default,
+        deserialize_with = "deserialize_i32_opt",
+        serialize_with = "serialize_i32_opt"
+    )]
     pub out_time: Option<i32>,
 
     /// Playback speed multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double speed)
@@ -724,7 +749,12 @@ pub struct AmAnimatedVec2 {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AmAnimatedFloat {
     /// Static value (if not animated).
-    #[serde(rename = "@value", default)]
+    #[serde(
+        rename = "@value",
+        default,
+        deserialize_with = "deserialize_float_opt",
+        serialize_with = "serialize_float_opt"
+    )]
     pub value: Option<f32>,
 
     /// Keyframes (if animated).
@@ -835,6 +865,48 @@ where
 {
     match value {
         Some([x, y]) => serializer.serialize_some(&format!("{},{}", x, y)),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_float_opt<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        Some(s) if !s.is_empty() => s.parse::<f32>().map(Some).map_err(serde::de::Error::custom),
+        _ => Ok(None),
+    }
+}
+
+fn serialize_float_opt<S>(value: &Option<f32>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(v) => serializer.serialize_some(&v.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_i32_opt<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        Some(s) if !s.is_empty() => s.parse::<i32>().map(Some).map_err(serde::de::Error::custom),
+        _ => Ok(None),
+    }
+}
+
+fn serialize_i32_opt<S>(value: &Option<i32>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(v) => serializer.serialize_some(&v.to_string()),
         None => serializer.serialize_none(),
     }
 }
