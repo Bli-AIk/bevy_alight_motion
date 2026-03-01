@@ -7,18 +7,26 @@ export const zhHansEffects = {
     { text: '<span style="color:#eab308">●</span> 变换 (Transform2)', link: '/zh-hans/effects/transform2' },
     { text: '<span style="color:#22c55e">●</span> 擦拭 (Wipe2)', link: '/zh-hans/effects/wipe2' },
     { text: '<span style="color:#eab308">●</span> 拉伸片段 (Stretch Segment)', link: '/zh-hans/effects/stretch-segment' },
+    { text: '<span style="color:#eab308">●</span> 拉伸 (Stretch)', link: '/zh-hans/effects/stretch2' },
     { text: '<span style="color:#ef4444">●</span> 高斯模糊 (Gaussian Blur)', link: '/zh-hans/effects/gaussian-blur' },
-    { text: '<span style="color:#ef4444">●</span> 网格 (Grid)', link: '/zh-hans/effects/grid' },
+    { text: '<span style="color:#22c55e">●</span> 网格 (Grid)', link: '/zh-hans/effects/grid' },
     { text: '<span style="color:#eab308">●</span> 阈值 (Threshold)', link: '/zh-hans/effects/threshold' },
     { text: '<span style="color:#eab308">●</span> 调色板映射 (Palette Map)', link: '/zh-hans/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> 颜色替换 (Replace Color)', link: '/zh-hans/effects/replace-color' },
     { text: '<span style="color:#22c55e">●</span> 缩放辅助 (Scale Assist)', link: '/zh-hans/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> 像素化 (Pixelate)', link: '/zh-hans/effects/pixelate' },
-    { text: '<span style="color:#ef4444">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' },
-    { text: '<span style="color:#ef4444">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
-    { text: '<span style="color:#ef4444">●</span> 径向重复 (Radial Repeat)', link: '/zh-hans/effects/radial-repeat' },
+    { text: '<span style="color:#eab308">●</span> 振荡 (Oscillate)', link: '/zh-hans/effects/oscillate3' },
+    { text: '<span style="color:#22c55e">●</span> 抖动 (Jitter)', link: '/zh-hans/effects/jitter' },
+    { text: '<span style="color:#eab308">●</span> 重复 (Repeat)', link: '/zh-hans/effects/repeat' },
+    { text: '<span style="color:#eab308">●</span> 线性重复 (Linear Repeat)', link: '/zh-hans/effects/linear-repeat' },
+    { text: '<span style="color:#22c55e">●</span> 径向重复 (Radial Repeat)', link: '/zh-hans/effects/radial-repeat' },
+    { text: '<span style="color:#22c55e">●</span> 路径重复 (Path Repeat)', link: '/zh-hans/effects/path-repeat' },
+    { text: '<span style="color:#22c55e">●</span> 回声关键帧 (Echo Keyframes)', link: '/zh-hans/effects/echokf' },
+    { text: '<span style="color:#eab308">●</span> 纯色 (Solid Color)', link: '/zh-hans/effects/solidcolor' },
     { text: '<span style="color:#22c55e">●</span> 摇摆 (Swing)', link: '/zh-hans/effects/swing2' },
-    { text: '<span style="color:#22c55e">●</span> 旋转 (Spin)', link: '/zh-hans/effects/spin' }
+    { text: '<span style="color:#22c55e">●</span> 旋转 (Spin)', link: '/zh-hans/effects/spin' },
+    { text: '<span style="color:#ef4444">●</span> 文字进度 (Text Progress)', link: '/zh-hans/effects/textprogress' },
+    { text: '<span style="color:#ef4444">●</span> 文字间距 (Text Spacing)', link: '/zh-hans/effects/textspacing' }
   ]
 };
 
@@ -28,18 +36,26 @@ export const enEffects = {
     { text: '<span style="color:#eab308">●</span> Transform2', link: '/en/effects/transform2' },
     { text: '<span style="color:#22c55e">●</span> Wipe2', link: '/en/effects/wipe2' },
     { text: '<span style="color:#eab308">●</span> Stretch Segment', link: '/en/effects/stretch-segment' },
+    { text: '<span style="color:#eab308">●</span> Stretch', link: '/en/effects/stretch2' },
     { text: '<span style="color:#ef4444">●</span> Gaussian Blur', link: '/en/effects/gaussian-blur' },
-    { text: '<span style="color:#ef4444">●</span> Grid', link: '/en/effects/grid' },
+    { text: '<span style="color:#22c55e">●</span> Grid', link: '/en/effects/grid' },
     { text: '<span style="color:#eab308">●</span> Threshold', link: '/en/effects/threshold' },
     { text: '<span style="color:#eab308">●</span> Palette Map', link: '/en/effects/palette-map' },
     { text: '<span style="color:#22c55e">●</span> Replace Color', link: '/en/effects/replace-color' },
     { text: '<span style="color:#22c55e">●</span> Scale Assist', link: '/en/effects/scale-assist' },
     { text: '<span style="color:#eab308">●</span> Pixelate', link: '/en/effects/pixelate' },
-    { text: '<span style="color:#ef4444">●</span> Repeat', link: '/en/effects/repeat' },
-    { text: '<span style="color:#ef4444">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
-    { text: '<span style="color:#ef4444">●</span> Radial Repeat', link: '/en/effects/radial-repeat' },
+    { text: '<span style="color:#eab308">●</span> Oscillate', link: '/en/effects/oscillate3' },
+    { text: '<span style="color:#22c55e">●</span> Jitter', link: '/en/effects/jitter' },
+    { text: '<span style="color:#eab308">●</span> Repeat', link: '/en/effects/repeat' },
+    { text: '<span style="color:#eab308">●</span> Linear Repeat', link: '/en/effects/linear-repeat' },
+    { text: '<span style="color:#22c55e">●</span> Radial Repeat', link: '/en/effects/radial-repeat' },
+    { text: '<span style="color:#22c55e">●</span> Path Repeat', link: '/en/effects/path-repeat' },
+    { text: '<span style="color:#22c55e">●</span> Echo Keyframes', link: '/en/effects/echokf' },
+    { text: '<span style="color:#eab308">●</span> Solid Color', link: '/en/effects/solidcolor' },
     { text: '<span style="color:#22c55e">●</span> Swing', link: '/en/effects/swing2' },
-    { text: '<span style="color:#22c55e">●</span> Spin', link: '/en/effects/spin' }
+    { text: '<span style="color:#22c55e">●</span> Spin', link: '/en/effects/spin' },
+    { text: '<span style="color:#ef4444">●</span> Text Progress', link: '/en/effects/textprogress' },
+    { text: '<span style="color:#ef4444">●</span> Text Spacing', link: '/en/effects/textspacing' }
   ]
 };
 

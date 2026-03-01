@@ -256,6 +256,16 @@ pub(crate) fn spawn_image(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                jitter_enabled: false,
+                jitter_angle: AmAnimatedFloat::default(),
+                jitter_freq: AmAnimatedFloat::default(),
+                jitter_mag: AmAnimatedFloat::default(),
+                jitter_seed: AmAnimatedFloat::default(),
+                jitter_slack: AmAnimatedFloat::default(),
+                jitter_zjitter: AmAnimatedFloat::default(),
+                retime: config.retime.clone(),
+                echo_time_shift_ms: config.echo_time_shift_ms,
+                echo_alpha_config: config.echo_alpha_config.clone(),
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -286,7 +296,7 @@ pub(crate) fn spawn_text(
     commands: &mut Commands,
     text: &AmText,
     fonts: &HashMap<String, Handle<Font>>,
-    _font_metrics: &HashMap<String, FontMetrics>,
+    font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
 ) -> Entity {
@@ -317,7 +327,14 @@ pub(crate) fn spawn_text(
         .unwrap_or(&text.font)
         .to_string();
 
-    let font_y_offset = 0.0;
+    let font_y_offset = font_metrics
+        .get(&font_name)
+        .map(|m| {
+            let n_lines = text.content.chars().filter(|c| *c == '\n').count() as f32 + 1.0;
+            let damping = (2.0_f32 / n_lines).min(1.0);
+            m.include_pad_y_offset(font_size) * damping
+        })
+        .unwrap_or(0.0);
 
     // Get text color from fill_color
     let color = if let Some(fill_color) = &text.fill_color {
@@ -541,6 +558,16 @@ pub(crate) fn spawn_text(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            jitter_enabled: false,
+            jitter_angle: AmAnimatedFloat::default(),
+            jitter_freq: AmAnimatedFloat::default(),
+            jitter_mag: AmAnimatedFloat::default(),
+            jitter_seed: AmAnimatedFloat::default(),
+            jitter_slack: AmAnimatedFloat::default(),
+            jitter_zjitter: AmAnimatedFloat::default(),
+            retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         transform,
         GlobalTransform::default(),
@@ -598,6 +625,10 @@ pub(crate) fn spawn_text(
             align: text.align.clone(),
             fill_color: text.fill_color.clone(),
             wrap_width: text.wrap_width,
+            line_height_ratio: font_metrics
+                .get(&font_name)
+                .map(|m| m.am_line_height_ratio(font_size))
+                .unwrap_or(1.2),
         },
         AmVisualSpawned,
     ));

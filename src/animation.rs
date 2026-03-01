@@ -17,6 +17,7 @@ mod interpolation;
 mod lifecycle;
 mod sdf;
 mod sdf_spawn;
+pub(crate) mod simplex_noise;
 mod spawn;
 mod spawn_entity;
 mod systems;
@@ -24,8 +25,9 @@ mod visual;
 
 // Re-export components
 pub use components::{
-    AmAnimated, AmCameraLayer, AmPathRepeat, AmPlayback, AmSdfFillParams, AmSdfParams,
-    AmSdfShapeParent, AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
+    AmAnimated, AmCameraLayer, AmEchoRuntime, AmPathRepeat, AmPlayback, AmRetimeInfo,
+    AmSdfFillParams, AmSdfParams, AmSdfShapeParent, AmSdfStrokeParams, DEBUG_NEGATIVE_HEIGHT_SCALE,
+    EchoAlphaConfig, RetimeMode,
 };
 
 // Re-export systems
@@ -41,7 +43,7 @@ pub use sdf::{
 };
 pub use systems::{
     advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system,
+    animate_text_opacity_system, animate_transform_system, update_echo_runtime_system,
 };
 
 // Re-export interpolation functions

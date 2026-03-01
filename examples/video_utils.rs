@@ -292,9 +292,15 @@ pub fn compare_images(
     // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
     const MATCH_THRESHOLD: u64 = 10;
 
-    // Dark-pixel compression tolerance parameters.
-    // Pixels with perceptual luminance below DARK_LUM_CUTOFF get a tolerance
-    // that linearly increases as luminance decreases, up to MAX_TOLERANCE.
+    // Video compression tolerance parameters.
+    // H.264 with 4:2:0 chroma subsampling introduces noise in all luminance
+    // ranges: chroma subsampling causes ±2-4 per channel at color edges, DCT
+    // quantization adds ±2-3 per channel. A small baseline tolerance absorbs
+    // this unavoidable codec noise so content_similarity focuses on actual
+    // rendering differences.
+    const BASE_COMPRESSION_TOLERANCE: f64 = 10.0;
+    // Pixels with perceptual luminance below DARK_LUM_CUTOFF get additional
+    // tolerance that linearly increases as luminance decreases, up to MAX.
     const DARK_LUM_CUTOFF: f64 = 40.0;
     const MAX_COMPRESSION_TOLERANCE: f64 = 60.0;
 
@@ -365,12 +371,14 @@ pub fn compare_images(
 
                 // Video codecs quantize dark areas aggressively (especially
                 // chroma at 4:2:0 subsampling), so we forgive noise proportional
-                // to darkness.
-                let tolerance = if max_lum < DARK_LUM_CUTOFF {
-                    MAX_COMPRESSION_TOLERANCE * (1.0 - max_lum / DARK_LUM_CUTOFF)
-                } else {
-                    0.0
-                };
+                // to darkness. A small baseline tolerance also absorbs general
+                // H.264 compression noise (DCT quantization, chroma subsampling).
+                let tolerance = BASE_COMPRESSION_TOLERANCE
+                    + if max_lum < DARK_LUM_CUTOFF {
+                        MAX_COMPRESSION_TOLERANCE * (1.0 - max_lum / DARK_LUM_CUTOFF)
+                    } else {
+                        0.0
+                    };
 
                 let effective_diff = (pixel_diff as f64 - tolerance).max(0.0);
                 total_diff_content += effective_diff;

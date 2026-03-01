@@ -17,6 +17,7 @@ pub struct Transform2Params {
     pub ainv: bool,
 }
 
+#[allow(dead_code)]
 pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
     let mut params = Transform2Params::default();
 

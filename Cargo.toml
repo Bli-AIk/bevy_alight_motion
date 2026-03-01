@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["Bli-AIk <haikun2333@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Bli-AIk/bevy_alight_motion"
+readme = "readme.md"
 # Disable auto-discovery to prevent video_utils.rs from being compiled as an example
 description = "Bevy plugin for loading and playing Alight Motion project files"
 exclude = [

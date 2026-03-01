@@ -30,10 +30,12 @@ use crate::animation::{
     animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
     animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
     animate_unified_effect_system, apply_mask_clipping_system, fix_rtl_line_alignment_system,
-    manage_layer_lifecycle_system, update_sdf_mask_system, update_unified_mask_system,
+    manage_layer_lifecycle_system, update_echo_runtime_system, update_sdf_mask_system,
+    update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
+use crate::group_fill::GroupFillMaterial;
 use crate::loader::{AlightMotionLoader, AmProject};
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
@@ -75,6 +77,7 @@ impl Plugin for AlightMotionPlugin {
             .add_plugins(Material2dPlugin::<UnifiedEffectMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurHMaterial>::default())
             .add_plugins(Material2dPlugin::<GaussianBlurVMaterial>::default())
+            .add_plugins(Material2dPlugin::<GroupFillMaterial>::default())
             .add_plugins(EffectRenderPlugin)
             .add_plugins(GaussianBlurPlugin)
             .init_asset::<AmProject>()
@@ -109,6 +112,8 @@ impl Plugin for AlightMotionPlugin {
             .add_systems(
                 Update,
                 (
+                    // Update echokf runtime before animation systems
+                    update_echo_runtime_system,
                     animate_transform_system,
                     animate_am_camera_system, // Animate Bevy camera from AM camera layer
                     animate_size_system,      // Update size from size property animation
@@ -124,8 +129,7 @@ impl Plugin for AlightMotionPlugin {
                     animate_rtt_blur_system,       // RTT Gaussian blur animation
                     apply_mask_clipping_system,    // Apply mask clipping to masked layers
                     hot_reload_shader_system,      // Hot-reload shader when 'R' is pressed
-                                                   // TODO: sync_rtt_camera_position_system disabled - not needed without propagate
-                                                   // crate::effects::sync_rtt_camera_position_system,
+                    crate::effects::sync_rtt_camera_position_system,
                 )
                     .chain()
                     .after(crate::effects::fix_nested_embed_render_layers_system),
@@ -274,6 +278,7 @@ fn spawn_loaded_projects_system(
                 canvas_width: project.scene.width as f32,
                 canvas_height: project.scene.height as f32,
                 scene_fps: project.scene.fps as f32,
+                scene_total_time: project.scene.total_time as f32,
                 ..Default::default()
             };
 

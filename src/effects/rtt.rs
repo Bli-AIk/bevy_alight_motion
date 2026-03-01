@@ -206,7 +206,7 @@ pub struct NeedsStrategyEvaluation {
 /// - Implement actual stencil-based clipping for Stencil strategy
 pub fn evaluate_render_strategy_system(
     mut commands: Commands,
-    query: Query<(Entity, &NeedsStrategyEvaluation), Without<RenderStrategy>>,
+    query: Query<(Entity, &NeedsStrategyEvaluation, Option<&AmGroupFill>), Without<RenderStrategy>>,
     // Query to check if embed has any effects that require Composite
     // For now, we can check for specific components or use heuristics
 ) {
@@ -219,17 +219,24 @@ pub fn evaluate_render_strategy_system(
         bevy::log::trace!("[Strategy] Frame {}: query count = {}", frame, count);
     }
 
-    for (entity, needs_eval) in query.iter() {
+    for (entity, needs_eval, group_fill) in query.iter() {
         // Determine render strategy based on embed properties
         //
         // - Direct: No RTT, content renders to parent's layer (most embeds)
         // - Stencil: For embeds that need bounds clipping (e.g., scale animation)
-        // - Composite: For embeds with shader effects (TODO)
+        // - Composite: For embeds with shader effects or group fill
         //
         // Key insight: Embeds with scale animation need bounds clipping because
         // content that was within bounds at scale=1.0 may exceed bounds when scaled.
 
-        let strategy = if needs_eval.has_scale_animation {
+        // Group fill requires Composite (RTT) - we need the rendered children as a texture
+        // to use as an alpha mask for the fill color/gradient.
+        let needs_fill = group_fill.is_some();
+
+        let strategy = if needs_fill {
+            // Fill requires rendering children to texture for alpha masking
+            RenderStrategy::Composite
+        } else if needs_eval.has_scale_animation {
             // Embeds with scale animation need bounds clipping
             RenderStrategy::Stencil
         } else {
@@ -238,12 +245,13 @@ pub fn evaluate_render_strategy_system(
         };
 
         bevy::log::trace!(
-            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{}, has_scale_anim={})",
+            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{}, has_scale_anim={}, has_fill={})",
             entity,
             strategy,
             needs_eval.scene_width,
             needs_eval.scene_height,
-            needs_eval.has_scale_animation
+            needs_eval.has_scale_animation,
+            needs_fill
         );
 
         // Remove evaluation marker and assign strategy
@@ -265,9 +273,20 @@ pub fn evaluate_render_strategy_system(
                 },
             ));
 
-        // For Composite strategy, we would add NeedsEmbedSceneRtt here.
-        // But with Direct strategy, we DON'T need RTT at all!
-        // Content will render directly to Layer 0 with proper Z-sorting.
+        // For Composite strategy, trigger RTT setup
+        if strategy == RenderStrategy::Composite {
+            commands.entity(entity).insert(NeedsEmbedSceneRtt {
+                scene_width: needs_eval.scene_width,
+                scene_height: needs_eval.scene_height,
+            });
+        }
+
+        // Handle fillType="none" - make group invisible
+        if let Some(fill) = group_fill
+            && fill.fill_type == GroupFillType::None
+        {
+            commands.entity(entity).insert(Visibility::Hidden);
+        }
     }
 }
 
@@ -276,7 +295,18 @@ pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
-    query: Query<(Entity, &NeedsEmbedSceneRtt, &Transform), Without<EmbedSceneRtt>>,
+    mut fill_materials: ResMut<Assets<crate::group_fill::GroupFillMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    query: Query<
+        (
+            Entity,
+            &NeedsEmbedSceneRtt,
+            &Transform,
+            &GlobalTransform,
+            Option<&AmGroupFill>,
+        ),
+        Without<EmbedSceneRtt>,
+    >,
     pending_query: Query<&crate::scene::AmPendingLayers>,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
@@ -292,7 +322,7 @@ pub fn setup_embed_scene_rtt_system(
         query.iter().count()
     );
 
-    for (entity, needs_rtt, embed_transform) in query.iter() {
+    for (entity, needs_rtt, embed_transform, embed_global, group_fill) in query.iter() {
         // Log embed transform for debugging
         bevy::log::trace!(
             "[RTT] Embed {:?} transform: scale=({:.3},{:.3}), pos=({:.1},{:.1})",
@@ -342,6 +372,15 @@ pub fn setup_embed_scene_rtt_system(
         // The camera is NOT added as a child of the embed to avoid inheriting scale/rotation.
         // Instead, sync_rtt_camera_position_system updates the camera's world position to follow
         // the embed's GlobalTransform translation.
+        //
+        // IMPORTANT: The embed's children inherit the scene entity's scale (fit_scale) via
+        // GlobalTransform. The RTT camera must compensate for this by scaling its projection
+        // area by the embed's global scale. Otherwise, shapes would be rendered too small
+        // because the global scale is applied both in the RTT rendering AND when displaying
+        // the RTT output on screen.
+        let global_scale = embed_global.to_scale_rotation_translation().0;
+        let effective_width = needs_rtt.scene_width * global_scale.x;
+        let effective_height = needs_rtt.scene_height * global_scale.y;
         let camera_entity = commands
             .spawn((
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
@@ -357,11 +396,11 @@ pub fn setup_embed_scene_rtt_system(
                 },
                 // In Bevy 0.18, RenderTarget is a separate component
                 RenderTarget::Image(render_texture_handle.clone().into()),
-                // Fixed scaling mode so projection area matches RTT texture size exactly
+                // Fixed scaling mode compensated for the embed's inherited global scale
                 Projection::Orthographic(OrthographicProjection {
                     scaling_mode: ScalingMode::Fixed {
-                        width: needs_rtt.scene_width,
-                        height: needs_rtt.scene_height,
+                        width: effective_width,
+                        height: effective_height,
                     },
                     near: -1000.0,
                     far: 1000.0,
@@ -369,8 +408,12 @@ pub fn setup_embed_scene_rtt_system(
                 }),
                 // Camera only renders this specific layer
                 RenderLayers::layer(render_layer_usize),
-                // Camera positioned at center of scene - will be updated by sync_rtt_camera_position_system
-                Transform::from_xyz(0.0, 0.0, 1000.0),
+                // Camera positioned at embed's world position for correct RTT capture
+                Transform::from_xyz(
+                    embed_global.translation().x,
+                    embed_global.translation().y,
+                    1000.0,
+                ),
             ))
             .id();
 
@@ -409,7 +452,8 @@ pub fn setup_embed_scene_rtt_system(
             RenderLayers::layer(0)
         };
 
-        // Add EmbedSceneRtt component and remove the marker
+        // Add EmbedSceneRtt component and remove the marker.
+        // For group fill, use Mesh2d + GroupFillMaterial instead of Sprite.
         commands
             .entity(entity)
             .remove::<NeedsEmbedSceneRtt>()
@@ -421,15 +465,54 @@ pub fn setup_embed_scene_rtt_system(
                     scene_width: needs_rtt.scene_width,
                     scene_height: needs_rtt.scene_height,
                 },
-                // Add sprite to display RTT output
-                Sprite {
-                    image: render_texture_handle,
-                    custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
-                    ..default()
-                },
                 // Use appropriate RenderLayers based on nesting
                 sprite_render_layer,
             ));
+
+        if let Some(fill) = group_fill {
+            if fill.fill_type != GroupFillType::None {
+                // Create GroupFillMaterial for color/gradient fill
+                use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
+                let uniform = match &fill.fill_type {
+                    GroupFillType::Color => GroupFillUniform {
+                        fill_color: fill.fill_color,
+                        gradient_config: Vec4::ZERO, // 0 = solid color
+                        ..default()
+                    },
+                    GroupFillType::Gradient {
+                        gradient_type,
+                        start_color,
+                        end_color,
+                        points,
+                    } => GroupFillUniform {
+                        fill_color: Vec4::ONE,
+                        gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
+                        gradient_start_color: *start_color,
+                        gradient_end_color: *end_color,
+                        gradient_points: *points,
+                    },
+                    GroupFillType::None => unreachable!(),
+                };
+                let material = fill_materials.add(GroupFillMaterial {
+                    uniform_data: uniform,
+                    texture: Some(render_texture_handle),
+                });
+                let mesh = meshes.add(Rectangle::new(
+                    needs_rtt.scene_width,
+                    needs_rtt.scene_height,
+                ));
+                commands
+                    .entity(entity)
+                    .insert((Mesh2d(mesh), MeshMaterial2d(material)));
+            }
+        } else {
+            // No fill - use plain Sprite to display RTT output
+            commands.entity(entity).insert(Sprite {
+                image: render_texture_handle,
+                custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
+                ..default()
+            });
+        }
 
         bevy::log::trace!(
             "[RTT] Set up RTT for embedScene {:?}: layer={}, size={}x{}",
@@ -473,33 +556,88 @@ pub fn fix_nested_embed_render_layers_system(
 
 /// Debug system to verify RTT camera projection settings
 pub fn debug_rtt_camera_projection_system(
-    camera_query: Query<(Entity, &EmbedSceneRttCamera, &Projection)>,
+    camera_query: Query<(Entity, &EmbedSceneRttCamera, &Camera, &Projection)>,
+    embed_query: Query<(&EmbedSceneRtt, &Transform, &GlobalTransform)>,
+    content_query: Query<(
+        Entity,
+        &crate::scene::AmEmbedContentMarker,
+        &Transform,
+        &GlobalTransform,
+    )>,
+    images: Res<Assets<Image>>,
 ) {
-    static mut FRAME_COUNT: u32 = 0;
-    unsafe {
-        FRAME_COUNT += 1;
-        if FRAME_COUNT != 5 {
-            // Log on frame 5 only
-            return;
-        }
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    if frame != 20 {
+        return;
     }
 
-    for (entity, _rtt_cam, projection) in camera_query.iter() {
-        match projection {
-            Projection::Orthographic(ortho) => {
-                bevy::log::trace!(
-                    "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
-                    entity,
-                    ortho.scaling_mode,
-                    ortho.area.width(),
-                    ortho.area.height()
+    for (entity, rtt_cam, camera, projection) in camera_query.iter() {
+        let logical_vp = camera.logical_viewport_size();
+        let physical_vp = camera.physical_viewport_size();
+        bevy::log::warn!(
+            "[RTT DEBUG] Camera {:?}: logical_vp={:?}, physical_vp={:?}",
+            entity,
+            logical_vp,
+            physical_vp,
+        );
+        if let Projection::Orthographic(ortho) = projection {
+            bevy::log::warn!(
+                "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
+                entity,
+                ortho.scaling_mode,
+                ortho.area.width(),
+                ortho.area.height()
+            );
+        }
+
+        // Log embed entity's transform
+        if let Ok((rtt, embed_tf, embed_gtf)) = embed_query.get(rtt_cam.embed_entity) {
+            bevy::log::warn!(
+                "[RTT DEBUG] Embed {:?}: local_pos=({:.1},{:.1}), local_scale=({:.3},{:.3}), global_pos=({:.1},{:.1}), global_scale=({:.3},{:.3},{:.3})",
+                rtt_cam.embed_entity,
+                embed_tf.translation.x,
+                embed_tf.translation.y,
+                embed_tf.scale.x,
+                embed_tf.scale.y,
+                embed_gtf.translation().x,
+                embed_gtf.translation().y,
+                embed_gtf.to_scale_rotation_translation().0.x,
+                embed_gtf.to_scale_rotation_translation().0.y,
+                embed_gtf.to_scale_rotation_translation().0.z,
+            );
+
+            // Check the RTT texture
+            if let Some(img) = images.get(&rtt.render_texture) {
+                bevy::log::warn!(
+                    "[RTT DEBUG] RTT texture size: {}x{}",
+                    img.width(),
+                    img.height()
                 );
             }
-            _ => {
+        }
+
+        // Log some content entities' transforms
+        let mut count = 0;
+        for (ce, marker, tf, gtf) in content_query.iter() {
+            if marker.embed_entity == rtt_cam.embed_entity {
+                let (s, _r, _t) = gtf.to_scale_rotation_translation();
                 bevy::log::warn!(
-                    "[RTT DEBUG] Camera {:?} has non-orthographic projection!",
-                    entity
+                    "[RTT DEBUG] Content {:?}: local_pos=({:.1},{:.1}), local_scale=({:.3},{:.3}), global_scale=({:.3},{:.3},{:.3})",
+                    ce,
+                    tf.translation.x,
+                    tf.translation.y,
+                    tf.scale.x,
+                    tf.scale.y,
+                    s.x,
+                    s.y,
+                    s.z,
                 );
+                count += 1;
+                if count >= 3 {
+                    break;
+                }
             }
         }
     }
@@ -796,24 +934,32 @@ fn propagate_to_descendants(
     updates
 }
 
-/// System to sync RTT camera positions with their embed's GlobalTransform.
+/// System to sync RTT camera positions and projection with their embed's GlobalTransform.
 /// This ensures that RTT cameras follow their embed's world position, allowing them to
 /// "see" the embed's Bevy children (which have world positions relative to the embed).
-/// The camera only follows translation, not rotation or scale, to avoid distorting the RTT output.
+/// Also syncs the projection's Fixed scaling to account for changes in global scale
+/// (e.g., animated scale on the embed or its parents).
 pub fn sync_rtt_camera_position_system(
     embed_query: Query<(&EmbedSceneRtt, &GlobalTransform)>,
-    mut camera_query: Query<(&EmbedSceneRttCamera, &mut Transform)>,
+    mut camera_query: Query<(&EmbedSceneRttCamera, &mut Transform, &mut Projection)>,
 ) {
-    for (camera_marker, mut camera_transform) in camera_query.iter_mut() {
-        if let Ok((_, embed_global)) = embed_query.get(camera_marker.embed_entity) {
-            // Set camera position to follow embed's world position
-            // Only copy translation, not rotation or scale
+    for (camera_marker, mut camera_transform, mut projection) in camera_query.iter_mut() {
+        if let Ok((rtt, embed_global)) = embed_query.get(camera_marker.embed_entity) {
+            // Sync position
             let embed_translation = embed_global.translation();
-            camera_transform.translation = Vec3::new(
-                embed_translation.x,
-                embed_translation.y,
-                1000.0, // Keep camera at z=1000 for proper depth
-            );
+            camera_transform.translation =
+                Vec3::new(embed_translation.x, embed_translation.y, 1000.0);
+
+            // Sync projection scale to compensate for inherited global scale
+            let global_scale = embed_global.to_scale_rotation_translation().0;
+            let effective_width = rtt.scene_width * global_scale.x;
+            let effective_height = rtt.scene_height * global_scale.y;
+            if let Projection::Orthographic(ref mut ortho) = *projection {
+                ortho.scaling_mode = ScalingMode::Fixed {
+                    width: effective_width,
+                    height: effective_height,
+                };
+            }
         }
     }
 }
