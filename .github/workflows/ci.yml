@@ -56,9 +56,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
 
-      # TODO: Re-enable clippy once warnings are resolved
-      # - name: Run clippy
-      #   run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Build
         run: cargo build --verbose

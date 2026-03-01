@@ -605,10 +605,10 @@ impl EchokfParams {
             // Find maximum value across all keyframes
             let mut max = self.count.value.unwrap_or(0.0);
             for kf in &self.count.keyframes {
-                if let Ok(v) = kf.value.parse::<f32>() {
-                    if v > max {
-                        max = v;
-                    }
+                if let Ok(v) = kf.value.parse::<f32>()
+                    && v > max
+                {
+                    max = v;
                 }
             }
             max.ceil() as u32

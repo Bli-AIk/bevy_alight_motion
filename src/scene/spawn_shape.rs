@@ -9,8 +9,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::effects::NeedsStrategyEvaluation;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmShape};
+use crate::schema::{AmAnimatedFloat, AmShape};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;

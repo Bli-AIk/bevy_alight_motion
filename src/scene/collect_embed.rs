@@ -89,7 +89,7 @@ pub(crate) fn collect_embed_scene(
 
     // Parse retime mode from the nested scene.
     // When retime is active, children get AmRetimeInfo so their time is remapped.
-    let retime_mode = RetimeMode::from_str(&embed.scene.retime);
+    let retime_mode = RetimeMode::parse(&embed.scene.retime);
     let retime_info = if retime_mode != RetimeMode::Off {
         let container_duration = (embed.end_time - embed.start_time) as f32;
         let nested_total = embed.scene.total_time as f32;

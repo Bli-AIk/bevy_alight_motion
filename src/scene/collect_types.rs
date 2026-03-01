@@ -5,15 +5,13 @@
 //! Functions for collecting specific layer types (shape, null, embed, text, image).
 //! 特定图层类型（形状、空对象、嵌入、文字、图片）的收集函数。
 
-use super::helpers;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmCamera, AmShape, AmText};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmCamera, AmText};
 
-use super::collect::{apply_mask_to_children, collect_pending_layers};
 use super::components::*;
 use super::effects::*;
 use super::helpers::*;

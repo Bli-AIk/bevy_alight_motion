@@ -41,9 +41,9 @@ fn remap_echo_pl_ids(pl: &mut PendingLayer) {
 }
 
 fn collect_ids_for_remap(pl: &PendingLayer, id_map: &mut HashMap<u64, u64>) {
-    if !id_map.contains_key(&pl.id) {
-        id_map.insert(pl.id, generate_unique_id(pl.id));
-    }
+    id_map
+        .entry(pl.id)
+        .or_insert_with(|| generate_unique_id(pl.id));
     for child in &pl.children {
         collect_ids_for_remap(child, id_map);
     }

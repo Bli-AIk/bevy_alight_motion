@@ -37,7 +37,7 @@ pub enum RetimeMode {
 
 impl RetimeMode {
     /// Parse retime mode from AM XML attribute value.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "stretch" => Self::Stretch,
             "freeze" => Self::Freeze,

@@ -220,7 +220,7 @@ mod tests {
             let x = i as f64 * 0.1;
             let v = simplex_noise_3d(x * 637.729, 0.0, x * 394.417);
             assert!(
-                v >= -1.5 && v <= 1.5,
+                (-1.5..=1.5).contains(&v),
                 "noise value {v} out of range at x={x}"
             );
         }

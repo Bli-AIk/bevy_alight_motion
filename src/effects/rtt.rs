@@ -260,7 +260,7 @@ pub fn evaluate_render_strategy_system(
             .entity(entity)
             .remove::<NeedsStrategyEvaluation>()
             .insert((
-                strategy.clone(),
+                strategy,
                 RenderHierarchyInfo::default(),
                 // Direct strategy: render to Layer 0 (main camera)
                 RenderLayers::layer(0),
@@ -282,10 +282,10 @@ pub fn evaluate_render_strategy_system(
         }
 
         // Handle fillType="none" - make group invisible
-        if let Some(fill) = group_fill {
-            if fill.fill_type == GroupFillType::None {
-                commands.entity(entity).insert(Visibility::Hidden);
-            }
+        if let Some(fill) = group_fill
+            && fill.fill_type == GroupFillType::None
+        {
+            commands.entity(entity).insert(Visibility::Hidden);
         }
     }
 }
@@ -582,17 +582,14 @@ pub fn debug_rtt_camera_projection_system(
             logical_vp,
             physical_vp,
         );
-        match projection {
-            Projection::Orthographic(ortho) => {
-                bevy::log::warn!(
-                    "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
-                    entity,
-                    ortho.scaling_mode,
-                    ortho.area.width(),
-                    ortho.area.height()
-                );
-            }
-            _ => {}
+        if let Projection::Orthographic(ortho) = projection {
+            bevy::log::warn!(
+                "[RTT DEBUG] Camera {:?} projection: {:?}, area={}x{}",
+                entity,
+                ortho.scaling_mode,
+                ortho.area.width(),
+                ortho.area.height()
+            );
         }
 
         // Log embed entity's transform

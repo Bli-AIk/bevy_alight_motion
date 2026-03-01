@@ -33,6 +33,7 @@ pub struct AmEmbedContentMarker {
 /// Component for echokf echo entities.
 /// Stores alpha keyframes and mixing fraction for per-frame alpha evaluation.
 #[derive(Component, Debug, Clone)]
+#[allow(dead_code)]
 pub struct AmEchoInfo {
     /// Alpha keyframes from echokf effect (evaluated at element's time)
     pub alpha_keyframes: crate::schema::AmAnimatedFloat,

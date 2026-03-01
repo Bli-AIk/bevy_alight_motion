@@ -18,6 +18,7 @@ use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec
 
 /// Convert alpha from sRGB to linear space so Bevy's linear blending approximates AM's sRGB blend.
 #[inline]
+#[allow(dead_code)]
 fn srgb_alpha_to_linear(a: f32) -> f32 {
     if a > 0.001 && a < 0.999 {
         if a <= 0.04045 {

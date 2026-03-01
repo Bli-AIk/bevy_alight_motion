@@ -991,7 +991,7 @@ pub(crate) fn spawn_embed_scene(
     let nested_z_spacing = config.z_spacing / 100.0;
 
     // Parse retime mode (same as collect path)
-    let retime_mode = crate::animation::RetimeMode::from_str(&embed.scene.retime);
+    let retime_mode = crate::animation::RetimeMode::parse(&embed.scene.retime);
     let retime_info = if retime_mode != crate::animation::RetimeMode::Off {
         let container_duration = (embed.end_time - embed.start_time) as f32;
         let nested_total = embed.scene.total_time as f32;

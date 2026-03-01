@@ -7,10 +7,9 @@
 
 use super::helpers;
 use bevy::prelude::*;
-use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmShape};
+use crate::schema::{AmAnimatedFloat, AmShape};
 
 use super::components::*;
 use super::effects::*;

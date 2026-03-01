@@ -1026,7 +1026,7 @@ pub fn update_echo_runtime_system(
 ) {
     for (entity, echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
         // Compute parent element's fractional time (0-1)
-        let global_time = playback.current_time_ms as f32;
+        let global_time = playback.current_time_ms;
         let parent_local = (global_time - echo_rt.embed_time_offset) * echo_rt.embed_speed;
         let parent_duration = echo_rt.embed_end - echo_rt.embed_start;
         let frac_t = if parent_duration > 0.0 {
