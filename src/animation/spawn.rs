@@ -185,22 +185,21 @@ pub(crate) fn process_pending_layers(
                 .map(|l| l.id)
                 .collect();
 
-            // Despawn children (deepest first would be ideal, but order doesn't matter much
-            // since we're despawning them all)
+            // Remove children from spawned_entities tracking (parent despawn will handle
+            // the actual ECS despawn recursively)
             for child_id in children_to_remove {
-                if let Some(child_entity) = pending.spawned_entities.remove(&child_id) {
-                    if let Some(child) = pending.layers.iter().find(|l| l.id == child_id) {
-                        bevy::log::trace!(
-                            "    [Lifecycle] (cascade) Despawning child '{}' (id={})",
-                            child.label,
-                            child_id
-                        );
-                    }
-                    commands.entity(child_entity).despawn();
+                if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
+                    && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
+                {
+                    bevy::log::trace!(
+                        "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
+                        child.label,
+                        child_id
+                    );
                 }
             }
 
-            // Despawn the entity itself
+            // Despawn the entity (and all ECS children recursively)
             commands.entity(entity).despawn();
         }
     }

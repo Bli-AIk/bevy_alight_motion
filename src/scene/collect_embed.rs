@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::animation::AmAnimated;
+use crate::animation::{AmAnimated, AmRetimeInfo, RetimeMode};
 use crate::loader::FontMetrics;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 
@@ -57,6 +57,9 @@ pub(crate) fn collect_embed_scene(
     // The formula for local_time in the animation system is:
     //   local_time = (global_time - time_offset) * speed_multiplier
     //
+    // For retime=OFF, AM uses: innerTimeMs = (parentTimeMs - embedStart) * speed + inTime
+    // This is a direct 1:1 mapping (no proportional scaling by totalTime).
+    //
     // embed.start_time is relative to PARENT's internal time, not global time.
     // When parent's internal time = embed.start_time, child should start.
     // Parent internal time = (global_time - parent_time_offset) * parent_speed
@@ -84,6 +87,32 @@ pub(crate) fn collect_embed_scene(
     // It does NOT mean freeze animations. The parent's speed still applies.
     let nested_speed = effective_speed;
 
+    // Parse retime mode from the nested scene.
+    // When retime is active, children get AmRetimeInfo so their time is remapped.
+    let retime_mode = RetimeMode::parse(&embed.scene.retime);
+    let retime_info = if retime_mode != RetimeMode::Off {
+        let container_duration = (embed.end_time - embed.start_time) as f32;
+        let nested_total = embed.scene.total_time as f32;
+        bevy::log::debug!(
+            "  [Retime] embed '{}': mode={:?}, container={}, total={}, speed={}",
+            embed.label,
+            retime_mode,
+            container_duration,
+            nested_total,
+            effective_speed,
+        );
+        Some(AmRetimeInfo {
+            mode: retime_mode,
+            embed_global_start: global_start,
+            container_duration_ms: container_duration,
+            nested_total_time_ms: nested_total,
+            embed_speed: effective_speed,
+        })
+    } else {
+        // Inherit retime from parent config (for deeply nested scenes within a retimed embed)
+        config.retime.clone()
+    };
+
     bevy::log::trace!(
         "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
@@ -105,6 +134,8 @@ pub(crate) fn collect_embed_scene(
         nesting_depth: config.nesting_depth + 1,
         speed_multiplier: nested_speed,
         scene_fps: embed.scene.fps as f32,
+        scene_total_time: embed.scene.total_time as f32,
+        retime: retime_info,
         ..config.clone()
     };
 
@@ -165,6 +196,12 @@ pub(crate) fn collect_embed_scene(
         all_embed_transform2.remove(0)
     };
     let embed_extra_transform2 = all_embed_transform2;
+
+    // Extract jitter effect from embed
+    let jitter_effect = extract_jitter_effect(&embed.effects);
+
+    // Extract group fill data from embed's fillType
+    let group_fill = build_group_fill(embed);
 
     PendingLayer {
         id: embed.id,
@@ -348,6 +385,17 @@ pub(crate) fn collect_embed_scene(
             textprogress_blink: false,
             shape_props: Default::default(),
             shape_points: Default::default(),
+            // Jitter effect
+            jitter_enabled: jitter_effect.enabled,
+            jitter_angle: jitter_effect.angle,
+            jitter_freq: jitter_effect.freq,
+            jitter_mag: jitter_effect.mag,
+            jitter_seed: jitter_effect.seed,
+            jitter_slack: jitter_effect.slack,
+            jitter_zjitter: jitter_effect.zjitter,
+            retime: config.retime.clone(),
+            echo_time_shift_ms: config.echo_time_shift_ms,
+            echo_alpha_config: config.echo_alpha_config.clone(),
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -358,5 +406,83 @@ pub(crate) fn collect_embed_scene(
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
+        echo_runtime: None,
+        group_fill,
+    }
+}
+
+/// Build AmGroupFill from embed scene's fill type and color/gradient data.
+fn build_group_fill(embed: &crate::schema::AmEmbedScene) -> Option<crate::effects::AmGroupFill> {
+    use crate::effects::{AmGroupFill, GroupFillType};
+
+    match embed.fill_type.as_str() {
+        "" => None, // Normal rendering (INTRINSIC)
+        "none" => Some(AmGroupFill {
+            fill_type: GroupFillType::None,
+            fill_color: Vec4::ZERO,
+        }),
+        "color" => {
+            let color = if let Some(ref fc) = embed.fill_color {
+                if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                    // Convert sRGB to linear for shader
+                    let srgb = Color::srgba(c[0], c[1], c[2], c[3]);
+                    let linear = srgb.to_linear();
+                    Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
+                } else {
+                    Vec4::ONE
+                }
+            } else {
+                Vec4::ONE
+            };
+            Some(AmGroupFill {
+                fill_type: GroupFillType::Color,
+                fill_color: color,
+            })
+        }
+        "gradient" => {
+            if let Some(ref g) = embed.gradient {
+                let gradient_type = match g.gradient_type.as_str() {
+                    "linear" => 1u8,
+                    "radial" => 2u8,
+                    "sweep" => 3u8,
+                    _ => 1u8,
+                };
+                // Keep gradient colors in sRGB space (AM interpolates in sRGB)
+                let start_color = if let Ok(c) = crate::schema::parse_color(&g.start_color) {
+                    Vec4::new(c[0], c[1], c[2], c[3])
+                } else {
+                    Vec4::ZERO
+                };
+                let end_color = if let Ok(c) = crate::schema::parse_color(&g.end_color) {
+                    Vec4::new(c[0], c[1], c[2], c[3])
+                } else {
+                    Vec4::ONE
+                };
+                // AM default points: (0,0) → (1,1) (diagonal)
+                let start_pt = g.start.unwrap_or([0.0, 0.0]);
+                let end_pt = g.end.unwrap_or([1.0, 1.0]);
+                Some(AmGroupFill {
+                    fill_type: GroupFillType::Gradient {
+                        gradient_type,
+                        start_color,
+                        end_color,
+                        points: Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]),
+                    },
+                    fill_color: Vec4::ONE,
+                })
+            } else {
+                // AM default: LINEAR gradient from BLACK to WHITE, (0,0)→(1,1)
+                Some(AmGroupFill {
+                    fill_type: GroupFillType::Gradient {
+                        gradient_type: 1, // LINEAR
+                        start_color: Vec4::new(0.0, 0.0, 0.0, 1.0),
+                        end_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                        points: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                    },
+                    fill_color: Vec4::ONE,
+                })
+            }
+        }
+        _ => None,
     }
 }

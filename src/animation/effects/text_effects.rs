@@ -8,6 +8,7 @@
 //! `AmOriginalGlyphs` and always compute from those.
 
 use bevy::prelude::*;
+use bevy::sprite::Text2d;
 use bevy::text::{ComputedTextBlock, TextLayoutInfo};
 
 use crate::animation::AmPlayback;
@@ -345,7 +346,8 @@ pub fn animate_text_spacing_system(
             &owned_originals
         };
 
-        // --- Determine base line height from cosmic-text run.line_y values ---
+        // --- Determine base line height ---
+        // cosmic-text's natural line height (hhea ascent + descent).
         let base_line_height = {
             let mut line_ys: Vec<f32> = originals.iter().map(|g| g.layout_line_y).collect();
             line_ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -356,7 +358,14 @@ pub fn animate_text_spacing_system(
                 font_size * 1.2
             }
         };
-        let new_line_height = base_line_height * line_mult;
+        // AM applies its spacing multiplier via Android StaticLayout which uses
+        // font metrics (including CJK fallback and includePad adjustments) that
+        // are larger than cosmic-text's hhea-based line height.  Empirically the
+        // effective per-unit-m slope is ≈ fontSize × 1.3 for Roboto + CJK.
+        // Keep cosmic-text's natural gap at m=1 for smooth continuity and scale
+        // only the EXTRA spacing with the Android-equivalent slope.
+        let android_spacing_base = font_size * 1.32;
+        let new_line_height = base_line_height + android_spacing_base * (line_mult - 1.0);
 
         let first_orig_line_y = originals
             .iter()
@@ -420,32 +429,6 @@ pub fn animate_text_spacing_system(
             }
 
             let orig_line_width: f32 = advances.iter().sum();
-            // DEBUG: print advances for first entity only, first frame
-            if orig_line == 0 && playback.current_time_ms < 10.0 {
-                eprintln!(
-                    "DEBUG advances line {}: total={:.1} wrap_width={:.1} letter_px={:.1}",
-                    orig_line, orig_line_width, wrap_width, letter_px
-                );
-                for (j, &adv) in advances.iter().enumerate() {
-                    let ch = line_glyphs
-                        .get(j)
-                        .and_then(|&(idx, _, _)| {
-                            let bi = originals[idx].byte_index;
-                            computed
-                                .buffer()
-                                .0
-                                .lines
-                                .get(orig_line)
-                                .and_then(|l| l.text().get(bi..))
-                                .and_then(|s| s.chars().next())
-                        })
-                        .unwrap_or('?');
-                    eprintln!(
-                        "  [{j}] char='{}' adv={:.2} layout_x={:.2}",
-                        ch, adv, line_glyphs[j].2
-                    );
-                }
-            }
             let orig_align_offset = align_factor * (wrap_width - orig_line_width).max(0.0);
             // left_margin in layout-space: where content starts (before alignment)
             let first_layout_x = line_glyphs[0].2;
@@ -575,22 +558,29 @@ pub struct AmProgressCursor;
 #[derive(Component)]
 pub struct AmProgressCursorRef(pub Entity);
 
-/// System: animate textprogress effect — hide glyphs outside the visible range and render cursor.
+/// Stores the original text content before text progress slicing.
+#[derive(Component)]
+pub struct AmOriginalText(pub String);
+
+/// System: animate textprogress effect — slice text content and append cursor character.
+///
+/// Matches AM's JS implementation:
+///   `el.text = el.text.slice(Math.round(len * start), Math.round(len * end)) + cursorChar`
+///
+/// Uses Text2d modification (text-slicing) so Bevy re-lays-out the text,
+/// matching AM's behavior of re-rendering sliced text each frame.
 pub fn animate_text_progress_system(
     playback: Res<AmPlayback>,
     mut commands: Commands,
-    mut query: Query<
-        (
-            Entity,
-            &AmAnimated,
-            &AmLayerSpec,
-            &mut TextLayoutInfo,
-            Option<&AmProgressCursorRef>,
-            Option<&AmOriginalGlyphs>,
-        ),
-        With<Text2d>,
-    >,
-    mut cursor_query: Query<(&mut Transform, &mut Sprite, &mut Visibility), With<AmProgressCursor>>,
+    mut query: Query<(
+        Entity,
+        &AmAnimated,
+        &AmLayerSpec,
+        &mut Text2d,
+        Option<&AmProgressCursorRef>,
+        Option<&AmOriginalText>,
+    )>,
+    mut cursor_query: Query<&mut Visibility, With<AmProgressCursor>>,
 ) {
     if playback.force_stopped {
         return;
@@ -598,7 +588,7 @@ pub fn animate_text_progress_system(
 
     let global_time = playback.current_time_ms;
 
-    for (entity, animated, spec, mut layout_info, cursor_ref, orig_glyphs) in query.iter_mut() {
+    for (entity, animated, spec, mut text2d, cursor_ref, orig_text) in query.iter_mut() {
         let has_progress = animated.textprogress_start.value.is_some()
             || !animated.textprogress_start.keyframes.is_empty()
             || !animated.textprogress_end.keyframes.is_empty();
@@ -610,19 +600,15 @@ pub fn animate_text_progress_system(
         let cursor_type = animated.textprogress_cursor;
         let blink = animated.textprogress_blink;
 
-        let (font_size, wrap_width) = match spec {
-            AmLayerSpec::Text {
-                font_size,
-                wrap_width,
-                ..
-            } => (*font_size, *wrap_width),
+        let original_content = match spec {
+            AmLayerSpec::Text { content, .. } => content.as_str(),
             _ => continue,
         };
 
         let local_time = animated.calc_local_time(global_time);
         if !animated.is_active(local_time) {
             if let Some(cref) = cursor_ref
-                && let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0)
+                && let Ok(mut vis) = cursor_query.get_mut(cref.0)
             {
                 *vis = Visibility::Hidden;
             }
@@ -638,151 +624,74 @@ pub fn animate_text_progress_system(
             .unwrap_or(1.0)
             .clamp(0.0, 1.0);
 
-        let layout_size = layout_info.size;
-        let total = layout_info.glyphs.len();
-        if total == 0 {
+        // Store original text on first run
+        if orig_text.is_none() {
+            commands
+                .entity(entity)
+                .insert(AmOriginalText(original_content.to_string()));
+        }
+
+        let source_text = orig_text.map(|o| o.0.as_str()).unwrap_or(original_content);
+        let char_count = source_text.chars().count();
+
+        if char_count == 0 {
             continue;
         }
 
-        // Store originals for glyph restoration (only if text_spacing hasn't done it)
-        let has_spacing = animated.textspacing_letter.value.is_some()
-            || !animated.textspacing_letter.keyframes.is_empty()
-            || animated.textspacing_line.value.is_some()
-            || !animated.textspacing_line.keyframes.is_empty();
-
-        if orig_glyphs.is_none() && !has_spacing {
-            let data: Vec<OrigGlyph> = layout_info
-                .glyphs
-                .iter()
-                .map(|g| OrigGlyph {
-                    position: g.position,
-                    size: g.size,
-                    line_index: g.line_index,
-                    byte_index: g.byte_index,
-                    layout_x: 0.0,
-                    layout_line_y: 0.0,
-                    is_cjk: false,
-                })
-                .collect();
-            commands.entity(entity).insert(AmOriginalGlyphs {
-                data,
-                orig_size_y: layout_info.size.y,
-            });
-        }
-
-        let glyphs = &mut layout_info.glyphs;
-
-        // AM clips text via path-length; we approximate with character count.
-        // Path-based clipping partially shows boundary characters; we can only show/hide whole chars.
-        // Round for start (boundary char more likely partially hidden → hide it),
-        // Floor for end (boundary char more likely partially visible → hide it for consistency).
-        let visible_start = if start <= 1e-5 {
+        // AM: Math.round(el.text.length * p.start), Math.round(el.text.length * p.end)
+        let slice_start = if start <= 1e-5 {
             0
         } else {
-            (start * total as f32).round().min(total as f32) as usize
+            (start * char_count as f32).round().min(char_count as f32) as usize
         };
-        let visible_end = if (end - 1.0).abs() < 1e-5 {
-            total
+        let slice_end = if (end - 1.0).abs() < 1e-5 {
+            char_count
         } else {
-            (end * total as f32).floor().min(total as f32) as usize
-        };
-        let last_visible = if visible_end > visible_start {
-            Some(visible_end - 1)
-        } else {
-            None
+            (end * char_count as f32).round().min(char_count as f32) as usize
         };
 
-        // Restore previously-hidden glyphs to original positions.
-        if !has_spacing && let Some(orig) = orig_glyphs {
-            for (i, glyph) in glyphs
-                .iter_mut()
-                .enumerate()
-                .take(visible_end.min(total))
-                .skip(visible_start)
-            {
-                if glyph.position.x <= -9999.0 {
-                    glyph.position = orig.data[i].position;
-                }
-            }
+        // AM cursor characters (Unicode block elements)
+        let cursor_char = match cursor_type {
+            0 => "",
+            1 => "_",
+            2 => "\u{2588}", // █
+            3 => "\u{258C}", // ▌
+            4 => "\u{2581}", // ▁
+            5 => "\u{258F}", // ▏
+            6 => "\u{2595}", // ▕
+            7 => "\u{25AF}", // ▯
+            8 => "\u{258E}", // ▎
+            _ => "",
+        };
+
+        // AM blink: only blinks when text is static (same visible chars as previous frame).
+        let show_cursor = if cursor_type == 0 {
+            false
+        } else if blink {
+            (global_time as u64 % 1000) < 500
+        } else {
+            true
+        };
+
+        // Compute sliced text + cursor (exactly like AM)
+        let mut sliced: String = source_text
+            .chars()
+            .skip(slice_start)
+            .take(slice_end.saturating_sub(slice_start))
+            .collect();
+
+        if show_cursor {
+            sliced.push_str(cursor_char);
         }
 
-        // Compute cursor position BEFORE hiding glyphs.
-        let cursor_info = if cursor_type != 0
-            && let Some(last_idx) = last_visible
-        {
-            let g = &glyphs[last_idx];
-            let glyph_right = g.position.x + g.size.x / 2.0;
-
-            let (cw, ch) = match cursor_type {
-                1 => (font_size * 0.5, (font_size * 0.055).max(3.0)), // underscore: wide, thin
-                2 => (font_size * 0.55, font_size * 0.85),            // block: character-sized
-                3 => ((font_size * 0.08).max(2.0), font_size * 0.85), // pipe: thin, tall
-                _ => (0.0, 0.0),
-            };
-
-            let cursor_cx = glyph_right + cw / 2.0;
-            let cursor_cy = match cursor_type {
-                1 => g.position.y + g.size.y / 2.0 - ch / 2.0, // bottom of glyph
-                _ => g.position.y,                             // vertically centered
-            };
-
-            // Text-box coords → entity local coords
-            // Anchor is corrected to center on wrapWidth, so offset by wrapWidth/2
-            let local_x = cursor_cx - wrap_width / 2.0;
-            let local_y = layout_size.y / 2.0 - cursor_cy;
-
-            let visible = if blink {
-                (global_time as u64 % 1000) < 500
-            } else {
-                true
-            };
-
-            Some((local_x, local_y, cw, ch, visible))
-        } else {
-            None
-        };
-
-        // Hide glyphs outside visible range
-        for (i, glyph) in glyphs.iter_mut().enumerate() {
-            if i < visible_start || i >= visible_end {
-                glyph.position.x = -10000.0;
-            }
+        // Only update Text2d if content changed (avoids unnecessary re-layout)
+        if text2d.0 != sliced {
+            text2d.0 = sliced;
         }
 
-        // Spawn or update cursor entity
-        if let Some((cx, cy, cw, ch, visible)) = cursor_info {
-            let vis = if visible {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
-            if let Some(cref) = cursor_ref {
-                if let Ok((mut tf, mut sp, mut v)) = cursor_query.get_mut(cref.0) {
-                    tf.translation.x = cx;
-                    tf.translation.y = cy;
-                    sp.custom_size = Some(Vec2::new(cw, ch));
-                    *v = vis;
-                }
-            } else {
-                let cursor_e = commands
-                    .spawn((
-                        AmProgressCursor,
-                        Sprite {
-                            color: Color::WHITE,
-                            custom_size: Some(Vec2::new(cw, ch)),
-                            ..default()
-                        },
-                        Transform::from_xyz(cx, cy, 0.01),
-                        vis,
-                        ChildOf(entity),
-                    ))
-                    .id();
-                commands
-                    .entity(entity)
-                    .insert(AmProgressCursorRef(cursor_e));
-            }
-        } else if let Some(cref) = cursor_ref
-            && let Ok((_, _, mut vis)) = cursor_query.get_mut(cref.0)
+        // Hide cursor sprites if they exist
+        if let Some(cref) = cursor_ref
+            && let Ok(mut vis) = cursor_query.get_mut(cref.0)
         {
             *vis = Visibility::Hidden;
         }

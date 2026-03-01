@@ -806,6 +806,7 @@ pub(crate) fn add_visual_components(
             align,
             fill_color,
             wrap_width,
+            line_height_ratio,
         } => {
             use bevy::text::Justify;
 
@@ -824,10 +825,9 @@ pub(crate) fn add_visual_components(
             // AM text element position is always the CENTER of the text box
             let anchor = bevy::sprite::Anchor::CENTER;
 
-            // Android's Roboto hhea metrics: ascent=1900, descent=500, unitsPerEm=2048
-            // line_height_ratio = (1900+500)/2048 = 1.1719
-            // Bevy default is 1.2 which causes progressive vertical offset vs AM
-            let line_height = bevy::text::LineHeight::RelativeToFont(1.172);
+            // Use AM-matching line height computed from font hhea metrics.
+            // AM's StaticLayout uses float ascent + descent for line spacing.
+            let line_height = bevy::text::LineHeight::RelativeToFont(*line_height_ratio);
 
             commands.entity(entity).insert((
                 Text2d::new(content.clone()),

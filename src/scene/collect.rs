@@ -28,6 +28,57 @@ fn generate_unique_id(_base_id: u64) -> u64 {
     UNIQUE_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Remap all IDs in an echo PendingLayer tree to unique IDs.
+/// This prevents echo copies from colliding with the original entity IDs.
+/// The root's `parent` is NOT remapped (it references an entity in the outer scope).
+fn remap_echo_pl_ids(pl: &mut PendingLayer) {
+    // Build old→new ID mapping for the entire tree
+    let mut id_map = HashMap::new();
+    collect_ids_for_remap(pl, &mut id_map);
+
+    // Apply mapping
+    apply_id_remap(pl, &id_map, true);
+}
+
+fn collect_ids_for_remap(pl: &PendingLayer, id_map: &mut HashMap<u64, u64>) {
+    id_map
+        .entry(pl.id)
+        .or_insert_with(|| generate_unique_id(pl.id));
+    for child in &pl.children {
+        collect_ids_for_remap(child, id_map);
+    }
+}
+
+fn apply_id_remap(pl: &mut PendingLayer, id_map: &HashMap<u64, u64>, is_root: bool) {
+    if let Some(&new_id) = id_map.get(&pl.id) {
+        pl.id = new_id;
+        pl.animated.layer_id = new_id;
+    }
+    // Don't remap root's parent (it's in the outer scope)
+    if !is_root {
+        if let Some(&new_parent) = id_map.get(&pl.parent) {
+            pl.parent = new_parent;
+        }
+        if let Some(&new_parent) = id_map.get(&pl.animated.parent_layer_id) {
+            pl.animated.parent_layer_id = new_parent;
+        }
+    }
+    if let Some(&new_embed) = id_map.get(&pl.containing_embed_id) {
+        pl.containing_embed_id = new_embed;
+    }
+    // Remap mask references
+    if let Some(ref mut mask_info) = pl.mask_info {
+        for entry in &mut mask_info.masks {
+            if let Some(&new_mask) = id_map.get(&entry.mask_layer_id) {
+                entry.mask_layer_id = new_mask;
+            }
+        }
+    }
+    for child in &mut pl.children {
+        apply_id_remap(child, id_map, false);
+    }
+}
+
 pub fn collect_pending_layers(
     scene: &AmScene,
     fonts: &HashMap<String, Handle<Font>>,
@@ -337,18 +388,115 @@ pub(crate) fn collect_layer(
             }
         }
         AmLayer::EmbedScene(embed) => {
-            let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-            bevy::log::trace!(
-                "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
-                embed.label,
-                embed.id,
-                embed.start_time,
-                embed.end_time,
-                embed.in_time,
-                embed.out_time,
-                pl.children.len()
-            );
-            pending.push(pl);
+            // Check for echokf effect
+            let echokf = super::effects::extract_echokf_effect(&embed.effects);
+
+            let max_count = echokf.max_count();
+            if echokf.enabled && max_count > 0 {
+                let seconds = echokf.static_seconds();
+                let is_dynamic = echokf.is_dynamic() || !echokf.alpha.keyframes.is_empty();
+
+                let base_echo_alpha = crate::animation::EchoAlphaConfig {
+                    alpha_keyframes: echokf.alpha.clone(),
+                    fraction: 0.0,
+                    parent_start: embed.start_time,
+                    parent_end: embed.end_time,
+                    parent_time_offset: config.time_offset,
+                    parent_speed: config.speed_multiplier,
+                };
+
+                // Build echo runtime template for dynamic echoes
+                let echo_rt_template = if is_dynamic {
+                    Some(crate::animation::AmEchoRuntime {
+                        echo_index: 0,
+                        max_count,
+                        mode: echokf.mode,
+                        count_kf: echokf.count.clone(),
+                        seconds_kf: echokf.seconds.clone(),
+                        alpha_kf: echokf.alpha.clone(),
+                        embed_start: embed.start_time as f32,
+                        embed_end: embed.end_time as f32,
+                        embed_time_offset: config.time_offset as f32,
+                        embed_speed: config.speed_multiplier,
+                    })
+                } else {
+                    None
+                };
+
+                if echokf.mode == 0 {
+                    // Mode 0 (atop): original first, then echoes on top
+                    let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+                    pending.push(pl);
+
+                    for i in 0..max_count {
+                        let echo_index = (max_count - 1 - i) as f32;
+                        let fraction = echo_index / max_count as f32;
+                        let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+                        let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
+
+                        let mut echo_config = config.clone();
+                        echo_config.echo_time_shift_ms += time_shift_ms;
+                        echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                            fraction,
+                            ..base_echo_alpha.clone()
+                        });
+
+                        let mut echo_pl =
+                            collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
+                        remap_echo_pl_ids(&mut echo_pl);
+                        // Attach echo runtime for dynamic updates
+                        if let Some(ref template) = echo_rt_template {
+                            echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
+                                echo_index: echo_index as u32,
+                                ..template.clone()
+                            });
+                        }
+                        pending.push(echo_pl);
+                    }
+                } else {
+                    // Mode 1 (behind): echoes first, then original on top
+                    for i in 0..max_count {
+                        let echo_index = i as f32;
+                        let fraction = echo_index / max_count as f32;
+                        let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+                        let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
+
+                        let mut echo_config = config.clone();
+                        echo_config.echo_time_shift_ms += time_shift_ms;
+                        echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                            fraction,
+                            ..base_echo_alpha.clone()
+                        });
+
+                        let mut echo_pl =
+                            collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
+                        remap_echo_pl_ids(&mut echo_pl);
+                        if let Some(ref template) = echo_rt_template {
+                            echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
+                                echo_index: echo_index as u32,
+                                ..template.clone()
+                            });
+                        }
+                        pending.push(echo_pl);
+                    }
+
+                    let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+                    pending.push(pl);
+                }
+            } else {
+                let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+                bevy::log::trace!(
+                    "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
+                    embed.label,
+                    embed.id,
+                    embed.start_time,
+                    embed.end_time,
+                    embed.in_time,
+                    embed.out_time,
+                    pl.children.len()
+                );
+                pending.push(pl);
+            }
         }
         AmLayer::Text(text) => {
             if let Some(pl) = collect_text(text, fonts, font_metrics, config, z) {

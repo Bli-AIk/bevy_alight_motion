@@ -9,8 +9,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::effects::NeedsStrategyEvaluation;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmShape};
+use crate::schema::{AmAnimatedFloat, AmShape};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;
@@ -450,6 +449,16 @@ pub(crate) fn spawn_shape(
                 textprogress_blink: false,
                 shape_props: Default::default(),
                 shape_points: Default::default(),
+                jitter_enabled: false,
+                jitter_angle: AmAnimatedFloat::default(),
+                jitter_freq: AmAnimatedFloat::default(),
+                jitter_mag: AmAnimatedFloat::default(),
+                jitter_seed: AmAnimatedFloat::default(),
+                jitter_slack: AmAnimatedFloat::default(),
+                jitter_zjitter: AmAnimatedFloat::default(),
+                retime: config.retime.clone(),
+                echo_time_shift_ms: config.echo_time_shift_ms,
+                echo_alpha_config: config.echo_alpha_config.clone(),
             },
             layer_spec,
             transform,

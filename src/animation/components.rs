@@ -13,6 +13,122 @@ use bevy::prelude::*;
 use crate::scene::effects::PathRepeatParams;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
+/// Retime mode for embedded scenes.
+/// Controls how nested scene time is mapped when container duration differs from content duration.
+///
+/// 嵌入场景的重定时模式。
+/// 控制容器时长与内容时长不同时，嵌套场景时间的映射方式。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum RetimeMode {
+    /// No retiming - content plays at normal speed, may be cut off.
+    #[default]
+    Off,
+    /// Stretch content to fit container duration.
+    Stretch,
+    /// Freeze on last frame when content ends.
+    Freeze,
+    /// Loop content when it ends.
+    Loop,
+    /// Loop with integer stride so loops fit evenly.
+    LoopStretch,
+    /// Content goes blank when it ends.
+    Blank,
+}
+
+impl RetimeMode {
+    /// Parse retime mode from AM XML attribute value.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "stretch" => Self::Stretch,
+            "freeze" => Self::Freeze,
+            "loop" => Self::Loop,
+            "loop-stretch" => Self::LoopStretch,
+            "blank" => Self::Blank,
+            _ => Self::Off,
+        }
+    }
+}
+
+/// Retime parameters for children of a retimed embed scene.
+/// Stored on each child layer's AmAnimated to transform global time into retimed time.
+///
+/// 重定时参数，用于重定时嵌入场景的子图层。
+#[derive(Debug, Clone)]
+pub struct AmRetimeInfo {
+    pub mode: RetimeMode,
+    /// Global time when the embed container starts playing.
+    pub embed_global_start: f32,
+    /// Duration of the embed container in ms (endTime - startTime).
+    pub container_duration_ms: f32,
+    /// totalTime of the nested scene in ms.
+    pub nested_total_time_ms: f32,
+    /// Combined speed up to the embed level (parent speed * embed speed).
+    pub embed_speed: f32,
+}
+
+/// Runtime echokf data for dynamically updating echo entities each frame.
+/// Attached to echo entities that need per-frame count/seconds/alpha updates.
+#[derive(Component, Debug, Clone)]
+pub struct AmEchoRuntime {
+    /// This echo's index (0-based)
+    pub echo_index: u32,
+    /// Max echo count (total spawned)
+    pub max_count: u32,
+    /// Echo mode: 0=atop, 1=behind
+    pub mode: i32,
+    /// Keyframed count parameter
+    pub count_kf: crate::schema::AmAnimatedFloat,
+    /// Keyframed seconds parameter
+    pub seconds_kf: crate::schema::AmAnimatedFloat,
+    /// Keyframed alpha parameter
+    pub alpha_kf: crate::schema::AmAnimatedFloat,
+    /// Embed element start time (ms) for fractional time computation
+    pub embed_start: f32,
+    /// Embed element end time (ms)
+    pub embed_end: f32,
+    /// Embed element time_offset (for computing global-to-local time)
+    pub embed_time_offset: f32,
+    /// Parent speed multiplier
+    pub embed_speed: f32,
+}
+
+/// Echo alpha config for entities in an echokf echo subtree.
+/// Contains everything needed to evaluate per-frame alpha.
+#[derive(Debug, Clone)]
+pub struct EchoAlphaConfig {
+    /// Alpha keyframes from echokf effect
+    pub alpha_keyframes: crate::schema::AmAnimatedFloat,
+    /// Fraction (0..1) for mixing: mix(alpha(t), 1.0, fraction)
+    pub fraction: f32,
+    /// Parent element start time (ms)
+    pub parent_start: i32,
+    /// Parent element end time (ms)
+    pub parent_end: i32,
+    /// Parent element time_offset
+    pub parent_time_offset: i32,
+    /// Parent element speed_multiplier
+    pub parent_speed: f32,
+}
+
+impl EchoAlphaConfig {
+    /// Evaluate echo alpha at the given global time.
+    /// Returns the multiplier for opacity (0.0 = invisible, 1.0 = fully opaque).
+    pub fn evaluate(&self, global_time: f32) -> f32 {
+        let parent_local = (global_time - self.parent_time_offset as f32) * self.parent_speed;
+        let parent_duration = (self.parent_end - self.parent_start) as f32;
+        let parent_layer_time = if parent_duration > 0.0 {
+            (parent_local - self.parent_start as f32) / parent_duration
+        } else {
+            0.0
+        };
+        let alpha_at_time =
+            super::interpolation::interpolate_float(&self.alpha_keyframes, parent_layer_time)
+                .unwrap_or(1.0);
+        // mix(alpha, 1.0, fraction) = alpha * (1 - fraction) + fraction
+        alpha_at_time * (1.0 - self.fraction) + self.fraction
+    }
+}
+
 /// DEBUG: 拉伸效果乘数，用于调试编组内图片的拉伸计算
 /// 当前问题："编组 2 Copy" 内的图片拉伸效果过大
 /// 调整此值直到编组内图片的拉伸效果与AM一致
@@ -337,16 +453,98 @@ pub struct AmAnimated {
     /// Generic shape vec2 properties (up to 5 points).
     /// Used by Line, Triangle, Quad, Penta for vertex animation.
     pub shape_points: [AmAnimatedVec2; 5],
+    // Jitter effect (com.alightcreative.effects.jitter)
+    /// Jitter effect: whether it is enabled
+    pub jitter_enabled: bool,
+    /// Jitter effect: movement angle (degrees) - may be keyframed
+    pub jitter_angle: AmAnimatedFloat,
+    /// Jitter effect: quantization frequency (steps/sec) - may be keyframed
+    pub jitter_freq: AmAnimatedFloat,
+    /// Jitter effect: displacement magnitude (pixels) - may be keyframed
+    pub jitter_mag: AmAnimatedFloat,
+    /// Jitter effect: noise seed - may be keyframed
+    pub jitter_seed: AmAnimatedFloat,
+    /// Jitter effect: perpendicular slack (0.0-1.0) - may be keyframed
+    pub jitter_slack: AmAnimatedFloat,
+    /// Jitter effect: z-axis jitter magnitude - may be keyframed
+    pub jitter_zjitter: AmAnimatedFloat,
+    /// Retime info for children of retimed embed scenes.
+    /// When present, overrides linear time mapping with retime mode.
+    pub retime: Option<AmRetimeInfo>,
+    /// Echo time shift in milliseconds (for echokf effect).
+    /// Applied in calc_layer_time to show animation at a past time.
+    pub echo_time_shift_ms: f32,
+    /// Echo alpha config (for echokf effect). If present, entity is an echo copy.
+    /// Contains alpha keyframes, fraction, and parent timing for per-frame alpha evaluation.
+    pub echo_alpha_config: Option<EchoAlphaConfig>,
 }
 
 impl AmAnimated {
+    /// Apply retime transformation to get nested scene time from global time.
+    /// Returns None if no retime is active (use normal linear mapping).
+    fn apply_retime(&self, global_time: f32) -> Option<f32> {
+        let rt = self.retime.as_ref()?;
+        if rt.mode == RetimeMode::Off {
+            return None;
+        }
+        let embed_elapsed = (global_time - rt.embed_global_start) * rt.embed_speed;
+        if embed_elapsed < 0.0 {
+            return Some(0.0);
+        }
+        let total = rt.nested_total_time_ms;
+        if total <= 0.0 {
+            return Some(0.0);
+        }
+        let nested_time = match rt.mode {
+            RetimeMode::Off => return None,
+            RetimeMode::Stretch => {
+                let container = rt.container_duration_ms;
+                if container > 0.0 {
+                    (embed_elapsed / container) * total
+                } else {
+                    embed_elapsed
+                }
+            }
+            RetimeMode::Freeze => embed_elapsed.min(total),
+            RetimeMode::Loop => embed_elapsed.rem_euclid(total),
+            RetimeMode::LoopStretch => {
+                let container = rt.container_duration_ms;
+                if container > 0.0 {
+                    let loops = (container / total).ceil().max(1.0);
+                    let stride = container / loops;
+                    if stride > 0.0 {
+                        ((embed_elapsed % stride) / stride) * total
+                    } else {
+                        embed_elapsed
+                    }
+                } else {
+                    embed_elapsed
+                }
+            }
+            RetimeMode::Blank => {
+                if embed_elapsed > total {
+                    // Return a time that won't match any layer's range.
+                    return Some(-1.0);
+                }
+                embed_elapsed
+            }
+        };
+        Some(nested_time)
+    }
+
     /// Calculate local time considering speed_multiplier (for animation interpolation).
     pub fn calc_local_time(&self, global_time: f32) -> f32 {
+        if let Some(nested_time) = self.apply_retime(global_time) {
+            return nested_time;
+        }
         (global_time - self.time_offset as f32) * self.speed_multiplier
     }
 
     /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
     pub fn calc_lifecycle_time(&self, global_time: f32) -> f32 {
+        if let Some(nested_time) = self.apply_retime(global_time) {
+            return nested_time;
+        }
         global_time - self.lifecycle_offset as f32
     }
 
@@ -357,10 +555,12 @@ impl AmAnimated {
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.
     /// Applies element_speed: with speed=0.5, animation plays at half rate.
+    /// For echo entities, shifts time backward by echo_time_shift_ms to show past state.
     pub fn calc_layer_time(&self, local_time: f32) -> f32 {
+        let effective_time = local_time - self.echo_time_shift_ms;
         let duration = (self.end_time - self.start_time) as f32;
         if duration > 0.0 {
-            (local_time - self.start_time as f32) / duration * self.element_speed
+            (effective_time - self.start_time as f32) / duration * self.element_speed
         } else {
             0.0
         }

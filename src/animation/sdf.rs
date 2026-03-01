@@ -16,6 +16,21 @@ use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
 use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
+/// Convert alpha from sRGB to linear space so Bevy's linear blending approximates AM's sRGB blend.
+#[inline]
+#[allow(dead_code)]
+fn srgb_alpha_to_linear(a: f32) -> f32 {
+    if a > 0.001 && a < 0.999 {
+        if a <= 0.04045 {
+            a / 12.92
+        } else {
+            ((a + 0.055) / 1.055).powf(2.4)
+        }
+    } else {
+        a
+    }
+}
+
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
 /// Now supports animated masks by reading GlobalTransform and AmAnimated from mask layer entities.
@@ -356,11 +371,19 @@ pub fn animate_sdf_opacity_system(
 
                 if let Some(material) = materials.get_mut(&material_handle.0) {
                     // Multiply by base_alpha to preserve original fill color transparency
-                    let final_alpha = opacity * animated.base_alpha;
+                    let mut final_alpha = opacity * animated.base_alpha;
+                    // Apply echo alpha (for echokf effect) to both fill and stroke
+                    let echo_mult = if let Some(ref echo_cfg) = animated.echo_alpha_config {
+                        echo_cfg.evaluate(global_time)
+                    } else {
+                        1.0
+                    };
+                    final_alpha *= echo_mult;
                     material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
 
-                    // Also update stroke alpha: base_stroke_alpha * opacity
-                    let final_stroke_alpha = sdf_params.base_stroke_alpha * opacity;
+                    // Also update stroke alpha: base_stroke_alpha * opacity * echo_alpha
+                    let final_stroke_alpha =
+                        (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
                     material.uniform_data.params.w =
                         repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
 
@@ -419,10 +442,12 @@ pub fn animate_sdf_opacity_system(
 /// Instead of using Transform.scale, we update SdfMaterial.params to change the SDF dimensions:
 /// - params.x = base_half_width * animation_scale_x
 /// - params.y = base_half_height * animation_scale_y
-/// - params.z = stroke_width (constant)
+/// - params.z = stroke_width (constant — AM scales path coordinates, not stroke)
 /// - params.w = packed_stroke_color (constant)
 ///
 /// This allows non-uniform scaling while keeping stroke width constant.
+/// Note: Stroke width is NOT scaled with shape animation because AM applies
+/// scale to path vertices directly, not through NanoVG's transform matrix.
 ///
 /// Also updates the child transform translation to account for pivot scaling.
 /// Since the parent (Pivot) is not scaled, we must move the child (Center)
@@ -611,11 +636,17 @@ pub fn animate_sdf_scale_system(
                 let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
 
                 // Use animated stroke width if available, otherwise use base value
-                let final_stroke_width = if stroke_width_animated >= 0.0 {
+                let mut final_stroke_width = if stroke_width_animated >= 0.0 {
                     stroke_width_animated
                 } else {
                     sdf_params.stroke_width
                 };
+
+                // When shape is scaled to near-zero, hide stroke to prevent tiny dots
+                // (AM doesn't render shapes at scale 0; our SDF stroke would still be visible)
+                if scaled_half_width.abs() < 0.1 && scaled_half_height.abs() < 0.1 {
+                    final_stroke_width = 0.0;
+                }
 
                 // Update material params: (half_width, half_height, stroke_width, packed_stroke)
                 if let Some(material) = materials.get_mut(&material_handle.0) {

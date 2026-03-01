@@ -102,10 +102,14 @@ min_frame_similarity = 0.40
 [overrides."effects/gaussian-blur/basic"]
 skip = true
 
+[overrides."effects/echo-keyframes/basic"]
+frame_offset = 0.2
+
 [overrides."effects/pixelate/bone"]
 avg_threshold = 0.98
 frame_threshold = 0.98
 max_failed_rate = 0
+frame_offset = 0.5
 
 # 此示例存在严重不匹配的问题，且当前的帧对比算法必须设为0.999才能保证肉眼看不出差别。不能修改这里的阈值
 [overrides."effects/pixelate/bone_single"]

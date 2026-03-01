@@ -917,10 +917,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // layer-pixels for layers at 1:1 scale within their scene.  Embed hierarchy scaling
     // is applied AFTER the effect, so scene_scale is NOT used in cell sizing.
     //
-    // Grid origin offset: AM uses gl_FragCoord (pixel center at integer+0.5) and
-    // integer layer locations, creating a 0.5 scene-pixel grid offset.  We replicate
-    // this with a +0.5 layer-pixel offset.  Y axis is flipped (AM is Y-up GL, we are
-    // Y-down), so Y is negated and the offset is applied: st_am = (dp.x + 0.5, -dp.y + 0.5).
+    // Grid alignment: dp = (sample_uv - 0.5) * display_size already gives the
+    // equivalent of AM's (fragCoord - layerCenter) because both have texel centers
+    // at half-pixel positions.  Y is negated to match GL Y-up convention.
     var pixelate_dist_center = 0.0;
     if pixelate_enabled {
         let display_size = vec2<f32>(uniforms.original_size.x, uniforms.original_size.y);
@@ -935,10 +934,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let dp = (sample_uv - vec2<f32>(0.5)) * display_size;
 
         // Convert to AM's inner-scene coordinate convention.
-        // AM uses gl_FragCoord (pixel centers at integer+0.5) and integer-valued
-        // layer locations.  The 0.5 scene-pixel grid phase that fragCoord introduces
-        // is replicated here with a +0.5 offset.  Y is negated (GL Y-up → WebGPU Y-down).
-        var st_am = vec2<f32>(dp.x + 0.5, -dp.y + 0.5);
+        // dp already equals (fragCoord - layerCenter) in AM's coordinate space:
+        // at the first texel (UV = 0.5/W), dp.x = -W/2 + 0.5 which matches
+        // AM's gl_FragCoord.x - layerCenter.x = -W/2 + 0.5.
+        // Y is negated (GL Y-up → WebGPU Y-down).
+        var st_am = vec2<f32>(dp.x, -dp.y);
 
         // Apply rotation: pixelate angle adjusted for parent rotation
         let parent_rotation = uniforms.pixelate_params2.w;
@@ -966,7 +966,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
         // Snap to cell center in AM coords, then convert back to dp
         let snapped_am = st_am - pos_in_pixel + size_vec * 0.5;
-        let snapped_dp = vec2<f32>(snapped_am.x - 0.5, -(snapped_am.y - 0.5));
+        let snapped_dp = vec2<f32>(snapped_am.x, -snapped_am.y);
         sample_uv = snapped_dp / display_size + vec2<f32>(0.5);
         // Discard if the grid cell center maps outside the texture
         if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {

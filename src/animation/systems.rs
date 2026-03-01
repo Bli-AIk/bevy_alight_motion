@@ -17,6 +17,7 @@ use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent}
 use super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
 };
+use super::simplex_noise::simplex_noise_3d;
 
 /// System to advance playback time.
 pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
@@ -85,7 +86,7 @@ pub fn animate_transform_system(
                 30.0
             };
             let frame_duration_ms = 1000.0 / fps;
-            let offset = frame_duration_ms * 0.35;
+            let offset = frame_duration_ms * 0.50;
             local_time += offset;
         }
 
@@ -318,6 +319,15 @@ pub fn animate_transform_system(
                 by -= animated.font_y_offset;
             }
 
+            // Compensate for cosmic-text vs Android StaticLayout horizontal glyph positioning.
+            // Android renders text to a bitmap with integer-pixel glyph positions, while
+            // cosmic-text uses sub-pixel positioning that results in a consistent ~1px rightward
+            // shift relative to AM's rendering. Apply correction scaled by inv_fit_scale to
+            // get exactly 1 screen pixel adjustment regardless of scene resolution.
+            if matches!(layer_spec, crate::scene::AmLayerSpec::Text { .. }) {
+                bx -= animated.inv_fit_scale;
+            }
+
             // Apply anchor offset compensation for SpriteShape with non-center pivot.
             // This keeps the sprite center at the AM location while pivot affects rotation/scale.
             // NOTE: Skip for SDF shapes - their pivot is already handled above via `by -= pivot_y`
@@ -438,6 +448,85 @@ pub fn animate_transform_system(
             } else {
                 1.0
             };
+
+            // Apply jitter effect (simplex noise-based position displacement)
+            if animated.jitter_enabled {
+                // AM uses integer millisecond scene time for both the jitter script
+                // and effect parameter evaluation. Truncate to integer ms to match.
+                let local_time_int = (local_time as f64).floor() as f32;
+                let duration = (animated.end_time - animated.start_time) as f32;
+                let am_layer_time = if duration > 0.0 {
+                    (local_time_int - animated.start_time as f32) / duration
+                } else {
+                    0.0
+                };
+
+                // Interpolate jitter parameters at AM's integer-ms-based layer_time
+                let jitter_freq_val =
+                    interpolate_float(&animated.jitter_freq, am_layer_time).unwrap_or(0.0);
+                let jitter_angle_val =
+                    interpolate_float(&animated.jitter_angle, am_layer_time).unwrap_or(0.0);
+                let jitter_mag_val =
+                    interpolate_float(&animated.jitter_mag, am_layer_time).unwrap_or(0.0);
+                let jitter_seed_val =
+                    interpolate_float(&animated.jitter_seed, am_layer_time).unwrap_or(0.0);
+                let jitter_slack_val =
+                    interpolate_float(&animated.jitter_slack, am_layer_time).unwrap_or(0.0);
+                let jitter_zjitter_val =
+                    interpolate_float(&animated.jitter_zjitter, am_layer_time).unwrap_or(0.0);
+
+                if jitter_freq_val > 0.0 {
+                    // Replicate AM's f32 precision chain for globalTime:
+                    // AM: env.time = (float)(sceneTime-startTime) / (float)(endTime-startTime)  [f32]
+                    //     env.duration = (endTime-startTime) / 1000.0  [f64]
+                    //     globalTime = env.duration * (double)env.time  [f64 * f32→f64]
+                    // The f32 division causes slight rounding that affects floor(gt*freq)
+                    // at boundary frames (e.g., frame 5: 0.199999995 vs exact 0.2).
+                    let duration_sec = (animated.end_time - animated.start_time) as f64 / 1000.0;
+                    let global_time = duration_sec * (am_layer_time as f64);
+                    let freq = jitter_freq_val as f64;
+                    let t = (global_time * freq).floor() / freq;
+
+                    let a = (jitter_angle_val as f64) * (std::f64::consts::PI / 180.0);
+                    let seed = jitter_seed_val as f64;
+                    let mag = jitter_mag_val as f64;
+
+                    // Primary displacement along angle direction
+                    let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
+                    let dx_primary = (a.sin() * mag * m) as f32;
+                    let dy_primary = (a.cos() * mag * m) as f32;
+                    bx += dx_primary;
+                    by -= dy_primary; // Y inverted for Bevy
+
+                    // Perpendicular slack displacement
+                    if jitter_slack_val > 0.0 {
+                        let a2 = a + std::f64::consts::FRAC_PI_2;
+                        let m2 =
+                            simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
+                        let slack = jitter_slack_val as f64;
+                        bx += (a2.sin() * mag * m2 * slack) as f32;
+                        by -= (a2.cos() * mag * m2 * slack) as f32;
+                    }
+
+                    // Z-axis jitter (affects perspective zoom like oscillate)
+                    if jitter_zjitter_val > 0.0 {
+                        let zm =
+                            simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
+                        let z_offset = (zm * jitter_zjitter_val as f64) as f32;
+                        if z_offset != 0.0 {
+                            let cam_dist = animated.canvas_width.max(animated.canvas_height)
+                                / (2.0 * (30.0_f32).to_radians().tan());
+                            let denom = cam_dist + z_offset;
+                            if denom > 0.0 {
+                                let zoom = cam_dist / denom;
+                                bx *= zoom;
+                                by *= zoom;
+                                oscillate_z_zoom *= zoom;
+                            }
+                        }
+                    }
+                }
+            }
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
@@ -654,7 +743,11 @@ pub fn animate_opacity_system(
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
         // e.g., if fillColor has alpha=0, the sprite should remain invisible regardless of opacity animation
-        let final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        let mut final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        // Apply echo alpha (for echokf effect)
+        if let Some(ref echo_cfg) = animated.echo_alpha_config {
+            final_alpha *= echo_cfg.evaluate(global_time);
+        }
         // AM composites opacity in sRGB space; Bevy blends in linear space.
         // Convert alpha sRGB→linear so GPU blend approximates AM's result.
         let corrected = if final_alpha > 0.001 && final_alpha < 0.999 {
@@ -746,7 +839,11 @@ pub fn animate_text_opacity_system(
         // Get opacity from keyframes, or default to 1.0 if no opacity animation
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
-        let final_alpha = opacity * animated.base_alpha;
+        let mut final_alpha = opacity * animated.base_alpha;
+        // Apply echo alpha (for echokf effect)
+        if let Some(ref echo_cfg) = animated.echo_alpha_config {
+            final_alpha *= echo_cfg.evaluate(global_time);
+        }
         text_color.0.set_alpha(final_alpha.clamp(0.0, 1.0));
     }
 }
@@ -910,5 +1007,112 @@ pub fn animate_am_camera_system(
                 ortho.scale = zoom;
             }
         }
+    }
+}
+
+/// Runtime system for updating echokf echo entities with dynamic (keyframed) parameters.
+/// Evaluates count/seconds/alpha keyframes per frame and updates echo time shifts and visibility.
+/// Propagates updated values to all descendant entities in each echo subtree.
+pub fn update_echo_runtime_system(
+    playback: Res<AmPlayback>,
+    mut echo_query: Query<(
+        Entity,
+        &super::components::AmEchoRuntime,
+        &mut AmAnimated,
+        &mut Visibility,
+    )>,
+    children_query: Query<&Children>,
+    mut child_animated_query: Query<&mut AmAnimated, Without<super::components::AmEchoRuntime>>,
+) {
+    for (entity, echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
+        // Compute parent element's fractional time (0-1)
+        let global_time = playback.current_time_ms;
+        let parent_local = (global_time - echo_rt.embed_time_offset) * echo_rt.embed_speed;
+        let parent_duration = echo_rt.embed_end - echo_rt.embed_start;
+        let frac_t = if parent_duration > 0.0 {
+            ((parent_local - echo_rt.embed_start) / parent_duration).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        // Evaluate keyframed count
+        let current_count = interpolate_float(&echo_rt.count_kf, frac_t)
+            .unwrap_or(1.0)
+            .round() as u32;
+
+        // Hide echoes beyond current count
+        if echo_rt.echo_index >= current_count {
+            *visibility = Visibility::Hidden;
+            continue;
+        } else {
+            *visibility = Visibility::Inherited;
+        }
+
+        // Evaluate keyframed seconds
+        let current_seconds = interpolate_float(&echo_rt.seconds_kf, frac_t).unwrap_or(0.5);
+
+        // Compute echo fraction and time shift based on current count
+        let r0 = if current_count > 0 {
+            echo_rt.echo_index as f32 / current_count as f32
+        } else {
+            0.0
+        };
+
+        let time_shift_ms = (1.0 - r0) * current_seconds * 1000.0;
+
+        // Update root entity
+        animated.echo_time_shift_ms = time_shift_ms;
+
+        // Evaluate keyframed alpha and build echo_alpha_config
+        let current_alpha = interpolate_float(&echo_rt.alpha_kf, frac_t).unwrap_or(1.0);
+        let mix = current_alpha * (1.0 - r0) + r0;
+        let echo_cfg = super::components::EchoAlphaConfig {
+            alpha_keyframes: crate::schema::AmAnimatedFloat {
+                value: Some(mix),
+                keyframes: Vec::new(),
+            },
+            fraction: 0.0, // Already computed into mix
+            parent_start: echo_rt.embed_start as i32,
+            parent_end: echo_rt.embed_end as i32,
+            parent_time_offset: echo_rt.embed_time_offset as i32,
+            parent_speed: echo_rt.embed_speed,
+        };
+        animated.echo_alpha_config = Some(echo_cfg.clone());
+
+        // Propagate to all descendant entities in the echo subtree
+        propagate_echo_to_descendants(
+            entity,
+            time_shift_ms,
+            &echo_cfg,
+            &children_query,
+            &mut child_animated_query,
+        );
+    }
+}
+
+/// Recursively propagate echo_time_shift_ms and echo_alpha_config to all descendants.
+fn propagate_echo_to_descendants(
+    parent: Entity,
+    time_shift_ms: f32,
+    echo_cfg: &super::components::EchoAlphaConfig,
+    children_query: &Query<&Children>,
+    child_animated_query: &mut Query<&mut AmAnimated, Without<super::components::AmEchoRuntime>>,
+) {
+    let Ok(children) = children_query.get(parent) else {
+        return;
+    };
+    for child in children.iter() {
+        if let Ok(mut child_animated) = child_animated_query.get_mut(child) {
+            child_animated.echo_time_shift_ms = time_shift_ms;
+            child_animated.echo_alpha_config = Some(echo_cfg.clone());
+        }
+        // Recurse into grandchildren
+        propagate_echo_to_descendants(
+            child,
+            time_shift_ms,
+            echo_cfg,
+            children_query,
+            child_animated_query,
+        );
     }
 }
