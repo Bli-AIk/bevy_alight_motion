@@ -95,7 +95,7 @@ fn main() {
     let project_file = get_project_file();
     println!("Loading project: {}", project_file);
 
-    // Default resolution
+    #[allow(unused_mut)]
     let mut resolution = Vec2::new(1280.0, 960.0);
 
     // In comparison mode, try to match video resolution
