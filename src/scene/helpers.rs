@@ -690,3 +690,37 @@ pub(crate) fn extract_shape_animations(
     };
     (props, [dv(), dv(), dv(), dv(), dv()])
 }
+
+/// Extract gradient data from an AmGradient into uniform-ready values.
+/// Returns (gradient_type, start_color, end_color, points).
+pub(crate) fn extract_gradient_data(
+    gradient: &Option<crate::schema::AmGradient>,
+) -> (u8, bevy::math::Vec4, bevy::math::Vec4, bevy::math::Vec4) {
+    use bevy::math::Vec4;
+    if let Some(g) = gradient {
+        let grad_type = match g.gradient_type.as_str() {
+            "linear" => 1u8,
+            "radial" => 2u8,
+            "sweep" => 3u8,
+            _ => 0u8,
+        };
+        if grad_type == 0 {
+            return (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO);
+        }
+        let start_color = crate::schema::parse_color(&g.start_color)
+            .map(|c| {
+                // Store in sRGB space for sRGB-space interpolation (matching AM's NanoVG)
+                Vec4::new(c[0], c[1], c[2], c[3])
+            })
+            .unwrap_or(Vec4::ZERO);
+        let end_color = crate::schema::parse_color(&g.end_color)
+            .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+            .unwrap_or(Vec4::ZERO);
+        let start_pt = g.start.unwrap_or([0.0, 0.0]);
+        let end_pt = g.end.unwrap_or([1.0, 1.0]);
+        let points = Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]);
+        (grad_type, start_color, end_color, points)
+    } else {
+        (0, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO)
+    }
+}
