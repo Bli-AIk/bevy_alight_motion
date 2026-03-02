@@ -221,7 +221,7 @@ pub(crate) fn collect_shape(
 
         // Extract gradient data
         let (gradient_type, gradient_start_color, gradient_end_color, gradient_points) =
-            super::spawn::extract_gradient_data(&shape.gradient);
+            super::helpers::extract_gradient_data(&shape.gradient);
 
         AmLayerSpec::SdfShape {
             fill_color: shape.fill_color.clone(),

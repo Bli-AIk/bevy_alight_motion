@@ -15,7 +15,6 @@ use crate::sdf::AmSdfShaders;
 use super::components::*;
 use super::effects::*;
 use super::helpers::*;
-use super::spawn::extract_gradient_data;
 
 /// Spawn a shape layer (lazy - visual components spawned later by lifecycle system).
 #[allow(clippy::too_many_arguments)]

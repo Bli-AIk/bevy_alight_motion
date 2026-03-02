@@ -16,6 +16,8 @@ mod components;
 pub(crate) mod effects;
 mod helpers;
 mod spawn;
+mod spawn_embed;
+mod spawn_null;
 mod spawn_shape;
 mod spawn_visual;
 
