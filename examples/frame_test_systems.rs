@@ -214,7 +214,7 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
             .iter()
             .filter(|&&dt| {
                 let ms = dt * 1000.0;
-                ms >= *lo_ms as f64 && ms < *hi_ms as f64
+                ms >= *lo_ms && ms < *hi_ms
             })
             .count();
         if count > 0 {
