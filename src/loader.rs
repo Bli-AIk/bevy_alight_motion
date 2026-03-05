@@ -113,18 +113,36 @@ impl AssetLoader for AlightMotionLoader {
         _settings: &Self::Settings,
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
+        let asset_path = load_context.path().clone();
+        let path_ref = asset_path.path();
+        let is_amproj = path_ref.extension().map_or(false, |ext| ext == "amproj");
 
-        let path = load_context.path().clone();
-        let path_ref = path.path();
+        let mut bytes = Vec::new();
+        match reader.read_to_end(&mut bytes).await {
+            Err(e) if is_amproj && e.kind() == std::io::ErrorKind::IsADirectory => {
+                let fs_path = resolve_asset_fs_path(path_ref);
+                return load_amproj_dir(&fs_path, load_context).await;
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+
         let extension = path_ref
             .extension()
             .and_then(std::ffi::OsStr::to_str)
             .unwrap_or("");
 
         match extension.to_lowercase().as_str() {
-            "amproj" => load_amproj(&bytes, load_context).await,
+            "amproj" => {
+                if zip::ZipArchive::new(std::io::Cursor::new(&bytes)).is_err() {
+                    // Not a valid ZIP — try loading as unpacked directory
+                    let fs_path = resolve_asset_fs_path(path_ref);
+                    if fs_path.is_dir() {
+                        return load_amproj_dir(&fs_path, load_context).await;
+                    }
+                }
+                load_amproj(&bytes, load_context).await
+            }
             "xml" => load_xml(&bytes, load_context).await,
             _ => Err(AmError::InvalidFormat(format!(
                 "Unknown file extension: {}",
@@ -136,6 +154,15 @@ impl AssetLoader for AlightMotionLoader {
     fn extensions(&self) -> &[&str] {
         &["amproj", "xml"]
     }
+}
+
+/// Resolve a Bevy asset path to an absolute filesystem path.
+/// Replicates Bevy's `FileAssetReader` root resolution: `CARGO_MANIFEST_DIR/assets/` or `<cwd>/assets/`.
+fn resolve_asset_fs_path(asset_path: &std::path::Path) -> std::path::PathBuf {
+    let base = std::env::var("CARGO_MANIFEST_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+    base.join("assets").join(asset_path)
 }
 
 /// Load from .amproj ZIP archive.
@@ -371,6 +398,181 @@ async fn load_amproj(
     validation_report.log_report(&scene.title);
     #[cfg(target_arch = "wasm32")]
     validation_report.log_report_wasm(&scene.title);
+
+    Ok(AmProject {
+        scene,
+        images,
+        fonts,
+        font_metrics,
+        embedded_images,
+        embedded_fonts: preserved_fonts,
+        validation_report,
+    })
+}
+
+/// Load from .amproj directory (unpacked format).
+async fn load_amproj_dir(
+    dir_path: &std::path::Path,
+    load_context: &mut LoadContext<'_>,
+) -> Result<AmProject, AmError> {
+    let mut xml_content = None;
+    let mut embedded_images: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut embedded_fonts: HashMap<String, Vec<u8>> = HashMap::new();
+
+    let entries = std::fs::read_dir(dir_path)
+        .map_err(|e| AmError::InvalidFormat(format!("Failed to read amproj directory: {}", e)))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        if name.ends_with(".xml") {
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| AmError::InvalidFormat(format!("Failed to read XML file: {}", e)))?;
+            xml_content = Some(content);
+        } else if name.ends_with(".png")
+            || name.ends_with(".jpg")
+            || name.ends_with(".jpeg")
+            || name.ends_with(".webp")
+        {
+            let data = std::fs::read(&path)
+                .map_err(|e| AmError::InvalidFormat(format!("Failed to read image file: {}", e)))?;
+            let uri = format!("amproj:{}", name);
+            debug!("Loaded image from directory: {}", uri);
+            embedded_images.insert(uri, data);
+        } else if name.ends_with(".ttf") || name.ends_with(".otf") {
+            let data = std::fs::read(&path)
+                .map_err(|e| AmError::InvalidFormat(format!("Failed to read font file: {}", e)))?;
+            embedded_fonts.insert(name.to_string(), data);
+        }
+    }
+
+    let xml_content = xml_content.ok_or_else(|| {
+        AmError::InvalidFormat("No XML file found in amproj directory".to_string())
+    })?;
+
+    let scene: AmScene = quick_xml::de::from_str(&xml_content)?;
+
+    let mut images = HashMap::new();
+    for (uri, data) in &embedded_images {
+        let label = uri.trim_start_matches("amproj:");
+
+        let format: &str =
+            if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+                "png"
+            } else if data.len() >= 2 && data[0..2] == [0xFF, 0xD8] {
+                "jpeg"
+            } else if data.len() >= 4
+                && &data[0..4] == b"RIFF"
+                && data.len() >= 12
+                && &data[8..12] == b"WEBP"
+            {
+                "webp"
+            } else {
+                let extension = label.rsplit('.').next().unwrap_or("png").to_lowercase();
+                if extension == "jpg" || extension == "jpeg" {
+                    "jpeg"
+                } else if extension == "webp" {
+                    "webp"
+                } else {
+                    "png"
+                }
+            };
+
+        if let Ok(image) = Image::from_buffer(
+            data,
+            bevy::image::ImageType::Extension(format),
+            bevy::image::CompressedImageFormats::NONE,
+            true,
+            bevy::image::ImageSampler::Default,
+            RenderAssetUsages::all(),
+        ) {
+            let handle = load_context.add_labeled_asset(label.to_string(), image);
+            images.insert(uri.clone(), handle.clone());
+            let am_uri = format!("am:{}", label);
+            images.insert(am_uri, handle);
+            debug!(
+                "Loaded image from directory: {} (detected format: {})",
+                uri, format
+            );
+        } else {
+            warn!(
+                "Failed to load image from directory: {} (tried format: {})",
+                uri, format
+            );
+        }
+    }
+
+    let mut fonts = HashMap::new();
+    let mut font_metrics = HashMap::new();
+    let mut preserved_fonts: HashMap<String, Vec<u8>> = HashMap::new();
+    for (name, data) in &embedded_fonts {
+        let mut test_db = fontdb::Database::new();
+        test_db.load_font_data(data.clone());
+        if test_db.faces().count() == 0 {
+            warn!(
+                "Font '{}' failed fontdb validation, skipping to avoid text pipeline panic",
+                name
+            );
+            continue;
+        }
+
+        preserved_fonts.insert(name.clone(), data.clone());
+
+        if let Ok(face) = ttf_parser::Face::parse(data, 0) {
+            let upm = face.units_per_em();
+            let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+                (
+                    os2.windows_ascender() as f32 / upm as f32,
+                    (-os2.windows_descender()) as f32 / upm as f32,
+                )
+            } else {
+                (
+                    face.ascender() as f32 / upm as f32,
+                    (-face.descender()) as f32 / upm as f32,
+                )
+            };
+            let hhea_ascent = face.ascender() as f32 / upm as f32;
+            let hhea_descent = (-face.descender()) as f32 / upm as f32;
+            font_metrics.insert(
+                name.clone(),
+                FontMetrics {
+                    win_ascent,
+                    win_descent,
+                    units_per_em: upm,
+                    hhea_ascent,
+                    hhea_descent,
+                },
+            );
+        }
+
+        let font = Font::try_from_bytes(data.clone()).map_err(|e| {
+            AmError::InvalidFormat(format!("Failed to load font {}: {:?}", name, e))
+        })?;
+        let label = format!("font_{}", name);
+        let handle = load_context.add_labeled_asset(label, font);
+        fonts.insert(name.clone(), handle);
+    }
+
+    let validation_report = crate::validation::ValidationReport::validate(&scene);
+    #[cfg(not(target_arch = "wasm32"))]
+    validation_report.log_report(&scene.title);
+    #[cfg(target_arch = "wasm32")]
+    validation_report.log_report_wasm(&scene.title);
+
+    info!("Loaded amproj directory: {:?}", dir_path);
+
+    // Map content provider URIs (content://...) to loaded image handles using <media> elements.
+    // Device-extracted directories use content URIs in shapes' fillImage attributes,
+    // while images are stored with amproj:filename keys.
+    for media in &scene.media {
+        if !media.uri.is_empty() && !media.filename.is_empty() {
+            let amproj_key = format!("amproj:{}", media.filename);
+            if let Some(handle) = images.get(&amproj_key).cloned() {
+                images.insert(media.uri.clone(), handle);
+            }
+        }
+    }
 
     Ok(AmProject {
         scene,
