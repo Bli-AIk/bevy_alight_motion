@@ -2,7 +2,17 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect};
+use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe};
+
+/// Effect IDs for transform variants.
+const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
+/// Legacy transform effect (older Alight Motion versions).
+/// Uses different property names: offset(vec2) → posx/posy, scale → posz.
+const TRANSFORM_LEGACY_ID: &str = "com.alightcreative.effects.transform";
+
+fn is_transform_effect(id: &str) -> bool {
+    id == TRANSFORM2_ID || id == TRANSFORM_LEGACY_ID
+}
 
 /// All extracted transform2 effect parameters.
 #[derive(Debug, Clone, Default)]
@@ -17,120 +27,128 @@ pub struct Transform2Params {
     pub ainv: bool,
 }
 
-#[allow(dead_code)]
-pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
+/// Parse a single transform2/transform effect into `Transform2Params`.
+///
+/// Handles both transform2 (modern: posx/posy/posz/angle) and legacy transform
+/// (older: offset(vec2)/scale/angle). Legacy properties are mapped:
+///   offset.x → posx, offset.y → posy, scale → posz.
+fn parse_transform_params(effect: &AmEffect) -> Transform2Params {
+    let is_legacy = effect.id == TRANSFORM_LEGACY_ID;
     let mut params = Transform2Params::default();
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.transform2" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "posx" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_x.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_x.value = Some(v);
-                        }
-                    }
-                    "posy" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_y.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_y.value = Some(v);
-                        }
-                    }
-                    "posz" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_z.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_z.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "xinv" => {
-                        params.xinv = prop.value == "true";
-                    }
-                    "yinv" => {
-                        params.yinv = prop.value == "true";
-                    }
-                    "zinv" => {
-                        params.zinv = prop.value == "true";
-                    }
-                    "ainv" => {
-                        params.ainv = prop.value == "true";
-                    }
-                    _ => {}
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "posx" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_x.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_x.value = Some(v);
                 }
             }
+            "posy" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_y.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_y.value = Some(v);
+                }
+            }
+            // Legacy transform uses "offset" (vec2) instead of separate posx/posy.
+            // Split vec2 "x,y" values into individual float keyframes.
+            "offset" if is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    let (kf_x, kf_y) = split_vec2_keyframes(&prop.keyframes);
+                    params.pos_x.keyframes = kf_x;
+                    params.pos_y.keyframes = kf_y;
+                } else if let Some((x, y)) = parse_vec2_value(&prop.value) {
+                    params.pos_x.value = Some(x);
+                    params.pos_y.value = Some(y);
+                }
+            }
+            "posz" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_z.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_z.value = Some(v);
+                }
+            }
+            // Legacy transform uses "scale" instead of "posz".
+            "scale" if is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_z.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_z.value = Some(v);
+                }
+            }
+            "angle" => {
+                if !prop.keyframes.is_empty() {
+                    params.angle.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.angle.value = Some(v);
+                }
+            }
+            "xinv" => params.xinv = prop.value == "true",
+            "yinv" => params.yinv = prop.value == "true",
+            "zinv" => params.zinv = prop.value == "true",
+            "ainv" => params.ainv = prop.value == "true",
+            // Legacy-only properties (alpha, fill, maskToLayer, sample) are ignored.
+            _ => {}
         }
     }
 
     params
 }
 
-/// Extract ALL transform2 effects (supports multiple stacked instances).
-pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transform2Params> {
-    let mut result = Vec::new();
+/// Split vec2 keyframes ("x,y" values) into separate x and y float keyframes.
+fn split_vec2_keyframes(keyframes: &[AmKeyframe]) -> (Vec<AmKeyframe>, Vec<AmKeyframe>) {
+    let mut kf_x = Vec::with_capacity(keyframes.len());
+    let mut kf_y = Vec::with_capacity(keyframes.len());
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.transform2" {
-            let mut params = Transform2Params::default();
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "posx" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_x.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_x.value = Some(v);
-                        }
-                    }
-                    "posy" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_y.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_y.value = Some(v);
-                        }
-                    }
-                    "posz" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_z.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_z.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "xinv" => {
-                        params.xinv = prop.value == "true";
-                    }
-                    "yinv" => {
-                        params.yinv = prop.value == "true";
-                    }
-                    "zinv" => {
-                        params.zinv = prop.value == "true";
-                    }
-                    "ainv" => {
-                        params.ainv = prop.value == "true";
-                    }
-                    _ => {}
-                }
-            }
-            result.push(params);
-        }
+    for kf in keyframes {
+        let (x_str, y_str) = match kf.value.split_once(',') {
+            Some((x, y)) => (x.trim().to_string(), y.trim().to_string()),
+            None => (kf.value.clone(), "0.0".to_string()),
+        };
+
+        kf_x.push(AmKeyframe {
+            time: kf.time,
+            value: x_str,
+            easing: kf.easing.clone(),
+        });
+        kf_y.push(AmKeyframe {
+            time: kf.time,
+            value: y_str,
+            easing: kf.easing.clone(),
+        });
     }
 
-    result
+    (kf_x, kf_y)
+}
+
+/// Parse a "x,y" string into (f32, f32).
+fn parse_vec2_value(value: &str) -> Option<(f32, f32)> {
+    let (x_str, y_str) = value.split_once(',')?;
+    let x = x_str.trim().parse::<f32>().ok()?;
+    let y = y_str.trim().parse::<f32>().ok()?;
+    Some((x, y))
+}
+
+#[allow(dead_code)]
+pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
+    for effect in effects {
+        if is_transform_effect(&effect.id) {
+            return parse_transform_params(effect);
+        }
+    }
+    Transform2Params::default()
+}
+
+/// Extract ALL transform2/transform effects (supports multiple stacked instances).
+pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transform2Params> {
+    effects
+        .iter()
+        .filter(|e| is_transform_effect(&e.id))
+        .map(parse_transform_params)
+        .collect()
 }
 #[derive(Debug, Clone, Default)]
 pub struct WipeEffectParams {

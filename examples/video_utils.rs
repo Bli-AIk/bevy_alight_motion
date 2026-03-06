@@ -1,9 +1,4 @@
-#![allow(
-    dead_code,
-    clippy::collapsible_if,
-    clippy::cast_abs_to_unsigned,
-    unused_imports
-)]
+#![allow(dead_code, unused_imports)]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -62,16 +57,15 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
                     if let Ok(file_type) = entry.file_type() {
                         if file_type.is_dir() {
                             search_videos(&entry.path(), extensions, latest);
-                        } else if file_type.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str()
-                                && let Some(extension) = file_name.split('.').next_back()
-                                && extensions.contains(&extension.to_lowercase().as_str())
-                                && let Ok(metadata) = entry.metadata()
-                                && let Ok(modified) = metadata.modified()
-                                && (latest.is_none() || latest.as_ref().unwrap().1 < modified)
-                            {
-                                *latest = Some((entry.path(), modified));
-                            }
+                        } else if file_type.is_file()
+                            && let Some(file_name) = entry.file_name().to_str()
+                            && let Some(extension) = file_name.split('.').next_back()
+                            && extensions.contains(&extension.to_lowercase().as_str())
+                            && let Ok(metadata) = entry.metadata()
+                            && let Ok(modified) = metadata.modified()
+                            && (latest.is_none() || latest.as_ref().unwrap().1 < modified)
+                        {
+                            *latest = Some((entry.path(), modified));
                         }
                     }
                 }

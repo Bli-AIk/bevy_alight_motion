@@ -9,6 +9,41 @@ use std::io::{Cursor, Read};
 use crate::error::AmError;
 use crate::schema::AmScene;
 
+/// Optional override configuration for amproj assets.
+///
+/// Placed alongside the `.amproj` file/directory as `<name>.amproj.toml`.
+/// Provides manual content URI → filename mappings for cases where
+/// the XML `<media>` elements lack a `filename` attribute.
+#[derive(Debug, Default, serde::Deserialize)]
+struct AmProjectOverride {
+    /// Content URI → local filename mappings.
+    /// Keys are Android content URIs (e.g. `content://media/external/images/media/1000048179`),
+    /// values are filenames within the amproj directory.
+    #[serde(default)]
+    media: HashMap<String, String>,
+}
+
+impl AmProjectOverride {
+    /// Try to load an override config from `<amproj_path>.toml`.
+    fn load_for(amproj_path: &std::path::Path) -> Option<Self> {
+        let toml_path = amproj_path.with_extension("amproj.toml");
+        let content = std::fs::read_to_string(&toml_path).ok()?;
+        match toml::from_str::<AmProjectOverride>(&content) {
+            Ok(config) => {
+                info!("Loaded amproj override config: {:?}", toml_path);
+                Some(config)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to parse amproj override config {:?}: {}",
+                    toml_path, e
+                );
+                None
+            }
+        }
+    }
+}
+
 /// Font metrics extracted from TTF/OTF files.
 #[derive(Debug, Clone, Default)]
 pub struct FontMetrics {
@@ -570,6 +605,22 @@ async fn load_amproj_dir(
             let amproj_key = format!("amproj:{}", media.filename);
             if let Some(handle) = images.get(&amproj_key).cloned() {
                 images.insert(media.uri.clone(), handle);
+            }
+        }
+    }
+
+    // Apply override config for content URIs that lack automatic filename mappings.
+    if let Some(overrides) = AmProjectOverride::load_for(dir_path) {
+        for (content_uri, filename) in &overrides.media {
+            let amproj_key = format!("amproj:{}", filename);
+            if let Some(handle) = images.get(&amproj_key).cloned() {
+                images.insert(content_uri.clone(), handle);
+                debug!("Override mapped {} -> {}", content_uri, filename);
+            } else {
+                warn!(
+                    "Override config references '{}' but no image '{}' found in amproj directory",
+                    content_uri, filename
+                );
             }
         }
     }
