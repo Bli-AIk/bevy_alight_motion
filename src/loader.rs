@@ -115,7 +115,7 @@ impl AssetLoader for AlightMotionLoader {
     ) -> Result<Self::Asset, Self::Error> {
         let asset_path = load_context.path().clone();
         let path_ref = asset_path.path();
-        let is_amproj = path_ref.extension().map_or(false, |ext| ext == "amproj");
+        let is_amproj = path_ref.extension().is_some_and(|ext| ext == "amproj");
 
         let mut bytes = Vec::new();
         match reader.read_to_end(&mut bytes).await {
