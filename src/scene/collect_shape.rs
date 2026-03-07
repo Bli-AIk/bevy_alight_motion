@@ -279,37 +279,35 @@ pub(crate) fn collect_shape(
         Vec2::new(comp_x, comp_y)
     };
 
-    let stroke_width_anim = {
-        let has_path_stroke = shape.stroke.is_some();
-        let border_scale = if has_path_stroke {
+    let has_path_stroke = shape.stroke.is_some();
+    let border_scale = if has_path_stroke {
+        1.0
+    } else {
+        let direction = shape
+            .borders
+            .first()
+            .map(|b| b.direction.as_str())
+            .unwrap_or("centered");
+        if direction == "centered" {
             1.0
         } else {
-            let direction = shape
-                .borders
-                .first()
-                .map(|b| b.direction.as_str())
-                .unwrap_or("centered");
-            if direction == "centered" {
-                1.0
-            } else {
-                config.canvas_width / 2048.0
-            }
-        };
-        let mut anim =
-            get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
-        // Scale border-sourced keyframe values by comp_width/2048
-        if border_scale != 1.0 {
-            if let Some(ref mut v) = anim.value {
-                *v *= border_scale;
-            }
-            for kf in &mut anim.keyframes {
-                if let Ok(val) = kf.value.parse::<f32>() {
-                    kf.value = (val * border_scale).to_string();
-                }
-            }
+            config.canvas_width / 2048.0
         }
-        anim
     };
+    let mut stroke_width_anim =
+        get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
+    // Scale border-sourced keyframe values by comp_width/2048
+    if border_scale != 1.0 {
+        if let Some(ref mut v) = stroke_width_anim.value {
+            *v *= border_scale;
+        }
+        for kf in &mut stroke_width_anim.keyframes {
+            let Ok(val) = kf.value.parse::<f32>() else {
+                continue;
+            };
+            kf.value = (val * border_scale).to_string();
+        }
+    }
 
     Some(PendingLayer {
         id: shape.id,
@@ -671,6 +669,45 @@ pub(crate) fn extract_shape_extras(
     }
 }
 
+/// Process a single SVG path token, advancing the index and collecting vertices.
+fn parse_path_token(tokens: &[&str], i: &mut usize, vertices: &mut Vec<f32>) {
+    match tokens[*i] {
+        "M" | "L" | "m" | "l" => {
+            if *i + 2 >= tokens.len() {
+                *i += 1;
+                return;
+            }
+            // 13 vertices max (26 floats)
+            if let (Ok(x), Ok(y)) = (tokens[*i + 1].parse::<f32>(), tokens[*i + 2].parse::<f32>())
+                && vertices.len() < 26
+            {
+                vertices.push(x);
+                vertices.push(y);
+            }
+            *i += 3;
+        }
+        "Z" | "z" => {
+            *i += 1;
+        }
+        _ => {
+            // Try parsing as coordinate pair (implicit L command)
+            if *i + 1 >= tokens.len() {
+                *i += 1;
+                return;
+            }
+            let (Ok(x), Ok(y)) = (tokens[*i].parse::<f32>(), tokens[*i + 1].parse::<f32>()) else {
+                *i += 1;
+                return;
+            };
+            if vertices.len() < 26 {
+                vertices.push(x);
+                vertices.push(y);
+            }
+            *i += 2;
+        }
+    }
+}
+
 /// Parse SVG-like path data into vertex vec4s for the shader.
 /// Supports M (move) and L (line) commands. Stores up to 13 vertices + vertex count.
 pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec4, Vec4, Vec4) {
@@ -689,40 +726,7 @@ pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec
     let tokens: Vec<&str> = cleaned.split_whitespace().collect();
     let mut i = 0;
     while i < tokens.len() {
-        match tokens[i] {
-            "M" | "L" | "m" | "l" => {
-                if i + 2 < tokens.len() {
-                    if let (Ok(x), Ok(y)) =
-                        (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>())
-                        && vertices.len() < 26
-                    {
-                        // 13 vertices max (26 floats)
-                        vertices.push(x);
-                        vertices.push(y);
-                    }
-                    i += 3;
-                } else {
-                    i += 1;
-                }
-            }
-            "Z" | "z" => {
-                i += 1;
-            }
-            _ => {
-                // Try parsing as coordinate pair (implicit L command)
-                if i + 1 < tokens.len()
-                    && let (Ok(x), Ok(y)) = (tokens[i].parse::<f32>(), tokens[i + 1].parse::<f32>())
-                {
-                    if vertices.len() < 26 {
-                        vertices.push(x);
-                        vertices.push(y);
-                    }
-                    i += 2;
-                    continue;
-                }
-                i += 1;
-            }
-        }
+        parse_path_token(&tokens, &mut i, &mut vertices);
     }
     let vertex_count = (vertices.len() / 2) as f32;
     // Pad to 26 floats (13 vertices)

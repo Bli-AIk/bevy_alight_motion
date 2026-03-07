@@ -73,29 +73,20 @@ fn repeat_with_easing(count: i32, params: &PathRepeatParams, layer_time: f32) ->
             }
             2 => {
                 // Smooth (gaussian-like)
-                if mid >= start && mid <= end_val {
-                    let range = end_val - start;
-                    if range > 0.0 {
-                        let normalized = ((mid - start) / range - 0.5) * 2.0 * std::f32::consts::PI;
-                        std::f64::consts::E.powf(-(normalized as f64 * normalized as f64) / 2.0)
-                            as f32
-                    } else {
-                        0.0
-                    }
+                let range = end_val - start;
+                if mid >= start && mid <= end_val && range > 0.0 {
+                    let normalized = ((mid - start) / range - 0.5) * 2.0 * std::f32::consts::PI;
+                    std::f64::consts::E.powf(-(normalized as f64 * normalized as f64) / 2.0) as f32
                 } else {
                     0.0
                 }
             }
             3 => {
                 // Triangle
-                if mid >= start && mid <= end_val {
-                    let range = end_val - start;
-                    if range > 0.0 {
-                        let t = (mid - start) / range;
-                        if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 }
-                    } else {
-                        0.0
-                    }
+                let range = end_val - start;
+                if mid >= start && mid <= end_val && range > 0.0 {
+                    let t = (mid - start) / range;
+                    2.0 * t.min(1.0 - t)
                 } else {
                     0.0
                 }
@@ -147,6 +138,19 @@ fn cubic_bezier_ease(t: f32, ease_in: f32, ease_out: f32) -> f32 {
     mt3 * 0.0 + 3.0 * mt2 * t * p1y + 3.0 * mt * t2 * p2y + t3 * 1.0
 }
 
+/// Hide all copy entities by setting their visibility to Hidden.
+fn hide_copies(
+    copy_entities: &[Entity],
+    copy_query: &mut Query<(&mut Transform, &mut Visibility, &mut Sprite), Without<AmPathRepeat>>,
+) {
+    for &copy_e in copy_entities {
+        let Ok((_, mut vis, _)) = copy_query.get_mut(copy_e) else {
+            continue;
+        };
+        *vis = Visibility::Hidden;
+    }
+}
+
 /// Sample a position and tangent along a rectangle's perimeter.
 /// The rectangle is defined by half-extents (half_w, half_h).
 /// Distance is measured along the perimeter (total = 2*(w+h)).
@@ -184,7 +188,6 @@ fn sample_rect_path(half_w: f32, half_h: f32, distance: f32) -> (f32, f32, f32, 
 
 /// Path repeat animation system.
 /// For each entity with AmPathRepeat, compute copy positions along the source shape's outline.
-#[allow(clippy::too_many_arguments)]
 pub fn animate_path_repeat_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,
@@ -219,11 +222,7 @@ pub fn animate_path_repeat_system(
 
         if !is_active {
             // Hide copies when layer is inactive
-            for &copy_e in &path_repeat.copy_entities {
-                if let Ok((_, mut vis, _)) = copy_query.get_mut(copy_e) {
-                    *vis = Visibility::Hidden;
-                }
-            }
+            hide_copies(&path_repeat.copy_entities, &mut copy_query);
             continue;
         }
 
@@ -236,11 +235,7 @@ pub fn animate_path_repeat_system(
         let count = count_raw.round() as i32;
 
         if count <= 0 {
-            for &copy_e in &path_repeat.copy_entities {
-                if let Ok((_, mut vis, _)) = copy_query.get_mut(copy_e) {
-                    *vis = Visibility::Hidden;
-                }
-            }
+            hide_copies(&path_repeat.copy_entities, &mut copy_query);
             continue;
         }
 
@@ -386,42 +381,44 @@ pub fn animate_path_repeat_system(
 
             // Set copy transform - position is relative to current element,
             // but since copies are root entities, we use the current element's position as base
-            if let Ok((mut copy_transform, mut copy_vis, mut sprite)) =
+            let Ok((mut copy_transform, mut copy_vis, mut sprite)) =
                 copy_query.get_mut(copy_entity)
+            else {
+                continue;
+            };
+
+            // Copies are root entities, so their Transform IS their world position
+            // We position them at: current_element_bevy_pos + copy_offset
+            copy_transform.translation = Vec3::new(
+                cur_bevy_x + copy_x,
+                cur_bevy_y + copy_y,
+                transform.translation.z,
+            );
+            copy_transform.scale =
+                Vec3::new(elem_scale[0] * copy_scale, elem_scale[1] * copy_scale, 1.0);
+            copy_transform.rotation = Quat::from_rotation_z(copy_rotation.to_radians());
+            sprite.custom_size = Some(Vec2::new(elem_width, elem_height));
+
+            // Compute color with blend
+            let mut color = base_color;
+            if blend > 0.0
+                && let Some(fc) = &fill_color_srgb
             {
-                // Copies are root entities, so their Transform IS their world position
-                // We position them at: current_element_bevy_pos + copy_offset
-                copy_transform.translation = Vec3::new(
-                    cur_bevy_x + copy_x,
-                    cur_bevy_y + copy_y,
-                    transform.translation.z,
-                );
-                copy_transform.scale =
-                    Vec3::new(elem_scale[0] * copy_scale, elem_scale[1] * copy_scale, 1.0);
-                copy_transform.rotation = Quat::from_rotation_z(copy_rotation.to_radians());
-                sprite.custom_size = Some(Vec2::new(elem_width, elem_height));
-
-                // Compute color with blend
-                let mut color = base_color;
-                if blend > 0.0
-                    && let Some(fc) = &fill_color_srgb
-                {
-                    let fc_color = Color::srgba(fc.x, fc.y, fc.z, fc.w);
-                    let t = (blend * ease).clamp(0.0, 1.0);
-                    let base_linear = color.to_linear();
-                    let fill_linear = fc_color.to_linear();
-                    color = Color::LinearRgba(LinearRgba::new(
-                        base_linear.red * (1.0 - t) + fill_linear.red * t,
-                        base_linear.green * (1.0 - t) + fill_linear.green * t,
-                        base_linear.blue * (1.0 - t) + fill_linear.blue * t,
-                        1.0,
-                    ));
-                }
-                let a = copy_alpha.clamp(0.0, 1.0);
-                sprite.color = color.with_alpha(a);
-
-                *copy_vis = Visibility::Inherited;
+                let fc_color = Color::srgba(fc.x, fc.y, fc.z, fc.w);
+                let t = (blend * ease).clamp(0.0, 1.0);
+                let base_linear = color.to_linear();
+                let fill_linear = fc_color.to_linear();
+                color = Color::LinearRgba(LinearRgba::new(
+                    base_linear.red * (1.0 - t) + fill_linear.red * t,
+                    base_linear.green * (1.0 - t) + fill_linear.green * t,
+                    base_linear.blue * (1.0 - t) + fill_linear.blue * t,
+                    1.0,
+                ));
             }
+            let a = copy_alpha.clamp(0.0, 1.0);
+            sprite.color = color.with_alpha(a);
+
+            *copy_vis = Visibility::Inherited;
         }
 
         // Hide excess copies

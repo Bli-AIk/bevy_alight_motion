@@ -169,12 +169,10 @@ impl AssetLoader for AlightMotionLoader {
 
         match extension.to_lowercase().as_str() {
             "amproj" => {
-                if zip::ZipArchive::new(std::io::Cursor::new(&bytes)).is_err() {
-                    // Not a valid ZIP — try loading as unpacked directory
-                    let fs_path = resolve_asset_fs_path(path_ref);
-                    if fs_path.is_dir() {
-                        return load_amproj_dir(&fs_path, load_context).await;
-                    }
+                // Not a valid ZIP — try loading as unpacked directory
+                let fs_path = resolve_asset_fs_path(path_ref);
+                if zip::ZipArchive::new(std::io::Cursor::new(&bytes)).is_err() && fs_path.is_dir() {
+                    return load_amproj_dir(&fs_path, load_context).await;
                 }
                 load_amproj(&bytes, load_context).await
             }
@@ -378,51 +376,14 @@ async fn load_amproj(
             if let Some(path) = resolve_google_font_to_system(&font_ref)
                 && let Ok(data) = std::fs::read(&path)
             {
-                // Validate with fontdb
-                let mut test_db = fontdb::Database::new();
-                test_db.load_font_data(data.clone());
-                if test_db.faces().count() == 0 {
-                    warn!("System font at '{}' failed fontdb validation", path);
-                    continue;
-                }
-                // Extract metrics
-                if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
-                    let upm = face.units_per_em();
-                    let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
-                        (
-                            os2.windows_ascender() as f32 / upm as f32,
-                            (-os2.windows_descender()) as f32 / upm as f32,
-                        )
-                    } else {
-                        (
-                            face.ascender() as f32 / upm as f32,
-                            (-face.descender()) as f32 / upm as f32,
-                        )
-                    };
-                    let hhea_ascent = face.ascender() as f32 / upm as f32;
-                    let hhea_descent = (-face.descender()) as f32 / upm as f32;
-                    font_metrics.insert(
-                        font_ref.clone(),
-                        FontMetrics {
-                            win_ascent,
-                            win_descent,
-                            units_per_em: upm,
-                            hhea_ascent,
-                            hhea_descent,
-                        },
-                    );
-                }
-                match Font::try_from_bytes(data) {
-                    Ok(font) => {
-                        let label = format!("font_system_{}", font_ref);
-                        let handle = load_context.add_labeled_asset(label, font);
-                        fonts.insert(font_ref.clone(), handle);
-                        info!("Resolved '{}' to system font: {}", font_ref, path);
-                    }
-                    Err(e) => {
-                        warn!("Failed to load system font '{}': {:?}", path, e);
-                    }
-                }
+                try_load_system_font(
+                    &font_ref,
+                    data,
+                    &path,
+                    &mut fonts,
+                    &mut font_metrics,
+                    load_context,
+                );
             }
         }
     }
@@ -634,6 +595,63 @@ async fn load_amproj_dir(
         embedded_fonts: preserved_fonts,
         validation_report,
     })
+}
+
+/// Validate and load a single system font, inserting it into the font maps.
+#[cfg(not(target_arch = "wasm32"))]
+fn try_load_system_font(
+    font_ref: &str,
+    data: Vec<u8>,
+    path: &str,
+    fonts: &mut HashMap<String, Handle<Font>>,
+    font_metrics: &mut HashMap<String, FontMetrics>,
+    load_context: &mut LoadContext<'_>,
+) {
+    // Validate with fontdb
+    let mut test_db = fontdb::Database::new();
+    test_db.load_font_data(data.clone());
+    if test_db.faces().count() == 0 {
+        warn!("System font at '{}' failed fontdb validation", path);
+        return;
+    }
+    // Extract metrics
+    if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+        let upm = face.units_per_em();
+        let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+            (
+                os2.windows_ascender() as f32 / upm as f32,
+                (-os2.windows_descender()) as f32 / upm as f32,
+            )
+        } else {
+            (
+                face.ascender() as f32 / upm as f32,
+                (-face.descender()) as f32 / upm as f32,
+            )
+        };
+        let hhea_ascent = face.ascender() as f32 / upm as f32;
+        let hhea_descent = (-face.descender()) as f32 / upm as f32;
+        font_metrics.insert(
+            font_ref.to_string(),
+            FontMetrics {
+                win_ascent,
+                win_descent,
+                units_per_em: upm,
+                hhea_ascent,
+                hhea_descent,
+            },
+        );
+    }
+    match Font::try_from_bytes(data) {
+        Ok(font) => {
+            let label = format!("font_system_{}", font_ref);
+            let handle = load_context.add_labeled_asset(label, font);
+            fonts.insert(font_ref.to_string(), handle);
+            info!("Resolved '{}' to system font: {}", font_ref, path);
+        }
+        Err(e) => {
+            warn!("Failed to load system font '{}': {:?}", path, e);
+        }
+    }
 }
 
 /// Collect unique Google Fonts references from all text layers (including nested scenes).

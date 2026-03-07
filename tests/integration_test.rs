@@ -18,54 +18,52 @@ fn test_6ex_layer_hierarchy() {
         let mut file = archive.by_index(i).unwrap();
         let name = file.name().to_string();
 
-        if name.ends_with(".xml") {
-            let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
+        if !name.ends_with(".xml") {
+            continue;
+        }
 
-            let scene: bevy_alight_motion::schema::AmScene =
-                quick_xml::de::from_str(&content).expect("Failed to parse XML");
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
 
-            println!("\n=== 6_ex Layer Structure ===\n");
-            println!("Canvas: {}x{}", scene.width, scene.height);
+        let scene: bevy_alight_motion::schema::AmScene =
+            quick_xml::de::from_str(&content).expect("Failed to parse XML");
 
-            // Find all nullobj layers (空)
-            for layer in &scene.layers {
-                match layer {
-                    bevy_alight_motion::schema::AmLayer::Nullobj(null) => {
-                        let rot_val = null.transform.rotation.value.unwrap_or(0.0);
-                        let loc_val = null.transform.location.value.unwrap_or_default();
-                        let loc_kf_count = null.transform.location.keyframes.len();
-                        println!(
-                            "NULLOBJ: id={}, label='{}', parent={}, rot={:.1}°, loc={:?} ({} keyframes)",
-                            null.id, null.label, null.parent, rot_val, loc_val, loc_kf_count
-                        );
-                    }
-                    bevy_alight_motion::schema::AmLayer::Shape(shape) => {
-                        if shape.label.contains("Image_") {
-                            let rot_val = shape.transform.rotation.value.unwrap_or(0.0);
-                            println!(
-                                "IMAGE: id={}, label='{}', parent={}, rot={:.1}°",
-                                shape.id, shape.label, shape.parent, rot_val
-                            );
-                        }
-                    }
-                    _ => {}
-                }
+        println!("\n=== 6_ex Layer Structure ===\n");
+        println!("Canvas: {}x{}", scene.width, scene.height);
+
+        // Find all nullobj layers (空)
+        for layer in &scene.layers {
+            if let bevy_alight_motion::schema::AmLayer::Nullobj(null) = layer {
+                let rot_val = null.transform.rotation.value.unwrap_or(0.0);
+                let loc_val = null.transform.location.value.unwrap_or_default();
+                let loc_kf_count = null.transform.location.keyframes.len();
+                println!(
+                    "NULLOBJ: id={}, label='{}', parent={}, rot={:.1}°, loc={:?} ({} keyframes)",
+                    null.id, null.label, null.parent, rot_val, loc_val, loc_kf_count
+                );
+            } else if let bevy_alight_motion::schema::AmLayer::Shape(shape) = layer
+                && shape.label.contains("Image_")
+            {
+                let rot_val = shape.transform.rotation.value.unwrap_or(0.0);
+                println!(
+                    "IMAGE: id={}, label='{}', parent={}, rot={:.1}°",
+                    shape.id, shape.label, shape.parent, rot_val
+                );
             }
+        }
 
-            // Verify that 空2 layers have 90 degree rotation
-            for layer in &scene.layers {
-                if let bevy_alight_motion::schema::AmLayer::Nullobj(null) = layer
-                    && null.label.contains("空 2")
-                {
-                    let rot = null.transform.rotation.value.unwrap_or(0.0);
-                    assert!(
-                        (rot - 90.0).abs() < 0.01,
-                        "空2 should have 90° rotation, got {}°",
-                        rot
-                    );
-                    println!("\n✓ Verified: '{}' has correct 90° rotation", null.label);
-                }
+        // Verify that 空2 layers have 90 degree rotation
+        for layer in &scene.layers {
+            if let bevy_alight_motion::schema::AmLayer::Nullobj(null) = layer
+                && null.label.contains("空 2")
+            {
+                let rot = null.transform.rotation.value.unwrap_or(0.0);
+                assert!(
+                    (rot - 90.0).abs() < 0.01,
+                    "空2 should have 90° rotation, got {}°",
+                    rot
+                );
+                println!("\n✓ Verified: '{}' has correct 90° rotation", null.label);
             }
         }
     }

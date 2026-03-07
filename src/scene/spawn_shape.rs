@@ -17,7 +17,6 @@ use super::effects::*;
 use super::helpers::*;
 
 /// Spawn a shape layer (lazy - visual components spawned later by lifecycle system).
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_shape(
     commands: &mut Commands,
     _shaders: &mut Assets<Shader>,

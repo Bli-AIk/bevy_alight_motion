@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::loader::FontMetrics;
-use crate::schema::{AmLayer, AmScene};
+use crate::schema::{AmEmbedScene, AmLayer, AmScene};
 
 use super::collect_embed::*;
 use super::collect_shape::*;
@@ -76,6 +76,120 @@ fn apply_id_remap(pl: &mut PendingLayer, id_map: &HashMap<u64, u64>, is_root: bo
     }
     for child in &mut pl.children {
         apply_id_remap(child, id_map, false);
+    }
+}
+
+/// Remap IDs and references for a single flattened child during the flatten pass.
+/// Handles parent, containing_embed_id, animated.layer_id, and mask_info remapping.
+fn remap_flattened_child(
+    child: &mut PendingLayer,
+    id_mappings: &[(u64, u64)],
+    layer_id: u64,
+    is_embed: bool,
+    embed_bevy_pos: Vec3,
+    child_embed_id: u64,
+) {
+    let original_parent = child.parent;
+
+    // Remap the parent reference
+    if original_parent == 0 {
+        child.parent = layer_id;
+
+        if is_embed {
+            child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
+            bevy::log::trace!(
+                "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
+                child.label,
+                child.id,
+                embed_bevy_pos.x,
+                embed_bevy_pos.y
+            );
+        }
+    } else {
+        // Find the new ID for the parent in our mapping list
+        // Search for the first mapping where old_id matches original_parent
+        let new_parent_id = id_mappings
+            .iter()
+            .find(|(old, _new)| *old == original_parent)
+            .map(|(_, new)| *new);
+
+        if let Some(new_parent_id) = new_parent_id {
+            child.parent = new_parent_id;
+        } else {
+            // Parent is external to this flatten batch - keep original
+            // (will be remapped by outer flatten call if needed)
+            bevy::log::trace!(
+                "[Flatten] Parent {} not found in mapping for '{}', keeping as-is",
+                original_parent,
+                child.label
+            );
+        }
+    }
+
+    // **Hybrid Rendering Pipeline Fix**:
+    // Remap containing_embed_id to the correct embed entity ID.
+    //
+    // Case 1: containing_embed_id == child_embed_id (direct child of current embed)
+    //         -> Set to current embed's remapped ID (layer_id for parent's children)
+    // Case 2: containing_embed_id is in id_mappings (grandchild referencing a nested embed)
+    //         -> Use the remapped ID from id_mappings
+    // Case 3: containing_embed_id points to current layer (this layer IS the embed)
+    //         -> This shouldn't happen (is_embed check in should_decouple)
+    if child.containing_embed_id != 0 {
+        if child.containing_embed_id == child_embed_id && is_embed {
+            // Direct content of this embed - use the embed's own ID (layer_id)
+            // Since this embed layer's ID hasn't been remapped yet (it's the current layer),
+            // we need to use `layer_id` which will become part of parent's flattening
+            child.containing_embed_id = layer_id;
+            bevy::log::trace!(
+                "[Flatten] Remapped containing_embed_id for '{}': {} -> {} (direct child of embed)",
+                child.label,
+                child_embed_id,
+                layer_id
+            );
+        } else {
+            // Find in mappings
+            let new_embed_id = id_mappings
+                .iter()
+                .find(|(old, _new)| *old == child.containing_embed_id)
+                .map(|(_, new)| *new);
+
+            if let Some(new_embed_id) = new_embed_id {
+                // Grandchild referencing a nested embed
+                child.containing_embed_id = new_embed_id;
+                bevy::log::trace!(
+                    "[Flatten] Remapped containing_embed_id for '{}' via id_mappings",
+                    child.label
+                );
+            }
+        }
+        // If neither case matches, keep the original ID (will be remapped in outer call)
+    }
+
+    // Also update the layer_id in animated component
+    child.animated.layer_id = child.id;
+
+    // **CRITICAL**: Remap mask_layer_id in mask_info to new IDs
+    // This is essential for nested masks to work correctly, since the
+    // mask layer's ID gets remapped during flattening.
+    if let Some(ref mut info) = child.mask_info {
+        for mask in info.masks.iter_mut() {
+            // Look up the new ID for this mask layer
+            let new_mask_id = id_mappings
+                .iter()
+                .find(|(old, _new)| *old == mask.mask_layer_id)
+                .map(|(_, new)| *new);
+
+            if let Some(new_mask_id) = new_mask_id {
+                bevy::log::debug!(
+                    "[Flatten] Remapped mask_layer_id for '{}': {} -> {}",
+                    child.label,
+                    mask.mask_layer_id,
+                    new_mask_id
+                );
+                mask.mask_layer_id = new_mask_id;
+            }
+        }
     }
 }
 
@@ -145,7 +259,7 @@ pub(crate) fn flatten_pending_layers(
 /// Spatial decoupling logic:
 /// - Only content inside top-level embeds (base_nesting_depth == 0 && embed_depth == 1) gets spatially decoupled
 /// - Content inside nested embeds (base_nesting_depth > 0 OR embed_depth > 1) becomes Bevy children
-#[allow(clippy::only_used_in_recursion)]
+#[expect(clippy::only_used_in_recursion)] // reason: embed_depth tracks nesting level for spatial decoupling decisions
 pub(crate) fn flatten_pending_layers_inner(
     layers: Vec<PendingLayer>,
     current_embed_id: u64,
@@ -237,116 +351,15 @@ pub(crate) fn flatten_pending_layers_inner(
 
             // Pass 2: Apply the mapping with correct parent lookup
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
-                let _old_id = id_mappings[idx].0;
-                let new_id = id_mappings[idx].1;
-
-                // Save the original parent for lookup
-                let original_parent = child.parent;
-
-                // Update child's ID
-                child.id = new_id;
-
-                // Remap the parent reference
-                if original_parent == 0 {
-                    child.parent = layer_id;
-
-                    if is_embed {
-                        child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
-                        bevy::log::trace!(
-                            "[FlattenDebug] Setting embed_offset for '{}' (id={}): offset=({:.1},{:.1})",
-                            child.label,
-                            child.id,
-                            embed_bevy_pos.x,
-                            embed_bevy_pos.y
-                        );
-                    }
-                } else {
-                    // Find the new ID for the parent in our mapping list
-                    // Search for the first mapping where old_id matches original_parent
-                    let new_parent_id = id_mappings
-                        .iter()
-                        .find(|(old, _new)| *old == original_parent)
-                        .map(|(_, new)| *new);
-
-                    if let Some(new_parent_id) = new_parent_id {
-                        child.parent = new_parent_id;
-                    } else {
-                        // Parent is external to this flatten batch - keep original
-                        // (will be remapped by outer flatten call if needed)
-                        bevy::log::trace!(
-                            "[Flatten] Parent {} not found in mapping for '{}', keeping as-is",
-                            original_parent,
-                            child.label
-                        );
-                    }
-                }
-
-                // **Hybrid Rendering Pipeline Fix**:
-                // Remap containing_embed_id to the correct embed entity ID.
-                //
-                // Case 1: containing_embed_id == child_embed_id (direct child of current embed)
-                //         -> Set to current embed's remapped ID (layer_id for parent's children)
-                // Case 2: containing_embed_id is in id_mappings (grandchild referencing a nested embed)
-                //         -> Use the remapped ID from id_mappings
-                // Case 3: containing_embed_id points to current layer (this layer IS the embed)
-                //         -> This shouldn't happen (is_embed check in should_decouple)
-                if child.containing_embed_id != 0 {
-                    if child.containing_embed_id == child_embed_id && is_embed {
-                        // Direct content of this embed - use the embed's own ID (layer_id)
-                        // Since this embed layer's ID hasn't been remapped yet (it's the current layer),
-                        // we need to use `layer_id` which will become part of parent's flattening
-                        child.containing_embed_id = layer_id;
-                        bevy::log::trace!(
-                            "[Flatten] Remapped containing_embed_id for '{}': {} -> {} (direct child of embed)",
-                            child.label,
-                            child_embed_id,
-                            layer_id
-                        );
-                    } else {
-                        // Find in mappings
-                        let new_embed_id = id_mappings
-                            .iter()
-                            .find(|(old, _new)| *old == child.containing_embed_id)
-                            .map(|(_, new)| *new);
-
-                        if let Some(new_embed_id) = new_embed_id {
-                            // Grandchild referencing a nested embed
-                            child.containing_embed_id = new_embed_id;
-                            bevy::log::trace!(
-                                "[Flatten] Remapped containing_embed_id for '{}' via id_mappings",
-                                child.label
-                            );
-                        }
-                    }
-                    // If neither case matches, keep the original ID (will be remapped in outer call)
-                }
-
-                // Also update the layer_id in animated component
-                child.animated.layer_id = child.id;
-
-                // **CRITICAL**: Remap mask_layer_id in mask_info to new IDs
-                // This is essential for nested masks to work correctly, since the
-                // mask layer's ID gets remapped during flattening.
-                if let Some(ref mut info) = child.mask_info {
-                    for mask in info.masks.iter_mut() {
-                        // Look up the new ID for this mask layer
-                        let new_mask_id = id_mappings
-                            .iter()
-                            .find(|(old, _new)| *old == mask.mask_layer_id)
-                            .map(|(_, new)| *new);
-
-                        if let Some(new_mask_id) = new_mask_id {
-                            bevy::log::debug!(
-                                "[Flatten] Remapped mask_layer_id for '{}': {} -> {}",
-                                child.label,
-                                mask.mask_layer_id,
-                                new_mask_id
-                            );
-                            mask.mask_layer_id = new_mask_id;
-                        }
-                    }
-                }
-
+                child.id = id_mappings[idx].1;
+                remap_flattened_child(
+                    &mut child,
+                    &id_mappings,
+                    layer_id,
+                    is_embed,
+                    embed_bevy_pos,
+                    child_embed_id,
+                );
                 result.push(child);
             }
         }
@@ -354,6 +367,125 @@ pub(crate) fn flatten_pending_layers_inner(
 
     result
 }
+
+/// Collect an embed scene layer, handling echokf effects if present.
+fn collect_embed_layer(
+    pending: &mut Vec<PendingLayer>,
+    embed: &AmEmbedScene,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+    z: f32,
+) {
+    let echokf = super::effects::extract_echokf_effect(&embed.effects);
+    let max_count = echokf.max_count();
+
+    if !echokf.enabled || max_count == 0 {
+        let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+        bevy::log::trace!(
+            "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
+            embed.label,
+            embed.id,
+            embed.start_time,
+            embed.end_time,
+            embed.in_time,
+            embed.out_time,
+            pl.children.len()
+        );
+        pending.push(pl);
+        return;
+    }
+
+    let seconds = echokf.static_seconds();
+    let is_dynamic = echokf.is_dynamic() || !echokf.alpha.keyframes.is_empty();
+
+    let base_echo_alpha = crate::animation::EchoAlphaConfig {
+        alpha_keyframes: echokf.alpha.clone(),
+        fraction: 0.0,
+        parent_start: embed.start_time,
+        parent_end: embed.end_time,
+        parent_time_offset: config.time_offset,
+        parent_speed: config.speed_multiplier,
+    };
+
+    // Build echo runtime template for dynamic echoes
+    let echo_rt_template = if is_dynamic {
+        Some(crate::animation::AmEchoRuntime {
+            echo_index: 0,
+            max_count,
+            mode: echokf.mode,
+            count_kf: echokf.count.clone(),
+            seconds_kf: echokf.seconds.clone(),
+            alpha_kf: echokf.alpha.clone(),
+            embed_start: embed.start_time as f32,
+            embed_end: embed.end_time as f32,
+            embed_time_offset: config.time_offset as f32,
+            embed_speed: config.speed_multiplier,
+        })
+    } else {
+        None
+    };
+
+    if echokf.mode == 0 {
+        // Mode 0 (atop): original first, then echoes on top
+        let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+        pending.push(pl);
+
+        for i in 0..max_count {
+            let echo_index = (max_count - 1 - i) as f32;
+            let fraction = echo_index / max_count as f32;
+            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+            let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
+
+            let mut echo_config = config.clone();
+            echo_config.echo_time_shift_ms += time_shift_ms;
+            echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                fraction,
+                ..base_echo_alpha.clone()
+            });
+
+            let mut echo_pl = collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
+            remap_echo_pl_ids(&mut echo_pl);
+            // Attach echo runtime for dynamic updates
+            if let Some(ref template) = echo_rt_template {
+                echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
+                    echo_index: echo_index as u32,
+                    ..template.clone()
+                });
+            }
+            pending.push(echo_pl);
+        }
+    } else {
+        // Mode 1 (behind): echoes first, then original on top
+        for i in 0..max_count {
+            let echo_index = i as f32;
+            let fraction = echo_index / max_count as f32;
+            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+            let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
+
+            let mut echo_config = config.clone();
+            echo_config.echo_time_shift_ms += time_shift_ms;
+            echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                fraction,
+                ..base_echo_alpha.clone()
+            });
+
+            let mut echo_pl = collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
+            remap_echo_pl_ids(&mut echo_pl);
+            if let Some(ref template) = echo_rt_template {
+                echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
+                    echo_index: echo_index as u32,
+                    ..template.clone()
+                });
+            }
+            pending.push(echo_pl);
+        }
+
+        let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
+        pending.push(pl);
+    }
+}
+
 pub(crate) fn collect_layer(
     pending: &mut Vec<PendingLayer>,
     layer: &AmLayer,
@@ -388,115 +520,7 @@ pub(crate) fn collect_layer(
             }
         }
         AmLayer::EmbedScene(embed) => {
-            // Check for echokf effect
-            let echokf = super::effects::extract_echokf_effect(&embed.effects);
-
-            let max_count = echokf.max_count();
-            if echokf.enabled && max_count > 0 {
-                let seconds = echokf.static_seconds();
-                let is_dynamic = echokf.is_dynamic() || !echokf.alpha.keyframes.is_empty();
-
-                let base_echo_alpha = crate::animation::EchoAlphaConfig {
-                    alpha_keyframes: echokf.alpha.clone(),
-                    fraction: 0.0,
-                    parent_start: embed.start_time,
-                    parent_end: embed.end_time,
-                    parent_time_offset: config.time_offset,
-                    parent_speed: config.speed_multiplier,
-                };
-
-                // Build echo runtime template for dynamic echoes
-                let echo_rt_template = if is_dynamic {
-                    Some(crate::animation::AmEchoRuntime {
-                        echo_index: 0,
-                        max_count,
-                        mode: echokf.mode,
-                        count_kf: echokf.count.clone(),
-                        seconds_kf: echokf.seconds.clone(),
-                        alpha_kf: echokf.alpha.clone(),
-                        embed_start: embed.start_time as f32,
-                        embed_end: embed.end_time as f32,
-                        embed_time_offset: config.time_offset as f32,
-                        embed_speed: config.speed_multiplier,
-                    })
-                } else {
-                    None
-                };
-
-                if echokf.mode == 0 {
-                    // Mode 0 (atop): original first, then echoes on top
-                    let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-                    pending.push(pl);
-
-                    for i in 0..max_count {
-                        let echo_index = (max_count - 1 - i) as f32;
-                        let fraction = echo_index / max_count as f32;
-                        let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
-                        let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
-
-                        let mut echo_config = config.clone();
-                        echo_config.echo_time_shift_ms += time_shift_ms;
-                        echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
-                            fraction,
-                            ..base_echo_alpha.clone()
-                        });
-
-                        let mut echo_pl =
-                            collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
-                        remap_echo_pl_ids(&mut echo_pl);
-                        // Attach echo runtime for dynamic updates
-                        if let Some(ref template) = echo_rt_template {
-                            echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
-                                echo_index: echo_index as u32,
-                                ..template.clone()
-                            });
-                        }
-                        pending.push(echo_pl);
-                    }
-                } else {
-                    // Mode 1 (behind): echoes first, then original on top
-                    for i in 0..max_count {
-                        let echo_index = i as f32;
-                        let fraction = echo_index / max_count as f32;
-                        let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
-                        let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
-
-                        let mut echo_config = config.clone();
-                        echo_config.echo_time_shift_ms += time_shift_ms;
-                        echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
-                            fraction,
-                            ..base_echo_alpha.clone()
-                        });
-
-                        let mut echo_pl =
-                            collect_embed_scene(embed, fonts, font_metrics, &echo_config, echo_z);
-                        remap_echo_pl_ids(&mut echo_pl);
-                        if let Some(ref template) = echo_rt_template {
-                            echo_pl.echo_runtime = Some(crate::animation::AmEchoRuntime {
-                                echo_index: echo_index as u32,
-                                ..template.clone()
-                            });
-                        }
-                        pending.push(echo_pl);
-                    }
-
-                    let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-                    pending.push(pl);
-                }
-            } else {
-                let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
-                bevy::log::trace!(
-                    "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",
-                    embed.label,
-                    embed.id,
-                    embed.start_time,
-                    embed.end_time,
-                    embed.in_time,
-                    embed.out_time,
-                    pl.children.len()
-                );
-                pending.push(pl);
-            }
+            collect_embed_layer(pending, embed, fonts, font_metrics, config, z);
         }
         AmLayer::Text(text) => {
             if let Some(pl) = collect_text(text, fonts, font_metrics, config, z) {
@@ -564,67 +588,71 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     for layer in layers.iter() {
         let is_mask = layer.blending_mode == AmBlendingMode::Mask
             || layer.blending_mode == AmBlendingMode::Exclude;
-        if is_mask {
-            // Extract mask geometry from the layer's transform and spec
-            let mask_entry = extract_mask_info_from_layer(layer);
-            if let Some(mut entry) = mask_entry {
-                // Set is_exclude based on blending mode
-                entry.is_exclude = layer.blending_mode == AmBlendingMode::Exclude;
-
-                // For child masks, transform coordinates to global space using parent's transform
-                if layer.parent != 0 {
-                    if let Some(&(parent_translation, parent_scale)) =
-                        parent_transform_info.get(&layer.parent)
-                    {
-                        // Transform child mask center to global coordinates
-                        let global_center = parent_translation
-                            + bevy::math::Vec2::new(
-                                entry.center.x * parent_scale.x,
-                                entry.center.y * parent_scale.y,
-                            );
-                        // Transform half_size by parent scale
-                        let global_half_size = bevy::math::Vec2::new(
-                            entry.half_size.x * parent_scale.x,
-                            entry.half_size.y * parent_scale.y,
-                        );
-
-                        bevy::log::trace!(
-                            "[MASK] Found child {} layer '{}' (id={}, parent={}) at z={:.4}, global_center=({:.1},{:.1}), global_half_size=({:.1},{:.1}), time={}..{}ms",
-                            if entry.is_exclude { "exclude" } else { "mask" },
-                            layer.label,
-                            layer.id,
-                            layer.parent,
-                            layer.z_index,
-                            global_center.x,
-                            global_center.y,
-                            global_half_size.x,
-                            global_half_size.y,
-                            entry.start_time,
-                            entry.end_time
-                        );
-
-                        entry.center = global_center;
-                        entry.half_size = global_half_size;
-                    }
-                } else {
-                    bevy::log::trace!(
-                        "[MASK] Found root {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
-                        if entry.is_exclude { "exclude" } else { "mask" },
-                        layer.label,
-                        layer.id,
-                        layer.z_index,
-                        entry.center.x,
-                        entry.center.y,
-                        entry.half_size.x,
-                        entry.half_size.y,
-                        entry.start_time,
-                        entry.end_time
-                    );
-                }
-
-                mask_layers.push((layer.id, layer.parent, layer.z_index, entry));
-            }
+        if !is_mask {
+            continue;
         }
+
+        // Extract mask geometry from the layer's transform and spec
+        let mask_entry = extract_mask_info_from_layer(layer);
+        let Some(mut entry) = mask_entry else {
+            continue;
+        };
+
+        // Set is_exclude based on blending mode
+        entry.is_exclude = layer.blending_mode == AmBlendingMode::Exclude;
+
+        // For child masks, transform coordinates to global space using parent's transform
+        if layer.parent != 0 {
+            if let Some(&(parent_translation, parent_scale)) =
+                parent_transform_info.get(&layer.parent)
+            {
+                // Transform child mask center to global coordinates
+                let global_center = parent_translation
+                    + bevy::math::Vec2::new(
+                        entry.center.x * parent_scale.x,
+                        entry.center.y * parent_scale.y,
+                    );
+                // Transform half_size by parent scale
+                let global_half_size = bevy::math::Vec2::new(
+                    entry.half_size.x * parent_scale.x,
+                    entry.half_size.y * parent_scale.y,
+                );
+
+                bevy::log::trace!(
+                    "[MASK] Found child {} layer '{}' (id={}, parent={}) at z={:.4}, global_center=({:.1},{:.1}), global_half_size=({:.1},{:.1}), time={}..{}ms",
+                    if entry.is_exclude { "exclude" } else { "mask" },
+                    layer.label,
+                    layer.id,
+                    layer.parent,
+                    layer.z_index,
+                    global_center.x,
+                    global_center.y,
+                    global_half_size.x,
+                    global_half_size.y,
+                    entry.start_time,
+                    entry.end_time
+                );
+
+                entry.center = global_center;
+                entry.half_size = global_half_size;
+            }
+        } else {
+            bevy::log::trace!(
+                "[MASK] Found root {} layer '{}' (id={}) at z={:.4}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), time={}..{}ms",
+                if entry.is_exclude { "exclude" } else { "mask" },
+                layer.label,
+                layer.id,
+                layer.z_index,
+                entry.center.x,
+                entry.center.y,
+                entry.half_size.x,
+                entry.half_size.y,
+                entry.start_time,
+                entry.end_time
+            );
+        }
+
+        mask_layers.push((layer.id, layer.parent, layer.z_index, entry));
     }
 
     if mask_layers.is_empty() {

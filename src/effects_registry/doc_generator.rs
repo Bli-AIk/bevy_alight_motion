@@ -145,22 +145,7 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
             writeln!(doc, "\n**Related Test Files:**").unwrap();
         }
         for file in test_files {
-            // 显示测试结果状态 / Show test result status
-            let status = if let Some(results) = config.test_results {
-                if let Some(result) = results.get_result(file) {
-                    if result.is_pass() {
-                        " ✅"
-                    } else if result.is_fail() {
-                        " ❌"
-                    } else {
-                        " ⏭️"
-                    }
-                } else {
-                    ""
-                }
-            } else {
-                ""
-            };
+            let status = test_result_status(config.test_results, file);
             writeln!(doc, "- `{}`{}", file, status).unwrap();
         }
     }
@@ -185,41 +170,50 @@ pub fn generate_effect_doc(effect: &EffectDef, lang: &str, config: &DocGenerator
     doc
 }
 
+/// Resolve test result status emoji for a file
+fn test_result_status<'a>(test_results: Option<&TestResults>, file: &str) -> &'a str {
+    let Some(results) = test_results else {
+        return "";
+    };
+    let Some(result) = results.get_result(file) else {
+        return "";
+    };
+    if result.is_pass() {
+        " ✅"
+    } else if result.is_fail() {
+        " ❌"
+    } else {
+        " ⏭️"
+    }
+}
+
 /// 检查字段是否已在代码中实现 / Check if field is implemented in code
 fn is_field_implemented(
     effect_id: &str,
     field_name: &str,
     impl_status: Option<&HashMap<String, EffectImpl>>,
 ) -> bool {
-    if let Some(status) = impl_status {
-        if let Some(impl_info) = status.get(effect_id) {
-            // 检查直接匹配 / Check direct match
-            if impl_info
-                .implemented_fields
-                .contains(&field_name.to_string())
-            {
-                return true;
-            }
-            // 检查模式匹配（如 color* 匹配 color1, color2 等）
-            // Check pattern match (e.g., color* matches color1, color2, etc.)
-            for pattern in &impl_info.pattern_fields {
-                if let Some(prefix) = pattern.strip_suffix('*')
-                    && field_name.starts_with(prefix)
-                {
-                    return true;
-                }
-            }
-            // 有扫描结果但字段未找到，说明未实现
-            // Has scan results but field not found, means not implemented
-            return false;
-        }
-        // 效果有扫描但找不到对应 ID，说明效果未实现
+    let Some(status) = impl_status else {
+        // If no scan results, we can't determine - return true to fall back to definition
+        return true;
+    };
+    let Some(impl_info) = status.get(effect_id) else {
         // Effect not found in scan results, means not implemented
         return false;
+    };
+    // Check direct match
+    if impl_info
+        .implemented_fields
+        .contains(&field_name.to_string())
+    {
+        return true;
     }
-    // 如果没有扫描结果，无法判断，返回 None 让调用者决定
-    // If no scan results, we can't determine - return true to fall back to definition
-    true
+    // Check pattern match (e.g., color* matches color1, color2, etc.)
+    impl_info.pattern_fields.iter().any(|pattern| {
+        pattern
+            .strip_suffix('*')
+            .is_some_and(|prefix| field_name.starts_with(prefix))
+    })
 }
 
 /// 写入字段行（根据实现状态）/ Write field line (based on implementation status)
@@ -435,21 +429,7 @@ pub fn generate_builtin_doc(
             writeln!(doc, "\n**Related Test Files:**").unwrap();
         }
         for file in builtin.test_files {
-            let status = if let Some(results) = config.test_results {
-                if let Some(result) = results.get_result(file) {
-                    if result.is_pass() {
-                        " ✅"
-                    } else if result.is_fail() {
-                        " ❌"
-                    } else {
-                        " ⏭️"
-                    }
-                } else {
-                    ""
-                }
-            } else {
-                ""
-            };
+            let status = test_result_status(config.test_results, file);
             writeln!(doc, "- `{}`{}", file, status).unwrap();
         }
     }

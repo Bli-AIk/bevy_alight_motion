@@ -508,18 +508,7 @@ impl AmAnimated {
             RetimeMode::Freeze => embed_elapsed.min(total),
             RetimeMode::Loop => embed_elapsed.rem_euclid(total),
             RetimeMode::LoopStretch => {
-                let container = rt.container_duration_ms;
-                if container > 0.0 {
-                    let loops = (container / total).ceil().max(1.0);
-                    let stride = container / loops;
-                    if stride > 0.0 {
-                        ((embed_elapsed % stride) / stride) * total
-                    } else {
-                        embed_elapsed
-                    }
-                } else {
-                    embed_elapsed
-                }
+                Self::calc_loop_stretch_time(rt.container_duration_ms, total, embed_elapsed)
             }
             RetimeMode::Blank => {
                 if embed_elapsed > total {
@@ -530,6 +519,19 @@ impl AmAnimated {
             }
         };
         Some(nested_time)
+    }
+
+    fn calc_loop_stretch_time(container: f32, total: f32, embed_elapsed: f32) -> f32 {
+        if container <= 0.0 {
+            return embed_elapsed;
+        }
+        let loops = (container / total).ceil().max(1.0);
+        let stride = container / loops;
+        if stride > 0.0 {
+            ((embed_elapsed % stride) / stride) * total
+        } else {
+            embed_elapsed
+        }
     }
 
     /// Calculate local time considering speed_multiplier (for animation interpolation).

@@ -29,7 +29,6 @@ pub fn count_total_layers(layers: &[PendingLayer]) -> usize {
 }
 
 /// Process pending layers recursively.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn process_pending_layers(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -167,41 +166,43 @@ pub(crate) fn process_pending_layers(
 
     // Despawn entities that are no longer active
     for layer_id in to_despawn {
-        if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
-            // Find layer info for logging
-            if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+        let Some(entity) = pending.spawned_entities.remove(&layer_id) else {
+            continue;
+        };
+
+        // Find layer info for logging
+        if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+            bevy::log::trace!(
+                "  [Lifecycle] Despawning '{}' (id={})",
+                layer.label,
+                layer_id
+            );
+        }
+
+        // Find all children of this layer (direct and nested) and despawn them first
+        let children_to_remove: Vec<u64> = pending
+            .layers
+            .iter()
+            .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
+            .map(|l| l.id)
+            .collect();
+
+        // Remove children from spawned_entities tracking (parent despawn will handle
+        // the actual ECS despawn recursively)
+        for child_id in children_to_remove {
+            if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
+                && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
+            {
                 bevy::log::trace!(
-                    "  [Lifecycle] Despawning '{}' (id={})",
-                    layer.label,
-                    layer_id
+                    "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
+                    child.label,
+                    child_id
                 );
             }
-
-            // Find all children of this layer (direct and nested) and despawn them first
-            let children_to_remove: Vec<u64> = pending
-                .layers
-                .iter()
-                .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
-                .map(|l| l.id)
-                .collect();
-
-            // Remove children from spawned_entities tracking (parent despawn will handle
-            // the actual ECS despawn recursively)
-            for child_id in children_to_remove {
-                if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
-                    && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
-                {
-                    bevy::log::trace!(
-                        "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
-                        child.label,
-                        child_id
-                    );
-                }
-            }
-
-            // Despawn the entity (and all ECS children recursively)
-            commands.entity(entity).despawn();
         }
+
+        // Despawn the entity (and all ECS children recursively)
+        commands.entity(entity).despawn();
     }
 
     // Sort layers to spawn by dependency (parents before children) using topological sort

@@ -535,21 +535,23 @@ pub fn fix_nested_embed_render_layers_system(
 ) {
     for (entity, _rtt, current_layers) in embed_query.iter() {
         // Check if this embed is a child of another embed
-        if let Ok(child_of) = parent_query.get(entity) {
-            let parent = child_of.parent();
-            if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
-                // This embed is nested inside another embed
-                let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
-                if *current_layers != expected_layer {
-                    bevy::log::trace!(
-                        "[RTT] Fixing nested embed {:?} RenderLayers: was {:?}, now layer {}",
-                        entity,
-                        current_layers,
-                        parent_rtt.render_layer
-                    );
-                    commands.entity(entity).insert(expected_layer);
-                }
-            }
+        let Ok(child_of) = parent_query.get(entity) else {
+            continue;
+        };
+        let parent = child_of.parent();
+        let Ok(parent_rtt) = embed_rtt_query.get(parent) else {
+            continue;
+        };
+        // This embed is nested inside another embed
+        let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
+        if *current_layers != expected_layer {
+            bevy::log::trace!(
+                "[RTT] Fixing nested embed {:?} RenderLayers: was {:?}, now layer {}",
+                entity,
+                current_layers,
+                parent_rtt.render_layer
+            );
+            commands.entity(entity).insert(expected_layer);
         }
     }
 }
@@ -621,23 +623,24 @@ pub fn debug_rtt_camera_projection_system(
         // Log some content entities' transforms
         let mut count = 0;
         for (ce, marker, tf, gtf) in content_query.iter() {
-            if marker.embed_entity == rtt_cam.embed_entity {
-                let (s, _r, _t) = gtf.to_scale_rotation_translation();
-                bevy::log::warn!(
-                    "[RTT DEBUG] Content {:?}: local_pos=({:.1},{:.1}), local_scale=({:.3},{:.3}), global_scale=({:.3},{:.3},{:.3})",
-                    ce,
-                    tf.translation.x,
-                    tf.translation.y,
-                    tf.scale.x,
-                    tf.scale.y,
-                    s.x,
-                    s.y,
-                    s.z,
-                );
-                count += 1;
-                if count >= 3 {
-                    break;
-                }
+            if marker.embed_entity != rtt_cam.embed_entity {
+                continue;
+            }
+            let (s, _r, _t) = gtf.to_scale_rotation_translation();
+            bevy::log::warn!(
+                "[RTT DEBUG] Content {:?}: local_pos=({:.1},{:.1}), local_scale=({:.3},{:.3}), global_scale=({:.3},{:.3},{:.3})",
+                ce,
+                tf.translation.x,
+                tf.translation.y,
+                tf.scale.x,
+                tf.scale.y,
+                s.x,
+                s.y,
+                s.z,
+            );
+            count += 1;
+            if count >= 3 {
+                break;
             }
         }
     }
@@ -846,7 +849,6 @@ pub fn propagate_render_layers_to_children_system(
 }
 
 /// Helper function to propagate RenderLayers to all descendants of an embed.
-#[allow(clippy::too_many_arguments)]
 fn propagate_to_descendants(
     commands: &mut Commands,
     embed_entity: Entity,
@@ -891,42 +893,43 @@ fn propagate_to_descendants(
         }
 
         // Recurse into non-embed children
-        if non_embed_query.get(child_entity).is_ok() {
-            let mut to_process: Vec<Entity> = Vec::new();
-            if let Ok(grandchildren) = children_query.get(child_entity) {
-                to_process.extend(grandchildren.to_vec());
+        let mut to_process: Vec<Entity> = Vec::new();
+        if non_embed_query.get(child_entity).is_ok()
+            && let Ok(grandchildren) = children_query.get(child_entity)
+        {
+            to_process.extend(grandchildren.to_vec());
+        }
+
+        while let Some(entity) = to_process.pop() {
+            // Only process non-embed descendants
+            if non_embed_query.get(entity).is_err() {
+                continue;
             }
 
-            while let Some(entity) = to_process.pop() {
-                // Only process non-embed descendants
-                if non_embed_query.get(entity).is_ok() {
-                    let layer_needs_update = match render_layers_query.get(entity) {
-                        Ok(current) => current != target_layer,
-                        Err(_) => true,
-                    };
+            let layer_needs_update = match render_layers_query.get(entity) {
+                Ok(current) => current != target_layer,
+                Err(_) => true,
+            };
 
-                    let vis_needs_update = match visibility_query.get(entity) {
-                        Ok(Visibility::Hidden) => true,
-                        Err(_) => false,
-                        _ => false,
-                    };
+            let vis_needs_update = match visibility_query.get(entity) {
+                Ok(Visibility::Hidden) => true,
+                Err(_) => false,
+                _ => false,
+            };
 
-                    if layer_needs_update || vis_needs_update {
-                        let mut entity_commands = commands.entity(entity);
-                        if layer_needs_update {
-                            entity_commands.insert(target_layer.clone());
-                        }
-                        if vis_needs_update {
-                            entity_commands.insert(Visibility::Inherited);
-                        }
-                        updates += 1;
-                    }
+            if layer_needs_update {
+                commands.entity(entity).insert(target_layer.clone());
+            }
+            if vis_needs_update {
+                commands.entity(entity).insert(Visibility::Inherited);
+            }
+            if layer_needs_update || vis_needs_update {
+                updates += 1;
+            }
 
-                    // Continue to grandchildren
-                    if let Ok(grandchildren) = children_query.get(entity) {
-                        to_process.extend(grandchildren.to_vec());
-                    }
-                }
+            // Continue to grandchildren
+            if let Ok(grandchildren) = children_query.get(entity) {
+                to_process.extend(grandchildren.to_vec());
             }
         }
     }

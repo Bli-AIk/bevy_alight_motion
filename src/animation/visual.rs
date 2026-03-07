@@ -17,7 +17,117 @@ use crate::sdf_material::SdfMaterial;
 
 use super::sdf_spawn::spawn_sdf_visual;
 
-#[allow(clippy::too_many_arguments)]
+/// Pre-calculate initial mask params from mask_info for first-frame correctness.
+/// Returns (effect_flags_x, mask_params, mask2_flags_x, mask2_params).
+fn compute_initial_mask_params(
+    mask_info: &Option<AmMaskInfo>,
+    fit_scale: f32,
+    global_time_ms: u64,
+) -> (f32, Vec4, f32, Vec4) {
+    let default_mask = (
+        0.0,
+        Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+        0.0,
+        Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+    );
+    let Some(mask_info) = mask_info else {
+        return default_mask;
+    };
+    let active_masks = mask_info.get_active_masks(global_time_ms);
+    if active_masks.is_empty() {
+        bevy::log::trace!(
+            "[MaterialInit] No active mask at time {}, mask_info has {} masks",
+            global_time_ms,
+            mask_info.masks.len()
+        );
+        return default_mask;
+    }
+
+    let mask1 = active_masks[0];
+    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+    let mask1_type = if mask1.is_exclude {
+        base_type1 + 2.0
+    } else {
+        base_type1
+    };
+    let mask1_params = Vec4::new(
+        mask1.center.x * fit_scale,
+        mask1.center.y * fit_scale,
+        mask1.half_size.x * fit_scale * mask1.scale.x,
+        mask1.half_size.y * fit_scale * mask1.scale.y,
+    );
+
+    let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
+        let mask2 = active_masks[1];
+        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
+        let m2_type = if mask2.is_exclude {
+            base_type2 + 2.0
+        } else {
+            base_type2
+        };
+        let m2_params = Vec4::new(
+            mask2.center.x * fit_scale,
+            mask2.center.y * fit_scale,
+            mask2.half_size.x * fit_scale * mask2.scale.x,
+            mask2.half_size.y * fit_scale * mask2.scale.y,
+        );
+        bevy::log::trace!(
+            "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
+            mask1_type,
+            m2_type,
+            fit_scale
+        );
+        (m2_type, m2_params)
+    } else {
+        bevy::log::trace!(
+            "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
+            mask1_type,
+            mask1.center.x * fit_scale,
+            mask1.center.y * fit_scale,
+            mask1.half_size.x * fit_scale * mask1.scale.x,
+            mask1.half_size.y * fit_scale * mask1.scale.y,
+            fit_scale
+        );
+        (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
+    };
+
+    (mask1_type, mask1_params, mask2_type, mask2_params)
+}
+
+/// Create a mesh from stretch bounds (min_x, max_x, min_y, max_y).
+fn create_stretch_bounds_mesh(
+    meshes: &mut Assets<Mesh>,
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
+) -> Handle<Mesh> {
+    let vertices = vec![
+        [min_x, min_y, 0.0],
+        [max_x, min_y, 0.0],
+        [max_x, max_y, 0.0],
+        [min_x, max_y, 0.0],
+    ];
+    let normals = vec![
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+    ];
+    let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+    let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+    let mut new_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+    );
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+    meshes.add(new_mesh)
+}
+
 pub(crate) fn add_visual_components(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -194,7 +304,6 @@ pub(crate) fn add_visual_components(
     }
 
     // Helper to create unified material with effects
-    #[allow(clippy::too_many_arguments)]
     fn create_unified_material(
         unified_materials: &mut Assets<UnifiedEffectMaterial>,
         texture: Handle<Image>,
@@ -216,90 +325,12 @@ pub(crate) fn add_visual_components(
         let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
 
         // Pre-calculate mask params if mask is present, to ensure first frame renders correctly
-        // Support up to 2 masks for dual-mask effects
         let (
             initial_effect_flags_x,
             initial_mask_params,
             initial_mask2_flags_x,
             initial_mask2_params,
-        ) = if let Some(mask_info) = mask_info {
-            let active_masks = mask_info.get_active_masks(global_time_ms);
-
-            if active_masks.is_empty() {
-                bevy::log::trace!(
-                    "[MaterialInit] No active mask at time {}, mask_info has {} masks",
-                    global_time_ms,
-                    mask_info.masks.len()
-                );
-                (
-                    0.0,
-                    Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-                    0.0,
-                    Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-                )
-            } else {
-                // First mask
-                let mask1 = active_masks[0];
-                let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                let mask1_type = if mask1.is_exclude {
-                    base_type1 + 2.0
-                } else {
-                    base_type1
-                };
-                // Apply fit_scale to center and half_size * scale for world coordinate space
-                let mask1_params = Vec4::new(
-                    mask1.center.x * fit_scale,
-                    mask1.center.y * fit_scale,
-                    mask1.half_size.x * fit_scale * mask1.scale.x,
-                    mask1.half_size.y * fit_scale * mask1.scale.y,
-                );
-
-                // Second mask (if present)
-                let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
-                    let mask2 = active_masks[1];
-                    let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                    let m2_type = if mask2.is_exclude {
-                        base_type2 + 2.0
-                    } else {
-                        base_type2
-                    };
-                    // Apply fit_scale to center and half_size * scale for world coordinate space
-                    let m2_params = Vec4::new(
-                        mask2.center.x * fit_scale,
-                        mask2.center.y * fit_scale,
-                        mask2.half_size.x * fit_scale * mask2.scale.x,
-                        mask2.half_size.y * fit_scale * mask2.scale.y,
-                    );
-                    bevy::log::trace!(
-                        "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
-                        mask1_type,
-                        m2_type,
-                        fit_scale
-                    );
-                    (m2_type, m2_params)
-                } else {
-                    bevy::log::trace!(
-                        "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
-                        mask1_type,
-                        mask1.center.x * fit_scale,
-                        mask1.center.y * fit_scale,
-                        mask1.half_size.x * fit_scale * mask1.scale.x,
-                        mask1.half_size.y * fit_scale * mask1.scale.y,
-                        fit_scale
-                    );
-                    (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
-                };
-
-                (mask1_type, mask1_params, mask2_type, mask2_params)
-            }
-        } else {
-            (
-                0.0,
-                Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-                0.0,
-                Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-            )
-        };
+        ) = compute_initial_mask_params(mask_info, fit_scale, global_time_ms);
 
         let mut material = UnifiedEffectMaterial {
             uniform_data: crate::masked_sprite::UnifiedEffectUniform {
@@ -380,249 +411,184 @@ pub(crate) fn add_visual_components(
                     image_uri,
                     images.contains_key(image_uri)
                 );
-                if let Some(handle) = images.get(image_uri) {
-                    // Check if ONLY blur is needed (no mask/wipe/stretch)
-                    // In this case, use Sprite + RTT blur for best quality
-                    let blur_only = needs_blur && !needs_mask && !needs_wipe && !needs_stretch;
+            }
+            let blur_only = needs_blur && !needs_mask && !needs_wipe && !needs_stretch;
+            let media_handle = (*is_media && !image_uri.is_empty())
+                .then(|| images.get(image_uri))
+                .flatten();
 
-                    if blur_only {
-                        // Use RTT-based Gaussian blur for best quality
-                        // Sprite will be replaced by RTT output in GaussianBlurPlugin
-                        let scaled_width = base_width * initial_scale.0.abs();
-                        let scaled_height = base_height * initial_scale.1.abs();
+            if let Some(handle) = media_handle.filter(|_| blur_only) {
+                // Use RTT-based Gaussian blur for best quality
+                let scaled_width = base_width * initial_scale.0.abs();
+                let scaled_height = base_height * initial_scale.1.abs();
+                let blur_radius = blur_params.map(|bp| bp.x).unwrap_or(0.0);
 
-                        // Calculate blur radius from blur_params
-                        let blur_radius = blur_params.map(|bp| bp.x).unwrap_or(0.0);
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: handle.clone(),
+                        color: Color::WHITE,
+                        custom_size: Some(Vec2::new(scaled_width, scaled_height)),
+                        ..default()
+                    },
+                    *anchor,
+                    crate::gaussian_blur::GaussianBlurEffect {
+                        radius: blur_radius,
+                        width: scaled_width,
+                        height: scaled_height,
+                        rtt_ready: false,
+                    },
+                    AmVisualSpawned,
+                ));
 
-                        commands.entity(entity).insert((
-                            Sprite {
-                                image: handle.clone(),
-                                color: Color::WHITE,
-                                custom_size: Some(Vec2::new(scaled_width, scaled_height)),
-                                ..default()
-                            },
-                            *anchor,
-                            crate::gaussian_blur::GaussianBlurEffect {
-                                radius: blur_radius,
-                                width: scaled_width,
-                                height: scaled_height,
-                                rtt_ready: false,
-                            },
-                            AmVisualSpawned,
-                        ));
+                bevy::log::trace!(
+                    "[Visual] Spawned sprite '{}' with RTT Gaussian blur: size=({:.1},{:.1}), radius={:.1}",
+                    label,
+                    scaled_width,
+                    scaled_height,
+                    blur_radius
+                );
+            } else if let Some(handle) = media_handle.filter(|_| needs_any_effect) {
+                // Use UnifiedEffectMaterial for combined effects (mask/wipe/stretch + optional blur)
+                let scaled_width = base_width * initial_scale.0.abs();
+                let scaled_height = base_height * initial_scale.1.abs();
+                let blur_expansion = pixelate_expansion;
 
-                        bevy::log::trace!(
-                            "[Visual] Spawned sprite '{}' with RTT Gaussian blur: size=({:.1},{:.1}), radius={:.1}",
-                            label,
-                            scaled_width,
-                            scaled_height,
-                            blur_radius
-                        );
-                    } else if needs_any_effect {
-                        // Use UnifiedEffectMaterial for combined effects (mask/wipe/stretch + optional blur)
-                        // For effect layers, Transform.scale is reset to Vec3::ONE in spawn_layer_entity
-                        // So we must bake the scale into the mesh dimensions
-                        let scaled_width = base_width * initial_scale.0.abs();
-                        let scaled_height = base_height * initial_scale.1.abs();
+                let stretch_mesh =
+                    initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                        create_stretch_bounds_mesh(meshes, min_x, max_x, min_y, max_y)
+                    });
+                let mesh = stretch_mesh.unwrap_or_else(|| {
+                    create_anchored_rectangle_with_blur(
+                        meshes,
+                        scaled_width,
+                        scaled_height,
+                        anchor,
+                        blur_expansion,
+                    )
+                });
 
-                        // Don't expand mesh statically for blur - blur will work within original bounds
-                        // For pixelate, expand mesh so edge blocks aren't clipped at layer boundary
-                        let blur_expansion = pixelate_expansion;
+                let blur_params_with_expansion = blur_params
+                    .map(|bp| Vec4::new(bp.x, scaled_width, scaled_height, blur_expansion));
+                let mesh_size = initial_stretch_mesh_bounds
+                    .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
-                        // Use initial stretch mesh bounds if provided (to prevent first frame jump)
-                        let mesh = if let Some((min_x, max_x, min_y, max_y)) =
-                            initial_stretch_mesh_bounds
-                        {
-                            // Create mesh with stretch-expanded bounds
-                            let vertices = vec![
-                                [min_x, min_y, 0.0],
-                                [max_x, min_y, 0.0],
-                                [max_x, max_y, 0.0],
-                                [min_x, max_y, 0.0],
-                            ];
-                            let normals = vec![
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                            ];
-                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
-                            let indices = vec![0u32, 1, 2, 0, 2, 3];
+                let material = create_unified_material(
+                    unified_materials,
+                    handle.clone(),
+                    LinearRgba::WHITE,
+                    scaled_width,
+                    scaled_height,
+                    mask_info,
+                    wipe_params,
+                    stretch_params,
+                    blur_params_with_expansion,
+                    palette_params,
+                    initial_mesh_offset,
+                    mesh_size,
+                    fit_scale,
+                    global_time_ms,
+                    replace_color_params,
+                );
 
-                            let mut new_mesh = Mesh::new(
-                                bevy::mesh::PrimitiveTopology::TriangleList,
-                                bevy::asset::RenderAssetUsages::RENDER_WORLD
-                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-                            );
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-                            meshes.add(new_mesh)
-                        } else {
-                            create_anchored_rectangle_with_blur(
-                                meshes,
-                                scaled_width,
-                                scaled_height,
-                                anchor,
-                                blur_expansion,
-                            )
-                        };
+                commands.entity(entity).insert((
+                    Mesh2d(mesh),
+                    MeshMaterial2d(material),
+                    UnifiedEffectMarker,
+                    AmVisualSpawned,
+                ));
 
-                        // Pass blur expansion info to material via blur_params.w
-                        // This allows shader to correctly map UVs for the expanded mesh
-                        let blur_params_with_expansion = blur_params.map(|mut bp| {
-                            bp.y = scaled_width;
-                            bp.z = scaled_height;
-                            bp.w = blur_expansion;
-                            bp
-                        });
+                bevy::log::trace!(
+                    "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}, has_stretch_bounds={}",
+                    label,
+                    scaled_width,
+                    scaled_height,
+                    blur_expansion,
+                    needs_mask,
+                    needs_wipe,
+                    needs_stretch,
+                    needs_blur,
+                    needs_palette,
+                    initial_stretch_mesh_bounds.is_some()
+                );
+            } else if let Some(handle) = media_handle {
+                // No effects - use normal sprite
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: handle.clone(),
+                        color: Color::WHITE,
+                        custom_size: Some(Vec2::new(base_width, base_height)),
+                        ..default()
+                    },
+                    *anchor,
+                    AmVisualSpawned,
+                ));
+            } else if let Some(wp) = white_pixel
+                && needs_any_effect
+            {
+                bevy::log::trace!(
+                    "[Visual] Spawning fill sprite '{}' with white_pixel, color fill",
+                    label
+                );
+                let color = extract_fill_color(fill_color, false);
+                let stretch_mesh =
+                    initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                        create_stretch_bounds_mesh(meshes, min_x, max_x, min_y, max_y)
+                    });
+                let mesh = stretch_mesh.unwrap_or_else(|| {
+                    create_anchored_rectangle(meshes, base_width, base_height, anchor)
+                });
 
-                        // Calculate mesh size for stretch bounds
-                        let mesh_size = initial_stretch_mesh_bounds
-                            .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
+                let mesh_size = initial_stretch_mesh_bounds
+                    .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
-                        let material = create_unified_material(
-                            unified_materials,
-                            handle.clone(),
-                            LinearRgba::WHITE,
-                            scaled_width,
-                            scaled_height,
-                            mask_info,
-                            wipe_params,
-                            stretch_params,
-                            blur_params_with_expansion,
-                            palette_params,
-                            initial_mesh_offset,
-                            mesh_size,
-                            fit_scale,
-                            global_time_ms,
-                            replace_color_params,
-                        );
+                let material = create_unified_material(
+                    unified_materials,
+                    wp.clone(),
+                    color.to_linear(),
+                    base_width,
+                    base_height,
+                    mask_info,
+                    wipe_params,
+                    stretch_params,
+                    blur_params,
+                    palette_params,
+                    initial_mesh_offset,
+                    mesh_size,
+                    fit_scale,
+                    global_time_ms,
+                    replace_color_params,
+                );
 
-                        // Transform.scale is Vec3::ONE for effect layers, scale is baked into mesh
-                        commands.entity(entity).insert((
-                            Mesh2d(mesh),
-                            MeshMaterial2d(material),
-                            UnifiedEffectMarker,
-                            AmVisualSpawned,
-                        ));
+                commands.entity(entity).insert((
+                    Mesh2d(mesh),
+                    MeshMaterial2d(material),
+                    UnifiedEffectMarker,
+                    AmVisualSpawned,
+                ));
 
-                        bevy::log::trace!(
-                            "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}, has_stretch_bounds={}",
-                            label,
-                            scaled_width,
-                            scaled_height,
-                            blur_expansion,
-                            needs_mask,
-                            needs_wipe,
-                            needs_stretch,
-                            needs_blur,
-                            needs_palette,
-                            initial_stretch_mesh_bounds.is_some()
-                        );
-                    } else {
-                        // No effects - use normal sprite
-                        commands.entity(entity).insert((
-                            Sprite {
-                                image: handle.clone(),
-                                color: Color::WHITE,
-                                custom_size: Some(Vec2::new(base_width, base_height)),
-                                ..default()
-                            },
-                            *anchor,
-                            AmVisualSpawned,
-                        ));
-                    }
-                }
+                bevy::log::trace!(
+                    "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
+                    label,
+                    base_width,
+                    base_height,
+                    initial_stretch_mesh_bounds.is_some()
+                );
             } else if let Some(wp) = white_pixel {
                 bevy::log::trace!(
                     "[Visual] Spawning fill sprite '{}' with white_pixel, color fill",
                     label
                 );
                 let color = extract_fill_color(fill_color, false);
-                if needs_any_effect {
-                    // Use initial stretch mesh bounds if provided (to prevent first frame jump)
-                    let mesh =
-                        if let Some((min_x, max_x, min_y, max_y)) = initial_stretch_mesh_bounds {
-                            let vertices = vec![
-                                [min_x, min_y, 0.0],
-                                [max_x, min_y, 0.0],
-                                [max_x, max_y, 0.0],
-                                [min_x, max_y, 0.0],
-                            ];
-                            let normals = vec![
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                            ];
-                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
-                            let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-                            let mut new_mesh = Mesh::new(
-                                bevy::mesh::PrimitiveTopology::TriangleList,
-                                bevy::asset::RenderAssetUsages::RENDER_WORLD
-                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-                            );
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-                            meshes.add(new_mesh)
-                        } else {
-                            create_anchored_rectangle(meshes, base_width, base_height, anchor)
-                        };
-
-                    // Calculate mesh size for stretch bounds
-                    let mesh_size = initial_stretch_mesh_bounds
-                        .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
-
-                    let material = create_unified_material(
-                        unified_materials,
-                        wp.clone(),
-                        color.to_linear(),
-                        base_width,
-                        base_height,
-                        mask_info,
-                        wipe_params,
-                        stretch_params,
-                        blur_params,
-                        palette_params,
-                        initial_mesh_offset,
-                        mesh_size,
-                        fit_scale,
-                        global_time_ms,
-                        replace_color_params,
-                    );
-
-                    // Transform.scale from scene.rs will handle the scaling
-                    commands.entity(entity).insert((
-                        Mesh2d(mesh),
-                        MeshMaterial2d(material),
-                        UnifiedEffectMarker,
-                        AmVisualSpawned,
-                    ));
-
-                    bevy::log::trace!(
-                        "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
-                        label,
-                        base_width,
-                        base_height,
-                        initial_stretch_mesh_bounds.is_some()
-                    );
-                } else {
-                    commands.entity(entity).insert((
-                        Sprite {
-                            image: wp.clone(),
-                            color,
-                            custom_size: Some(Vec2::new(base_width, base_height)),
-                            ..default()
-                        },
-                        *anchor,
-                        AmVisualSpawned,
-                    ));
-                }
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: wp.clone(),
+                        color,
+                        custom_size: Some(Vec2::new(base_width, base_height)),
+                        ..default()
+                    },
+                    *anchor,
+                    AmVisualSpawned,
+                ));
             } else {
                 bevy::log::warn!(
                     "[Visual] Cannot spawn fill sprite '{}': white_pixel is None! is_media={}, image_uri='{}'",
@@ -711,92 +677,66 @@ pub(crate) fn add_visual_components(
             let base_width = *width * size_scale;
             let base_height = *height * size_scale;
 
-            if let Some(handle) = images.get(image_uri) {
-                if needs_any_effect {
-                    // Use initial stretch mesh bounds if provided (to prevent first frame jump)
-                    let mesh =
-                        if let Some((min_x, max_x, min_y, max_y)) = initial_stretch_mesh_bounds {
-                            // Create mesh with stretch-expanded bounds
-                            let vertices = vec![
-                                [min_x, min_y, 0.0],
-                                [max_x, min_y, 0.0],
-                                [max_x, max_y, 0.0],
-                                [min_x, max_y, 0.0],
-                            ];
-                            let normals = vec![
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, 0.0, 1.0],
-                            ];
-                            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
-                            let indices = vec![0u32, 1, 2, 0, 2, 3];
+            if let Some(handle) = images.get(image_uri)
+                && needs_any_effect
+            {
+                // Use initial stretch mesh bounds if provided (to prevent first frame jump)
+                let stretch_mesh =
+                    initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
+                        create_stretch_bounds_mesh(meshes, min_x, max_x, min_y, max_y)
+                    });
+                let mesh = stretch_mesh.unwrap_or_else(|| {
+                    create_anchored_rectangle(meshes, base_width, base_height, anchor)
+                });
 
-                            let mut new_mesh = Mesh::new(
-                                bevy::mesh::PrimitiveTopology::TriangleList,
-                                bevy::asset::RenderAssetUsages::RENDER_WORLD
-                                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-                            );
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-                            meshes.add(new_mesh)
-                        } else {
-                            // Create mesh with BASE dimensions (not scaled)
-                            // Transform.scale will handle the actual scaling
-                            create_anchored_rectangle(meshes, base_width, base_height, anchor)
-                        };
+                // Calculate mesh size for stretch bounds
+                let mesh_size = initial_stretch_mesh_bounds
+                    .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
-                    // Calculate mesh size for stretch bounds
-                    let mesh_size = initial_stretch_mesh_bounds
-                        .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
+                let material = create_unified_material(
+                    unified_materials,
+                    handle.clone(),
+                    LinearRgba::WHITE,
+                    base_width,
+                    base_height,
+                    mask_info,
+                    wipe_params,
+                    stretch_params,
+                    blur_params,
+                    palette_params,
+                    initial_mesh_offset,
+                    mesh_size,
+                    fit_scale,
+                    global_time_ms,
+                    replace_color_params,
+                );
 
-                    let material = create_unified_material(
-                        unified_materials,
-                        handle.clone(),
-                        LinearRgba::WHITE,
-                        base_width,
-                        base_height,
-                        mask_info,
-                        wipe_params,
-                        stretch_params,
-                        blur_params,
-                        palette_params,
-                        initial_mesh_offset,
-                        mesh_size,
-                        fit_scale,
-                        global_time_ms,
-                        replace_color_params,
-                    );
+                // Transform.scale from scene.rs will handle the scaling
+                commands.entity(entity).insert((
+                    Mesh2d(mesh),
+                    MeshMaterial2d(material),
+                    UnifiedEffectMarker,
+                    AmVisualSpawned,
+                ));
 
-                    // Transform.scale from scene.rs will handle the scaling
-                    commands.entity(entity).insert((
-                        Mesh2d(mesh),
-                        MeshMaterial2d(material),
-                        UnifiedEffectMarker,
-                        AmVisualSpawned,
-                    ));
-
-                    bevy::log::trace!(
-                        "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
-                        label,
-                        base_width,
-                        base_height,
-                        initial_stretch_mesh_bounds.is_some()
-                    );
-                } else {
-                    commands.entity(entity).insert((
-                        Sprite {
-                            image: handle.clone(),
-                            color: Color::WHITE,
-                            custom_size: Some(Vec2::new(base_width, base_height)),
-                            ..default()
-                        },
-                        *anchor,
-                        AmVisualSpawned,
-                    ));
-                }
+                bevy::log::trace!(
+                    "[Visual] Spawned image '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
+                    label,
+                    base_width,
+                    base_height,
+                    initial_stretch_mesh_bounds.is_some()
+                );
+            } else if let Some(handle) = images.get(image_uri) {
+                commands.entity(entity).insert((
+                    Sprite {
+                        image: handle.clone(),
+                        color: Color::WHITE,
+                        custom_size: Some(Vec2::new(base_width, base_height)),
+                        ..default()
+                    },
+                    *anchor,
+                    AmVisualSpawned,
+                ));
             }
         }
         AmLayerSpec::Text {
