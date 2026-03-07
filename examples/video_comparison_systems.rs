@@ -511,7 +511,7 @@ pub fn comparison_loop(
             let ref_path = &state.frame_paths[frame_idx];
 
             // Debug: log actual paths being compared for frame 30 and copy ref frame
-            if frame_idx % 5 == 0 {
+            if frame_idx.is_multiple_of(5) {
                 println!(
                     "[COMPARE DEBUG] Frame {}: shot={:?}, ref={:?}",
                     frame_idx,
@@ -550,17 +550,15 @@ pub fn comparison_loop(
                     result.content_similarity,
                     result.pixel_match_rate * 100.0
                 );
-            } else {
-                if frame_idx % 10 == 0 {
-                    println!(
-                        "[FRAME {:03}] Similarity: {:.4} ({}) | Content: {:.4}, Match: {:.1}%",
-                        frame_idx,
-                        similarity,
-                        "OK".green(),
-                        result.content_similarity,
-                        result.pixel_match_rate * 100.0
-                    );
-                }
+            } else if frame_idx.is_multiple_of(10) {
+                println!(
+                    "[FRAME {:03}] Similarity: {:.4} ({}) | Content: {:.4}, Match: {:.1}%",
+                    frame_idx,
+                    similarity,
+                    "OK".green(),
+                    result.content_similarity,
+                    result.pixel_match_rate * 100.0
+                );
             }
 
             // Clean up shot to save space? Keep it for now.

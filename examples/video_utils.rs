@@ -332,10 +332,13 @@ pub fn compare_images(
                 }
                 let nx = x as i32 + dx;
                 let ny = y as i32 + dy;
-                if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
-                    if is_empty(img.get_pixel(nx as u32, ny as u32)) {
-                        return true;
-                    }
+                if nx >= 0
+                    && nx < w as i32
+                    && ny >= 0
+                    && ny < h as i32
+                    && is_empty(img.get_pixel(nx as u32, ny as u32))
+                {
+                    return true;
                 }
             }
         }
@@ -347,10 +350,10 @@ pub fn compare_images(
             let p1 = img1.get_pixel(x, y);
             let p2 = img2.get_pixel(x, y);
 
-            let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
-            let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
-            let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
-            let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
+            let r_diff = (p1[0] as i32 - p2[0] as i32).unsigned_abs() as u64;
+            let g_diff = (p1[1] as i32 - p2[1] as i32).unsigned_abs() as u64;
+            let b_diff = (p1[2] as i32 - p2[2] as i32).unsigned_abs() as u64;
+            let a_diff = (p1[3] as i32 - p2[3] as i32).unsigned_abs() as u64;
 
             let pixel_diff = r_diff + g_diff + b_diff + a_diff;
 
