@@ -367,6 +367,23 @@ pub fn ensure_paused_during_load(
     }
 }
 
+fn print_critical_failures(critical_failed_frames: &[(usize, f32)], min_frame_similarity: f32) {
+    if critical_failed_frames.is_empty() {
+        return;
+    }
+    println!(
+        "  {} frames below min threshold ({:.2}):",
+        "Critical:".red().bold(),
+        min_frame_similarity
+    );
+    for (idx, score) in critical_failed_frames.iter().take(5) {
+        println!("    Frame {}: {:.4}", idx, score);
+    }
+    if critical_failed_frames.len() > 5 {
+        println!("    ... and {} more", critical_failed_frames.len() - 5);
+    }
+}
+
 pub fn comparison_loop(
     mut state: ResMut<ComparisonState>,
     mut playback: ResMut<AmPlayback>,
@@ -648,19 +665,7 @@ pub fn comparison_loop(
                 );
 
                 // List critical failures if any
-                if !critical_failed_frames.is_empty() {
-                    println!(
-                        "  {} frames below min threshold ({:.2}):",
-                        "Critical:".red().bold(),
-                        state.min_frame_similarity
-                    );
-                    for (idx, score) in critical_failed_frames.iter().take(5) {
-                        println!("    Frame {}: {:.4}", idx, score);
-                    }
-                    if critical_failed_frames.len() > 5 {
-                        println!("    ... and {} more", critical_failed_frames.len() - 5);
-                    }
-                }
+                print_critical_failures(&critical_failed_frames, state.min_frame_similarity);
 
                 // Final result
                 let overall_passed = avg_passed && frame_rate_passed;
