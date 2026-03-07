@@ -444,7 +444,7 @@ pub(super) fn spawn_layer_entity(
             let scene_width = layer.animated.canvas_width;
             let scene_height = layer.animated.canvas_height;
             let adj_stretch = stretch_raw / 500.0;
-            let offset_norm = offset_raw / 1000.0;
+            let _offset_norm = offset_raw / 1000.0;
 
             // Mesh bounds: compute displacement in screen space, rotate to local space
             let dx_screen = angle_rad.cos().abs() * adj_stretch * scene_width;

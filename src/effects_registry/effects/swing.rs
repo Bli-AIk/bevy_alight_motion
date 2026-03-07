@@ -17,7 +17,11 @@ define_effect! {
     <property name="phase" type="float" value="0.0" />
     <property name="type" type="int" value="0" />
 </effect>"##,
-    tests: ["effects/swing/basic.amproj"],
+    tests: [
+        "effects/swing/basic.amproj",
+        "effects/swing/animation.amproj",
+        "effects/swing/multi.amproj",
+    ],
     fields: [
         define_field! {
             name: "freq",

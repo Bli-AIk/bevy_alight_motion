@@ -259,28 +259,6 @@ impl StretchSegmentParams {
     }
 }
 
-/// Extract stretch segment effect parameters from effects.
-pub(crate) fn extract_stretch_segment_effect(effects: &[AmEffect]) -> StretchSegmentParams {
-    let mut params = StretchSegmentParams::default();
-
-    for effect in effects {
-        if effect.id != "com.alightcreative.effects.stretchsegment" {
-            continue;
-        }
-        for prop in &effect.properties {
-            match prop.name.as_str() {
-                "angle" => apply_animated_float(&mut params.angle, prop),
-                "stretch" => apply_animated_float(&mut params.stretch, prop),
-                "offset" => apply_animated_float(&mut params.offset, prop),
-                "smooth" => apply_animated_float(&mut params.smooth, prop),
-                _ => (),
-            }
-        }
-    }
-
-    params
-}
-
 /// Extract ALL stretch segment effects (supports multiple stacked instances).
 pub(crate) fn extract_all_stretch_segment_effects(
     effects: &[AmEffect],
