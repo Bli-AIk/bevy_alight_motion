@@ -16,7 +16,6 @@ use crate::scene::{
 };
 use crate::sdf_material::SdfMaterial;
 
-use super::components::DEBUG_NEGATIVE_HEIGHT_SCALE;
 use super::helpers::get_initial_scale_from_animated;
 use super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
@@ -61,7 +60,11 @@ pub(super) fn spawn_layer_entity(
         || layer.animated.stretch_offset.value.is_some()
         || !layer.animated.stretch_offset.keyframes.is_empty()
         || layer.animated.stretch_smooth.value.is_some()
-        || !layer.animated.stretch_smooth.keyframes.is_empty();
+        || !layer.animated.stretch_smooth.keyframes.is_empty()
+        || layer.animated.stretch_seg2_amount.value.is_some()
+        || !layer.animated.stretch_seg2_amount.keyframes.is_empty()
+        || layer.animated.stretch_seg2_angle.value.is_some()
+        || !layer.animated.stretch_seg2_angle.keyframes.is_empty();
 
     let has_blur = layer.animated.blur_strength.value.is_some()
         || !layer.animated.blur_strength.keyframes.is_empty();
@@ -350,7 +353,11 @@ pub(super) fn spawn_layer_entity(
             || layer.animated.stretch_offset.value.is_some()
             || !layer.animated.stretch_offset.keyframes.is_empty()
             || layer.animated.stretch_smooth.value.is_some()
-            || !layer.animated.stretch_smooth.keyframes.is_empty();
+            || !layer.animated.stretch_smooth.keyframes.is_empty()
+            || layer.animated.stretch_seg2_amount.value.is_some()
+            || !layer.animated.stretch_seg2_amount.keyframes.is_empty()
+            || layer.animated.stretch_seg2_angle.value.is_some()
+            || !layer.animated.stretch_seg2_angle.keyframes.is_empty();
 
         // Check if layer has blur effect
         let has_blur = layer.animated.blur_strength.value.is_some()
@@ -426,88 +433,51 @@ pub(super) fn spawn_layer_entity(
             let angle_deg =
                 interpolate_float(&layer.animated.stretch_angle, layer_time).unwrap_or(0.0);
             let transform_rotation_rad = initial_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
-            let angle_rad = angle_deg.to_radians() + transform_rotation_rad;
-            let stretch_px =
+            // Pass original AM angle to shader (NOT rotation-compensated)
+            let angle_rad = angle_deg.to_radians();
+            let stretch_raw =
                 interpolate_float(&layer.animated.stretch_amount, layer_time).unwrap_or(0.0);
-            let offset_px =
+            let offset_raw =
                 interpolate_float(&layer.animated.stretch_offset, layer_time).unwrap_or(0.0);
 
-            // Calculate base_size (same logic as animate_unified_effect_system)
-            let has_negative_size_y = sprite_size[1] < 0.0;
-            let base_size = if has_negative_size_y {
-                (orig_width * orig_width + orig_height * orig_height).sqrt()
-                    * DEBUG_NEGATIVE_HEIGHT_SCALE
-            } else if orig_width >= orig_height {
-                orig_width
-            } else {
-                let rot_cos = transform_rotation_rad.cos().abs();
-                let rot_sin = transform_rotation_rad.sin().abs();
-                let world_w = orig_width * rot_cos + orig_height * rot_sin;
-                0.8 * world_w + 0.2 * orig_width
-            };
-            let base_divisor = base_size / 4.27; // Best match for reference
-            let stretch_factor = 1.0 + stretch_px / base_divisor;
+            // AM formula: convert to scene-normalized coords
+            let scene_width = layer.animated.canvas_width;
+            let scene_height = layer.animated.canvas_height;
+            let adj_stretch = stretch_raw / 500.0;
+            let offset_norm = offset_raw / 1000.0;
 
-            let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
-
-            // Apply embed RTT compensation if this is embed content
-            if layer.containing_embed_id != 0 {
-                let ratio = layer.animated.canvas_height / 960.0;
-                actual_stretch_px *= ratio;
-            }
-
-            let angle_factor = 1.0 - 0.1 * angle_rad.sin().abs();
-            let half_gap = actual_stretch_px * 0.5 * angle_factor;
-
-            let rotate = |x: f32, y: f32, angle: f32| -> (f32, f32) {
-                let c = angle.cos();
-                let s = angle.sin();
-                (x * c - y * s, x * s + y * c)
-            };
-
-            let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
-                let (rx, ry) = rotate(vx, vy, angle_rad);
-                let shifted_x = rx + offset_px;
-                let pushed_x = rx + shifted_x.signum() * half_gap;
-                rotate(pushed_x, ry, -angle_rad)
-            };
+            // Mesh bounds: compute displacement in screen space, rotate to local space
+            let dx_screen = angle_rad.cos().abs() * adj_stretch * scene_width;
+            let dy_screen = angle_rad.sin().abs() * adj_stretch * scene_height;
+            let rot_cos = transform_rotation_rad.cos().abs();
+            let rot_sin = transform_rotation_rad.sin().abs();
+            let max_dx = rot_cos * dx_screen + rot_sin * dy_screen;
+            let max_dy = rot_sin * dx_screen + rot_cos * dy_screen;
 
             let hw = orig_width / 2.0;
             let hh = orig_height / 2.0;
-            let corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
-
-            let mut min_x = f32::MAX;
-            let mut max_x = f32::MIN;
-            let mut min_y = f32::MAX;
-            let mut max_y = f32::MIN;
-
-            for (cx, cy) in corners {
-                let (tx, ty) = transform_vertex(cx, cy);
-                min_x = min_x.min(tx);
-                max_x = max_x.max(tx);
-                min_y = min_y.min(ty);
-                max_y = max_y.max(ty);
-            }
-
-            // No padding - the calculated bounds should be exact for stretch effect
-            // Padding would cause sample_uv to go outside [0,1] range
-
-            let center_offset_x = (min_x + max_x) / 2.0;
-            let center_offset_y = (min_y + max_y) / 2.0;
+            let min_x = -hw - max_dx;
+            let max_x = hw + max_dx;
+            let min_y = -hh - max_dy;
+            let max_y = hh + max_dy;
 
             bevy::log::trace!(
-                "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) stretch_px={:.1} actual={:.1} offset=({:.2},{:.2})",
+                "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) adj_stretch={:.4} expansion=({:.2},{:.2})",
                 layer.label,
                 orig_width,
                 orig_height,
-                stretch_px,
-                actual_stretch_px,
-                center_offset_x,
-                center_offset_y
+                adj_stretch,
+                max_dx,
+                max_dy
             );
 
             (
-                Some(Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0)),
+                Some(Vec4::new(
+                    transform_rotation_rad,
+                    0.0,
+                    scene_width,
+                    scene_height,
+                )),
                 Some((min_x, max_x, min_y, max_y)),
             )
         } else {

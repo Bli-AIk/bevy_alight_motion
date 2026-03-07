@@ -280,6 +280,29 @@ pub(crate) fn extract_stretch_segment_effect(effects: &[AmEffect]) -> StretchSeg
 
     params
 }
+
+/// Extract ALL stretch segment effects (supports multiple stacked instances).
+pub(crate) fn extract_all_stretch_segment_effects(
+    effects: &[AmEffect],
+) -> Vec<StretchSegmentParams> {
+    effects
+        .iter()
+        .filter(|e| e.id == "com.alightcreative.effects.stretchsegment")
+        .map(|effect| {
+            let mut params = StretchSegmentParams::default();
+            for prop in &effect.properties {
+                match prop.name.as_str() {
+                    "angle" => apply_animated_float(&mut params.angle, prop),
+                    "stretch" => apply_animated_float(&mut params.stretch, prop),
+                    "offset" => apply_animated_float(&mut params.offset, prop),
+                    "smooth" => apply_animated_float(&mut params.smooth, prop),
+                    _ => (),
+                }
+            }
+            params
+        })
+        .collect()
+}
 #[derive(Debug, Clone, Default)]
 pub struct GaussianBlurParams {
     /// Blur strength (0 = no blur, higher = more blur)

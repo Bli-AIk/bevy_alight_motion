@@ -9,6 +9,7 @@
 //! AM 场景加载、实体生成和图层管理。
 
 mod collect;
+mod collect_camera;
 mod collect_embed;
 mod collect_shape;
 mod collect_types;

@@ -43,7 +43,8 @@ pub(crate) fn collect_shape(
     };
     let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&shape.effects);
-    let stretch_segment = extract_stretch_segment_effect(&shape.effects);
+    let all_stretch_segments = extract_all_stretch_segment_effects(&shape.effects);
+    let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let palette_map = extract_palette_map_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
@@ -351,6 +352,18 @@ pub(crate) fn collect_shape(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            stretch_seg2_angle: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.angle.clone()),
+            stretch_seg2_amount: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.stretch.clone()),
+            stretch_seg2_offset: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.offset.clone()),
+            stretch_seg2_smooth: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: shape.speed,

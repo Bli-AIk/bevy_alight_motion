@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmCamera, AmText};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmText};
 
 use super::components::*;
 use super::effects::*;
@@ -34,7 +34,8 @@ pub(crate) fn collect_null(
     };
     let extra_transform2 = all_transform2;
     let wipe_effect = extract_wipe_effect(&null.effects);
-    let stretch_segment = extract_stretch_segment_effect(&null.effects);
+    let all_stretch_segments = extract_all_stretch_segment_effects(&null.effects);
+    let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
     let stretch2_effect = extract_stretch2_effect(&null.effects);
@@ -100,6 +101,18 @@ pub(crate) fn collect_null(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            stretch_seg2_angle: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.angle.clone()),
+            stretch_seg2_amount: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.stretch.clone()),
+            stretch_seg2_offset: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.offset.clone()),
+            stretch_seg2_smooth: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
@@ -367,6 +380,10 @@ pub(crate) fn collect_text(
             stretch_amount: AmAnimatedFloat::default(),
             stretch_offset: AmAnimatedFloat::default(),
             stretch_smooth: AmAnimatedFloat::default(),
+            stretch_seg2_angle: AmAnimatedFloat::default(),
+            stretch_seg2_amount: AmAnimatedFloat::default(),
+            stretch_seg2_offset: AmAnimatedFloat::default(),
+            stretch_seg2_smooth: AmAnimatedFloat::default(),
             blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
@@ -547,7 +564,8 @@ pub(crate) fn collect_image(
     let (sx, sy) = get_initial_scale(&image.transform.scale);
     let (pivot_x, pivot_y) = get_initial_pivot(&image.transform.pivot);
     let wipe_effect = extract_wipe_effect(&image.effects);
-    let stretch_segment = extract_stretch_segment_effect(&image.effects);
+    let all_stretch_segments = extract_all_stretch_segment_effects(&image.effects);
+    let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let palette_map = extract_palette_map_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
@@ -621,6 +639,18 @@ pub(crate) fn collect_image(
             stretch_amount: stretch_segment.stretch,
             stretch_offset: stretch_segment.offset,
             stretch_smooth: stretch_segment.smooth,
+            stretch_seg2_angle: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.angle.clone()),
+            stretch_seg2_amount: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.stretch.clone()),
+            stretch_seg2_offset: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.offset.clone()),
+            stretch_seg2_smooth: all_stretch_segments
+                .get(1)
+                .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
@@ -773,80 +803,6 @@ pub(crate) fn collect_image(
         } else {
             None
         },
-        embed_scene_size: None,
-        containing_embed_id: 0,
-        from_deeply_nested_scene: config.nesting_depth > 1,
-        echo_runtime: None,
-        group_fill: None,
-    })
-}
-
-/// Collect a camera layer's data for lazy spawning.
-pub(crate) fn collect_camera(
-    camera: &AmCamera,
-    config: &AmSceneConfig,
-    z: f32,
-) -> Option<PendingLayer> {
-    let has_parent = camera.parent != 0;
-    let (tx, ty) = get_initial_location(&camera.transform.location, config, has_parent);
-
-    // Extract base Z from first location keyframe (or use default)
-    let base_z = camera
-        .transform
-        .location
-        .keyframes
-        .first()
-        .and_then(|kf| {
-            let parts: Vec<&str> = kf.value.split(',').collect();
-            parts.get(2).and_then(|s| s.trim().parse::<f32>().ok())
-        })
-        .or_else(|| camera.transform.location.value.as_ref().map(|v| v[2]))
-        .unwrap_or(-1247.0);
-
-    let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
-        ..Default::default()
-    };
-
-    Some(PendingLayer {
-        id: camera.id,
-        label: camera.label.clone(),
-        parent: camera.parent,
-        start_time: camera.start_time,
-        end_time: camera.end_time,
-        transform,
-        animated: AmAnimated {
-            layer_id: camera.id,
-            start_time: camera.start_time,
-            end_time: camera.end_time,
-            time_offset: config.time_offset,
-            lifecycle_offset: config.lifecycle_offset,
-            location: camera.transform.location.clone(),
-            pivot: camera.transform.pivot.clone(),
-            rotation: camera.transform.rotation.clone(),
-            scale: camera.transform.scale.clone(),
-            opacity: camera.transform.opacity.clone(),
-            canvas_width: config.canvas_width,
-            canvas_height: config.canvas_height,
-            has_parent,
-            parent_layer_id: camera.parent,
-            speed_multiplier: config.speed_multiplier,
-            element_speed: 1.0,
-            scene_fps: config.scene_fps,
-            retime: config.retime.clone(),
-            echo_time_shift_ms: config.echo_time_shift_ms,
-            echo_alpha_config: config.echo_alpha_config.clone(),
-            ..Default::default()
-        },
-        spec: AmLayerSpec::Camera {
-            fov: camera.fov.clone(),
-            base_z,
-        },
-        z_index: z,
-        children: Vec::new(),
-        blending_mode: AmBlendingMode::Normal,
-        mask_info: None,
-        palette_params: None,
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,

@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 
-use crate::animation::components::{AmAnimated, AmPlayback, DEBUG_NEGATIVE_HEIGHT_SCALE};
+use crate::animation::components::{AmAnimated, AmPlayback};
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
 /// Convert sRGB component to linear for shader (colors from AM are sRGB).
@@ -213,7 +213,20 @@ pub fn animate_unified_effect_system(
             || animated.stretch_offset.value.is_some()
             || !animated.stretch_offset.keyframes.is_empty()
             || animated.stretch_smooth.value.is_some()
-            || !animated.stretch_smooth.keyframes.is_empty();
+            || !animated.stretch_smooth.keyframes.is_empty()
+            || animated.stretch_seg2_amount.value.is_some()
+            || !animated.stretch_seg2_amount.keyframes.is_empty()
+            || animated.stretch_seg2_angle.value.is_some()
+            || !animated.stretch_seg2_angle.keyframes.is_empty()
+            || animated.stretch_seg2_offset.value.is_some()
+            || !animated.stretch_seg2_offset.keyframes.is_empty()
+            || animated.stretch_seg2_smooth.value.is_some()
+            || !animated.stretch_seg2_smooth.keyframes.is_empty();
+
+        let has_stretch_seg2 = animated.stretch_seg2_amount.value.is_some()
+            || !animated.stretch_seg2_amount.keyframes.is_empty()
+            || animated.stretch_seg2_angle.value.is_some()
+            || !animated.stretch_seg2_angle.keyframes.is_empty();
 
         let has_pixelate =
             animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
@@ -403,134 +416,106 @@ pub fn animate_unified_effect_system(
             material.set_stretch_enabled(true);
 
             let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
-            // Compensate for transform rotation: subtract transform rotation from effect angle
-            // This ensures the stretch effect is applied in world space, not local space
-            // Note: transform rotation is already negated in animate_transform_system (for Bevy's coord system)
-            // So we add it back here to get the original AM rotation value
-            let angle_rad = angle_deg.to_radians() + transform_rotation_rad;
-            let stretch_px = interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
-            let offset_px = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
-            let smooth = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
-            let smooth_width = smooth * 0.3;
+            // Pass original AM angle to shader (NOT rotation-compensated).
+            // The shader rotates local coords to screen space using transform_rotation,
+            // applies the AM stretch formula, then rotates back. This correctly handles
+            // the anisotropic scene-norm space (scene_width != scene_height).
+            let angle_rad = angle_deg.to_radians();
+            let stretch_raw =
+                interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
+            let offset_raw = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
+            let smooth_raw = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
 
-            // Calculate mesh expansion for stretch segment effect
-            //
-            // The base_size determines how much stretch_px translates to actual pixel stretch.
-            // Through black-box testing, we found that the formula depends on the aspect ratio:
-            //
-            // - For wide shapes (width >= height): use orig_width directly
-            // - For tall shapes (width < height): use weighted formula with rotation
-            //
-            // Special case: when size.y is negative (AM uses this for certain flip/transform
-            // operations), the stretch calculation needs to use the diagonal length instead.
-            let has_negative_size_y = sprite_size[1] < 0.0;
+            // AM stretch-segment formula (from stretchsegment.xml):
+            //   adjStretch = stretch / 500.0  (scene-normalized coords)
+            //   offset_norm = offset / 1000.0  (scene-normalized coords)
+            //   smooth is passed raw (0..1)
+            // The shader converts pixel coords to scene-norm, applies AM's formula, converts back.
+            let scene_width = animated.canvas_width;
+            let scene_height = animated.canvas_height;
+            let adj_stretch = stretch_raw / 500.0;
+            let offset_norm = offset_raw / 1000.0;
 
-            // Debug: log raw values for negative height embed content
-            if has_negative_size_y && embed_marker.is_some() {
-                info!(
-                    "[StretchDebug] layer_id={} sprite_size=({:.2},{:.2}) scale=({:.2},{:.2}) orig=({:.2},{:.2})",
-                    animated.layer_id,
-                    sprite_size[0],
-                    sprite_size[1],
-                    scale[0],
-                    scale[1],
-                    orig_width,
-                    orig_height
-                );
-            }
-
-            let base_size = if has_negative_size_y {
-                // For negative height, use diagonal length as base, with optional scale factor
-                (orig_width * orig_width + orig_height * orig_height).sqrt()
-                    * DEBUG_NEGATIVE_HEIGHT_SCALE
-            } else if orig_width >= orig_height {
-                // Wide shape: use original width
-                orig_width
+            // Compute second stretch-segment params if present
+            let (adj_stretch2, angle_rad2, offset_norm2, smooth_raw2) = if has_stretch_seg2 {
+                let a2_deg =
+                    interpolate_float(&animated.stretch_seg2_angle, layer_time).unwrap_or(0.0);
+                let a2_rad = a2_deg.to_radians();
+                let s2_raw =
+                    interpolate_float(&animated.stretch_seg2_amount, layer_time).unwrap_or(0.0);
+                let o2_raw =
+                    interpolate_float(&animated.stretch_seg2_offset, layer_time).unwrap_or(0.0);
+                let sm2_raw =
+                    interpolate_float(&animated.stretch_seg2_smooth, layer_time).unwrap_or(0.0);
+                (s2_raw / 500.0, a2_rad, o2_raw / 1000.0, sm2_raw)
             } else {
-                // Tall shape: use weighted formula with rotation
-                let rot_cos = transform_rotation_rad.cos().abs();
-                let rot_sin = transform_rotation_rad.sin().abs();
-                let world_w = orig_width * rot_cos + orig_height * rot_sin;
-                0.8 * world_w + 0.2 * orig_width
-            };
-            let base_divisor = base_size / 4.27; // Best match for reference
-            let stretch_factor = 1.0 + stretch_px / base_divisor;
-
-            let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
-
-            // Hack: Compensate for RTT stretch issue in groups
-            // The issue causes grouped elements to appear shorter/less stretched than expected
-            // This seems related to the ratio between RTT canvas height and the standard 960.0 height
-            if embed_marker.is_some() {
-                let ratio = animated.canvas_height / 960.0;
-                actual_stretch_px *= ratio;
-            }
-
-            let angle_factor = 1.0 - 0.1 * angle_rad.sin().abs();
-            let half_gap = actual_stretch_px * 0.5 * angle_factor;
-
-            let rotate = |x: f32, y: f32, angle: f32| -> (f32, f32) {
-                let c = angle.cos();
-                let s = angle.sin();
-                (x * c - y * s, x * s + y * c)
+                (0.0, 0.0, 0.0, 0.0)
             };
 
-            let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
-                let (rx, ry) = rotate(vx, vy, angle_rad);
-                let shifted_x = rx + offset_px;
-                let pushed_x = rx + shifted_x.signum() * half_gap;
-                rotate(pushed_x, ry, -angle_rad)
+            // Mesh bounds: compute max displacement in SCREEN space using original AM angle,
+            // then rotate back to LOCAL space for mesh expansion.
+            // This correctly handles the anisotropic scene-norm space for rotated sprites.
+            let cos_a1 = angle_rad.cos().abs();
+            let sin_a1 = angle_rad.sin().abs();
+            let dx1_screen = cos_a1 * adj_stretch * scene_width;
+            let dy1_screen = sin_a1 * adj_stretch * scene_height;
+            let (dx2_screen, dy2_screen) = if has_stretch_seg2 {
+                (
+                    angle_rad2.cos().abs() * adj_stretch2 * scene_width,
+                    angle_rad2.sin().abs() * adj_stretch2 * scene_height,
+                )
+            } else {
+                (0.0, 0.0)
             };
+            let total_dx_screen = dx1_screen + dx2_screen;
+            let total_dy_screen = dy1_screen + dy2_screen;
 
-            let hw = orig_width / 2.0;
-            let hh = orig_height / 2.0;
-            let corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
+            // Rotate screen-space displacement bounding box back to local space
+            let rot_cos = transform_rotation_rad.cos().abs();
+            let rot_sin = transform_rotation_rad.sin().abs();
+            let total_dx = rot_cos * total_dx_screen + rot_sin * total_dy_screen;
+            let total_dy = rot_sin * total_dx_screen + rot_cos * total_dy_screen;
 
-            let mut min_x = f32::MAX;
-            let mut max_x = f32::MIN;
-            let mut min_y = f32::MAX;
-            let mut max_y = f32::MIN;
+            let new_width = orig_width + 2.0 * total_dx;
+            let new_height = orig_height + 2.0 * total_dy;
 
-            for (cx, cy) in corners {
-                let (tx, ty) = transform_vertex(cx, cy);
-                min_x = min_x.min(tx);
-                max_x = max_x.max(tx);
-                min_y = min_y.min(ty);
-                max_y = max_y.max(ty);
-            }
+            // Mesh vertex bounds (centered, expanded)
+            let half_nw = new_width / 2.0;
+            let half_nh = new_height / 2.0;
+            let min_x = -half_nw;
+            let max_x = half_nw;
+            let min_y = -half_nh;
+            let max_y = half_nh;
 
-            // No padding - the calculated bounds should be exact for stretch effect
-            // Padding would cause sample_uv to go outside [0,1] range
-
-            let new_width = max_x - min_x;
-            let new_height = max_y - min_y;
-            let center_offset_x = (min_x + max_x) / 2.0;
-            let center_offset_y = (min_y + max_y) / 2.0;
-
-            // Debug: log stretch calculation details (trace level)
-            if stretch_px > 0.1 {
-                let is_embed_content = animated.embed_offset != Vec2::ZERO;
+            // Debug: log stretch calculation details
+            if stretch_raw > 0.1 {
                 trace!(
-                    "[Stretch] layer_id={} is_embed={} canvas=({:.0},{:.0}) stretch_px={:.1} actual={:.1} new_h={:.1} neg_h={} base_size={:.1}",
+                    "[Stretch] layer_id={} scene=({:.0},{:.0}) adj_stretch={:.4} new_sz=({:.1},{:.1})",
                     animated.layer_id,
-                    is_embed_content,
-                    animated.canvas_width,
-                    animated.canvas_height,
-                    stretch_px,
-                    actual_stretch_px,
+                    scene_width,
+                    scene_height,
+                    adj_stretch,
+                    new_width,
                     new_height,
-                    has_negative_size_y,
-                    base_size
                 );
             }
 
-            // Update material parameters
+            // Pass raw AM params to shader: (angle, adjStretch, offset_norm, smooth)
+            // mesh_offset.x carries transform_rotation for screen-space conversion
             material.uniform_data.stretch_params =
-                Vec4::new(angle_rad, actual_stretch_px, offset_px, smooth_width);
+                Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
             material.uniform_data.original_size =
                 Vec4::new(orig_width, orig_height, new_width, new_height);
             material.uniform_data.mesh_offset =
-                Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0);
+                Vec4::new(transform_rotation_rad, 0.0, scene_width, scene_height);
+
+            // Update second stretch-segment material parameters
+            if has_stretch_seg2 {
+                material.uniform_data.stretch_seg2_params =
+                    Vec4::new(angle_rad2, adj_stretch2, offset_norm2, smooth_raw2);
+            } else {
+                material.uniform_data.stretch_seg2_params = Vec4::ZERO;
+            }
 
             // Create new mesh with expanded bounds
             let vertices = vec![

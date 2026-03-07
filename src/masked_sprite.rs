@@ -39,7 +39,7 @@ pub struct UnifiedEffectUniform {
     /// Size: (orig_w, orig_h, mesh_w, mesh_h)
     pub original_size: Vec4,
 
-    /// Offset: (center_off_x, center_off_y, 0, 0)
+    /// Offset: (transform_rotation_rad, 0, scene_width, scene_height)
     pub mesh_offset: Vec4,
 
     /// Blur: (strength, 0, 0, 0)
@@ -175,6 +175,9 @@ pub struct UnifiedEffectUniform {
 
     /// Solidcolor alpha: (alpha, 0, 0, 0)
     pub solid_color_alpha: Vec4,
+
+    /// Second stretch segment params: (angle_rad, stretch_px, offset_px, smooth)
+    pub stretch_seg2_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -428,6 +431,7 @@ impl Default for UnifiedEffectUniform {
             stretch2_params: Vec4::ZERO,
             solid_color_params: Vec4::ZERO,
             solid_color_alpha: Vec4::ZERO,
+            stretch_seg2_params: Vec4::ZERO,
         }
     }
 }

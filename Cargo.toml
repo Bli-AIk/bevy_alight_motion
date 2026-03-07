@@ -23,7 +23,7 @@ exclude = [
 autoexamples = false
 
 [dependencies]
-bevy = { version = "0.18", features = ["jpeg"] }
+bevy = { version = "0.18", features = ["jpeg", "webp"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 quick-xml = { version = "0.39", features = ["serialize"] }

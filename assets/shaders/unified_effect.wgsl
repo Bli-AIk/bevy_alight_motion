@@ -22,7 +22,7 @@ struct UnifiedEffectUniform {
     wipe_params: vec4<f32>,        // (wipe_start, wipe_end, wipe_angle, wipe_feather)
     stretch_params: vec4<f32>,     // (angle_radians, stretch_px, offset_px, smooth_width)
     original_size: vec4<f32>,      // (orig_width, orig_height, mesh_width, mesh_height)
-    mesh_offset: vec4<f32>,        // (center_offset_x, center_offset_y, 0, 0)
+    mesh_offset: vec4<f32>,        // (transform_rotation_rad, 0, scene_width, scene_height)
     blur_params: vec4<f32>,        // (radius_px, orig_width, orig_height, expansion_px)
     palette_flags: vec4<f32>,      // (enabled, count, shades, alpha)
     palette_color1: vec4<f32>,
@@ -81,6 +81,8 @@ struct UnifiedEffectUniform {
     // Solidcolor effect
     solid_color_params: vec4<f32>,     // (r, g, b, blend_mode)
     solid_color_alpha: vec4<f32>,      // (alpha, 0, 0, 0)
+    // Second stretch segment effect
+    stretch_seg2_params: vec4<f32>,    // (angle_radians, stretch_px, offset_px, smooth_width)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -150,42 +152,81 @@ fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
     return min(a, b) - h * h * h * k * (1.0 / 6.0);
 }
 
-// Apply stretch segment effect - returns modified UV
-fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
-    let angle = uniforms.stretch_params.x;
-    let stretch_px = uniforms.stretch_params.y;
-    let offset_px = uniforms.stretch_params.z;
-    let smooth_param = uniforms.stretch_params.w;
-    
+// Generic stretch segment: matches AM's stretchsegment.xml exactly.
+// Converts UV to scene-normalized space, applies AM's stretch formula, converts back.
+// Parameters:
+//   params.x = angle (radians)
+//   params.y = adjStretch = stretch_raw / 500.0 (scene-norm units)
+//   params.z = offset_norm = offset_raw / 1000.0 (scene-norm units)
+//   params.w = smooth (raw AM value, 0..1)
+// in_width/in_height + cx/cy define the input UV-to-pixel mapping.
+// Output always uses orig_width/orig_height for pixel-to-UV conversion.
+fn apply_stretch_segment_gen(
+    uv: vec2<f32>,
+    params: vec4<f32>,
+    in_width: f32, in_height: f32,
+) -> vec2<f32> {
+    let angle = params.x;       // Original AM angle (NOT rotation-compensated)
+    let adj_stretch = params.y;
+    let offset_norm = params.z;
+    let smooth_raw = params.w;
+
     let orig_width = uniforms.original_size.x;
     let orig_height = uniforms.original_size.y;
-    let mesh_width = uniforms.original_size.z;
-    let mesh_height = uniforms.original_size.w;
-    
-    let center_off_x = uniforms.mesh_offset.x;
-    let center_off_y = uniforms.mesh_offset.y;
-    
-    let angle_factor = mix(1.0, 0.9, abs(sin(angle)));
-    let half_gap = stretch_px * 0.5 * angle_factor;
-    
-    let pixel_x = (uv.x - 0.5) * mesh_width + center_off_x;
-    let pixel_y = (uv.y - 0.5) * mesh_height + center_off_y;
-    let pixel_coord = vec2<f32>(pixel_x, pixel_y);
-    
-    let rotated_pixel = rotate_vec(pixel_coord, angle);
-    let shifted_x = rotated_pixel.x + offset_px;
-    
-    // Use sminCubic for smooth blending (matches AM's stretchsegment shader)
-    let smooth_k = max(0.00001, smooth_param * half_gap);
-    let d = smin_cubic(half_gap, abs(shifted_x), smooth_k);
-    let sample_rotated_x = rotated_pixel.x + d * -sign(shifted_x);
-    
-    let final_rotated = vec2<f32>(sample_rotated_x, rotated_pixel.y);
-    let unrotated_pixel = rotate_vec(final_rotated, -angle);
-    
+    let scene_width = uniforms.mesh_offset.z;
+    let scene_height = uniforms.mesh_offset.w;
+    let transform_rot = uniforms.mesh_offset.x;
+
+    // Convert mesh UV to pixel coords (layer-local, relative to center).
+    // Y is flipped: UV.y=0 is top (Bevy), but AM's scene-norm has +Y = up (OpenGL).
+    let local_px_x = (uv.x - 0.5) * in_width;
+    let local_px_y = (0.5 - uv.y) * in_height;
+
+    // Rotate local coords to screen space using Bevy's transform rotation.
+    // AM's stretch formula operates in screen-normalized space, which is anisotropic
+    // (scene_width != scene_height). Rotating the angle alone doesn't account for this.
+    let cos_r = cos(transform_rot);
+    let sin_r = sin(transform_rot);
+    let screen_px_x = local_px_x * cos_r - local_px_y * sin_r;
+    let screen_px_y = local_px_x * sin_r + local_px_y * cos_r;
+
+    // Convert to scene-normalized coords (matching AM's st = acScreenNorm - acLayerCenterNorm)
+    let st = vec2<f32>(screen_px_x / scene_width, screen_px_y / scene_height);
+
+    // Direction vector (exactly as AM: vec2(1,0) * rot(angle))
+    let v = vec2<f32>(cos(angle), sin(angle));
+
+    // Distance along direction + offset (AM formula)
+    let dist = dot(st, v) + offset_norm;
+
+    // Smooth cubic min (AM formula)
+    let smooth_k = max(0.00001, smooth_raw * adj_stretch);
+    let d = smin_cubic(adj_stretch, abs(dist), smooth_k);
+
+    // Displace in scene-norm space along direction
+    let displaced_norm = st + v * d * -sign(dist);
+
+    // Convert back to screen pixel coords
+    let disp_screen_px_x = displaced_norm.x * scene_width;
+    let disp_screen_px_y = displaced_norm.y * scene_height;
+
+    // Rotate back to local space (inverse rotation: rotate by -transform_rot)
+    let disp_local_px_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
+    let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
+
+    // Convert to original-image UV (Y flipped back: positive scene-norm → UV < 0.5)
     return vec2<f32>(
-        (unrotated_pixel.x / orig_width) + 0.5,
-        (unrotated_pixel.y / orig_height) + 0.5
+        (disp_local_px_x / orig_width) + 0.5,
+        0.5 - (disp_local_px_y / orig_height)
+    );
+}
+
+// Single stretch segment (mesh UV → original-image UV)
+fn apply_stretch_segment(uv: vec2<f32>) -> vec2<f32> {
+    return apply_stretch_segment_gen(
+        uv,
+        uniforms.stretch_params,
+        uniforms.original_size.z, uniforms.original_size.w,
     );
 }
 
@@ -893,7 +934,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // Apply stretch segment effect if enabled (before blur)
     if stretch_enabled {
-        sample_uv = apply_stretch_segment(mesh.uv);
+        let seg2_stretch = uniforms.stretch_seg2_params.y;
+        let has_seg2 = abs(seg2_stretch) > 0.001;
+
+        if has_seg2 {
+            // Dual stretch: AM applies effects as sequential render passes.
+            // The LAST effect (seg2) runs on the output pixel position first,
+            // then the FIRST effect (seg1) runs at the displaced position.
+            // So: apply seg2 at mesh UV, then seg1 at the result.
+            sample_uv = apply_stretch_segment_gen(
+                mesh.uv,
+                uniforms.stretch_seg2_params,
+                uniforms.original_size.z, uniforms.original_size.w,
+            );
+            sample_uv = apply_stretch_segment_gen(
+                sample_uv,
+                uniforms.stretch_params,
+                uniforms.original_size.x, uniforms.original_size.y,
+            );
+        } else {
+            // Single stretch
+            sample_uv = apply_stretch_segment(mesh.uv);
+        }
         
         // Add small tolerance to prevent edge clipping due to floating point precision
         let eps = 0.002;

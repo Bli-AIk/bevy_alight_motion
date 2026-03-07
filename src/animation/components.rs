@@ -224,6 +224,14 @@ pub struct AmAnimated {
     pub stretch_offset: AmAnimatedFloat,
     /// Stretch segment effect smooth width (0 = hard edge).
     pub stretch_smooth: AmAnimatedFloat,
+    /// Second stretch segment effect angle in degrees.
+    pub stretch_seg2_angle: AmAnimatedFloat,
+    /// Second stretch segment effect stretch amount.
+    pub stretch_seg2_amount: AmAnimatedFloat,
+    /// Second stretch segment effect offset.
+    pub stretch_seg2_offset: AmAnimatedFloat,
+    /// Second stretch segment effect smooth width.
+    pub stretch_seg2_smooth: AmAnimatedFloat,
     /// Gaussian blur effect strength (0 = no blur).
     pub blur_strength: AmAnimatedFloat,
     /// Speed multiplier from parent embed scenes.
