@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-08T13:45:59.236512+08:00",
+  "timestamp": "2026-03-08T19:18:27.827915+08:00",
   "summary": {
     "passed": 114,
     "warnings": 0,
     "skipped": 2,
-    "failed": 34
+    "failed": 35
   },
   "results": {
     "basic/bezier/bezier": {
@@ -277,7 +277,8 @@
       "status": "pass"
     },
     "private/USER_71/2_ex2": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.5367
     },
     "private/USER_71/2_ex3": {
       "status": "pass"
@@ -304,6 +305,10 @@
     "private/USER_71/3_ex3": {
       "status": "fail",
       "avg_similarity": 0.9619
+    },
+    "private/USER_bot_205/demo/bullet": {
+      "status": "fail",
+      "avg_similarity": 0.7696
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",

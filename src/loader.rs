@@ -3,7 +3,7 @@
 use bevy::asset::io::Reader;
 use bevy::asset::{AssetLoader, LoadContext, RenderAssetUsages};
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 
 use crate::error::AmError;
@@ -558,11 +558,23 @@ async fn load_amproj_dir(
 
     info!("Loaded amproj directory: {:?}", dir_path);
 
-    // Map content provider URIs (content://...) to loaded image handles using <media> elements.
-    // Device-extracted directories use content URIs in shapes' fillImage attributes,
-    // while images are stored with amproj:filename keys.
+    // Load override config first so Force set entries take priority over auto-resolve.
+    let overrides = AmProjectOverride::load_for(dir_path);
+    let override_uris: HashSet<&str> = overrides
+        .as_ref()
+        .map(|o| o.media.keys().map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+
+    // Auto-resolve content URIs via <media> elements, skipping URIs with override entries.
     for media in &scene.media {
         if !media.uri.is_empty() && !media.filename.is_empty() {
+            if override_uris.contains(media.uri.as_str()) {
+                debug!(
+                    "Skipping auto-resolve for {} (overridden in .amproj.toml)",
+                    media.uri
+                );
+                continue;
+            }
             let amproj_key = format!("amproj:{}", media.filename);
             if let Some(handle) = images.get(&amproj_key).cloned() {
                 images.insert(media.uri.clone(), handle);
@@ -570,16 +582,16 @@ async fn load_amproj_dir(
         }
     }
 
-    // Apply override config for content URIs that lack automatic filename mappings.
-    if let Some(overrides) = AmProjectOverride::load_for(dir_path) {
+    // Apply override config — Force set entries always take priority.
+    if let Some(overrides) = overrides {
         for (content_uri, filename) in &overrides.media {
             let amproj_key = format!("amproj:{}", filename);
             if let Some(handle) = images.get(&amproj_key).cloned() {
                 images.insert(content_uri.clone(), handle);
-                debug!("Override mapped {} -> {}", content_uri, filename);
+                debug!("Override: {} -> {}", content_uri, filename);
             } else {
                 warn!(
-                    "Override config references '{}' but no image '{}' found in amproj directory",
+                    "Override config references '{}' but image '{}' not found in amproj directory",
                     content_uri, filename
                 );
             }
