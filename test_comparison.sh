@@ -174,7 +174,7 @@ while IFS= read -r amproj; do
             fi
         fi
     fi
-done < <(find "$PROJECTS_DIR" -name "*.amproj" -type f | sort)
+done < <(find "$PROJECTS_DIR" \( -name "*.amproj" -type d -print -prune \) -o \( -name "*.amproj" -type f -print \) | sort)
 EXAMPLES=$(echo $EXAMPLES | tr ' ' '\n' | sort | tr '\n' ' ')
 
 EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
