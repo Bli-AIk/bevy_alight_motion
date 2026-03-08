@@ -27,6 +27,7 @@ pub mod textprogress;
 pub mod textspacing;
 pub mod threshold;
 pub mod transform2;
+pub mod transform_legacy;
 pub mod wipe2;
 
 use super::types::EffectDef;
@@ -35,6 +36,7 @@ use super::types::EffectDef;
 pub fn all() -> &'static [&'static EffectDef] {
     &[
         &transform2::EFFECT,
+        &transform_legacy::EFFECT,
         &wipe2::EFFECT,
         &stretch_segment::EFFECT,
         &stretch2::EFFECT,
