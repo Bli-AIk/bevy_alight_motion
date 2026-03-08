@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-07T22:20:28.593910+08:00",
+  "timestamp": "2026-03-08T13:12:36.621199+08:00",
   "summary": {
-    "passed": 112,
+    "passed": 114,
     "warnings": 0,
     "skipped": 2,
     "failed": 34
@@ -231,6 +231,12 @@
     "effects/stretch-segment/muti/basic": {
       "status": "pass"
     },
+    "effects/stretch-segment/muti/mask_in": {
+      "status": "pass"
+    },
+    "effects/stretch-segment/muti/mask_out": {
+      "status": "pass"
+    },
     "effects/swing/animation": {
       "status": "pass"
     },
@@ -271,8 +277,7 @@
       "status": "pass"
     },
     "private/USER_71/2_ex2": {
-      "status": "fail",
-      "avg_similarity": 0.4404
+      "status": "fail"
     },
     "private/USER_71/2_ex3": {
       "status": "pass"
@@ -286,7 +291,7 @@
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8245
+      "avg_similarity": 0.8262
     },
     "private/USER_71/3_ex2": {
       "status": "fail",
@@ -294,7 +299,7 @@
     },
     "private/USER_71/3_ex2_1": {
       "status": "fail",
-      "avg_similarity": 0.9351
+      "avg_similarity": 0.9502
     },
     "private/USER_71/3_ex3": {
       "status": "fail",

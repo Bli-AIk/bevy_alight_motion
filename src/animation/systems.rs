@@ -15,7 +15,8 @@ use crate::scene::AmLayerMarker;
 
 use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent};
 use super::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
+    interpolate_float, interpolate_float_reverse, interpolate_vec2, interpolate_vec2_reverse,
+    interpolate_vec3, interpolate_vec3_reverse,
 };
 use super::simplex_noise::simplex_noise_3d;
 
@@ -354,9 +355,21 @@ pub fn animate_transform_system(
         // Calculate normalized time within layer duration
         let layer_time = animated.calc_layer_time(local_time);
 
+        // Compute frame_delta in normalized time for AM's reverseInterpolateFirstFrame.
+        // This enables smooth backward extrapolation for transform properties
+        // when the first keyframe is near the element's start.
+        let element_duration_ms = (animated.end_time - animated.start_time) as f32;
+        let frame_delta = if element_duration_ms > 0.0 {
+            let fps = animated.scene_fps.max(1.0);
+            (1000.0 / fps) / element_duration_ms * animated.element_speed.abs()
+        } else {
+            0.0
+        };
+
         // Get current scale for pivot compensation and flip detection
         // For SDF shapes and effect sprites, magnitude is handled separately, but we need sign for flipping
-        let mut actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        let mut actual_scale = interpolate_vec2_reverse(&animated.scale, layer_time, frame_delta)
+            .unwrap_or([1.0, 1.0]);
 
         // Apply scale_assist effect (multiplies scale based on axis)
         // Formula derived from reference video analysis:
@@ -437,7 +450,7 @@ pub fn animate_transform_system(
         // Interpolate location and convert from AM to Bevy coordinates
         // Use extrapolation for location to improve accuracy before first keyframe
         let mut oscillate_z_zoom = 1.0_f32;
-        if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
+        if let Some(loc) = interpolate_vec3_reverse(&animated.location, layer_time, frame_delta) {
             let (mut bx, mut by) = if animated.has_parent {
                 // For layers with parents, use local coordinates
                 // Only flip Y axis (AM Y-down -> Bevy Y-up)
@@ -556,7 +569,8 @@ pub fn animate_transform_system(
 
         // Interpolate rotation (negate for Bevy's coordinate system)
         // Get base rotation - default to 0 if not animated
-        let base_rotation = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+        let base_rotation =
+            interpolate_float_reverse(&animated.rotation, layer_time, frame_delta).unwrap_or(0.0);
         let mut final_rotation = -base_rotation; // Negate for Bevy's coordinate system
 
         // Apply swing effect (oscillating rotation)

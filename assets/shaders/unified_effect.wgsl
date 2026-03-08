@@ -83,6 +83,10 @@ struct UnifiedEffectUniform {
     solid_color_alpha: vec4<f32>,      // (alpha, 0, 0, 0)
     // Second stretch segment effect
     stretch_seg2_params: vec4<f32>,    // (angle_radians, stretch_px, offset_px, smooth_width)
+    // Mask1 stretch-segment params (for stretched masks)
+    mask1_stretch1_params: vec4<f32>,  // (angle_rad, adj_stretch, offset, smooth)
+    mask1_stretch2_params: vec4<f32>,  // (angle_rad, adj_stretch, offset, smooth)
+    mask1_stretch_info: vec4<f32>,     // (aspect_w, aspect_h, orig_half_w, orig_half_h)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -309,6 +313,90 @@ fn compute_ue_mask_blend_factor(
     }
 }
 
+// Compute mask blend factor for a mask with stretch-segment effects.
+// Operates in world/screen space directly: computes the AM stretch-segment
+// displacement on the world-relative position to find the "source" position,
+// then checks if the source is within the mask's original bounds.
+fn compute_ue_mask_blend_factor_stretched(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    stretch1: vec4<f32>,
+    stretch2: vec4<f32>,
+    stretch_info: vec4<f32>,
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let is_exclude = mask_type > 2.5;
+
+    // World-relative coords = screen-relative coords in 2D
+    let rel = world_pos - center;
+
+    // Scene dimensions in world units (scaled by fit_scale)
+    let scene_w = stretch_info.x;
+    let scene_h = stretch_info.y;
+
+    // Convert to scene-normalized coords (same space as AM's stretch formula)
+    var st = vec2<f32>(rel.x / scene_w, rel.y / scene_h);
+
+    // Apply stretch-segment displacement(s) in REVERSE order — AM applies effects as
+    // sequential render passes, so the LAST effect (seg2) maps the output position first,
+    // then the FIRST effect (seg1) maps at the displaced position.
+    // This matches the layer shader's apply order in the dual-stretch path.
+    if stretch2.y > 0.0001 {
+        let angle = stretch2.x;
+        let adj_stretch = stretch2.y;
+        let offset_norm = stretch2.z;
+        let smooth_raw = stretch2.w;
+        let v = vec2<f32>(cos(angle), sin(angle));
+        let dist = dot(st, v) + offset_norm;
+        let smooth_k = max(0.00001, smooth_raw * adj_stretch);
+        let d = smin_cubic(adj_stretch, abs(dist), smooth_k);
+        st = st + v * d * -sign(dist);
+    }
+    if stretch1.y > 0.0001 {
+        let angle = stretch1.x;
+        let adj_stretch = stretch1.y;
+        let offset_norm = stretch1.z;
+        let smooth_raw = stretch1.w;
+        let v = vec2<f32>(cos(angle), sin(angle));
+        let dist = dot(st, v) + offset_norm;
+        let smooth_k = max(0.00001, smooth_raw * adj_stretch);
+        let d = smin_cubic(adj_stretch, abs(dist), smooth_k);
+        st = st + v * d * -sign(dist);
+    }
+
+    // Convert displaced scene-norm back to world coords
+    let disp_world = vec2<f32>(st.x * scene_w, st.y * scene_h);
+
+    // Rotate to mask-local coords to check against original shape bounds
+    var disp_local = disp_world;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        disp_local = vec2<f32>(disp_world.x * c - disp_world.y * s, disp_world.x * s + disp_world.y * c);
+    }
+
+    // Check if displaced position falls within the ORIGINAL (un-expanded) mask shape
+    // Use SDF with smoothstep for anti-aliasing at the boundary (matches AM's rendered mask AA)
+    let orig_half = stretch_info.zw;
+    let mask_sdf = max(abs(disp_local.x) - orig_half.x, abs(disp_local.y) - orig_half.y);
+    let mask_alpha = fill_alpha * (1.0 - smoothstep(-1.0, 1.0, mask_sdf));
+
+    if is_exclude {
+        return 1.0 - opacity * mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - mask_alpha);
+    }
+}
+
 // Apply combined masks - returns blend factor (1.0=fully visible, 0.0=fully hidden)
 fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
     let mask1_type = uniforms.effect_flags.x;
@@ -325,13 +413,29 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
 
     var factor = 1.0;
     if mask1_enabled {
-        factor *= compute_ue_mask_blend_factor(
-            world_pos,
-            uniforms.mask_params,
-            mask1_rotation,
-            mask1_type,
-            uniforms.mask_blend,
-        );
+        // Use stretch-aware evaluation if mask has stretch-segment effects
+        let has_mask_stretch = uniforms.mask1_stretch1_params.y > 0.0001
+                            || uniforms.mask1_stretch2_params.y > 0.0001;
+        if has_mask_stretch {
+            factor *= compute_ue_mask_blend_factor_stretched(
+                world_pos,
+                uniforms.mask_params,
+                mask1_rotation,
+                mask1_type,
+                uniforms.mask_blend,
+                uniforms.mask1_stretch1_params,
+                uniforms.mask1_stretch2_params,
+                uniforms.mask1_stretch_info,
+            );
+        } else {
+            factor *= compute_ue_mask_blend_factor(
+                world_pos,
+                uniforms.mask_params,
+                mask1_rotation,
+                mask1_type,
+                uniforms.mask_blend,
+            );
+        }
     }
     if mask2_enabled {
         factor *= compute_ue_mask_blend_factor(
