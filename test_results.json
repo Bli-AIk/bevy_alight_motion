@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-08T13:12:36.621199+08:00",
+  "timestamp": "2026-03-08T13:45:59.236512+08:00",
   "summary": {
     "passed": 114,
     "warnings": 0,
@@ -287,11 +287,11 @@
     },
     "private/USER_71/3_ex": {
       "status": "fail",
-      "avg_similarity": 0.8271
+      "avg_similarity": 0.8625
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8262
+      "avg_similarity": 0.8759
     },
     "private/USER_71/3_ex2": {
       "status": "fail",

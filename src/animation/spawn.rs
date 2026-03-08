@@ -99,11 +99,11 @@ pub(crate) fn process_pending_layers(
             None => return true, // Parent not in our list, assume active
         };
 
-        // Use lifecycle_time for visibility (NOT affected by element speed).
-        // start_time/end_time are in scene time, not speed-adjusted time.
-        let parent_lifecycle_time = parent.animated.calc_lifecycle_time(global_time);
-        let parent_active = parent_lifecycle_time >= parent.start_time as f32
-            && parent_lifecycle_time < parent.end_time as f32;
+        // Use calc_local_time for visibility (applies accumulated parent speed).
+        // start_time/end_time are in parent-scene time, so we need speed scaling.
+        let parent_local_time = parent.animated.calc_local_time(global_time);
+        let parent_active = parent_local_time >= parent.start_time as f32
+            && parent_local_time < parent.end_time as f32;
 
         if !parent_active {
             return false; // Parent is not active
@@ -114,14 +114,14 @@ pub(crate) fn process_pending_layers(
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
-        // Use lifecycle_time for visibility (NOT affected by element speed).
-        // start_time/end_time are in scene time, not speed-adjusted time.
-        let lifecycle_time = layer.animated.calc_lifecycle_time(global_time);
+        // Use calc_local_time for visibility (applies accumulated parent speed).
+        // start_time/end_time are in parent-scene time, so we need speed scaling.
+        let local_time = layer.animated.calc_local_time(global_time);
 
         // Check if layer should be active (considering both own time range and parent's time range)
         // Note: AM uses half-open interval [start, end) for layer visibility
         let own_time_active =
-            lifecycle_time >= layer.start_time as f32 && lifecycle_time < layer.end_time as f32;
+            local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 
         // Check if all ancestors are active
         let ancestors_active =
@@ -136,12 +136,12 @@ pub(crate) fn process_pending_layers(
         unsafe {
             if DEBUG_FRAME < 5 && idx < 10 {
                 bevy::log::debug!(
-                    "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, lifecycle_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
+                    "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, local_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
                     layer.label,
                     layer.id,
                     layer.parent,
                     global_time,
-                    lifecycle_time,
+                    local_time,
                     layer.start_time,
                     layer.end_time,
                     own_time_active,
