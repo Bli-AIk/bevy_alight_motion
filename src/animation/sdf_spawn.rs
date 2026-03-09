@@ -17,6 +17,7 @@ use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color};
 use super::components::{AmSdfParams, AmSdfShapeParent};
 use super::visual::extract_fill_color;
 
+#[expect(clippy::too_many_arguments)]
 pub fn spawn_sdf_visual(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
