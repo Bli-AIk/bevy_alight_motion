@@ -128,7 +128,7 @@ fn create_stretch_bounds_mesh(
     meshes.add(new_mesh)
 }
 
-#[expect(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)] // reason: visual setup requires many GPU resource handles
 pub(crate) fn add_visual_components(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
