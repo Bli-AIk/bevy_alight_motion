@@ -200,27 +200,29 @@ pub(crate) fn get_shape_size(
     _fill_type: &str,
 ) -> (f32, f32) {
     for prop in properties {
-        if prop.name == "size" && prop.prop_type == "vec2" {
-            // Check static value first
-            // AM's size property represents half-extents, multiply by 2 for full dimensions
-            if !prop.value.is_empty()
-                && let Ok(size) = crate::schema::parse_vec2(&prop.value)
-            {
-                return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
-            }
-            // If no static value, check first keyframe
-            if !prop.keyframes.is_empty() {
-                // Find earliest keyframe
-                let mut sorted: Vec<_> = prop.keyframes.iter().collect();
-                sorted.sort_by(|a, b| {
-                    a.time
-                        .partial_cmp(&b.time)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                if let Ok(size) = crate::schema::parse_vec2(&sorted[0].value) {
-                    return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
-                }
-            }
+        if prop.name != "size" || prop.prop_type != "vec2" {
+            continue;
+        }
+        // Check static value first
+        // AM's size property represents half-extents, multiply by 2 for full dimensions
+        if !prop.value.is_empty()
+            && let Ok(size) = crate::schema::parse_vec2(&prop.value)
+        {
+            return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
+        }
+        // If no static value, check first keyframe
+        if prop.keyframes.is_empty() {
+            continue;
+        }
+        // Find earliest keyframe
+        let mut sorted: Vec<_> = prop.keyframes.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if let Ok(size) = crate::schema::parse_vec2(&sorted[0].value) {
+            return ((size[0] * 2.0).abs(), (size[1] * 2.0).abs());
         }
     }
     (100.0, 100.0)

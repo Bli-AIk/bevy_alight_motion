@@ -1,7 +1,7 @@
 # Rounded Rectangle
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-03-01 17:45:43
+> Last tested: 2026-03-07 20:20:21
 
 Rounded rectangle shape using SDF rendering.
 

@@ -201,162 +201,163 @@ fn spawn_loaded_projects_system(
             continue;
         }
 
-        if let Some(project) = projects.get(&root.handle) {
-            bevy::log::info!(
-                "Loading AM project: {} ({}x{}, {}ms)",
-                project.scene.title,
-                project.scene.width,
-                project.scene.height,
-                project.scene.total_time
-            );
-            bevy::log::debug!("  Media count: {}", project.scene.media.len());
-            bevy::log::debug!("  Images loaded: {}", project.images.len());
-            for uri in project.images.keys() {
-                bevy::log::trace!("    - {}", uri);
-            }
-            bevy::log::debug!("  Layers count: {}", project.scene.layers.len());
-
-            // Update playback duration
-            playback.total_time_ms = project.scene.total_time as f32;
-
-            // Apply resolution scaling and compute inverse scale for embed children
-            let mut fit_scale = 1.0f32;
-            match *resolution_config {
-                AmProjectResolution::None => {
-                    // Default scale 1.0
-                }
-                AmProjectResolution::FitWindow => {
-                    if let Some(window) = window_query.iter().next() {
-                        let s_x = window.width() / (project.scene.width as f32);
-                        let s_y = window.height() / (project.scene.height as f32);
-                        fit_scale = s_x.min(s_y);
-                        transform.scale = Vec3::splat(fit_scale);
-                        bevy::log::info!(
-                            "Scaled project to fit window: scale={:.4} (win={}x{})",
-                            fit_scale,
-                            window.width(),
-                            window.height()
-                        );
-                    }
-                }
-                AmProjectResolution::CoverWindow => {
-                    if let Some(window) = window_query.iter().next() {
-                        let s_x = window.width() / (project.scene.width as f32);
-                        let s_y = window.height() / (project.scene.height as f32);
-                        fit_scale = s_x.max(s_y);
-                        transform.scale = Vec3::splat(fit_scale);
-                        bevy::log::info!(
-                            "Scaled project to cover window: scale={:.4} (win={}x{})",
-                            fit_scale,
-                            window.width(),
-                            window.height()
-                        );
-                    }
-                }
-                AmProjectResolution::FixedWidth(target_width) => {
-                    fit_scale = target_width / (project.scene.width as f32);
-                    transform.scale = Vec3::splat(fit_scale);
-                    bevy::log::info!(
-                        "Scaled project to fixed width {}: scale={:.4}",
-                        target_width,
-                        fit_scale
-                    );
-                }
-                AmProjectResolution::FixedHeight(target_height) => {
-                    fit_scale = target_height / (project.scene.height as f32);
-                    transform.scale = Vec3::splat(fit_scale);
-                    bevy::log::info!(
-                        "Scaled project to fixed height {}: scale={:.4}",
-                        target_height,
-                        fit_scale
-                    );
-                }
-            }
-
-            // Build scene configuration
-            let config = AmSceneConfig {
-                canvas_width: project.scene.width as f32,
-                canvas_height: project.scene.height as f32,
-                scene_fps: project.scene.fps as f32,
-                scene_total_time: project.scene.total_time as f32,
-                ..Default::default()
-            };
-
-            // Collect pending layers instead of spawning immediately
-            let pending_layers = crate::scene::collect_pending_layers(
-                &project.scene,
-                &project.fonts,
-                &project.font_metrics,
-                &config,
-            );
-
-            bevy::log::info!(
-                "Prepared {} pending layers for lazy spawning",
-                pending_layers.len()
-            );
-
-            // Create layers container as child of project root
-            let layers_container = commands
-                .spawn((
-                    Name::new("AmLayersContainer"),
-                    crate::scene::AmLayersContainer,
-                    Transform::default(),
-                    GlobalTransform::default(),
-                    Visibility::Inherited,
-                    InheritedVisibility::default(),
-                    ViewVisibility::default(),
-                ))
-                .id();
-
-            commands.entity(entity).add_child(layers_container);
-
-            // Create embed contents container as SIBLING of project root (not child!)
-            // This container has identity Transform, so embed content coordinates remain unchanged
-            // Embed content uses internal canvas coordinates and renders to RTT camera
-            // It must NOT inherit the project's fit_scale Transform
-            let embed_contents_container = commands
-                .spawn((
-                    Name::new("AmEmbedContentsContainer"),
-                    crate::scene::AmEmbedContentsContainer,
-                    Transform::default(),
-                    GlobalTransform::default(),
-                    Visibility::Inherited,
-                    InheritedVisibility::default(),
-                    ViewVisibility::default(),
-                ))
-                .id();
-
-            // Create RTT cameras container as SIBLING of project root
-            // This container organizes all EmbedSceneRttCamera entities
-            let rtt_cameras_container = commands
-                .spawn((
-                    Name::new("AmRttCamerasContainer"),
-                    crate::scene::AmRttCamerasContainer,
-                    Transform::default(),
-                    GlobalTransform::default(),
-                    Visibility::Inherited,
-                    InheritedVisibility::default(),
-                    ViewVisibility::default(),
-                ))
-                .id();
-
-            // Add the pending layers component to the project root
-            // Store inverse fit scale for embed children coordinate adjustment
-            // Include layers_container entity for spawning layers as its children
-            commands
-                .entity(entity)
-                .insert(crate::scene::AmPendingLayers {
-                    layers: pending_layers,
-                    spawned_entities: std::collections::HashMap::new(),
-                    inv_fit_scale: 1.0 / fit_scale,
-                    layers_container: Some(layers_container),
-                    embed_contents_container: Some(embed_contents_container),
-                    rtt_cameras_container: Some(rtt_cameras_container),
-                });
-
-            root.spawned = true;
-            bevy::log::info!("Project ready for playback");
+        let Some(project) = projects.get(&root.handle) else {
+            continue;
+        };
+        bevy::log::info!(
+            "Loading AM project: {} ({}x{}, {}ms)",
+            project.scene.title,
+            project.scene.width,
+            project.scene.height,
+            project.scene.total_time
+        );
+        bevy::log::debug!("  Media count: {}", project.scene.media.len());
+        bevy::log::debug!("  Images loaded: {}", project.images.len());
+        for uri in project.images.keys() {
+            bevy::log::trace!("    - {}", uri);
         }
+        bevy::log::debug!("  Layers count: {}", project.scene.layers.len());
+
+        // Update playback duration
+        playback.total_time_ms = project.scene.total_time as f32;
+
+        // Apply resolution scaling and compute inverse scale for embed children
+        let mut fit_scale = 1.0f32;
+        match *resolution_config {
+            AmProjectResolution::None => {
+                // Default scale 1.0
+            }
+            AmProjectResolution::FitWindow => {
+                if let Some(window) = window_query.iter().next() {
+                    let s_x = window.width() / (project.scene.width as f32);
+                    let s_y = window.height() / (project.scene.height as f32);
+                    fit_scale = s_x.min(s_y);
+                    transform.scale = Vec3::splat(fit_scale);
+                    bevy::log::info!(
+                        "Scaled project to fit window: scale={:.4} (win={}x{})",
+                        fit_scale,
+                        window.width(),
+                        window.height()
+                    );
+                }
+            }
+            AmProjectResolution::CoverWindow => {
+                if let Some(window) = window_query.iter().next() {
+                    let s_x = window.width() / (project.scene.width as f32);
+                    let s_y = window.height() / (project.scene.height as f32);
+                    fit_scale = s_x.max(s_y);
+                    transform.scale = Vec3::splat(fit_scale);
+                    bevy::log::info!(
+                        "Scaled project to cover window: scale={:.4} (win={}x{})",
+                        fit_scale,
+                        window.width(),
+                        window.height()
+                    );
+                }
+            }
+            AmProjectResolution::FixedWidth(target_width) => {
+                fit_scale = target_width / (project.scene.width as f32);
+                transform.scale = Vec3::splat(fit_scale);
+                bevy::log::info!(
+                    "Scaled project to fixed width {}: scale={:.4}",
+                    target_width,
+                    fit_scale
+                );
+            }
+            AmProjectResolution::FixedHeight(target_height) => {
+                fit_scale = target_height / (project.scene.height as f32);
+                transform.scale = Vec3::splat(fit_scale);
+                bevy::log::info!(
+                    "Scaled project to fixed height {}: scale={:.4}",
+                    target_height,
+                    fit_scale
+                );
+            }
+        }
+
+        // Build scene configuration
+        let config = AmSceneConfig {
+            canvas_width: project.scene.width as f32,
+            canvas_height: project.scene.height as f32,
+            scene_fps: project.scene.fps as f32,
+            scene_total_time: project.scene.total_time as f32,
+            ..Default::default()
+        };
+
+        // Collect pending layers instead of spawning immediately
+        let pending_layers = crate::scene::collect_pending_layers(
+            &project.scene,
+            &project.fonts,
+            &project.font_metrics,
+            &config,
+        );
+
+        bevy::log::info!(
+            "Prepared {} pending layers for lazy spawning",
+            pending_layers.len()
+        );
+
+        // Create layers container as child of project root
+        let layers_container = commands
+            .spawn((
+                Name::new("AmLayersContainer"),
+                crate::scene::AmLayersContainer,
+                Transform::default(),
+                GlobalTransform::default(),
+                Visibility::Inherited,
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
+
+        commands.entity(entity).add_child(layers_container);
+
+        // Create embed contents container as SIBLING of project root (not child!)
+        // This container has identity Transform, so embed content coordinates remain unchanged
+        // Embed content uses internal canvas coordinates and renders to RTT camera
+        // It must NOT inherit the project's fit_scale Transform
+        let embed_contents_container = commands
+            .spawn((
+                Name::new("AmEmbedContentsContainer"),
+                crate::scene::AmEmbedContentsContainer,
+                Transform::default(),
+                GlobalTransform::default(),
+                Visibility::Inherited,
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
+
+        // Create RTT cameras container as SIBLING of project root
+        // This container organizes all EmbedSceneRttCamera entities
+        let rtt_cameras_container = commands
+            .spawn((
+                Name::new("AmRttCamerasContainer"),
+                crate::scene::AmRttCamerasContainer,
+                Transform::default(),
+                GlobalTransform::default(),
+                Visibility::Inherited,
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
+
+        // Add the pending layers component to the project root
+        // Store inverse fit scale for embed children coordinate adjustment
+        // Include layers_container entity for spawning layers as its children
+        commands
+            .entity(entity)
+            .insert(crate::scene::AmPendingLayers {
+                layers: pending_layers,
+                spawned_entities: std::collections::HashMap::new(),
+                inv_fit_scale: 1.0 / fit_scale,
+                layers_container: Some(layers_container),
+                embed_contents_container: Some(embed_contents_container),
+                rtt_cameras_container: Some(rtt_cameras_container),
+            });
+
+        root.spawned = true;
+        bevy::log::info!("Project ready for playback");
     }
 }
 

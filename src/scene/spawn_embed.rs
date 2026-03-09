@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
-use crate::effects::NeedsStrategyEvaluation;
+use crate::effects::{AmGroupFill, GroupFillType, NeedsStrategyEvaluation};
 use crate::loader::FontMetrics;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 use crate::sdf::AmSdfShaders;
@@ -18,8 +18,17 @@ use super::effects::*;
 use super::helpers::*;
 use super::spawn::spawn_scene;
 
+/// Parse a color string into a linear `Vec4`, returning `fallback` on failure.
+fn parse_color_to_linear_vec4(color_str: &str, fallback: Vec4) -> Vec4 {
+    let Ok(c) = crate::schema::parse_color(color_str) else {
+        return fallback;
+    };
+    let srgb = bevy::color::Color::srgba(c[0], c[1], c[2], c[3]);
+    let linear = srgb.to_linear();
+    Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
+}
+
 /// Spawn an embedded scene.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_embed_scene(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -132,6 +141,10 @@ pub(crate) fn spawn_embed_scene(
                 stretch_amount: AmAnimatedFloat::default(),
                 stretch_offset: AmAnimatedFloat::default(),
                 stretch_smooth: AmAnimatedFloat::default(),
+                stretch_seg2_angle: AmAnimatedFloat::default(),
+                stretch_seg2_amount: AmAnimatedFloat::default(),
+                stretch_seg2_offset: AmAnimatedFloat::default(),
+                stretch_seg2_smooth: AmAnimatedFloat::default(),
                 blur_strength: AmAnimatedFloat::default(),
                 speed_multiplier: config.speed_multiplier,
                 element_speed: 1.0,
@@ -293,69 +306,47 @@ pub(crate) fn spawn_embed_scene(
         .id();
 
     // Insert group fill component if this embed has a fill type
-    {
-        use crate::effects::{AmGroupFill, GroupFillType};
-        match embed.fill_type.as_str() {
-            "none" => {
-                commands.entity(entity).insert(AmGroupFill {
-                    fill_type: GroupFillType::None,
-                    fill_color: Vec4::ZERO,
-                });
-            }
-            "color" => {
-                let color = if let Some(ref fc) = embed.fill_color {
-                    if let Ok(c) = crate::schema::parse_color(&fc.value) {
-                        let srgb = bevy::color::Color::srgba(c[0], c[1], c[2], c[3]);
-                        let linear = srgb.to_linear();
-                        Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
-                    } else {
-                        Vec4::ONE
-                    }
-                } else {
-                    Vec4::ONE
-                };
-                commands.entity(entity).insert(AmGroupFill {
-                    fill_type: GroupFillType::Color,
-                    fill_color: color,
-                });
-            }
-            "gradient" => {
-                if let Some(ref g) = embed.gradient {
-                    let gradient_type = match g.gradient_type.as_str() {
-                        "linear" => 1u8,
-                        "radial" => 2u8,
-                        "sweep" => 3u8,
-                        _ => 1u8,
-                    };
-                    let start_color = if let Ok(c) = crate::schema::parse_color(&g.start_color) {
-                        let srgb = bevy::color::Color::srgba(c[0], c[1], c[2], c[3]);
-                        let linear = srgb.to_linear();
-                        Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
-                    } else {
-                        Vec4::ZERO
-                    };
-                    let end_color = if let Ok(c) = crate::schema::parse_color(&g.end_color) {
-                        let srgb = bevy::color::Color::srgba(c[0], c[1], c[2], c[3]);
-                        let linear = srgb.to_linear();
-                        Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
-                    } else {
-                        Vec4::ONE
-                    };
-                    let start_pt = g.start.unwrap_or([0.5, 0.0]);
-                    let end_pt = g.end.unwrap_or([0.5, 1.0]);
-                    commands.entity(entity).insert(AmGroupFill {
-                        fill_type: GroupFillType::Gradient {
-                            gradient_type,
-                            start_color,
-                            end_color,
-                            points: Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]),
-                        },
-                        fill_color: Vec4::ONE,
-                    });
-                }
-            }
-            _ => {}
+    match embed.fill_type.as_str() {
+        "none" => {
+            commands.entity(entity).insert(AmGroupFill {
+                fill_type: GroupFillType::None,
+                fill_color: Vec4::ZERO,
+            });
         }
+        "color" => {
+            let color = match embed.fill_color {
+                Some(ref fc) => parse_color_to_linear_vec4(&fc.value, Vec4::ONE),
+                None => Vec4::ONE,
+            };
+            commands.entity(entity).insert(AmGroupFill {
+                fill_type: GroupFillType::Color,
+                fill_color: color,
+            });
+        }
+        "gradient" => {
+            if let Some(ref g) = embed.gradient {
+                let gradient_type = match g.gradient_type.as_str() {
+                    "linear" => 1u8,
+                    "radial" => 2u8,
+                    "sweep" => 3u8,
+                    _ => 1u8,
+                };
+                let start_color = parse_color_to_linear_vec4(&g.start_color, Vec4::ZERO);
+                let end_color = parse_color_to_linear_vec4(&g.end_color, Vec4::ONE);
+                let start_pt = g.start.unwrap_or([0.5, 0.0]);
+                let end_pt = g.end.unwrap_or([0.5, 1.0]);
+                commands.entity(entity).insert(AmGroupFill {
+                    fill_type: GroupFillType::Gradient {
+                        gradient_type,
+                        start_color,
+                        end_color,
+                        points: Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]),
+                    },
+                    fill_color: Vec4::ONE,
+                });
+            }
+        }
+        _ => {}
     }
 
     // Recursively spawn nested scene with accumulated time offset

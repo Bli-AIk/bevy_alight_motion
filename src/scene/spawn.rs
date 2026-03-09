@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::loader::FontMetrics;
-use crate::schema::{AmLayer, AmScene};
+use crate::schema::{AmEmbedScene, AmLayer, AmScene};
 use crate::sdf::AmSdfShaders;
 
 use super::components::*;
@@ -20,7 +20,199 @@ use super::spawn_null::spawn_null;
 use super::spawn_shape::spawn_shape;
 use super::spawn_visual::{spawn_image, spawn_text};
 
-#[allow(clippy::too_many_arguments)]
+/// Attaches an entity to its parent layer or the scene root.
+fn attach_to_parent(
+    commands: &mut Commands,
+    entity: Entity,
+    layer_parent: u64,
+    parent_relations: &mut Vec<(Entity, u64)>,
+    scene_parent: Entity,
+) {
+    if layer_parent != 0 {
+        parent_relations.push((entity, layer_parent));
+    } else {
+        commands.entity(scene_parent).add_child(entity);
+    }
+}
+
+/// Handles spawning of an embedded scene layer, including echo (echokf) effect duplication.
+fn handle_embed_layer(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    embed: &AmEmbedScene,
+    images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    white_pixel: &Handle<Image>,
+    sdf_shaders: &AmSdfShaders,
+    config: &AmSceneConfig,
+    z: f32,
+    entity_map: &mut HashMap<u64, Entity>,
+    parent_relations: &mut Vec<(Entity, u64)>,
+    scene_parent: Entity,
+) {
+    let echokf = extract_echokf_effect(&embed.effects);
+    let max_count = echokf.max_count();
+
+    if !echokf.enabled || max_count == 0 {
+        let entity = spawn_embed_scene(
+            commands,
+            shaders,
+            embed,
+            images,
+            fonts,
+            font_metrics,
+            white_pixel,
+            sdf_shaders,
+            config,
+            z,
+        );
+        entity_map.insert(embed.id, entity);
+        attach_to_parent(
+            commands,
+            entity,
+            embed.parent,
+            parent_relations,
+            scene_parent,
+        );
+        return;
+    }
+
+    let seconds = echokf.static_seconds();
+    eprintln!(
+        "[ECHOKF] embed '{}' id={}: max_count={}, seconds={:.3}, mode={}, alpha_kf={}",
+        embed.label,
+        embed.id,
+        max_count,
+        seconds,
+        echokf.mode,
+        echokf.alpha.keyframes.len()
+    );
+
+    let base_echo_alpha = crate::animation::EchoAlphaConfig {
+        alpha_keyframes: echokf.alpha.clone(),
+        fraction: 0.0,
+        parent_start: embed.start_time,
+        parent_end: embed.end_time,
+        parent_time_offset: config.time_offset,
+        parent_speed: config.speed_multiplier,
+    };
+
+    if echokf.mode == 0 {
+        // Mode 0 (atop): render original first (bottom), echoes on top
+        let entity = spawn_embed_scene(
+            commands,
+            shaders,
+            embed,
+            images,
+            fonts,
+            font_metrics,
+            white_pixel,
+            sdf_shaders,
+            config,
+            z,
+        );
+        entity_map.insert(embed.id, entity);
+        attach_to_parent(
+            commands,
+            entity,
+            embed.parent,
+            parent_relations,
+            scene_parent,
+        );
+
+        for i in 0..max_count {
+            let echo_index = (max_count - 1 - i) as f32;
+            let fraction = echo_index / max_count as f32;
+            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+            let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
+
+            let mut echo_config = config.clone();
+            echo_config.echo_time_shift_ms += time_shift_ms;
+            echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                fraction,
+                ..base_echo_alpha.clone()
+            });
+
+            let echo_entity = spawn_embed_scene(
+                commands,
+                shaders,
+                embed,
+                images,
+                fonts,
+                font_metrics,
+                white_pixel,
+                sdf_shaders,
+                &echo_config,
+                echo_z,
+            );
+            attach_to_parent(
+                commands,
+                echo_entity,
+                embed.parent,
+                parent_relations,
+                scene_parent,
+            );
+        }
+    } else {
+        // Mode 1 (behind): echoes first, then original on top
+        for i in 0..max_count {
+            let echo_index = i as f32;
+            let fraction = echo_index / max_count as f32;
+            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
+            let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
+
+            let mut echo_config = config.clone();
+            echo_config.echo_time_shift_ms += time_shift_ms;
+            echo_config.echo_alpha_config = Some(crate::animation::EchoAlphaConfig {
+                fraction,
+                ..base_echo_alpha.clone()
+            });
+
+            let echo_entity = spawn_embed_scene(
+                commands,
+                shaders,
+                embed,
+                images,
+                fonts,
+                font_metrics,
+                white_pixel,
+                sdf_shaders,
+                &echo_config,
+                echo_z,
+            );
+            attach_to_parent(
+                commands,
+                echo_entity,
+                embed.parent,
+                parent_relations,
+                scene_parent,
+            );
+        }
+
+        let entity = spawn_embed_scene(
+            commands,
+            shaders,
+            embed,
+            images,
+            fonts,
+            font_metrics,
+            white_pixel,
+            sdf_shaders,
+            config,
+            z,
+        );
+        entity_map.insert(embed.id, entity);
+        attach_to_parent(
+            commands,
+            entity,
+            embed.parent,
+            parent_relations,
+            scene_parent,
+        );
+    }
+}
+
 pub fn spawn_scene(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -140,159 +332,21 @@ pub fn spawn_scene(
                 prev_layer_info = Some((entity, null.id, String::new()));
             }
             AmLayer::EmbedScene(embed) => {
-                // Check for echokf effect on this embed
-                let echokf = extract_echokf_effect(&embed.effects);
-
-                let max_count = echokf.max_count();
-                if echokf.enabled && max_count > 0 {
-                    let seconds = echokf.static_seconds();
-                    eprintln!(
-                        "[ECHOKF] embed '{}' id={}: max_count={}, seconds={:.3}, mode={}, alpha_kf={}",
-                        embed.label,
-                        embed.id,
-                        max_count,
-                        seconds,
-                        echokf.mode,
-                        echokf.alpha.keyframes.len()
-                    );
-
-                    // Build base echo alpha config with parent timing
-                    let base_echo_alpha = crate::animation::EchoAlphaConfig {
-                        alpha_keyframes: echokf.alpha.clone(),
-                        fraction: 0.0,
-                        parent_start: embed.start_time,
-                        parent_end: embed.end_time,
-                        parent_time_offset: config.time_offset,
-                        parent_speed: config.speed_multiplier,
-                    };
-
-                    if echokf.mode == 0 {
-                        // Mode 0 (atop): render original first (bottom), echoes on top
-                        let entity = spawn_embed_scene(
-                            commands,
-                            shaders,
-                            embed,
-                            images,
-                            fonts,
-                            font_metrics,
-                            white_pixel,
-                            sdf_shaders,
-                            config,
-                            z,
-                        );
-                        entity_map.insert(embed.id, entity);
-                        if embed.parent != 0 {
-                            parent_relations.push((entity, embed.parent));
-                        } else {
-                            commands.entity(parent).add_child(entity);
-                        }
-
-                        for i in 0..max_count {
-                            let echo_index = (max_count - 1 - i) as f32;
-                            let fraction = echo_index / max_count as f32;
-                            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
-                            let echo_z = z + (i as f32 + 1.0) * config.z_spacing * 0.001;
-
-                            let mut echo_config = config.clone();
-                            echo_config.echo_time_shift_ms += time_shift_ms;
-                            echo_config.echo_alpha_config =
-                                Some(crate::animation::EchoAlphaConfig {
-                                    fraction,
-                                    ..base_echo_alpha.clone()
-                                });
-
-                            let echo_entity = spawn_embed_scene(
-                                commands,
-                                shaders,
-                                embed,
-                                images,
-                                fonts,
-                                font_metrics,
-                                white_pixel,
-                                sdf_shaders,
-                                &echo_config,
-                                echo_z,
-                            );
-                            if embed.parent != 0 {
-                                parent_relations.push((echo_entity, embed.parent));
-                            } else {
-                                commands.entity(parent).add_child(echo_entity);
-                            }
-                        }
-                    } else {
-                        // Mode 1 (behind): echoes first, then original on top
-                        for i in 0..max_count {
-                            let echo_index = i as f32;
-                            let fraction = echo_index / max_count as f32;
-                            let time_shift_ms = (1.0 - fraction) * seconds * 1000.0;
-                            let echo_z = z - (max_count - i) as f32 * config.z_spacing * 0.001;
-
-                            let mut echo_config = config.clone();
-                            echo_config.echo_time_shift_ms += time_shift_ms;
-                            echo_config.echo_alpha_config =
-                                Some(crate::animation::EchoAlphaConfig {
-                                    fraction,
-                                    ..base_echo_alpha.clone()
-                                });
-
-                            let echo_entity = spawn_embed_scene(
-                                commands,
-                                shaders,
-                                embed,
-                                images,
-                                fonts,
-                                font_metrics,
-                                white_pixel,
-                                sdf_shaders,
-                                &echo_config,
-                                echo_z,
-                            );
-                            if embed.parent != 0 {
-                                parent_relations.push((echo_entity, embed.parent));
-                            } else {
-                                commands.entity(parent).add_child(echo_entity);
-                            }
-                        }
-
-                        let entity = spawn_embed_scene(
-                            commands,
-                            shaders,
-                            embed,
-                            images,
-                            fonts,
-                            font_metrics,
-                            white_pixel,
-                            sdf_shaders,
-                            config,
-                            z,
-                        );
-                        entity_map.insert(embed.id, entity);
-                        if embed.parent != 0 {
-                            parent_relations.push((entity, embed.parent));
-                        } else {
-                            commands.entity(parent).add_child(entity);
-                        }
-                    }
-                } else {
-                    let entity = spawn_embed_scene(
-                        commands,
-                        shaders,
-                        embed,
-                        images,
-                        fonts,
-                        font_metrics,
-                        white_pixel,
-                        sdf_shaders,
-                        config,
-                        z,
-                    );
-                    entity_map.insert(embed.id, entity);
-                    if embed.parent != 0 {
-                        parent_relations.push((entity, embed.parent));
-                    } else {
-                        commands.entity(parent).add_child(entity);
-                    }
-                }
+                handle_embed_layer(
+                    commands,
+                    shaders,
+                    embed,
+                    images,
+                    fonts,
+                    font_metrics,
+                    white_pixel,
+                    sdf_shaders,
+                    config,
+                    z,
+                    &mut entity_map,
+                    &mut parent_relations,
+                    parent,
+                );
                 prev_layer_info = Some((
                     entity_map
                         .get(&embed.id)

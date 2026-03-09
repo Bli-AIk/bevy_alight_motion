@@ -148,6 +148,14 @@ avg_threshold = 0.96
 avg_threshold = 0.92
 max_failed_rate = 0.90
 
+# Stretch segment ex4 - rotated sprite with non-uniform scale
+[overrides."effects/stretch-segment/ex4"]
+max_failed_rate = 0.20
+
+# Stretch segment multi-effect test
+[overrides."effects/stretch-segment/muti/basic"]
+max_failed_rate = 0.15
+
 [overrides."effects/scale-assist/ex"]
 frame_offset = 0.5
 avg_threshold = 0.97

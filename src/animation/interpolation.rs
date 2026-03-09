@@ -239,6 +239,215 @@ pub fn parse_keyframe_vec2(s: &str) -> Option<[f32; 2]> {
     crate::schema::parse_vec2(s).ok()
 }
 
+// ─── AM reverseInterpolateFirstFrame ───────────────────────────────────
+//
+// AM applies backward extrapolation for transform properties (location, scale,
+// rotation) when the first keyframe is within one frame-delta of t=0.
+// This prevents visual "pops" when a shape first appears.
+//
+// Algorithm (from AM source KeyableKt.reverseInterpolateFirstFrame):
+// 1. If first_kf.time <= frame_delta, create a synthetic keyframe at
+//    t = first_kf.time - 2 * frame_delta
+// 2. Synthetic value uses backward extrapolation via the NEXT keyframe's easing
+// 3. At query time, interpolate between synthetic KF and first KF (linear easing)
+
+/// Compute reverse-interpolated value for a float property.
+/// Returns `Some(value)` if reverse interpolation applies, `None` otherwise.
+fn reverse_interpolate_float_impl(
+    keyframes: &[AmKeyframe],
+    t: f32,
+    frame_delta: f32,
+) -> Option<f32> {
+    if keyframes.len() < 2 || frame_delta <= 0.0 {
+        return None;
+    }
+    let mut sorted: Vec<&AmKeyframe> = keyframes.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let first = sorted[0];
+    // Only apply if t is before first KF and first KF is within one frame-delta of t=0
+    if t >= first.time || first.time > frame_delta || first.time < -frame_delta {
+        return None;
+    }
+
+    let second = sorted[1];
+    let span = second.time - first.time;
+    if span <= 0.0 {
+        return None;
+    }
+
+    let synth_time = first.time - frame_delta * 2.0;
+    // Fraction of synth position relative to first→second KF span (will be negative)
+    let ratio = (synth_time - first.time) / span;
+    let easing = second
+        .easing
+        .as_ref()
+        .map(|e| Easing::parse(e))
+        .unwrap_or_default();
+    let easing_output = easing.evaluate(ratio);
+
+    let v_first: f32 = first.value.parse().ok()?;
+    let v_second: f32 = second.value.parse().ok()?;
+    let v_synth = lerp(v_first, v_second, easing_output);
+
+    // Interpolate between synthetic and first KF (linear, first KF has no easing)
+    let denom = first.time - synth_time;
+    if denom.abs() < f32::EPSILON {
+        return Some(v_first);
+    }
+    let fraction = (t - synth_time) / denom;
+    Some(lerp(v_synth, v_first, fraction))
+}
+
+/// Compute reverse-interpolated value for a Vec3 property.
+fn reverse_interpolate_vec3_impl(
+    keyframes: &[AmKeyframe],
+    t: f32,
+    frame_delta: f32,
+) -> Option<[f32; 3]> {
+    if keyframes.len() < 2 || frame_delta <= 0.0 {
+        return None;
+    }
+    let mut sorted: Vec<&AmKeyframe> = keyframes.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let first = sorted[0];
+    if t >= first.time || first.time > frame_delta || first.time < -frame_delta {
+        return None;
+    }
+
+    let second = sorted[1];
+    let span = second.time - first.time;
+    if span <= 0.0 {
+        return None;
+    }
+
+    let synth_time = first.time - frame_delta * 2.0;
+    let ratio = (synth_time - first.time) / span;
+    let easing = second
+        .easing
+        .as_ref()
+        .map(|e| Easing::parse(e))
+        .unwrap_or_default();
+    let easing_output = easing.evaluate(ratio);
+
+    let v_first = parse_keyframe_vec3(&first.value)?;
+    let v_second = parse_keyframe_vec3(&second.value).unwrap_or(v_first);
+
+    let v_synth = [
+        lerp(v_first[0], v_second[0], easing_output),
+        lerp(v_first[1], v_second[1], easing_output),
+        lerp(v_first[2], v_second[2], easing_output),
+    ];
+
+    let denom = first.time - synth_time;
+    if denom.abs() < f32::EPSILON {
+        return Some(v_first);
+    }
+    let fraction = (t - synth_time) / denom;
+    Some([
+        lerp(v_synth[0], v_first[0], fraction),
+        lerp(v_synth[1], v_first[1], fraction),
+        lerp(v_synth[2], v_first[2], fraction),
+    ])
+}
+
+/// Compute reverse-interpolated value for a Vec2 property.
+fn reverse_interpolate_vec2_impl(
+    keyframes: &[AmKeyframe],
+    t: f32,
+    frame_delta: f32,
+) -> Option<[f32; 2]> {
+    if keyframes.len() < 2 || frame_delta <= 0.0 {
+        return None;
+    }
+    let mut sorted: Vec<&AmKeyframe> = keyframes.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let first = sorted[0];
+    if t >= first.time || first.time > frame_delta || first.time < -frame_delta {
+        return None;
+    }
+
+    let second = sorted[1];
+    let span = second.time - first.time;
+    if span <= 0.0 {
+        return None;
+    }
+
+    let synth_time = first.time - frame_delta * 2.0;
+    let ratio = (synth_time - first.time) / span;
+    let easing = second
+        .easing
+        .as_ref()
+        .map(|e| Easing::parse(e))
+        .unwrap_or_default();
+    let easing_output = easing.evaluate(ratio);
+
+    let v_first = parse_keyframe_vec2(&first.value).unwrap_or([1.0, 1.0]);
+    let v_second = parse_keyframe_vec2(&second.value).unwrap_or(v_first);
+
+    let v_synth = [
+        lerp(v_first[0], v_second[0], easing_output),
+        lerp(v_first[1], v_second[1], easing_output),
+    ];
+
+    let denom = first.time - synth_time;
+    if denom.abs() < f32::EPSILON {
+        return Some(v_first);
+    }
+    let fraction = (t - synth_time) / denom;
+    Some([
+        lerp(v_synth[0], v_first[0], fraction),
+        lerp(v_synth[1], v_first[1], fraction),
+    ])
+}
+
+/// Interpolate a Vec3 property with AM's reverse-interpolation for transforms.
+/// `frame_delta` is one frame's duration in normalized time (1/fps / element_duration_secs).
+pub fn interpolate_vec3_reverse(
+    prop: &AmAnimatedVec3,
+    t: f32,
+    frame_delta: f32,
+) -> Option<[f32; 3]> {
+    if let Some(val) = reverse_interpolate_vec3_impl(&prop.keyframes, t, frame_delta) {
+        return Some(val);
+    }
+    interpolate_vec3(prop, t)
+}
+
+/// Interpolate a Vec2 property with AM's reverse-interpolation for transforms.
+pub fn interpolate_vec2_reverse(
+    prop: &AmAnimatedVec2,
+    t: f32,
+    frame_delta: f32,
+) -> Option<[f32; 2]> {
+    if let Some(val) = reverse_interpolate_vec2_impl(&prop.keyframes, t, frame_delta) {
+        return Some(val);
+    }
+    interpolate_vec2(prop, t)
+}
+
+/// Interpolate a float property with AM's reverse-interpolation for transforms.
+pub fn interpolate_float_reverse(prop: &AmAnimatedFloat, t: f32, frame_delta: f32) -> Option<f32> {
+    if let Some(val) = reverse_interpolate_float_impl(&prop.keyframes, t, frame_delta) {
+        return Some(val);
+    }
+    interpolate_float(prop, t)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

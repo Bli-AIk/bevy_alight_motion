@@ -1,4 +1,4 @@
-#![allow(clippy::collapsible_if, deprecated, dead_code)]
+#![allow(deprecated, dead_code)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
 //!
@@ -19,7 +19,6 @@
 //! cargo run -p bevy_alight_motion --example player --features video-debug -- <project_name>
 //! ```
 //!
-#![allow(clippy::collapsible_else_if, clippy::manual_is_multiple_of)]
 //! ### Run Video Comparison Test / 运行视频比对测试
 //! ```bash
 //! cargo run -p bevy_alight_motion --example player --features video-comparison -- <project_name>
@@ -464,74 +463,78 @@ fn toggle_debug_overlay(
     overlay_query: Query<Entity, With<DebugOverlay>>,
     window_query: Query<&Window>,
 ) {
-    if keyboard.just_pressed(KeyCode::F4) {
-        settings.show_overlay = !settings.show_overlay;
-
-        if settings.show_overlay {
-            // Remove any existing overlay entity before spawning a new one.
-            for entity in overlay_query.iter() {
-                commands.entity(entity).despawn();
-            }
-
-            // Look up the most recently modified image in the debug folder.
-            if let Some(latest_image_path) = find_latest_debug_image() {
-                println!("Loading debug overlay image: {}", latest_image_path);
-
-                // Load the selected image asset.
-                let image_handle: Handle<Image> = asset_server.load(&latest_image_path);
-
-                // Query the current window size for correct scaling.
-                if let Ok(window) = window_query.single() {
-                    let window_width = window.width();
-                    let window_height = window.height();
-
-                    // Spawn the overlay node with a semi-transparent background.
-                    commands
-                        .spawn((
-                            Name::new("DebugOverlay"),
-                            DebugOverlay,
-                            Node {
-                                position_type: PositionType::Absolute,
-                                width: Val::Percent(100.0),
-                                height: Val::Percent(100.0),
-                                top: Val::Px(0.0),
-                                left: Val::Px(0.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            ZIndex(1000),
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                ImageNode {
-                                    image: image_handle,
-                                    // Render the image as semi-transparent.
-                                    color: Color::srgba(1.0, 1.0, 1.0, 0.5),
-                                    ..default()
-                                },
-                                Node {
-                                    // Scale the image to fit the window while preserving aspect ratio.
-                                    width: Val::Percent(100.0),
-                                    height: Val::Percent(100.0),
-                                    max_width: Val::Px(window_width),
-                                    max_height: Val::Px(window_height),
-                                    ..default()
-                                },
-                            ));
-                        });
-
-                    println!("Debug image overlay: ON");
-                }
-            }
-        } else {
-            // Remove the overlay entity.
-            for entity in overlay_query.iter() {
-                commands.entity(entity).despawn();
-            }
-            println!("Debug image overlay: OFF");
-        }
+    if !keyboard.just_pressed(KeyCode::F4) {
+        return;
     }
+
+    settings.show_overlay = !settings.show_overlay;
+
+    if !settings.show_overlay {
+        for entity in overlay_query.iter() {
+            commands.entity(entity).despawn();
+        }
+        println!("Debug image overlay: OFF");
+        return;
+    }
+
+    // Remove any existing overlay entity before spawning a new one.
+    for entity in overlay_query.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    // Look up the most recently modified image in the debug folder.
+    let Some(latest_image_path) = find_latest_debug_image() else {
+        return;
+    };
+    println!("Loading debug overlay image: {}", latest_image_path);
+
+    // Load the selected image asset.
+    let image_handle: Handle<Image> = asset_server.load(&latest_image_path);
+
+    // Query the current window size for correct scaling.
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let window_width = window.width();
+    let window_height = window.height();
+
+    // Spawn the overlay node with a semi-transparent background.
+    commands
+        .spawn((
+            Name::new("DebugOverlay"),
+            DebugOverlay,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ZIndex(1000),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                ImageNode {
+                    image: image_handle,
+                    // Render the image as semi-transparent.
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                    ..default()
+                },
+                Node {
+                    // Scale the image to fit the window while preserving aspect ratio.
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    max_width: Val::Px(window_width),
+                    max_height: Val::Px(window_height),
+                    ..default()
+                },
+            ));
+        });
+
+    println!("Debug image overlay: ON");
 }
 
 /// Find the most recently modified image in the debug folder.
@@ -559,30 +562,41 @@ fn find_latest_debug_image() -> Option<String> {
 
         found_debug_folder = true;
 
-        if let Ok(entries) = fs::read_dir(debug_path) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type()
-                    && file_type.is_file()
-                    && let Some(file_name) = entry.file_name().to_str()
-                {
-                    // Check whether the file uses a supported image extension.
-                    if let Some(extension) = file_name.split('.').next_back()
-                        && extensions.contains(&extension.to_lowercase().as_str())
-                        && let Ok(metadata) = entry.metadata()
-                        && let Ok(modified) = metadata.modified()
-                    {
-                        let relative_path = format!("debug/{}", file_name);
+        let Ok(entries) = fs::read_dir(debug_path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_file() {
+                continue;
+            }
+            let file_name_os = entry.file_name();
+            let Some(file_name) = file_name_os.to_str() else {
+                continue;
+            };
+            let Some(extension) = file_name.split('.').next_back() else {
+                continue;
+            };
+            if !extensions.contains(&extension.to_lowercase().as_str()) {
+                continue;
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
 
-                        if latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified {
-                            latest_file = Some((relative_path, modified));
-                        }
-                    }
-                }
+            let relative_path = format!("debug/{}", file_name);
+            if latest_file.is_none() || latest_file.as_ref().unwrap().1 < modified {
+                latest_file = Some((relative_path, modified));
             }
-            // Once files are found in this path we can stop probing others.
-            if latest_file.is_some() {
-                break;
-            }
+        }
+        // Once files are found in this path we can stop probing others.
+        if latest_file.is_some() {
+            break;
         }
     }
 
@@ -626,73 +640,75 @@ fn toggle_mask_debug(
 ) {
     #[cfg(not(feature = "video-comparison"))]
     {
-        if keyboard.just_pressed(KeyCode::KeyM) {
-            settings.show_masks = !settings.show_masks;
+        if !keyboard.just_pressed(KeyCode::KeyM) {
+            return;
+        }
 
-            if settings.show_masks {
-                // Spawn mask visualization entities for each mask
-                // First, find unique mask centers (masks may be shared across many entities)
-                let mut seen_masks: std::collections::HashSet<(i32, i32, i32, i32)> =
-                    std::collections::HashSet::new();
+        settings.show_masks = !settings.show_masks;
 
-                for mask_info in mask_query.iter() {
-                    for mask in &mask_info.masks {
-                        // Create a key based on mask position and size (rounded to int for comparison)
-                        let key = (
-                            (mask.center.x * 10.0) as i32,
-                            (mask.center.y * 10.0) as i32,
-                            (mask.half_size.x * 10.0) as i32,
-                            (mask.half_size.y * 10.0) as i32,
-                        );
-
-                        if seen_masks.contains(&key) {
-                            continue;
-                        }
-                        seen_masks.insert(key);
-
-                        // Spawn a semi-transparent rectangle to visualize the mask
-                        println!(
-                            "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
-                            mask.center.x,
-                            mask.center.y,
-                            mask.half_size.x * 2.0,
-                            mask.half_size.y * 2.0
-                        );
-
-                        // Create a sprite to show the mask region
-                        commands.spawn((
-                            Name::new("MaskDebugVisual"),
-                            MaskDebugVisual,
-                            Sprite {
-                                color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
-                                custom_size: Some(Vec2::new(
-                                    mask.half_size.x * 2.0,
-                                    mask.half_size.y * 2.0,
-                                )),
-                                ..default()
-                            },
-                            Transform::from_translation(Vec3::new(
-                                mask.center.x,
-                                mask.center.y,
-                                100.0, // High z to render on top
-                            )),
-                        ));
-                    }
-                }
-
-                if seen_masks.is_empty() {
-                    println!("[MASK DEBUG] No masks found to visualize");
-                } else {
-                    println!("[MASK DEBUG] Showing {} mask region(s)", seen_masks.len());
-                }
-            } else {
-                // Remove debug visualizations
-                let count = debug_visual_query.iter().count();
-                for entity in debug_visual_query.iter() {
-                    commands.entity(entity).despawn();
-                }
-                println!("[MASK DEBUG] Hidden {} mask visualization(s)", count);
+        if !settings.show_masks {
+            // Remove debug visualizations
+            let count = debug_visual_query.iter().count();
+            for entity in debug_visual_query.iter() {
+                commands.entity(entity).despawn();
             }
+            println!("[MASK DEBUG] Hidden {} mask visualization(s)", count);
+            return;
+        }
+
+        // Spawn mask visualization entities for each mask
+        // First, find unique mask centers (masks may be shared across many entities)
+        let mut seen_masks: std::collections::HashSet<(i32, i32, i32, i32)> =
+            std::collections::HashSet::new();
+
+        let all_masks: Vec<_> = mask_query
+            .iter()
+            .flat_map(|info| info.masks.iter())
+            .collect();
+
+        for mask in &all_masks {
+            // Create a key based on mask position and size (rounded to int for comparison)
+            let key = (
+                (mask.center.x * 10.0) as i32,
+                (mask.center.y * 10.0) as i32,
+                (mask.half_size.x * 10.0) as i32,
+                (mask.half_size.y * 10.0) as i32,
+            );
+
+            if !seen_masks.insert(key) {
+                continue;
+            }
+
+            // Spawn a semi-transparent rectangle to visualize the mask
+            println!(
+                "[MASK DEBUG] Visualizing mask at ({:.1},{:.1}) size ({:.1},{:.1})",
+                mask.center.x,
+                mask.center.y,
+                mask.half_size.x * 2.0,
+                mask.half_size.y * 2.0
+            );
+
+            // Create a sprite to show the mask region
+            commands.spawn((
+                Name::new("MaskDebugVisual"),
+                MaskDebugVisual,
+                Sprite {
+                    color: Color::srgba(1.0, 0.0, 0.0, 0.3), // Semi-transparent red
+                    custom_size: Some(Vec2::new(mask.half_size.x * 2.0, mask.half_size.y * 2.0)),
+                    ..default()
+                },
+                Transform::from_translation(Vec3::new(
+                    mask.center.x,
+                    mask.center.y,
+                    100.0, // High z to render on top
+                )),
+            ));
+        }
+
+        if seen_masks.is_empty() {
+            println!("[MASK DEBUG] No masks found to visualize");
+        } else {
+            println!("[MASK DEBUG] Showing {} mask region(s)", seen_masks.len());
         }
     }
 }

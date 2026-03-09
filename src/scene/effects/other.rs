@@ -2,7 +2,26 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect, AmKeyframe};
+
+fn parse_vec2_value(value: &str) -> Option<[f32; 2]> {
+    let parts: Vec<&str> = value.split(',').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let x = parts[0].trim().parse::<f32>().ok()?;
+    let y = parts[1].trim().parse::<f32>().ok()?;
+    Some([x, y])
+}
+
+fn parse_color_keyframe(kf: &AmKeyframe) -> Option<AmKeyframe> {
+    let color = crate::schema::parse_color(&kf.value).ok()?;
+    Some(AmKeyframe {
+        time: kf.time,
+        value: format!("{},{},{},{}", color[0], color[1], color[2], color[3]),
+        easing: kf.easing.clone(),
+    })
+}
 
 /// Swing effect parameters
 /// Creates oscillating rotation animation
@@ -46,59 +65,54 @@ impl SwingParams {
 pub(crate) fn extract_swing_effect(effects: &[AmEffect]) -> SwingParams {
     let mut params = SwingParams::default();
 
-    // Check if swing effect exists before setting defaults
-    let has_swing = effects
+    let Some(effect) = effects
         .iter()
-        .any(|e| e.id == "com.alightcreative.effects.swing2");
-    if !has_swing {
+        .find(|e| e.id == "com.alightcreative.effects.swing2")
+    else {
         return params;
-    }
+    };
 
     // Default values (only set when effect exists)
     params.a1.value = Some(-30.0);
     params.a2.value = Some(30.0);
     params.freq.value = Some(1.0);
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.swing2" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "freq" => {
-                        if !prop.keyframes.is_empty() {
-                            params.freq.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.freq.value = Some(v);
-                        }
-                    }
-                    "a1" => {
-                        if !prop.keyframes.is_empty() {
-                            params.a1.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.a1.value = Some(v);
-                        }
-                    }
-                    "a2" => {
-                        if !prop.keyframes.is_empty() {
-                            params.a2.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.a2.value = Some(v);
-                        }
-                    }
-                    "phase" => {
-                        if !prop.keyframes.is_empty() {
-                            params.phase.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.phase.value = Some(v);
-                        }
-                    }
-                    "type" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.swing_type = v;
-                        }
-                    }
-                    _ => {}
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "freq" => {
+                if !prop.keyframes.is_empty() {
+                    params.freq.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.freq.value = Some(v);
                 }
             }
+            "a1" => {
+                if !prop.keyframes.is_empty() {
+                    params.a1.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.a1.value = Some(v);
+                }
+            }
+            "a2" => {
+                if !prop.keyframes.is_empty() {
+                    params.a2.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.a2.value = Some(v);
+                }
+            }
+            "phase" => {
+                if !prop.keyframes.is_empty() {
+                    params.phase.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.phase.value = Some(v);
+                }
+            }
+            "type" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.swing_type = v;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -109,20 +123,22 @@ pub(crate) fn extract_swing_effect(effects: &[AmEffect]) -> SwingParams {
 /// 从效果中提取旋转效果RPM参数
 pub(crate) fn extract_spin_rpm(effects: &[AmEffect]) -> AmAnimatedFloat {
     let mut rpm = AmAnimatedFloat::default();
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.spin" {
-            // Default RPM is 60 (from spin.xml)
-            rpm.value = Some(60.0);
-            for prop in &effect.properties {
-                if prop.name == "rpm" {
-                    if !prop.keyframes.is_empty() {
-                        rpm.keyframes = prop.keyframes.clone();
-                    } else if let Ok(v) = prop.value.parse::<f32>() {
-                        rpm.value = Some(v);
-                    }
-                }
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.spin")
+    else {
+        return rpm;
+    };
+
+    // Default RPM is 60 (from spin.xml)
+    rpm.value = Some(60.0);
+    for prop in &effect.properties {
+        if prop.name == "rpm" {
+            if !prop.keyframes.is_empty() {
+                rpm.keyframes = prop.keyframes.clone();
+            } else if let Ok(v) = prop.value.parse::<f32>() {
+                rpm.value = Some(v);
             }
-            break;
         }
     }
     rpm
@@ -161,41 +177,42 @@ impl ThresholdParams {
 /// 从效果中提取阈值效果参数
 pub(crate) fn extract_threshold_effect(effects: &[AmEffect]) -> ThresholdParams {
     let mut params = ThresholdParams::default();
-    // Only set default value if the effect is present
-    // params.threshold.value stays None until threshold effect is found
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.threshold" {
-            // Effect found - set default value that may be overridden
-            params.threshold.value = Some(0.5);
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.threshold")
+    else {
+        return params;
+    };
 
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "threshold" => {
-                        if !prop.keyframes.is_empty() {
-                            params.threshold.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.threshold.value = Some(v);
-                        }
-                    }
-                    "feather" => {
-                        if !prop.keyframes.is_empty() {
-                            params.feather.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.feather.value = Some(v);
-                        }
-                    }
-                    "invert" => {
-                        params.invert = prop.value == "true";
-                    }
-                    "blendMode" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.blend_mode = v;
-                        }
-                    }
-                    _ => {}
+    // Effect found - set default value that may be overridden
+    params.threshold.value = Some(0.5);
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "threshold" => {
+                if !prop.keyframes.is_empty() {
+                    params.threshold.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.threshold.value = Some(v);
                 }
             }
+            "feather" => {
+                if !prop.keyframes.is_empty() {
+                    params.feather.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.feather.value = Some(v);
+                }
+            }
+            "invert" => {
+                params.invert = prop.value == "true";
+            }
+            "blendMode" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.blend_mode = v;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -244,85 +261,67 @@ impl GridParams {
 /// 从效果中提取网格效果参数
 pub(crate) fn extract_grid_effect(effects: &[AmEffect]) -> GridParams {
     let mut params = GridParams::default();
-    // Only set default values when grid effect is actually present
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.grid2" {
-            // Grid effect found - set default values that may be overridden
-            params.spacing.value = Some(0.1);
-            params.width.value = Some(0.01);
-            params.smoothing.value = Some(0.05);
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.grid2")
+    else {
+        return params;
+    };
 
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "position" => {
-                        if !prop.keyframes.is_empty() {
-                            params.position.keyframes = prop.keyframes.clone();
-                        } else {
-                            let parts: Vec<&str> = prop.value.split(',').collect();
-                            if parts.len() == 2
-                                && let Ok(x) = parts[0].trim().parse::<f32>()
-                                && let Ok(y) = parts[1].trim().parse::<f32>()
-                            {
-                                params.position.value = Some([x, y]);
-                            }
-                        }
-                    }
-                    "spacing" => {
-                        if !prop.keyframes.is_empty() {
-                            params.spacing.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.spacing.value = Some(v);
-                        }
-                    }
-                    "width" => {
-                        if !prop.keyframes.is_empty() {
-                            params.width.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.width.value = Some(v);
-                        }
-                    }
-                    "color" => {
-                        if !prop.keyframes.is_empty() {
-                            params.color.keyframes = prop
-                                .keyframes
-                                .iter()
-                                .filter_map(|kf| {
-                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
-                                        Some(crate::schema::AmKeyframe {
-                                            time: kf.time,
-                                            value: format!(
-                                                "{},{},{},{}",
-                                                color[0], color[1], color[2], color[3]
-                                            ),
-                                            easing: kf.easing.clone(),
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
-                            params.color.value =
-                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
-                        }
-                    }
-                    "punchout" => {
-                        params.punchout = prop.value == "true";
-                    }
-                    "smoothing" => {
-                        if !prop.keyframes.is_empty() {
-                            params.smoothing.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.smoothing.value = Some(v);
-                        }
-                    }
-                    "screenSpace" => {
-                        params.screen_space = prop.value == "true";
-                    }
-                    _ => {}
+    // Grid effect found - set default values that may be overridden
+    params.spacing.value = Some(0.1);
+    params.width.value = Some(0.01);
+    params.smoothing.value = Some(0.05);
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "position" => {
+                if !prop.keyframes.is_empty() {
+                    params.position.keyframes = prop.keyframes.clone();
+                } else if let Some(v) = parse_vec2_value(&prop.value) {
+                    params.position.value = Some(v);
                 }
             }
+            "spacing" => {
+                if !prop.keyframes.is_empty() {
+                    params.spacing.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.spacing.value = Some(v);
+                }
+            }
+            "width" => {
+                if !prop.keyframes.is_empty() {
+                    params.width.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.width.value = Some(v);
+                }
+            }
+            "color" => {
+                if !prop.keyframes.is_empty() {
+                    params.color.keyframes = prop
+                        .keyframes
+                        .iter()
+                        .filter_map(parse_color_keyframe)
+                        .collect();
+                } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                    params.color.value = Some(Vec4::new(color[0], color[1], color[2], color[3]));
+                }
+            }
+            "punchout" => {
+                params.punchout = prop.value == "true";
+            }
+            "smoothing" => {
+                if !prop.keyframes.is_empty() {
+                    params.smoothing.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.smoothing.value = Some(v);
+                }
+            }
+            "screenSpace" => {
+                params.screen_space = prop.value == "true";
+            }
+            _ => {}
         }
     }
 
@@ -392,63 +391,59 @@ pub struct OscillateParams {
 pub(crate) fn extract_oscillate_effect(effects: &[AmEffect]) -> OscillateParams {
     let mut params = OscillateParams::default();
 
-    let has_effect = effects
+    let Some(effect) = effects
         .iter()
-        .any(|e| e.id == "com.alightcreative.effects.oscillate3");
-    if !has_effect {
+        .find(|e| e.id == "com.alightcreative.effects.oscillate3")
+    else {
         return params;
-    }
+    };
 
     // Default values from oscillate3.xml
     params.angle.value = Some(45.0);
     params.freq.value = Some(2.0);
     params.mag.value = Some(25.0);
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.oscillate3" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "direction" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.direction = v;
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "freq" => {
-                        if !prop.keyframes.is_empty() {
-                            params.freq.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.freq.value = Some(v);
-                        }
-                    }
-                    "mag" => {
-                        if !prop.keyframes.is_empty() {
-                            params.mag.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.mag.value = Some(v);
-                        }
-                    }
-                    "type" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.wave_type = v;
-                        }
-                    }
-                    "phase" => {
-                        if !prop.keyframes.is_empty() {
-                            params.phase.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.phase.value = Some(v);
-                        }
-                    }
-                    _ => {}
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "direction" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.direction = v;
                 }
             }
+            "angle" => {
+                if !prop.keyframes.is_empty() {
+                    params.angle.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.angle.value = Some(v);
+                }
+            }
+            "freq" => {
+                if !prop.keyframes.is_empty() {
+                    params.freq.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.freq.value = Some(v);
+                }
+            }
+            "mag" => {
+                if !prop.keyframes.is_empty() {
+                    params.mag.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.mag.value = Some(v);
+                }
+            }
+            "type" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.wave_type = v;
+                }
+            }
+            "phase" => {
+                if !prop.keyframes.is_empty() {
+                    params.phase.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.phase.value = Some(v);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -513,12 +508,12 @@ impl Default for JitterParams {
 pub(crate) fn extract_jitter_effect(effects: &[AmEffect]) -> JitterParams {
     let mut params = JitterParams::default();
 
-    let has_effect = effects
+    let Some(effect) = effects
         .iter()
-        .any(|e| e.id == "com.alightcreative.effects.jitter");
-    if !has_effect {
+        .find(|e| e.id == "com.alightcreative.effects.jitter")
+    else {
         return params;
-    }
+    };
 
     params.enabled = true;
 
@@ -542,19 +537,15 @@ pub(crate) fn extract_jitter_effect(effects: &[AmEffect]) -> JitterParams {
         }
     }
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.jitter" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "angle" => params.angle = parse_animated_float(prop, 45.0),
-                    "freq" => params.freq = parse_animated_float(prop, 30.0),
-                    "mag" => params.mag = parse_animated_float(prop, 25.0),
-                    "seed" => params.seed = parse_animated_float(prop, 0.0),
-                    "slack" => params.slack = parse_animated_float(prop, 0.0),
-                    "zjitter" => params.zjitter = parse_animated_float(prop, 0.0),
-                    _ => {}
-                }
-            }
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "angle" => params.angle = parse_animated_float(prop, 45.0),
+            "freq" => params.freq = parse_animated_float(prop, 30.0),
+            "mag" => params.mag = parse_animated_float(prop, 25.0),
+            "seed" => params.seed = parse_animated_float(prop, 0.0),
+            "slack" => params.slack = parse_animated_float(prop, 0.0),
+            "zjitter" => params.zjitter = parse_animated_float(prop, 0.0),
+            _ => {}
         }
     }
 
@@ -603,14 +594,13 @@ impl EchokfParams {
             self.count.value.unwrap_or(1.0) as u32
         } else {
             // Find maximum value across all keyframes
-            let mut max = self.count.value.unwrap_or(0.0);
-            for kf in &self.count.keyframes {
-                if let Ok(v) = kf.value.parse::<f32>()
-                    && v > max
-                {
-                    max = v;
-                }
-            }
+            let kf_max = self
+                .count
+                .keyframes
+                .iter()
+                .filter_map(|kf| kf.value.parse::<f32>().ok())
+                .fold(f32::NEG_INFINITY, f32::max);
+            let max = self.count.value.unwrap_or(0.0).max(kf_max);
             max.ceil() as u32
         }
     }
@@ -712,12 +702,12 @@ pub struct SolidColorParams {
 pub(crate) fn extract_solid_color_effect(effects: &[AmEffect]) -> SolidColorParams {
     let mut params = SolidColorParams::default();
 
-    let has_effect = effects
+    let Some(effect) = effects
         .iter()
-        .any(|e| e.id == "com.alightcreative.solidcolor");
-    if !has_effect {
+        .find(|e| e.id == "com.alightcreative.solidcolor")
+    else {
         return params;
-    }
+    };
 
     // Default values from solidcolor.xml
     params.alpha.value = Some(1.0);
@@ -728,50 +718,32 @@ pub(crate) fn extract_solid_color_effect(effects: &[AmEffect]) -> SolidColorPara
         1.0,
     ));
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.solidcolor" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "color" => {
-                        if !prop.keyframes.is_empty() {
-                            params.color.keyframes = prop
-                                .keyframes
-                                .iter()
-                                .filter_map(|kf| {
-                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
-                                        Some(crate::schema::AmKeyframe {
-                                            time: kf.time,
-                                            value: format!(
-                                                "{},{},{},{}",
-                                                color[0], color[1], color[2], color[3]
-                                            ),
-                                            easing: kf.easing.clone(),
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
-                            params.color.value =
-                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
-                        }
-                    }
-                    "alpha" => {
-                        if !prop.keyframes.is_empty() {
-                            params.alpha.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.alpha.value = Some(v);
-                        }
-                    }
-                    "blendMode" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.blend_mode = v;
-                        }
-                    }
-                    _ => {}
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "color" => {
+                if !prop.keyframes.is_empty() {
+                    params.color.keyframes = prop
+                        .keyframes
+                        .iter()
+                        .filter_map(parse_color_keyframe)
+                        .collect();
+                } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
+                    params.color.value = Some(Vec4::new(color[0], color[1], color[2], color[3]));
                 }
             }
+            "alpha" => {
+                if !prop.keyframes.is_empty() {
+                    params.alpha.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.alpha.value = Some(v);
+                }
+            }
+            "blendMode" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.blend_mode = v;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -783,70 +755,67 @@ pub(crate) fn extract_solid_color_effect(effects: &[AmEffect]) -> SolidColorPara
 pub(crate) fn extract_pixelate_effect(effects: &[AmEffect]) -> PixelateParams {
     let mut params = PixelateParams::default();
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.pixelate2" {
-            // Effect found - set default values that may be overridden
-            params.size.value = Some(10.0); // Default pixel size
-            params.stretch.value = Some([1.0, 1.0]);
-            params.threshold.value = Some(0.5);
-            params.saturation.value = Some(1.0);
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.pixelate2")
+    else {
+        return params;
+    };
 
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "size" => {
-                        if !prop.keyframes.is_empty() {
-                            params.size.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.size.value = Some(v);
-                        }
-                    }
-                    "stretch" => {
-                        if !prop.keyframes.is_empty() {
-                            params.stretch.keyframes = prop.keyframes.clone();
-                        } else {
-                            let parts: Vec<&str> = prop.value.split(',').collect();
-                            if parts.len() == 2
-                                && let Ok(x) = parts[0].trim().parse::<f32>()
-                                && let Ok(y) = parts[1].trim().parse::<f32>()
-                            {
-                                params.stretch.value = Some([x, y]);
-                            }
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "vignette" => {
-                        if !prop.keyframes.is_empty() {
-                            params.vignette.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.vignette.value = Some(v);
-                        }
-                    }
-                    "threshold" => {
-                        if !prop.keyframes.is_empty() {
-                            params.threshold.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.threshold.value = Some(v);
-                        }
-                    }
-                    "saturation" => {
-                        if !prop.keyframes.is_empty() {
-                            params.saturation.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.saturation.value = Some(v);
-                        }
-                    }
-                    "screenSpace" => {
-                        params.screen_space = prop.value == "true";
-                    }
-                    _ => {}
+    // Effect found - set default values that may be overridden
+    params.size.value = Some(10.0); // Default pixel size
+    params.stretch.value = Some([1.0, 1.0]);
+    params.threshold.value = Some(0.5);
+    params.saturation.value = Some(1.0);
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "size" => {
+                if !prop.keyframes.is_empty() {
+                    params.size.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.size.value = Some(v);
                 }
             }
+            "stretch" => {
+                if !prop.keyframes.is_empty() {
+                    params.stretch.keyframes = prop.keyframes.clone();
+                } else if let Some(v) = parse_vec2_value(&prop.value) {
+                    params.stretch.value = Some(v);
+                }
+            }
+            "angle" => {
+                if !prop.keyframes.is_empty() {
+                    params.angle.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.angle.value = Some(v);
+                }
+            }
+            "vignette" => {
+                if !prop.keyframes.is_empty() {
+                    params.vignette.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.vignette.value = Some(v);
+                }
+            }
+            "threshold" => {
+                if !prop.keyframes.is_empty() {
+                    params.threshold.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.threshold.value = Some(v);
+                }
+            }
+            "saturation" => {
+                if !prop.keyframes.is_empty() {
+                    params.saturation.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.saturation.value = Some(v);
+                }
+            }
+            "screenSpace" => {
+                params.screen_space = prop.value == "true";
+            }
+            _ => {}
         }
     }
 
@@ -869,19 +838,22 @@ pub(crate) fn extract_text_spacing_effect(effects: &[AmEffect]) -> TextSpacingPa
     let mut params = TextSpacingParams::default();
     params.line_spacing.value = Some(1.0);
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.textspacing" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "letterspacing" => {
-                        crate::scene::effects::extract_float_prop(prop, &mut params.letter_spacing);
-                    }
-                    "linespacing" => {
-                        crate::scene::effects::extract_float_prop(prop, &mut params.line_spacing);
-                    }
-                    _ => {}
-                }
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.textspacing")
+    else {
+        return params;
+    };
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "letterspacing" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.letter_spacing);
             }
+            "linespacing" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.line_spacing);
+            }
+            _ => {}
         }
     }
 
@@ -908,27 +880,30 @@ pub(crate) fn extract_text_progress_effect(effects: &[AmEffect]) -> TextProgress
     let mut params = TextProgressParams::default();
     params.end.value = Some(1.0);
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.textprogress" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "start" => {
-                        crate::scene::effects::extract_float_prop(prop, &mut params.start);
-                    }
-                    "end" => {
-                        crate::scene::effects::extract_float_prop(prop, &mut params.end);
-                    }
-                    "cursor" => {
-                        if let Ok(v) = prop.value.parse::<f32>() {
-                            params.cursor = v as i32;
-                        }
-                    }
-                    "blink" => {
-                        params.blink = prop.value == "true" || prop.value == "1";
-                    }
-                    _ => {}
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.textprogress")
+    else {
+        return params;
+    };
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "start" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.start);
+            }
+            "end" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.end);
+            }
+            "cursor" => {
+                if let Ok(v) = prop.value.parse::<f32>() {
+                    params.cursor = v as i32;
                 }
             }
+            "blink" => {
+                params.blink = prop.value == "true" || prop.value == "1";
+            }
+            _ => {}
         }
     }
 

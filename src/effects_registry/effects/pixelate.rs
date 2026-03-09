@@ -26,7 +26,12 @@ define_effect! {
     <property name="threshold" type="float" value="0.5" />
     <property name="saturation" type="float" value="1.0" />
 </effect>"#,
-    tests: [],
+    tests: [
+        "effects/pixelate/basic.amproj",
+        "effects/pixelate/bone.amproj",
+        "effects/pixelate/bone_single.amproj",
+        "effects/pixelate/sprite.amproj",
+    ],
     fields: [
         define_field! {
             name: "size",

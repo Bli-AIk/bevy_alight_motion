@@ -3,11 +3,46 @@
 use bevy::asset::io::Reader;
 use bevy::asset::{AssetLoader, LoadContext, RenderAssetUsages};
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 
 use crate::error::AmError;
 use crate::schema::AmScene;
+
+/// Optional override configuration for amproj assets.
+///
+/// Placed alongside the `.amproj` file/directory as `<name>.amproj.toml`.
+/// Provides manual content URI → filename mappings for cases where
+/// the XML `<media>` elements lack a `filename` attribute.
+#[derive(Debug, Default, serde::Deserialize)]
+struct AmProjectOverride {
+    /// Content URI → local filename mappings.
+    /// Keys are Android content URIs (e.g. `content://media/external/images/media/1000048179`),
+    /// values are filenames within the amproj directory.
+    #[serde(default)]
+    media: HashMap<String, String>,
+}
+
+impl AmProjectOverride {
+    /// Try to load an override config from `<amproj_path>.toml`.
+    fn load_for(amproj_path: &std::path::Path) -> Option<Self> {
+        let toml_path = amproj_path.with_extension("amproj.toml");
+        let content = std::fs::read_to_string(&toml_path).ok()?;
+        match toml::from_str::<AmProjectOverride>(&content) {
+            Ok(config) => {
+                info!("Loaded amproj override config: {:?}", toml_path);
+                Some(config)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to parse amproj override config {:?}: {}",
+                    toml_path, e
+                );
+                None
+            }
+        }
+    }
+}
 
 /// Font metrics extracted from TTF/OTF files.
 #[derive(Debug, Clone, Default)]
@@ -134,12 +169,10 @@ impl AssetLoader for AlightMotionLoader {
 
         match extension.to_lowercase().as_str() {
             "amproj" => {
-                if zip::ZipArchive::new(std::io::Cursor::new(&bytes)).is_err() {
-                    // Not a valid ZIP — try loading as unpacked directory
-                    let fs_path = resolve_asset_fs_path(path_ref);
-                    if fs_path.is_dir() {
-                        return load_amproj_dir(&fs_path, load_context).await;
-                    }
+                // Not a valid ZIP — try loading as unpacked directory
+                let fs_path = resolve_asset_fs_path(path_ref);
+                if zip::ZipArchive::new(std::io::Cursor::new(&bytes)).is_err() && fs_path.is_dir() {
+                    return load_amproj_dir(&fs_path, load_context).await;
                 }
                 load_amproj(&bytes, load_context).await
             }
@@ -343,51 +376,14 @@ async fn load_amproj(
             if let Some(path) = resolve_google_font_to_system(&font_ref)
                 && let Ok(data) = std::fs::read(&path)
             {
-                // Validate with fontdb
-                let mut test_db = fontdb::Database::new();
-                test_db.load_font_data(data.clone());
-                if test_db.faces().count() == 0 {
-                    warn!("System font at '{}' failed fontdb validation", path);
-                    continue;
-                }
-                // Extract metrics
-                if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
-                    let upm = face.units_per_em();
-                    let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
-                        (
-                            os2.windows_ascender() as f32 / upm as f32,
-                            (-os2.windows_descender()) as f32 / upm as f32,
-                        )
-                    } else {
-                        (
-                            face.ascender() as f32 / upm as f32,
-                            (-face.descender()) as f32 / upm as f32,
-                        )
-                    };
-                    let hhea_ascent = face.ascender() as f32 / upm as f32;
-                    let hhea_descent = (-face.descender()) as f32 / upm as f32;
-                    font_metrics.insert(
-                        font_ref.clone(),
-                        FontMetrics {
-                            win_ascent,
-                            win_descent,
-                            units_per_em: upm,
-                            hhea_ascent,
-                            hhea_descent,
-                        },
-                    );
-                }
-                match Font::try_from_bytes(data) {
-                    Ok(font) => {
-                        let label = format!("font_system_{}", font_ref);
-                        let handle = load_context.add_labeled_asset(label, font);
-                        fonts.insert(font_ref.clone(), handle);
-                        info!("Resolved '{}' to system font: {}", font_ref, path);
-                    }
-                    Err(e) => {
-                        warn!("Failed to load system font '{}': {:?}", path, e);
-                    }
-                }
+                try_load_system_font(
+                    &font_ref,
+                    data,
+                    &path,
+                    &mut fonts,
+                    &mut font_metrics,
+                    load_context,
+                );
             }
         }
     }
@@ -562,14 +558,42 @@ async fn load_amproj_dir(
 
     info!("Loaded amproj directory: {:?}", dir_path);
 
-    // Map content provider URIs (content://...) to loaded image handles using <media> elements.
-    // Device-extracted directories use content URIs in shapes' fillImage attributes,
-    // while images are stored with amproj:filename keys.
+    // Load override config first so Force set entries take priority over auto-resolve.
+    let overrides = AmProjectOverride::load_for(dir_path);
+    let override_uris: HashSet<&str> = overrides
+        .as_ref()
+        .map(|o| o.media.keys().map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+
+    // Auto-resolve content URIs via <media> elements, skipping URIs with override entries.
     for media in &scene.media {
         if !media.uri.is_empty() && !media.filename.is_empty() {
+            if override_uris.contains(media.uri.as_str()) {
+                debug!(
+                    "Skipping auto-resolve for {} (overridden in .amproj.toml)",
+                    media.uri
+                );
+                continue;
+            }
             let amproj_key = format!("amproj:{}", media.filename);
             if let Some(handle) = images.get(&amproj_key).cloned() {
                 images.insert(media.uri.clone(), handle);
+            }
+        }
+    }
+
+    // Apply override config — Force set entries always take priority.
+    if let Some(overrides) = overrides {
+        for (content_uri, filename) in &overrides.media {
+            let amproj_key = format!("amproj:{}", filename);
+            if let Some(handle) = images.get(&amproj_key).cloned() {
+                images.insert(content_uri.clone(), handle);
+                debug!("Override: {} -> {}", content_uri, filename);
+            } else {
+                warn!(
+                    "Override config references '{}' but image '{}' not found in amproj directory",
+                    content_uri, filename
+                );
             }
         }
     }
@@ -583,6 +607,63 @@ async fn load_amproj_dir(
         embedded_fonts: preserved_fonts,
         validation_report,
     })
+}
+
+/// Validate and load a single system font, inserting it into the font maps.
+#[cfg(not(target_arch = "wasm32"))]
+fn try_load_system_font(
+    font_ref: &str,
+    data: Vec<u8>,
+    path: &str,
+    fonts: &mut HashMap<String, Handle<Font>>,
+    font_metrics: &mut HashMap<String, FontMetrics>,
+    load_context: &mut LoadContext<'_>,
+) {
+    // Validate with fontdb
+    let mut test_db = fontdb::Database::new();
+    test_db.load_font_data(data.clone());
+    if test_db.faces().count() == 0 {
+        warn!("System font at '{}' failed fontdb validation", path);
+        return;
+    }
+    // Extract metrics
+    if let Ok(face) = ttf_parser::Face::parse(&data, 0) {
+        let upm = face.units_per_em();
+        let (win_ascent, win_descent) = if let Some(os2) = face.tables().os2 {
+            (
+                os2.windows_ascender() as f32 / upm as f32,
+                (-os2.windows_descender()) as f32 / upm as f32,
+            )
+        } else {
+            (
+                face.ascender() as f32 / upm as f32,
+                (-face.descender()) as f32 / upm as f32,
+            )
+        };
+        let hhea_ascent = face.ascender() as f32 / upm as f32;
+        let hhea_descent = (-face.descender()) as f32 / upm as f32;
+        font_metrics.insert(
+            font_ref.to_string(),
+            FontMetrics {
+                win_ascent,
+                win_descent,
+                units_per_em: upm,
+                hhea_ascent,
+                hhea_descent,
+            },
+        );
+    }
+    match Font::try_from_bytes(data) {
+        Ok(font) => {
+            let label = format!("font_system_{}", font_ref);
+            let handle = load_context.add_labeled_asset(label, font);
+            fonts.insert(font_ref.to_string(), handle);
+            info!("Resolved '{}' to system font: {}", font_ref, path);
+        }
+        Err(e) => {
+            warn!("Failed to load system font '{}': {:?}", path, e);
+        }
+    }
 }
 
 /// Collect unique Google Fonts references from all text layers (including nested scenes).

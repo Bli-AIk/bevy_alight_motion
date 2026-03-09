@@ -60,24 +60,20 @@ pub fn scan_amproj_files(assets_dir: &Path) -> Result<EffectTestFiles, String> {
 
     for filename in tracked_files {
         let path = projects_dir.join(&filename);
-        if path.exists() {
-            total_files += 1;
+        if !path.exists() {
+            continue;
+        }
+        total_files += 1;
 
-            // 提取 amproj 文件中的效果 ID / Extract effect IDs from amproj file
-            match extract_effects_from_amproj(&path) {
-                Ok(effects) => {
-                    for effect_id in effects {
-                        effect_map
-                            .entry(effect_id)
-                            .or_default()
-                            .insert(filename.clone());
-                    }
-                }
-                Err(_e) => {
-                    // 静默忽略解析错误 / Silently ignore parse errors
-                    // eprintln!("Warning: Failed to parse {}: {}", filename, e);
-                }
-            }
+        // Extract effect IDs from amproj file
+        let Ok(effects) = extract_effects_from_amproj(&path) else {
+            continue;
+        };
+        for effect_id in effects {
+            effect_map
+                .entry(effect_id)
+                .or_default()
+                .insert(filename.clone());
         }
     }
 
@@ -165,28 +161,31 @@ fn extract_effects_from_amproj(amproj_path: &Path) -> Result<Vec<String>, String
 
     let mut effects = HashSet::new();
 
-    // 查找并读取 XML 文件 / Find and read XML files
+    // Find and read XML files
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
             .map_err(|e| format!("Failed to read archive entry: {}", e))?;
 
-        if file.name().ends_with(".xml") {
-            let mut content = String::new();
-            file.read_to_string(&mut content)
-                .map_err(|e| format!("Failed to read XML content: {}", e))?;
+        if !file.name().ends_with(".xml") {
+            continue;
+        }
 
-            // 提取效果 ID / Extract effect IDs
-            // 格式: <effect id="com.alightcreative.effects.xxx"
-            for line in content.lines() {
-                if let Some(start) = line.find("<effect id=\"") {
-                    let rest = &line[start + 12..];
-                    if let Some(end) = rest.find('"') {
-                        let effect_id = rest[..end].to_string();
-                        effects.insert(effect_id);
-                    }
-                }
-            }
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .map_err(|e| format!("Failed to read XML content: {}", e))?;
+
+        // Extract effect IDs
+        // Format: <effect id="com.alightcreative.effects.xxx"
+        for line in content.lines() {
+            let Some(start) = line.find("<effect id=\"") else {
+                continue;
+            };
+            let rest = &line[start + 12..];
+            let Some(end) = rest.find('"') else {
+                continue;
+            };
+            effects.insert(rest[..end].to_string());
         }
     }
 
@@ -232,26 +231,18 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
         let line_num = line_num + 1; // 1-based line numbers
         let trimmed = line.trim();
 
-        // 检测效果 ID / Detect effect ID
-        // 格式: if effect.id == "com.alightcreative.effects.xxx"
-        if let Some(start) = trimmed.find("effect.id == \"") {
-            let rest = &trimmed[start + 14..];
-            if let Some(end) = rest.find('"') {
-                let effect_id = rest[..end].to_string();
-                current_effect_id = Some(effect_id.clone());
-
-                if !effects.contains_key(&effect_id) {
-                    effects.insert(
-                        effect_id.clone(),
-                        EffectImpl {
-                            effect_id,
-                            implemented_fields: Vec::new(),
-                            pattern_fields: Vec::new(),
-                            source_lines: Vec::new(),
-                        },
-                    );
-                }
-            }
+        // Detect effect ID
+        // Format: if effect.id == "com.alightcreative.effects.xxx"
+        if let Some(effect_id) = extract_effect_id(trimmed) {
+            current_effect_id = Some(effect_id.clone());
+            effects
+                .entry(effect_id.clone())
+                .or_insert_with(|| EffectImpl {
+                    effect_id,
+                    implemented_fields: Vec::new(),
+                    pattern_fields: Vec::new(),
+                    source_lines: Vec::new(),
+                });
         }
 
         // 检测 match prop.name.as_str() 块 / Detect match block
@@ -265,45 +256,25 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
             brace_depth += trimmed.matches('{').count() as i32;
             brace_depth -= trimmed.matches('}').count() as i32;
 
-            // 检测模式匹配（如 name if name.starts_with("color")）
             // Detect pattern matches (e.g., name if name.starts_with("color"))
-            if trimmed.contains("starts_with(\"")
-                && let Some(start) = trimmed.find("starts_with(\"")
+            if let Some(pattern_desc) = extract_starts_with_pattern(trimmed)
+                && let Some(ref effect_id) = current_effect_id
+                && let Some(effect) = effects.get_mut(effect_id)
+                && !effect.pattern_fields.contains(&pattern_desc)
             {
-                let rest = &trimmed[start + 13..];
-                if let Some(end) = rest.find('"') {
-                    let pattern = rest[..end].to_string();
-                    if let Some(ref effect_id) = current_effect_id
-                        && let Some(effect) = effects.get_mut(effect_id)
-                    {
-                        let pattern_desc = format!("{}*", pattern);
-                        if !effect.pattern_fields.contains(&pattern_desc) {
-                            effect.pattern_fields.push(pattern_desc);
-                        }
-                    }
-                }
+                effect.pattern_fields.push(pattern_desc);
             }
 
-            // 检测 match 分支中的字段名 / Detect field names in match arms
-            // 格式: "fieldname" => { ... }
-            // 但跳过非字段名的字符串（如 "true", 颜色值等）
-            if trimmed.contains("=>")
-                && !trimmed.contains("if ")
-                && let Some(start) = trimmed.find('"')
-                && let Some(end) = trimmed[start + 1..].find('"')
+            // Detect field names in match arms
+            // Format: "fieldname" => { ... }
+            // Skip non-field strings (e.g., "true", color values)
+            if let Some(field_name) = extract_match_arm_field(trimmed)
+                && let Some(ref effect_id) = current_effect_id
+                && let Some(effect) = effects.get_mut(effect_id)
+                && !effect.implemented_fields.contains(&field_name)
             {
-                let field_name = trimmed[start + 1..start + 1 + end].to_string();
-
-                // 验证是否为有效的字段名 / Validate if it's a valid field name
-                // 有效字段名：小写字母开头，只包含字母、数字和下划线
-                if is_valid_field_name(&field_name)
-                    && let Some(ref effect_id) = current_effect_id
-                    && let Some(effect) = effects.get_mut(effect_id)
-                    && !effect.implemented_fields.contains(&field_name)
-                {
-                    effect.implemented_fields.push(field_name);
-                    effect.source_lines.push(line_num);
-                }
+                effect.implemented_fields.push(field_name);
+                effect.source_lines.push(line_num);
             }
 
             // 退出 match 块 / Exit match block
@@ -323,6 +294,33 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
     }
 
     Ok(effects)
+}
+
+/// Extract effect ID from a code condition line like `effect.id == "..."`
+fn extract_effect_id(trimmed: &str) -> Option<String> {
+    let start = trimmed.find("effect.id == \"")?;
+    let rest = &trimmed[start + 14..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+/// Extract pattern from a `starts_with("...")` call, returning formatted `pattern*`
+fn extract_starts_with_pattern(trimmed: &str) -> Option<String> {
+    let start = trimmed.find("starts_with(\"")?;
+    let rest = &trimmed[start + 13..];
+    let end = rest.find('"')?;
+    Some(format!("{}*", &rest[..end]))
+}
+
+/// Extract a valid field name from a match arm line like `"fieldname" => { ... }`
+fn extract_match_arm_field(trimmed: &str) -> Option<String> {
+    if !trimmed.contains("=>") || trimmed.contains("if ") {
+        return None;
+    }
+    let start = trimmed.find('"')?;
+    let end = trimmed[start + 1..].find('"')?;
+    let field_name = trimmed[start + 1..start + 1 + end].to_string();
+    is_valid_field_name(&field_name).then_some(field_name)
 }
 
 /// 检查是否为有效的字段名 / Check if it's a valid field name

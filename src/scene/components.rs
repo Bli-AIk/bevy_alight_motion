@@ -301,7 +301,7 @@ pub struct AmRttCamerasContainer;
 
 /// Layer specification for lazy spawning. Contains all data needed to spawn the visual.
 #[derive(Component, Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)] // reason: enum variants are all large scene data, boxing would add indirection without benefit
 pub enum AmLayerSpec {
     /// Shape with sprite (media or color fill without stroke)
     SpriteShape {

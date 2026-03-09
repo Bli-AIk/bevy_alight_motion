@@ -242,10 +242,10 @@ pub fn update_video_debug_overlay(
 /// Cleanup temp files on exit
 impl Drop for VideoDebugState {
     fn drop(&mut self) {
-        if let Some(temp_dir) = &self.temp_dir {
-            if let Err(e) = std::fs::remove_dir_all(temp_dir) {
-                eprintln!("[VIDEO DEBUG] Failed to cleanup temp dir: {:?}", e);
-            }
+        if let Some(temp_dir) = &self.temp_dir
+            && let Err(e) = std::fs::remove_dir_all(temp_dir)
+        {
+            eprintln!("[VIDEO DEBUG] Failed to cleanup temp dir: {:?}", e);
         }
     }
 }

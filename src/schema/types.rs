@@ -116,7 +116,7 @@ pub struct AmMedia {
 /// Layer types in the scene.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)] // reason: AmShape is the primary variant, boxing would hurt ergonomics
 pub enum AmLayer {
     /// Visible shape layer.
     Shape(AmShape),
