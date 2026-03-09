@@ -27,7 +27,10 @@ define_effect! {
     <property name="zinv" type="bool" value="false" />
     <property name="ainv" type="bool" value="false" />
 </effect>"##,
-    tests: [],
+    tests: [
+        "effects/transform/complex1.amproj",
+        "effects/transform/complex2.amproj",
+    ],
     fields: [
         define_field! {
             name: "posx",

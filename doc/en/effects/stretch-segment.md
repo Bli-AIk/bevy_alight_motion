@@ -1,16 +1,16 @@
 # Stretch Segment
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-03-01 17:45:43
+> Last tested: 2026-03-07 20:20:21
 
-UV domain distortion effect that stretches the image along a dividing line. Formula: new_width = orig_width * (1.0 + stretch_px / (orig_width / 5.76))
+UV domain distortion effect that stretches the image along a dividing line. Uses AM's native scene-normalized coordinate formula with multi-effect stacking support.
 
-**Support Status**: ⚠️ Partially Supported
+**Support Status**: ✅ Fully Supported
 
 - **Stretch (stretch)**: ✅ Implemented (Stretch amount (pixels))
-- **Angle (angle)**: ⚠️ Partial (Dividing line angle (basic support, minor visual differences))
-- **Offset (offset)**: ⚠️ Partial (Dividing line position offset (basic support, minor visual differences))
-- **Smooth (smooth)**: ❌ Not implemented (Edge smoothness (not yet implemented))
+- **Angle (angle)**: ✅ Implemented (Dividing line angle (degrees), uses scene-normalized coordinate system)
+- **Offset (offset)**: ✅ Implemented (Dividing line position offset (scene-normalized: offset/1000))
+- **Smooth (smooth)**: ✅ Implemented (Edge smoothness (implemented via smin_cubic))
 
 **Related Test Files:**
 - `effects/stretch-segment/basic.amproj` ✅
@@ -19,6 +19,7 @@ UV domain distortion effect that stretches the image along a dividing line. Form
 - `effects/stretch-segment/ex3.amproj` ✅
 - `effects/stretch-segment/ex4.amproj` ✅
 - `effects/stretch-segment/ex5.amproj` ✅
+- `effects/stretch-segment/muti/basic.amproj` ✅
 
 ---
 

@@ -2,7 +2,17 @@
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect};
+use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe, AmProperty};
+
+/// Effect IDs for transform variants.
+const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
+/// Legacy transform effect (older Alight Motion versions).
+/// Uses different property names: offset(vec2) → posx/posy, scale → posz.
+const TRANSFORM_LEGACY_ID: &str = "com.alightcreative.effects.transform";
+
+fn is_transform_effect(id: &str) -> bool {
+    id == TRANSFORM2_ID || id == TRANSFORM_LEGACY_ID
+}
 
 /// All extracted transform2 effect parameters.
 #[derive(Debug, Clone, Default)]
@@ -17,120 +27,180 @@ pub struct Transform2Params {
     pub ainv: bool,
 }
 
-#[allow(dead_code)]
-pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
+/// Parse a single transform2/transform effect into `Transform2Params`.
+///
+/// Handles both transform2 (modern: posx/posy/posz/angle) and legacy transform
+/// (older: offset(vec2)/scale/angle). Legacy properties are mapped:
+///   offset.x → posx, offset.y → posy, scale → posz.
+fn parse_transform_params(effect: &AmEffect) -> Transform2Params {
+    let is_legacy = effect.id == TRANSFORM_LEGACY_ID;
     let mut params = Transform2Params::default();
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.transform2" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "posx" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_x.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_x.value = Some(v);
-                        }
-                    }
-                    "posy" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_y.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_y.value = Some(v);
-                        }
-                    }
-                    "posz" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_z.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_z.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "xinv" => {
-                        params.xinv = prop.value == "true";
-                    }
-                    "yinv" => {
-                        params.yinv = prop.value == "true";
-                    }
-                    "zinv" => {
-                        params.zinv = prop.value == "true";
-                    }
-                    "ainv" => {
-                        params.ainv = prop.value == "true";
-                    }
-                    _ => {}
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "posx" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_x.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_x.value = Some(v);
                 }
             }
+            "posy" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_y.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_y.value = Some(v);
+                }
+            }
+            // Legacy transform uses "offset" (vec2) instead of separate posx/posy.
+            // Split vec2 "x,y" values into individual float keyframes.
+            "offset" if is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    let (kf_x, kf_y) = split_vec2_keyframes(&prop.keyframes);
+                    params.pos_x.keyframes = kf_x;
+                    params.pos_y.keyframes = kf_y;
+                } else if let Some((x, y)) = parse_vec2_value(&prop.value) {
+                    params.pos_x.value = Some(x);
+                    params.pos_y.value = Some(y);
+                }
+            }
+            "posz" if !is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_z.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_z.value = Some(v);
+                }
+            }
+            // Legacy transform uses "scale" instead of "posz".
+            "scale" if is_legacy => {
+                if !prop.keyframes.is_empty() {
+                    params.pos_z.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.pos_z.value = Some(v);
+                }
+            }
+            "angle" => {
+                if !prop.keyframes.is_empty() {
+                    params.angle.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.angle.value = Some(v);
+                }
+            }
+            "xinv" => params.xinv = prop.value == "true",
+            "yinv" => params.yinv = prop.value == "true",
+            "zinv" => params.zinv = prop.value == "true",
+            "ainv" => params.ainv = prop.value == "true",
+            // Legacy-only properties (alpha, fill, maskToLayer, sample) are ignored.
+            _ => {}
         }
     }
 
     params
 }
 
-/// Extract ALL transform2 effects (supports multiple stacked instances).
-pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transform2Params> {
-    let mut result = Vec::new();
+/// Split vec2 keyframes ("x,y" values) into separate x and y float keyframes.
+fn split_vec2_keyframes(keyframes: &[AmKeyframe]) -> (Vec<AmKeyframe>, Vec<AmKeyframe>) {
+    let mut kf_x = Vec::with_capacity(keyframes.len());
+    let mut kf_y = Vec::with_capacity(keyframes.len());
 
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.transform2" {
-            let mut params = Transform2Params::default();
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "posx" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_x.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_x.value = Some(v);
-                        }
-                    }
-                    "posy" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_y.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_y.value = Some(v);
-                        }
-                    }
-                    "posz" => {
-                        if !prop.keyframes.is_empty() {
-                            params.pos_z.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.pos_z.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "xinv" => {
-                        params.xinv = prop.value == "true";
-                    }
-                    "yinv" => {
-                        params.yinv = prop.value == "true";
-                    }
-                    "zinv" => {
-                        params.zinv = prop.value == "true";
-                    }
-                    "ainv" => {
-                        params.ainv = prop.value == "true";
-                    }
-                    _ => {}
-                }
-            }
-            result.push(params);
-        }
+    for kf in keyframes {
+        let (x_str, y_str) = match kf.value.split_once(',') {
+            Some((x, y)) => (x.trim().to_string(), y.trim().to_string()),
+            None => (kf.value.clone(), "0.0".to_string()),
+        };
+
+        kf_x.push(AmKeyframe {
+            time: kf.time,
+            value: x_str,
+            easing: kf.easing.clone(),
+        });
+        kf_y.push(AmKeyframe {
+            time: kf.time,
+            value: y_str,
+            easing: kf.easing.clone(),
+        });
     }
 
-    result
+    (kf_x, kf_y)
+}
+
+/// Parse a "x,y" string into (f32, f32).
+fn parse_vec2_value(value: &str) -> Option<(f32, f32)> {
+    let (x_str, y_str) = value.split_once(',')?;
+    let x = x_str.trim().parse::<f32>().ok()?;
+    let y = y_str.trim().parse::<f32>().ok()?;
+    Some((x, y))
+}
+
+/// Apply property value or keyframes to an `AmAnimatedFloat`.
+fn apply_animated_float(target: &mut AmAnimatedFloat, prop: &AmProperty) {
+    if !prop.keyframes.is_empty() {
+        target.keyframes = prop.keyframes.clone();
+    } else if let Ok(v) = prop.value.parse::<f32>() {
+        target.value = Some(v);
+    }
+}
+
+/// Parse a color string into a `Vec4` (RGBA).
+fn parse_color_vec4(value: &str) -> Option<Vec4> {
+    let c = crate::schema::parse_color(value).ok()?;
+    Some(Vec4::new(c[0], c[1], c[2], c[3]))
+}
+
+/// Apply a custom palette color property (color1-color8).
+fn apply_custom_color(colors: &mut [Vec4; 8], name: &str, value: &str) {
+    let Some(index_str) = name.strip_prefix("color") else {
+        return;
+    };
+    let Ok(index) = index_str.parse::<usize>() else {
+        return;
+    };
+    if !(1..=8).contains(&index) {
+        return;
+    }
+    let Some(color) = parse_color_vec4(value) else {
+        return;
+    };
+    colors[index - 1] = color;
+}
+
+/// Apply property value or keyframes to an `AmAnimatedColor`.
+fn apply_animated_color(target: &mut AmAnimatedColor, prop: &AmProperty) {
+    if !prop.keyframes.is_empty() {
+        target.keyframes = prop
+            .keyframes
+            .iter()
+            .filter_map(|kf| {
+                let c = crate::schema::parse_color(&kf.value).ok()?;
+                Some(AmKeyframe {
+                    time: kf.time,
+                    value: format!("{},{},{},{}", c[0], c[1], c[2], c[3]),
+                    easing: kf.easing.clone(),
+                })
+            })
+            .collect();
+    } else if let Some(color) = parse_color_vec4(&prop.value) {
+        target.value = Some(color);
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn extract_effect_animations(effects: &[AmEffect]) -> Transform2Params {
+    for effect in effects {
+        if is_transform_effect(&effect.id) {
+            return parse_transform_params(effect);
+        }
+    }
+    Transform2Params::default()
+}
+
+/// Extract ALL transform2/transform effects (supports multiple stacked instances).
+pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transform2Params> {
+    effects
+        .iter()
+        .filter(|e| is_transform_effect(&e.id))
+        .map(parse_transform_params)
+        .collect()
 }
 #[derive(Debug, Clone, Default)]
 pub struct WipeEffectParams {
@@ -147,39 +217,16 @@ pub(crate) fn extract_wipe_effect(effects: &[AmEffect]) -> WipeEffectParams {
     params.end.value = Some(1.0);
 
     for effect in effects {
-        if effect.id == "com.alightcreative.effects.wipe2" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "start" => {
-                        if !prop.keyframes.is_empty() {
-                            params.start.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.start.value = Some(v);
-                        }
-                    }
-                    "end" => {
-                        if !prop.keyframes.is_empty() {
-                            params.end.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.end.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "feather" => {
-                        if !prop.keyframes.is_empty() {
-                            params.feather.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.feather.value = Some(v);
-                        }
-                    }
-                    _ => {}
-                }
+        if effect.id != "com.alightcreative.effects.wipe2" {
+            continue;
+        }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "start" => apply_animated_float(&mut params.start, prop),
+                "end" => apply_animated_float(&mut params.end, prop),
+                "angle" => apply_animated_float(&mut params.angle, prop),
+                "feather" => apply_animated_float(&mut params.feather, prop),
+                _ => (),
             }
         }
     }
@@ -212,49 +259,27 @@ impl StretchSegmentParams {
     }
 }
 
-/// Extract stretch segment effect parameters from effects.
-pub(crate) fn extract_stretch_segment_effect(effects: &[AmEffect]) -> StretchSegmentParams {
-    let mut params = StretchSegmentParams::default();
-
-    for effect in effects {
-        if effect.id == "com.alightcreative.effects.stretchsegment" {
+/// Extract ALL stretch segment effects (supports multiple stacked instances).
+pub(crate) fn extract_all_stretch_segment_effects(
+    effects: &[AmEffect],
+) -> Vec<StretchSegmentParams> {
+    effects
+        .iter()
+        .filter(|e| e.id == "com.alightcreative.effects.stretchsegment")
+        .map(|effect| {
+            let mut params = StretchSegmentParams::default();
             for prop in &effect.properties {
                 match prop.name.as_str() {
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "stretch" => {
-                        if !prop.keyframes.is_empty() {
-                            params.stretch.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.stretch.value = Some(v);
-                        }
-                    }
-                    "offset" => {
-                        if !prop.keyframes.is_empty() {
-                            params.offset.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.offset.value = Some(v);
-                        }
-                    }
-                    "smooth" => {
-                        if !prop.keyframes.is_empty() {
-                            params.smooth.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.smooth.value = Some(v);
-                        }
-                    }
-                    _ => {}
+                    "angle" => apply_animated_float(&mut params.angle, prop),
+                    "stretch" => apply_animated_float(&mut params.stretch, prop),
+                    "offset" => apply_animated_float(&mut params.offset, prop),
+                    "smooth" => apply_animated_float(&mut params.smooth, prop),
+                    _ => (),
                 }
             }
-        }
-    }
-
-    params
+            params
+        })
+        .collect()
 }
 #[derive(Debug, Clone, Default)]
 pub struct GaussianBlurParams {
@@ -274,15 +299,12 @@ pub(crate) fn extract_gaussian_blur_effect(effects: &[AmEffect]) -> GaussianBlur
     let mut params = GaussianBlurParams::default();
 
     for effect in effects {
-        if effect.id == "com.alightcreative.effects.gaussianblur" {
-            for prop in &effect.properties {
-                if prop.name == "strength" {
-                    if !prop.keyframes.is_empty() {
-                        params.strength.keyframes = prop.keyframes.clone();
-                    } else if let Ok(v) = prop.value.parse::<f32>() {
-                        params.strength.value = Some(v);
-                    }
-                }
+        if effect.id != "com.alightcreative.effects.gaussianblur" {
+            continue;
+        }
+        for prop in &effect.properties {
+            if prop.name == "strength" {
+                apply_animated_float(&mut params.strength, prop);
             }
         }
     }
@@ -313,37 +335,18 @@ pub(crate) fn extract_palette_map_effect(effects: &[AmEffect]) -> PaletteMapPara
     let mut params = PaletteMapParams::default();
 
     for effect in effects {
-        if effect.id == "com.alightcreative.effects.palettemap" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "alpha" => {
-                        if !prop.keyframes.is_empty() {
-                            params.alpha.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.alpha.value = Some(v);
-                        }
-                    }
-                    "palette" => {
-                        if let Ok(v) = prop.value.parse::<u8>() {
-                            params.palette_id = v;
-                        }
-                    }
-                    "shades" => {
-                        params.shades = prop.value == "true";
-                    }
-                    name if name.starts_with("color") => {
-                        // Parse color1-color8
-                        if let Some(index_char) = name.strip_prefix("color")
-                            && let Ok(index) = index_char.parse::<usize>()
-                            && (1..=8).contains(&index)
-                            && let Ok(color) = crate::schema::parse_color(&prop.value)
-                        {
-                            params.custom_colors[index - 1] =
-                                Vec4::new(color[0], color[1], color[2], color[3]);
-                        }
-                    }
-                    _ => {}
+        if effect.id != "com.alightcreative.effects.palettemap" {
+            continue;
+        }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "alpha" => apply_animated_float(&mut params.alpha, prop),
+                "palette" => params.palette_id = prop.value.parse().unwrap_or(params.palette_id),
+                "shades" => params.shades = prop.value == "true",
+                name if name.starts_with("color") => {
+                    apply_custom_color(&mut params.custom_colors, name, &prop.value)
                 }
+                _ => (),
             }
         }
     }
@@ -377,65 +380,20 @@ pub(crate) fn extract_replace_color_effect(effects: &[AmEffect]) -> ReplaceColor
     params.alpha.value = Some(1.0); // Default: full effect
 
     for effect in effects {
-        if effect.id == "com.alightcreative.replacecolor" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "oldcolor" => {
-                        if let Ok(color) = crate::schema::parse_color(&prop.value) {
-                            params.old_color = Vec4::new(color[0], color[1], color[2], color[3]);
-                        }
-                    }
-                    "newcolor" => {
-                        if !prop.keyframes.is_empty() {
-                            params.new_color.keyframes = prop
-                                .keyframes
-                                .iter()
-                                .filter_map(|kf| {
-                                    if let Ok(color) = crate::schema::parse_color(&kf.value) {
-                                        Some(crate::schema::AmKeyframe {
-                                            time: kf.time,
-                                            value: format!(
-                                                "{},{},{},{}",
-                                                color[0], color[1], color[2], color[3]
-                                            ),
-                                            easing: kf.easing.clone(),
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                        } else if let Ok(color) = crate::schema::parse_color(&prop.value) {
-                            params.new_color.value =
-                                Some(Vec4::new(color[0], color[1], color[2], color[3]));
-                        }
-                    }
-                    "threshold" => {
-                        if !prop.keyframes.is_empty() {
-                            params.threshold.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.threshold.value = Some(v);
-                        }
-                    }
-                    "feather" => {
-                        if !prop.keyframes.is_empty() {
-                            params.feather.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.feather.value = Some(v);
-                        }
-                    }
-                    "alpha" => {
-                        if !prop.keyframes.is_empty() {
-                            params.alpha.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.alpha.value = Some(v);
-                        }
-                    }
-                    "lockLuminance" => {
-                        params.lock_luminance = prop.value == "true";
-                    }
-                    _ => {}
+        if effect.id != "com.alightcreative.replacecolor" {
+            continue;
+        }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "oldcolor" => {
+                    params.old_color = parse_color_vec4(&prop.value).unwrap_or(params.old_color)
                 }
+                "newcolor" => apply_animated_color(&mut params.new_color, prop),
+                "threshold" => apply_animated_float(&mut params.threshold, prop),
+                "feather" => apply_animated_float(&mut params.feather, prop),
+                "alpha" => apply_animated_float(&mut params.alpha, prop),
+                "lockLuminance" => params.lock_luminance = prop.value == "true",
+                _ => (),
             }
         }
     }
@@ -462,30 +420,15 @@ pub(crate) fn extract_scale_assist_effect(effects: &[AmEffect]) -> ScaleAssistPa
     params.damp.value = Some(1.0); // Default: no damping
 
     for effect in effects {
-        if effect.id == "com.alightcreative.effects.scaleassist" {
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "axis" => {
-                        if let Ok(v) = prop.value.parse::<i32>() {
-                            params.axis = v;
-                        }
-                    }
-                    "scale" => {
-                        if !prop.keyframes.is_empty() {
-                            params.scale.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.scale.value = Some(v);
-                        }
-                    }
-                    "damp" => {
-                        if !prop.keyframes.is_empty() {
-                            params.damp.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.damp.value = Some(v);
-                        }
-                    }
-                    _ => {}
-                }
+        if effect.id != "com.alightcreative.effects.scaleassist" {
+            continue;
+        }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "axis" => params.axis = prop.value.parse().unwrap_or(params.axis),
+                "scale" => apply_animated_float(&mut params.scale, prop),
+                "damp" => apply_animated_float(&mut params.damp, prop),
+                _ => (),
             }
         }
     }
@@ -517,33 +460,20 @@ pub(crate) fn extract_stretch2_effect(effects: &[AmEffect]) -> Stretch2Params {
     let mut params = Stretch2Params::default();
 
     for effect in effects {
-        if effect.id == "com.alightcreative.effects.stretch2" {
-            bevy::prelude::warn!("[extract_stretch2] Found stretch2 effect!");
-            // Default scale=1 (no stretch)
-            params.scale.value = Some(1.0);
-            params.angle.value = Some(0.0);
+        if effect.id != "com.alightcreative.effects.stretch2" {
+            continue;
+        }
+        bevy::prelude::warn!("[extract_stretch2] Found stretch2 effect!");
+        // Default scale=1 (no stretch)
+        params.scale.value = Some(1.0);
+        params.angle.value = Some(0.0);
 
-            for prop in &effect.properties {
-                match prop.name.as_str() {
-                    "scale" => {
-                        if !prop.keyframes.is_empty() {
-                            params.scale.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.scale.value = Some(v);
-                        }
-                    }
-                    "angle" => {
-                        if !prop.keyframes.is_empty() {
-                            params.angle.keyframes = prop.keyframes.clone();
-                        } else if let Ok(v) = prop.value.parse::<f32>() {
-                            params.angle.value = Some(v);
-                        }
-                    }
-                    "contentOnly" => {
-                        params.content_only = prop.value == "true";
-                    }
-                    _ => {}
-                }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "scale" => apply_animated_float(&mut params.scale, prop),
+                "angle" => apply_animated_float(&mut params.angle, prop),
+                "contentOnly" => params.content_only = prop.value == "true",
+                _ => (),
             }
         }
     }

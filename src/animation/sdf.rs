@@ -16,6 +16,177 @@ use crate::sdf_material::{SdfMaterial, repack_with_alpha};
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
 use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
+/// Apply solidcolor blend mode to SDF material fill color.
+fn apply_solidcolor_blend(
+    color: &mut Vec4,
+    base: &[f32; 4],
+    sc_color: Vec4,
+    sc_alpha: f32,
+    blend_mode: i32,
+) {
+    match blend_mode {
+        0 => {
+            // Normal: replace RGB, mix by alpha
+            color.x = base[0] + (sc_color.x - base[0]) * sc_alpha;
+            color.y = base[1] + (sc_color.y - base[1]) * sc_alpha;
+            color.z = base[2] + (sc_color.z - base[2]) * sc_alpha;
+        }
+        1 => {
+            // Multiply
+            let mr = base[0] * sc_color.x;
+            let mg = base[1] * sc_color.y;
+            let mb = base[2] * sc_color.z;
+            color.x = base[0] + (mr - base[0]) * sc_alpha;
+            color.y = base[1] + (mg - base[1]) * sc_alpha;
+            color.z = base[2] + (mb - base[2]) * sc_alpha;
+        }
+        2 => {
+            // Screen
+            let sr = 1.0 - (1.0 - base[0]) * (1.0 - sc_color.x);
+            let sg = 1.0 - (1.0 - base[1]) * (1.0 - sc_color.y);
+            let sb = 1.0 - (1.0 - base[2]) * (1.0 - sc_color.z);
+            color.x = base[0] + (sr - base[0]) * sc_alpha;
+            color.y = base[1] + (sg - base[1]) * sc_alpha;
+            color.z = base[2] + (sb - base[2]) * sc_alpha;
+        }
+        _ => {}
+    }
+}
+
+/// Compute mask parameters from a mask entry using the mask layer's current animated state.
+/// Returns (center, half_size, rotation_rad, blend_params).
+/// blend_params = Vec3(fill_alpha, opacity, stroke_width_world).
+fn compute_sdf_mask_params(
+    mask: &crate::scene::AmMaskEntry,
+    pending: &crate::scene::AmPendingLayers,
+    mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
+    playback_time: f32,
+    parent_global_scale: Vec3,
+    fit_scale: f32,
+) -> (Vec2, Vec2, f32, Vec3) {
+    let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) else {
+        return (
+            mask.center * fit_scale,
+            mask.half_size * fit_scale * mask.scale,
+            mask.rotation,
+            Vec3::new(1.0, 1.0, 0.0),
+        );
+    };
+    let Ok((_global_transform, mask_animated, spec)) = mask_layer_query.get(mask_entity) else {
+        return (
+            mask.center * fit_scale,
+            mask.half_size * fit_scale * mask.scale,
+            mask.rotation,
+            Vec3::new(1.0, 1.0, 0.0),
+        );
+    };
+
+    let (base_width, base_height, pivot_x, pivot_y, fill_alpha, initial_sw, stroke_dir) = match spec
+    {
+        crate::scene::AmLayerSpec::SdfShape {
+            width,
+            height,
+            pivot_x,
+            pivot_y,
+            fill_color,
+            no_fill,
+            stroke_width,
+            stroke_direction,
+            ..
+        } => {
+            let fa = if *no_fill {
+                0.0
+            } else if let Some(fc) = fill_color {
+                if fc.value.len() >= 3 && fc.value.starts_with('#') {
+                    let alpha_hex = &fc.value[1..3];
+                    u8::from_str_radix(alpha_hex, 16).unwrap_or(255) as f32 / 255.0
+                } else {
+                    1.0
+                }
+            } else {
+                1.0
+            };
+            (
+                *width,
+                *height,
+                *pivot_x,
+                *pivot_y,
+                fa,
+                *stroke_width,
+                stroke_direction.as_str(),
+            )
+        }
+        crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
+            (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered")
+        }
+        _ => (
+            mask.half_size.x * 2.0 / mask.scale.x,
+            mask.half_size.y * 2.0 / mask.scale.y,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            "centered",
+        ),
+    };
+
+    let local_time = mask_animated.calc_local_time(playback_time);
+    let layer_time = mask_animated.calc_layer_time(local_time);
+    let mask_opacity = interpolate_float(&mask_animated.opacity, layer_time).unwrap_or(1.0);
+    let current_sw =
+        interpolate_float(&mask_animated.stroke_width, layer_time).unwrap_or(initial_sw);
+    let rotation_deg = interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
+    let rotation_rad = (-rotation_deg).to_radians();
+    let [scale_x, scale_y] =
+        interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+    let [anim_size_x, anim_size_y] =
+        interpolate_vec2(&mask_animated.size, layer_time).unwrap_or([base_width, base_height]);
+
+    let mask_translation = _global_transform.translation();
+
+    let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
+    let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
+    let rotated_offset_x =
+        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+    let rotated_offset_y =
+        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+    let center_x = mask_translation.x + rotated_offset_x;
+    let center_y = mask_translation.y + rotated_offset_y;
+
+    let initial_stroke_ext_x = mask.half_size.x - base_width / 2.0 * mask.scale.x;
+    let initial_stroke_ext_y = mask.half_size.y - base_height / 2.0 * mask.scale.y;
+    let ext = |sw: f32| match stroke_dir {
+        "inside" => 0.0,
+        "outside" => sw,
+        _ => sw * 0.5,
+    };
+    let stroke_delta = ext(current_sw) - ext(initial_sw);
+    let half_width =
+        (anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta) * fit_scale;
+    let half_height =
+        (anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta) * fit_scale;
+    let sw_world = current_sw * fit_scale;
+
+    bevy::log::debug!(
+        "[MaskDebug] mask_layer_id={}, center=({:.1},{:.1}), half=({:.1},{:.1}), fill_alpha={:.2}, opacity={:.2}, sw={:.1}",
+        mask.mask_layer_id,
+        center_x,
+        center_y,
+        half_width,
+        half_height,
+        fill_alpha,
+        mask_opacity,
+        sw_world,
+    );
+
+    (
+        Vec2::new(center_x, center_y),
+        Vec2::new(half_width, half_height),
+        rotation_rad,
+        Vec3::new(fill_alpha, mask_opacity, sw_world),
+    )
+}
+
 /// Convert alpha from sRGB to linear space so Bevy's linear blending approximates AM's sRGB blend.
 #[inline]
 #[allow(dead_code)]
@@ -94,219 +265,78 @@ pub fn update_sdf_mask_system(
         // Get parent's global scale - this is the coordinate system we need to match
         let parent_global_scale = parent_global_transform.to_scale_rotation_translation().0;
 
-        // Helper closure to compute mask parameters from mask layer transform
-        // IMPORTANT: The returned coordinates must be in the same space as the SDF child entity's world_position.
-        // The SDF child entity's GlobalTransform inherits from parent_global_transform (scale = fit_scale).
-        // So mask coordinates must also be scaled by fit_scale, NOT by mask's own GlobalTransform.
-        // Returns (center, half_size, rotation, blend_params)
-        // blend_params = Vec3(fill_alpha, opacity, stroke_width_world)
-        let compute_mask_params = |mask: &crate::scene::AmMaskEntry| -> (Vec2, Vec2, f32, Vec3) {
-            // Try to get the mask layer's current transform and animation data
-            if let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id)
-                && let Ok((_global_transform, mask_animated, spec)) =
-                    mask_layer_query.get(mask_entity)
-            {
-                // Get base shape dimensions and fill alpha from spec
-                let (base_width, base_height, pivot_x, pivot_y, fill_alpha, initial_sw, stroke_dir) =
-                    match spec {
-                        crate::scene::AmLayerSpec::SdfShape {
-                            width,
-                            height,
-                            pivot_x,
-                            pivot_y,
-                            fill_color,
-                            no_fill,
-                            stroke_width,
-                            stroke_direction,
-                            ..
-                        } => {
-                            let fa = if *no_fill {
-                                0.0
-                            } else if let Some(fc) = fill_color {
-                                // Parse alpha from #AARRGGBB format
-                                if fc.value.len() >= 3 && fc.value.starts_with('#') {
-                                    let alpha_hex = &fc.value[1..3];
-                                    u8::from_str_radix(alpha_hex, 16).unwrap_or(255) as f32 / 255.0
-                                } else {
-                                    1.0
-                                }
-                            } else {
-                                1.0
-                            };
-                            (
-                                *width,
-                                *height,
-                                *pivot_x,
-                                *pivot_y,
-                                fa,
-                                *stroke_width,
-                                stroke_direction.as_str(),
-                            )
-                        }
-                        crate::scene::AmLayerSpec::SpriteShape { width, height, .. } => {
-                            (*width, *height, 0.0, 0.0, 1.0, 0.0, "centered")
-                        }
-                        _ => (
-                            mask.half_size.x * 2.0 / mask.scale.x,
-                            mask.half_size.y * 2.0 / mask.scale.y,
-                            0.0,
-                            0.0,
-                            1.0,
-                            0.0,
-                            "centered",
-                        ),
-                    };
-
-                // Calculate normalized layer time for interpolation
-                let local_time = mask_animated.calc_local_time(playback.current_time_ms);
-                let layer_time = mask_animated.calc_layer_time(local_time);
-
-                // Animated opacity and stroke width
-                let mask_opacity =
-                    interpolate_float(&mask_animated.opacity, layer_time).unwrap_or(1.0);
-                let current_sw = interpolate_float(&mask_animated.stroke_width, layer_time)
-                    .unwrap_or(initial_sw);
-
-                // Get animated values using interpolation
-                // Rotation
-                let rotation_deg =
-                    interpolate_float(&mask_animated.rotation, layer_time).unwrap_or(0.0);
-                let rotation_rad = (-rotation_deg).to_radians();
-
-                // Scale (local animated scale)
-                let [scale_x, scale_y] =
-                    interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
-
-                // Size - get animated size (AM stores full dimensions, we need half-extents)
-                let [anim_size_x, anim_size_y] = interpolate_vec2(&mask_animated.size, layer_time)
-                    .unwrap_or([base_width, base_height]);
-
-                let mask_translation = _global_transform.translation();
-                let mask_global_scale = _global_transform.to_scale_rotation_translation().0;
-
-                let _scale_ratio_x = parent_global_scale.x / mask_global_scale.x;
-                let _scale_ratio_y = parent_global_scale.y / mask_global_scale.y;
-
-                let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
-                let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
-
-                let rotated_offset_x =
-                    scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                let rotated_offset_y =
-                    scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-
-                let center_x = mask_translation.x + rotated_offset_x;
-                let center_y = mask_translation.y + rotated_offset_y;
-
-                // Half-size: Compute from current animated size and scale.
-                let initial_stroke_ext_x = mask.half_size.x - base_width / 2.0 * mask.scale.x;
-                let initial_stroke_ext_y = mask.half_size.y - base_height / 2.0 * mask.scale.y;
-                let ext = |sw: f32| match stroke_dir {
-                    "inside" => 0.0,
-                    "outside" => sw,
-                    _ => sw * 0.5,
-                };
-                let stroke_delta = ext(current_sw) - ext(initial_sw);
-                let half_width =
-                    (anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta) * fit_scale;
-                let half_height =
-                    (anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta) * fit_scale;
-
-                // Stroke width in world units (same scale as half_size)
-                let sw_world = current_sw * fit_scale;
-
-                bevy::log::debug!(
-                    "[MaskDebug] mask_layer_id={}, center=({:.1},{:.1}), half=({:.1},{:.1}), fill_alpha={:.2}, opacity={:.2}, sw={:.1}",
-                    mask.mask_layer_id,
-                    center_x,
-                    center_y,
-                    half_width,
-                    half_height,
-                    fill_alpha,
-                    mask_opacity,
-                    sw_world,
-                );
-
-                return (
-                    Vec2::new(center_x, center_y),
-                    Vec2::new(half_width, half_height),
-                    rotation_rad,
-                    Vec3::new(fill_alpha, mask_opacity, sw_world),
-                );
-            }
-            // Fallback
-            (
-                mask.center * fit_scale,
-                mask.half_size * fit_scale * mask.scale,
-                mask.rotation,
-                Vec3::new(1.0, 1.0, 0.0),
-            )
-        };
-
         for child in children.iter() {
-            if let Ok((material_handle, child_global_transform)) = sdf_query.get_mut(child)
-                && let Some(material) = materials.get_mut(&material_handle.0)
-            {
-                // Log child SDF entity's world position for debugging
-                let _child_translation = child_global_transform.translation();
-                let _child_scale = child_global_transform.to_scale_rotation_translation().0;
-                let _frame_half = material.uniform_data.frame_half;
+            let Ok((material_handle, child_global_transform)) = sdf_query.get_mut(child) else {
+                continue;
+            };
+            let Some(material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            let _child_translation = child_global_transform.translation();
+            let _child_scale = child_global_transform.to_scale_rotation_translation().0;
+            let _frame_half = material.uniform_data.frame_half;
 
-                if active_masks.is_empty() {
-                    // No active masks - disable masking (content visible without clipping)
-                    material.uniform_data.mask_type = 0.0;
-                    material.uniform_data.mask2_type = 0.0;
-                } else {
-                    // First mask
-                    let mask1 = active_masks[0];
-                    let (mask1_center, mask1_half_size, mask1_rotation, mask1_blend) =
-                        compute_mask_params(mask1);
+            if active_masks.is_empty() {
+                material.uniform_data.mask_type = 0.0;
+                material.uniform_data.mask2_type = 0.0;
+                continue;
+            }
 
-                    // Use calculated mask params
-                    material.uniform_data.mask_params = bevy::math::Vec4::new(
-                        mask1_center.x,
-                        mask1_center.y,
-                        mask1_half_size.x,
-                        mask1_half_size.y,
+            let mask1 = active_masks[0];
+            let (mask1_center, mask1_half_size, mask1_rotation, mask1_blend) =
+                compute_sdf_mask_params(
+                    mask1,
+                    pending,
+                    &mask_layer_query,
+                    playback.current_time_ms,
+                    parent_global_scale,
+                    fit_scale,
+                );
+
+            material.uniform_data.mask_params = bevy::math::Vec4::new(
+                mask1_center.x,
+                mask1_center.y,
+                mask1_half_size.x,
+                mask1_half_size.y,
+            );
+            material.uniform_data.mask_blend =
+                bevy::math::Vec4::new(mask1_blend.x, mask1_blend.y, mask1_blend.z, 0.0);
+
+            let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
+            material.uniform_data.mask_type = if mask1.is_exclude {
+                base_type1 + 2.0
+            } else {
+                base_type1
+            };
+            material.uniform_data.mask_rotation = mask1_rotation;
+
+            if active_masks.len() >= 2 {
+                let mask2 = active_masks[1];
+                let (mask2_center, mask2_half_size, mask2_rotation, mask2_blend) =
+                    compute_sdf_mask_params(
+                        mask2,
+                        pending,
+                        &mask_layer_query,
+                        playback.current_time_ms,
+                        parent_global_scale,
+                        fit_scale,
                     );
-                    material.uniform_data.mask_blend =
-                        bevy::math::Vec4::new(mask1_blend.x, mask1_blend.y, mask1_blend.z, 0.0);
 
-                    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-                    material.uniform_data.mask_type = if mask1.is_exclude {
-                        base_type1 + 2.0
-                    } else {
-                        base_type1
-                    };
-                    material.uniform_data.mask_rotation = mask1_rotation;
-
-                    // Second mask (if present)
-                    if active_masks.len() >= 2 {
-                        let mask2 = active_masks[1];
-                        let (mask2_center, mask2_half_size, mask2_rotation, mask2_blend) =
-                            compute_mask_params(mask2);
-
-                        material.uniform_data.mask2_params = bevy::math::Vec4::new(
-                            mask2_center.x,
-                            mask2_center.y,
-                            mask2_half_size.x,
-                            mask2_half_size.y,
-                        );
-                        material.uniform_data.mask2_blend =
-                            bevy::math::Vec4::new(mask2_blend.x, mask2_blend.y, mask2_blend.z, 0.0);
-                        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-                        material.uniform_data.mask2_type = if mask2.is_exclude {
-                            base_type2 + 2.0
-                        } else {
-                            base_type2
-                        };
-                        material.uniform_data.mask2_rotation = mask2_rotation;
-                    } else {
-                        material.uniform_data.mask2_type = 0.0;
-                        material.uniform_data.mask2_rotation = 0.0;
-                        material.uniform_data.mask2_blend = bevy::math::Vec4::ZERO;
-                    }
-                }
+                material.uniform_data.mask2_params = bevy::math::Vec4::new(
+                    mask2_center.x,
+                    mask2_center.y,
+                    mask2_half_size.x,
+                    mask2_half_size.y,
+                );
+                material.uniform_data.mask2_blend =
+                    bevy::math::Vec4::new(mask2_blend.x, mask2_blend.y, mask2_blend.z, 0.0);
+                let base_type2 = 1.0 + mask2.is_circle as u8 as f32;
+                material.uniform_data.mask2_type = base_type2 + mask2.is_exclude as u8 as f32 * 2.0;
+                material.uniform_data.mask2_rotation = mask2_rotation;
+            } else {
+                material.uniform_data.mask2_type = 0.0;
+                material.uniform_data.mask2_rotation = 0.0;
+                material.uniform_data.mask2_blend = bevy::math::Vec4::ZERO;
             }
         }
     }
@@ -348,90 +378,69 @@ pub fn animate_sdf_opacity_system(
 
         // Update all SDF children
         for child in children.iter() {
-            if let Ok((material_handle, sdf_params, mut visibility)) = sdf_query.get_mut(child) {
-                // Check if layer is active
-                if !animated.is_active(local_time) {
-                    // Hide shape when outside its time range
-                    *visibility = Visibility::Hidden;
-                    if let Some(material) = materials.get_mut(&material_handle.0) {
-                        material.uniform_data.color.w = 0.0;
-                        material.uniform_data.params.w =
-                            repack_with_alpha(sdf_params.packed_stroke, 0.0);
-                    }
-                    continue;
-                }
-
-                // If force hidden, keep visibility Hidden but still update material for proper timing
-                if is_force_hidden {
-                    *visibility = Visibility::Hidden;
-                } else {
-                    // Show shape when within its time range and not force hidden
-                    *visibility = Visibility::Inherited;
-                }
-
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    // Multiply by base_alpha to preserve original fill color transparency
-                    let mut final_alpha = opacity * animated.base_alpha;
-                    // Apply echo alpha (for echokf effect) to both fill and stroke
-                    let echo_mult = if let Some(ref echo_cfg) = animated.echo_alpha_config {
-                        echo_cfg.evaluate(global_time)
-                    } else {
-                        1.0
-                    };
-                    final_alpha *= echo_mult;
-                    material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
-
-                    // Also update stroke alpha: base_stroke_alpha * opacity * echo_alpha
-                    let final_stroke_alpha =
-                        (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
-                    material.uniform_data.params.w =
-                        repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
-
-                    // Apply solidcolor effect: mix base fill color with solid color
-                    let sc_alpha =
-                        interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
-                    if sc_alpha > 0.0 {
-                        let sc_color = interpolate_color(&animated.solid_color, layer_time)
-                            .unwrap_or(bevy::math::Vec4::ZERO);
-                        let base = &animated.base_fill_color;
-                        match animated.solid_color_blend_mode {
-                            0 => {
-                                // Normal: replace RGB, mix by alpha
-                                material.uniform_data.color.x =
-                                    base[0] + (sc_color.x - base[0]) * sc_alpha;
-                                material.uniform_data.color.y =
-                                    base[1] + (sc_color.y - base[1]) * sc_alpha;
-                                material.uniform_data.color.z =
-                                    base[2] + (sc_color.z - base[2]) * sc_alpha;
-                            }
-                            1 => {
-                                // Multiply
-                                let mr = base[0] * sc_color.x;
-                                let mg = base[1] * sc_color.y;
-                                let mb = base[2] * sc_color.z;
-                                material.uniform_data.color.x = base[0] + (mr - base[0]) * sc_alpha;
-                                material.uniform_data.color.y = base[1] + (mg - base[1]) * sc_alpha;
-                                material.uniform_data.color.z = base[2] + (mb - base[2]) * sc_alpha;
-                            }
-                            2 => {
-                                // Screen
-                                let sr = 1.0 - (1.0 - base[0]) * (1.0 - sc_color.x);
-                                let sg = 1.0 - (1.0 - base[1]) * (1.0 - sc_color.y);
-                                let sb = 1.0 - (1.0 - base[2]) * (1.0 - sc_color.z);
-                                material.uniform_data.color.x = base[0] + (sr - base[0]) * sc_alpha;
-                                material.uniform_data.color.y = base[1] + (sg - base[1]) * sc_alpha;
-                                material.uniform_data.color.z = base[2] + (sb - base[2]) * sc_alpha;
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    // Pass pixelate2 threshold to shader via gradient_config.y
-                    let pix_thresh =
-                        interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.0);
-                    material.uniform_data.gradient_config.y = pix_thresh;
-                }
+            let Ok((material_handle, sdf_params, mut visibility)) = sdf_query.get_mut(child) else {
+                continue;
+            };
+            // Check if layer is active
+            if !animated.is_active(local_time)
+                && let Some(material) = materials.get_mut(&material_handle.0)
+            {
+                *visibility = Visibility::Hidden;
+                material.uniform_data.color.w = 0.0;
+                material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                continue;
             }
+            if !animated.is_active(local_time) {
+                *visibility = Visibility::Hidden;
+                continue;
+            }
+
+            // If force hidden, keep visibility Hidden but still update material for proper timing
+            if is_force_hidden {
+                *visibility = Visibility::Hidden;
+            } else {
+                *visibility = Visibility::Inherited;
+            }
+
+            let Some(material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            // Multiply by base_alpha to preserve original fill color transparency
+            let mut final_alpha = opacity * animated.base_alpha;
+            // Apply echo alpha (for echokf effect) to both fill and stroke
+            let echo_mult = if let Some(ref echo_cfg) = animated.echo_alpha_config {
+                echo_cfg.evaluate(global_time)
+            } else {
+                1.0
+            };
+            final_alpha *= echo_mult;
+            material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
+
+            // Also update stroke alpha: base_stroke_alpha * opacity * echo_alpha
+            let final_stroke_alpha =
+                (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
+            material.uniform_data.params.w =
+                repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+
+            // Apply solidcolor effect: mix base fill color with solid color
+            let sc_alpha =
+                interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
+            if sc_alpha > 0.0 {
+                let sc_color = interpolate_color(&animated.solid_color, layer_time)
+                    .unwrap_or(bevy::math::Vec4::ZERO);
+                apply_solidcolor_blend(
+                    &mut material.uniform_data.color,
+                    &animated.base_fill_color,
+                    sc_color,
+                    sc_alpha,
+                    animated.solid_color_blend_mode,
+                );
+            }
+
+            // Pass pixelate2 threshold to shader via gradient_config.y
+            let pix_thresh =
+                interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.0);
+            material.uniform_data.gradient_config.y = pix_thresh;
         }
     }
 }
@@ -586,12 +595,13 @@ pub fn animate_sdf_scale_system(
             posz_offset += posz - 1.0;
         }
         for extra in &animated.extra_transform2 {
-            if let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) {
-                if extra.zinv {
-                    posz = 2.0 - posz;
-                }
-                posz_offset += posz - 1.0;
+            let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) else {
+                continue;
+            };
+            if extra.zinv {
+                posz = 2.0 - posz;
             }
+            posz_offset += posz - 1.0;
         }
         let combined_posz = 1.0 + posz_offset;
         anim_scale[0] *= combined_posz;
@@ -630,89 +640,86 @@ pub fn animate_sdf_scale_system(
 
         // Update SDF child's params to reflect scaled dimensions
         for child in children.iter() {
-            if let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) {
-                // Calculate scaled dimensions
-                let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
-                let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
+            let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) else {
+                continue;
+            };
+            // Calculate scaled dimensions
+            let scaled_half_width = sdf_params.base_half_width * anim_scale[0];
+            let scaled_half_height = sdf_params.base_half_height * anim_scale[1];
 
-                // Use animated stroke width if available, otherwise use base value
-                let mut final_stroke_width = if stroke_width_animated >= 0.0 {
-                    stroke_width_animated
-                } else {
-                    sdf_params.stroke_width
-                };
+            // Use animated stroke width if available, otherwise use base value
+            let mut final_stroke_width = if stroke_width_animated >= 0.0 {
+                stroke_width_animated
+            } else {
+                sdf_params.stroke_width
+            };
 
-                // When shape is scaled to near-zero, hide stroke to prevent tiny dots
-                // (AM doesn't render shapes at scale 0; our SDF stroke would still be visible)
-                if scaled_half_width.abs() < 0.1 && scaled_half_height.abs() < 0.1 {
-                    final_stroke_width = 0.0;
-                }
+            // When shape is scaled to near-zero, hide stroke to prevent tiny dots
+            if scaled_half_width.abs() < 0.1 && scaled_half_height.abs() < 0.1 {
+                final_stroke_width = 0.0;
+            }
 
-                // Update material params: (half_width, half_height, stroke_width, packed_stroke)
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    bevy::log::debug!(
-                        "[SDF_SCALE] layer={}: scaled_half=({:.1},{:.1}), stroke={:.1}, frame_half={:.1}, anim_scale=({:.2},{:.2})",
-                        animated.layer_id,
-                        scaled_half_width,
-                        scaled_half_height,
-                        final_stroke_width,
-                        material.uniform_data.frame_half,
-                        anim_scale[0],
-                        anim_scale[1]
-                    );
-                    material.uniform_data.params = Vec4::new(
-                        scaled_half_width,
-                        scaled_half_height,
-                        final_stroke_width,
-                        sdf_params.packed_stroke,
-                    );
+            // Update translation to simulate scaling around pivot
+            // Center position = -Pivot * Scale
+            // Account for Y-flip: AM pivot_y is down (+), Bevy Y is up
+            transform.translation.x = -sdf_params.base_pivot_x * anim_scale[0];
+            transform.translation.y = sdf_params.base_pivot_y * anim_scale[1];
 
-                    // Update shape_extra from animated properties
-                    if has_shape_anim {
-                        material.uniform_data.shape_extra = Vec4::new(
-                            shape_extra_anim[0],
-                            shape_extra_anim[1],
-                            shape_extra_anim[2],
-                            shape_extra_anim[3],
-                        );
-                    }
-                    if has_pts_anim {
-                        material.uniform_data.shape_extra = Vec4::new(
-                            shape_pts_anim[0][0],
-                            shape_pts_anim[0][1],
-                            shape_pts_anim[1][0],
-                            shape_pts_anim[1][1],
-                        );
-                        material.uniform_data.shape_extra2 = Vec4::new(
-                            shape_pts_anim[2][0],
-                            shape_pts_anim[2][1],
-                            shape_pts_anim[3][0],
-                            shape_pts_anim[3][1],
-                        );
-                        material.uniform_data.shape_extra3 =
-                            Vec4::new(shape_pts_anim[4][0], shape_pts_anim[4][1], 0.0, 0.0);
-                    }
+            // Update material params: (half_width, half_height, stroke_width, packed_stroke)
+            let Some(material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            bevy::log::debug!(
+                "[SDF_SCALE] layer={}: scaled_half=({:.1},{:.1}), stroke={:.1}, frame_half={:.1}, anim_scale=({:.2},{:.2})",
+                animated.layer_id,
+                scaled_half_width,
+                scaled_half_height,
+                final_stroke_width,
+                material.uniform_data.frame_half,
+                anim_scale[0],
+                anim_scale[1]
+            );
+            material.uniform_data.params = Vec4::new(
+                scaled_half_width,
+                scaled_half_height,
+                final_stroke_width,
+                sdf_params.packed_stroke,
+            );
 
-                    // Dynamically update frame_half to accommodate scaled dimensions
-                    // This is critical for scale_assist effect which can create extreme stretching
-                    // The shader uses frame_half to define the coordinate system range
-                    let new_frame_half =
-                        scaled_half_width.max(scaled_half_height) + final_stroke_width * 2.0;
-                    // Only update if larger than current (avoid shrinking mesh bounds)
-                    if new_frame_half > material.uniform_data.frame_half {
-                        material.uniform_data.frame_half = new_frame_half;
-                    }
-                }
+            // Update shape_extra from animated properties
+            if has_shape_anim {
+                material.uniform_data.shape_extra = Vec4::new(
+                    shape_extra_anim[0],
+                    shape_extra_anim[1],
+                    shape_extra_anim[2],
+                    shape_extra_anim[3],
+                );
+            }
+            if has_pts_anim {
+                material.uniform_data.shape_extra = Vec4::new(
+                    shape_pts_anim[0][0],
+                    shape_pts_anim[0][1],
+                    shape_pts_anim[1][0],
+                    shape_pts_anim[1][1],
+                );
+                material.uniform_data.shape_extra2 = Vec4::new(
+                    shape_pts_anim[2][0],
+                    shape_pts_anim[2][1],
+                    shape_pts_anim[3][0],
+                    shape_pts_anim[3][1],
+                );
+                material.uniform_data.shape_extra3 =
+                    Vec4::new(shape_pts_anim[4][0], shape_pts_anim[4][1], 0.0, 0.0);
+            }
 
-                // Update translation to simulate scaling around pivot
-                // Center position = -Pivot * Scale
-                // Account for Y-flip: AM pivot_y is down (+), Bevy Y is up
-                // So translation.y = pivot_y * scale_y (positive pivot_y moves center UP relative to pivot)
-                let new_x = -sdf_params.base_pivot_x * anim_scale[0];
-                let new_y = sdf_params.base_pivot_y * anim_scale[1];
-
-                transform.translation.x = new_x;
-                transform.translation.y = new_y;
+            // Dynamically update frame_half to accommodate scaled dimensions
+            // This is critical for scale_assist effect which can create extreme stretching
+            // The shader uses frame_half to define the coordinate system range
+            let new_frame_half =
+                scaled_half_width.max(scaled_half_height) + final_stroke_width * 2.0;
+            // Only update if larger than current (avoid shrinking mesh bounds)
+            if new_frame_half > material.uniform_data.frame_half {
+                material.uniform_data.frame_half = new_frame_half;
             }
         }
     }

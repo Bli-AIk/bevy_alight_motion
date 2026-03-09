@@ -28,7 +28,6 @@ use super::spawn::process_pending_layers;
 /// - 当图层进入时间范围时创建实体
 /// - 当图层退出时间范围时销毁实体
 /// - 实现真正的懒惰生成，实体在需要时才存在
-#[allow(clippy::too_many_arguments)]
 pub fn manage_layer_lifecycle_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,

@@ -1,7 +1,7 @@
 # 振荡 (Oscillate)
 
 > ⚠️ **此文档由代码自动生成，请勿手动编辑。**
-> 最近测试时间：2026-03-01 17:45:43
+> 最近测试时间：2026-03-07 20:20:21
 
 使图层沿指定方向以正弦/三角波进行周期性振荡运动。
 
@@ -15,7 +15,7 @@
 - **相位 (phase)**: ✅ 已实现 (相位偏移)
 
 **关联测试文件：**
-- `effects/swing/animation.amproj` ✅
+- `effects/swing/animation.amproj` ❌
 - `effects/swing/multi.amproj` ✅
 
 ---

@@ -122,16 +122,16 @@ impl TestResults {
         let mut _skip_count = 0;
 
         for test_file in test_files {
-            if let Some(result) = self.get_result(test_file) {
-                if result.is_pass() {
-                    pass_count += 1;
-                } else if result.is_fail() {
-                    fail_count += 1;
-                } else {
-                    _skip_count += 1;
-                }
+            let Some(result) = self.get_result(test_file) else {
+                // No result found, treat as not tested
+                _skip_count += 1;
+                continue;
+            };
+            if result.is_pass() {
+                pass_count += 1;
+            } else if result.is_fail() {
+                fail_count += 1;
             } else {
-                // 未找到测试结果，视为未测试 / No result found, treat as not tested
                 _skip_count += 1;
             }
         }

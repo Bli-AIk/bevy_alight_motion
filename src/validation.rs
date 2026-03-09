@@ -117,6 +117,57 @@ pub struct SceneStats {
     pub bookmark_count: u32,
 }
 
+/// Print a single supported effect entry with colored output
+#[cfg(not(target_arch = "wasm32"))]
+fn log_effect_usage_entry(effect: &EffectUsage) {
+    match effect.level {
+        SupportLevel::Full => {
+            println!(
+                "  {} {} - {} usage(s)",
+                "✓".green(),
+                effect.display_name.green(),
+                effect.usage_count
+            );
+        }
+        SupportLevel::Partial => {
+            println!(
+                "  {} {} - {} usage(s) {}",
+                "⚠".yellow(),
+                effect.display_name.yellow(),
+                effect.usage_count,
+                "(partial support)".dimmed()
+            );
+        }
+        SupportLevel::Unsupported => {
+            // This shouldn't happen in supported_effects_used
+        }
+    }
+}
+
+/// Print a single unsupported effect entry with colored output
+#[cfg(not(target_arch = "wasm32"))]
+fn log_unsupported_effect_entry(effect_id: &str, usages: &[&UnsupportedEffect]) {
+    let first = usages.first().unwrap();
+    if usages.len() == 1 {
+        println!(
+            "  {} '{}' ({}) on layer '{}' (id={})",
+            "✗".red(),
+            first.effect_label.red(),
+            effect_id.dimmed(),
+            first.layer_label,
+            first.layer_id
+        );
+    } else {
+        println!(
+            "  {} '{}' ({}) - {} usage(s)",
+            "✗".red(),
+            first.effect_label.red(),
+            effect_id.dimmed(),
+            usages.len()
+        );
+    }
+}
+
 impl ValidationReport {
     /// Validate an AM scene and generate a report
     /// 验证 AM 场景并生成报告
@@ -330,28 +381,7 @@ impl ValidationReport {
             );
 
             for effect in &self.supported_effects_used {
-                match effect.level {
-                    SupportLevel::Full => {
-                        println!(
-                            "  {} {} - {} usage(s)",
-                            "✓".green(),
-                            effect.display_name.green(),
-                            effect.usage_count
-                        );
-                    }
-                    SupportLevel::Partial => {
-                        println!(
-                            "  {} {} - {} usage(s) {}",
-                            "⚠".yellow(),
-                            effect.display_name.yellow(),
-                            effect.usage_count,
-                            "(partial support)".dimmed()
-                        );
-                    }
-                    SupportLevel::Unsupported => {
-                        // This shouldn't happen in supported_effects_used
-                    }
-                }
+                log_effect_usage_entry(effect);
             }
         }
 
@@ -373,25 +403,7 @@ impl ValidationReport {
                 effect_counts.len()
             );
             for (effect_id, usages) in &effect_counts {
-                let first = usages.first().unwrap();
-                if usages.len() == 1 {
-                    println!(
-                        "  {} '{}' ({}) on layer '{}' (id={})",
-                        "✗".red(),
-                        first.effect_label.red(),
-                        effect_id.dimmed(),
-                        first.layer_label,
-                        first.layer_id
-                    );
-                } else {
-                    println!(
-                        "  {} '{}' ({}) - {} usage(s)",
-                        "✗".red(),
-                        first.effect_label.red(),
-                        effect_id.dimmed(),
-                        usages.len()
-                    );
-                }
+                log_unsupported_effect_entry(effect_id, usages);
             }
         }
 

@@ -15,9 +15,265 @@ use crate::scene::AmLayerMarker;
 
 use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent};
 use super::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec3, interpolate_vec3_with_extrapolation,
+    interpolate_float, interpolate_float_reverse, interpolate_vec2, interpolate_vec2_reverse,
+    interpolate_vec3, interpolate_vec3_reverse,
 };
 use super::simplex_noise::simplex_noise_3d;
+
+/// Negate value when `inv` is true.
+fn invert_if(val: f32, inv: bool) -> f32 {
+    if inv { -val } else { val }
+}
+
+/// Accumulate Hz-style parameter over time (used by oscillate, swing, spin).
+/// For non-keyed: `value * time_sec * non_keyed_factor`.
+/// For keyed: numerical integration at 120 steps/sec, each step adds `value / step_divisor`.
+fn accumulate_hz(
+    field: &crate::schema::AmAnimatedFloat,
+    layer_time: f32,
+    duration_sec: f32,
+    non_keyed_factor: f32,
+    step_divisor: f64,
+) -> f32 {
+    let time_sec = layer_time * duration_sec;
+    if field.keyframes.is_empty() {
+        let val = interpolate_float(field, layer_time).unwrap_or(0.0);
+        val * time_sec * non_keyed_factor
+    } else {
+        let total_steps = (duration_sec * 120.0).round() as i32;
+        let current_step = (120.0 * time_sec).round() as i32;
+        let mut accum = 0.0f64;
+        if total_steps > 0 {
+            for i in 0..=current_step.min(total_steps) {
+                let frac_t = i as f32 / total_steps as f32;
+                let val_at_t = interpolate_float(field, frac_t).unwrap_or(0.0);
+                accum += val_at_t as f64 / step_divisor;
+            }
+        }
+        accum as f32
+    }
+}
+
+/// Compute oscillate wave value (sine or triangle).
+/// `sine_offset` and `triangle_offset` shift the phase for orbit mode.
+fn compute_oscillate_wave(
+    wave_type: i32,
+    accumulated_freq: f32,
+    phase: f32,
+    sine_offset: f32,
+    triangle_offset: f32,
+) -> f32 {
+    let sp = phase + sine_offset;
+    match wave_type {
+        0 => ((accumulated_freq * 2.0 + sp * 2.0) * std::f32::consts::PI).sin(),
+        1 => {
+            let tp = phase + triangle_offset;
+            let x = (accumulated_freq * 2.0 + tp * 2.0) / 2.0 + tp;
+            let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
+            x_mod.abs() * 4.0 - 1.0
+        }
+        _ => ((accumulated_freq * 2.0 + sp * 2.0) * std::f32::consts::PI).sin(),
+    }
+}
+
+/// Compute perspective zoom from a z-offset (shared by oscillate and jitter).
+fn compute_perspective_zoom(z_offset: f32, canvas_width: f32, canvas_height: f32) -> f32 {
+    if z_offset == 0.0 {
+        return 1.0;
+    }
+    let cam_dist = canvas_width.max(canvas_height) / (2.0 * (30.0_f32).to_radians().tan());
+    let denom = cam_dist + z_offset;
+    if denom > 0.0 { cam_dist / denom } else { 0.001 }
+}
+
+/// Apply oscillate effect (position oscillation + z-depth perspective).
+/// Returns the z_zoom multiplier.
+fn apply_oscillate(animated: &AmAnimated, layer_time: f32, bx: &mut f32, by: &mut f32) -> f32 {
+    if animated.oscillate_freq.value.is_none() && animated.oscillate_freq.keyframes.is_empty() {
+        return 1.0;
+    }
+
+    let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+
+    // Hz accumulation (same pattern as swing)
+    let accumulated_freq = accumulate_hz(
+        &animated.oscillate_freq,
+        layer_time,
+        duration_sec,
+        1.0,
+        120.0,
+    );
+
+    let phase = interpolate_float(&animated.oscillate_phase, layer_time).unwrap_or(0.0);
+    let mag = interpolate_float(&animated.oscillate_mag, layer_time).unwrap_or(25.0);
+    let angle_deg = interpolate_float(&animated.oscillate_angle, layer_time).unwrap_or(45.0);
+
+    // AM formula: a = (90 - angle) * PI / 180
+    let a = (90.0 - angle_deg) * std::f32::consts::PI / 180.0;
+    let dx = a.sin();
+    let dy = a.cos();
+
+    // Wave value: sin((freq*2 + phase*2) * PI) or triangle variant
+    let m = compute_oscillate_wave(
+        animated.oscillate_wave_type,
+        accumulated_freq,
+        phase,
+        0.0,
+        0.0,
+    );
+
+    let z_offset = match animated.oscillate_direction {
+        1 => {
+            // Depth (z): AM perspective camera maps z-offset to scale + position
+            mag * m
+        }
+        2 => {
+            // Orbit: offset x/y and z (90° phase shift)
+            *bx += dx * mag * m;
+            *by -= dy * mag * m; // Y inverted for Bevy
+            let m2 = compute_oscillate_wave(
+                animated.oscillate_wave_type,
+                accumulated_freq,
+                phase,
+                0.25,
+                0.125,
+            );
+            mag * m2
+        }
+        _ => {
+            // Direction 0 (angle-based): offset x/y
+            *bx += dx * mag * m;
+            *by -= dy * mag * m; // Y inverted for Bevy
+            0.0
+        }
+    };
+
+    // Apply z-depth perspective zoom
+    let zoom = compute_perspective_zoom(z_offset, animated.canvas_width, animated.canvas_height);
+    *bx *= zoom;
+    *by *= zoom;
+    zoom
+}
+
+/// Apply pivot offset compensation for different layer types.
+fn apply_pivot_offset(
+    animated: &AmAnimated,
+    layer_time: f32,
+    layer_spec: &crate::scene::AmLayerSpec,
+    sdf_parent: Option<&AmSdfShapeParent>,
+    current_scale: [f32; 2],
+    bx: &mut f32,
+    by: &mut f32,
+) {
+    let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) else {
+        return;
+    };
+    let pivot_x = pivot[0];
+    let pivot_y = pivot[1];
+
+    // Check if this is an SDF shape by either having AmSdfShapeParent component
+    // OR having SdfShape layer spec (mask layers don't have visual but still need SDF pivot handling)
+    let is_sdf_shape =
+        sdf_parent.is_some() || matches!(layer_spec, crate::scene::AmLayerSpec::SdfShape { .. });
+
+    if is_sdf_shape {
+        // SDF shapes: translation is at transform center (location + pivot)
+        // Simply add pivot offset (Y flip for Bevy coordinates)
+        *bx += pivot_x;
+        *by -= pivot_y;
+    } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
+        // Embed scenes: need rotation-aware pivot compensation
+        // In AM, objects rotate/scale around (location + pivot)
+        // Bevy rotates/scales around Transform.translation
+        // We calculate where the visual center ends up after rotation/scale around pivot
+
+        // Get current rotation
+        let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+        let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
+
+        // Convert pivot to Bevy Y direction
+        let pivot_bevy_y = -pivot_y;
+
+        // Object offset from rotation center is -pivot
+        // After scaling
+        let scaled_offset_x = -pivot_x * current_scale[0];
+        let scaled_offset_y = -pivot_bevy_y * current_scale[1];
+
+        // After rotation
+        let rotated_offset_x =
+            scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+        let rotated_offset_y =
+            scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+        // Compensation: rotated_offset - original_offset = rotated_offset + pivot
+        *bx += rotated_offset_x + pivot_x;
+        *by += rotated_offset_y + pivot_bevy_y;
+    }
+    // For effect sprites: no pivot compensation needed here
+    // The mesh vertices in animate_unified_effect_system include anchor offset
+    // which keeps the pivot point fixed as the mesh size changes
+}
+
+/// Compute jitter effect offsets and z-zoom.
+/// Returns (dx, dy, z_zoom).
+fn compute_jitter(animated: &AmAnimated, local_time: f32) -> (f32, f32, f32) {
+    // AM uses integer millisecond scene time for both the jitter script
+    // and effect parameter evaluation. Truncate to integer ms to match.
+    let local_time_int = (local_time as f64).floor() as f32;
+    let duration = (animated.end_time - animated.start_time) as f32;
+    let am_layer_time = if duration > 0.0 {
+        (local_time_int - animated.start_time as f32) / duration
+    } else {
+        0.0
+    };
+
+    // Interpolate jitter parameters at AM's integer-ms-based layer_time
+    let jitter_freq_val = interpolate_float(&animated.jitter_freq, am_layer_time).unwrap_or(0.0);
+    if jitter_freq_val <= 0.0 {
+        return (0.0, 0.0, 1.0);
+    }
+
+    let jitter_angle_val = interpolate_float(&animated.jitter_angle, am_layer_time).unwrap_or(0.0);
+    let jitter_mag_val = interpolate_float(&animated.jitter_mag, am_layer_time).unwrap_or(0.0);
+    let jitter_seed_val = interpolate_float(&animated.jitter_seed, am_layer_time).unwrap_or(0.0);
+    let jitter_slack_val = interpolate_float(&animated.jitter_slack, am_layer_time).unwrap_or(0.0);
+    let jitter_zjitter_val =
+        interpolate_float(&animated.jitter_zjitter, am_layer_time).unwrap_or(0.0);
+
+    // Replicate AM's f32 precision chain for globalTime
+    let duration_sec = (animated.end_time - animated.start_time) as f64 / 1000.0;
+    let global_time = duration_sec * (am_layer_time as f64);
+    let freq = jitter_freq_val as f64;
+    let t = (global_time * freq).floor() / freq;
+
+    let a = (jitter_angle_val as f64) * (std::f64::consts::PI / 180.0);
+    let seed = jitter_seed_val as f64;
+    let mag = jitter_mag_val as f64;
+
+    // Primary displacement along angle direction
+    let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
+    let mut dx_total = (a.sin() * mag * m) as f32;
+    let mut dy_total = -((a.cos() * mag * m) as f32); // Y inverted for Bevy
+
+    // Perpendicular slack displacement
+    if jitter_slack_val > 0.0 {
+        let a2 = a + std::f64::consts::FRAC_PI_2;
+        let m2 = simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
+        let slack = jitter_slack_val as f64;
+        dx_total += (a2.sin() * mag * m2 * slack) as f32;
+        dy_total -= (a2.cos() * mag * m2 * slack) as f32;
+    }
+
+    // Z-axis jitter (affects perspective zoom like oscillate)
+    let mut z_zoom = 1.0_f32;
+    if jitter_zjitter_val > 0.0 {
+        let zm = simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
+        let z_offset = (zm * jitter_zjitter_val as f64) as f32;
+        z_zoom = compute_perspective_zoom(z_offset, animated.canvas_width, animated.canvas_height);
+    }
+
+    (dx_total, dy_total, z_zoom)
+}
 
 /// System to advance playback time.
 pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>) {
@@ -42,7 +298,6 @@ pub fn advance_playback_system(time: Res<Time>, mut playback: ResMut<AmPlayback>
 /// Normal pause still updates animations based on current time.
 /// Note: Scale animation is skipped for SDF shape parents (handled by animate_sdf_scale).
 /// Note: Scale animation is skipped for UnifiedEffectMarker entities (scale baked into mesh).
-#[allow(clippy::type_complexity)]
 pub fn animate_transform_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
@@ -100,9 +355,21 @@ pub fn animate_transform_system(
         // Calculate normalized time within layer duration
         let layer_time = animated.calc_layer_time(local_time);
 
+        // Compute frame_delta in normalized time for AM's reverseInterpolateFirstFrame.
+        // This enables smooth backward extrapolation for transform properties
+        // when the first keyframe is near the element's start.
+        let element_duration_ms = (animated.end_time - animated.start_time) as f32;
+        let frame_delta = if element_duration_ms > 0.0 {
+            let fps = animated.scene_fps.max(1.0);
+            (1000.0 / fps) / element_duration_ms * animated.element_speed.abs()
+        } else {
+            0.0
+        };
+
         // Get current scale for pivot compensation and flip detection
         // For SDF shapes and effect sprites, magnitude is handled separately, but we need sign for flipping
-        let mut actual_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
+        let mut actual_scale = interpolate_vec2_reverse(&animated.scale, layer_time, frame_delta)
+            .unwrap_or([1.0, 1.0]);
 
         // Apply scale_assist effect (multiplies scale based on axis)
         // Formula derived from reference video analysis:
@@ -162,12 +429,13 @@ pub fn animate_transform_system(
             posz_offset += posz - 1.0;
         }
         for extra in &animated.extra_transform2 {
-            if let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) {
-                if extra.zinv {
-                    posz = 2.0 - posz;
-                }
-                posz_offset += posz - 1.0;
+            let Some(mut posz) = interpolate_float(&extra.pos_z, layer_time) else {
+                continue;
+            };
+            if extra.zinv {
+                posz = 2.0 - posz;
             }
+            posz_offset += posz - 1.0;
         }
         let combined_posz = 1.0 + posz_offset;
         actual_scale[0] *= combined_posz;
@@ -182,7 +450,7 @@ pub fn animate_transform_system(
         // Interpolate location and convert from AM to Bevy coordinates
         // Use extrapolation for location to improve accuracy before first keyframe
         let mut oscillate_z_zoom = 1.0_f32;
-        if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
+        if let Some(loc) = interpolate_vec3_reverse(&animated.location, layer_time, frame_delta) {
             let (mut bx, mut by) = if animated.has_parent {
                 // For layers with parents, use local coordinates
                 // Only flip Y axis (AM Y-down -> Bevy Y-up)
@@ -228,89 +496,31 @@ pub fn animate_transform_system(
             }
 
             // Apply pivot offset and compensation
-            // AM transforms around (location + pivot), Bevy transforms around entity origin
-            // For SDF shapes: translation should be at transform center (location + pivot)
-            // For embed scenes: need full rotation-aware pivot compensation
-            // For effect sprites (scale_assist): skip pivot compensation - mesh anchor offset handles it
-            // For other shapes: need pivot compensation for non-unit scale
-            if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
-                let pivot_x = pivot[0];
-                let pivot_y = pivot[1];
-
-                // Check if this is an SDF shape by either having AmSdfShapeParent component
-                // OR having SdfShape layer spec (mask layers don't have visual but still need SDF pivot handling)
-                let is_sdf_shape = sdf_parent.is_some()
-                    || matches!(layer_spec, crate::scene::AmLayerSpec::SdfShape { .. });
-
-                if is_sdf_shape {
-                    // SDF shapes: translation is at transform center (location + pivot)
-                    // Simply add pivot offset (Y flip for Bevy coordinates)
-                    bx += pivot_x;
-                    by -= pivot_y;
-                } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
-                    // Embed scenes: need rotation-aware pivot compensation
-                    // In AM, objects rotate/scale around (location + pivot)
-                    // Bevy rotates/scales around Transform.translation
-                    // We calculate where the visual center ends up after rotation/scale around pivot
-
-                    // Get current rotation
-                    let rotation_deg =
-                        interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
-                    let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
-
-                    // Convert pivot to Bevy Y direction
-                    let pivot_bevy_y = -pivot_y;
-
-                    // Object offset from rotation center is -pivot
-                    // After scaling
-                    let scaled_offset_x = -pivot_x * current_scale[0];
-                    let scaled_offset_y = -pivot_bevy_y * current_scale[1];
-
-                    // After rotation
-                    let rotated_offset_x =
-                        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                    let rotated_offset_y =
-                        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-
-                    // Compensation: rotated_offset - original_offset = rotated_offset + pivot
-                    bx += rotated_offset_x + pivot_x;
-                    by += rotated_offset_y + pivot_bevy_y;
-                } else if effect_marker.is_none() {
-                    // Standard shapes: pivot offset is already applied in the initial transform
-                    // No additional compensation needed here
-                }
-                // For effect sprites: no pivot compensation needed here
-                // The mesh vertices in animate_unified_effect_system include anchor offset
-                // which keeps the pivot point fixed as the mesh size changes
-            }
+            apply_pivot_offset(
+                animated,
+                layer_time,
+                layer_spec,
+                sdf_parent,
+                current_scale,
+                &mut bx,
+                &mut by,
+            );
 
             // Apply effect position offsets (transform2 effect)
-            if let Some(mut effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
-                if animated.effect_xinv {
-                    effect_x = -effect_x;
-                }
-                bx += effect_x;
+            if let Some(effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+                bx += invert_if(effect_x, animated.effect_xinv);
             }
-            if let Some(mut effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
-                if animated.effect_yinv {
-                    effect_y = -effect_y;
-                }
-                by -= effect_y; // Y is inverted
+            if let Some(effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+                by -= invert_if(effect_y, animated.effect_yinv); // Y is inverted
             }
             // Apply extra stacked transform2 position offsets
             for extra in &animated.extra_transform2 {
-                if let Some(mut ex) = interpolate_float(&extra.pos_x, layer_time) {
-                    if extra.xinv {
-                        ex = -ex;
-                    }
-                    bx += ex;
-                }
-                if let Some(mut ey) = interpolate_float(&extra.pos_y, layer_time) {
-                    if extra.yinv {
-                        ey = -ey;
-                    }
-                    by -= ey;
-                }
+                bx += interpolate_float(&extra.pos_x, layer_time)
+                    .map(|x| invert_if(x, extra.xinv))
+                    .unwrap_or(0.0);
+                by -= interpolate_float(&extra.pos_y, layer_time)
+                    .map(|y| invert_if(y, extra.yinv))
+                    .unwrap_or(0.0);
             }
 
             // Apply font Y offset for text layers (to compensate for different font metrics)
@@ -343,189 +553,15 @@ pub fn animate_transform_system(
             // They render to RTT camera at origin - no scaling needed for position
             // The inv_fit_scale is only used for sprite SIZE compensation, not position
 
-            // Apply oscillate effect (position oscillation)
-            // AM oscillate3: freq is Hz-accumulated, applies positional offset
-            let mut oscillate_z_offset: f32 = 0.0;
-            if animated.oscillate_freq.value.is_some()
-                || !animated.oscillate_freq.keyframes.is_empty()
-            {
-                let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
-                let time_sec = layer_time * duration_sec;
-
-                // Hz accumulation (same pattern as swing)
-                let accumulated_freq = if animated.oscillate_freq.keyframes.is_empty() {
-                    let freq =
-                        interpolate_float(&animated.oscillate_freq, layer_time).unwrap_or(0.0);
-                    freq * time_sec
-                } else {
-                    let total_steps = (duration_sec * 120.0).round() as i32;
-                    let current_step = (120.0 * time_sec).round() as i32;
-                    let mut accum = 0.0f64;
-                    if total_steps > 0 {
-                        for i in 0..=current_step.min(total_steps) {
-                            let frac_t = i as f32 / total_steps as f32;
-                            let freq_at_t =
-                                interpolate_float(&animated.oscillate_freq, frac_t).unwrap_or(0.0);
-                            accum += freq_at_t as f64 / 120.0;
-                        }
-                    }
-                    accum as f32
-                };
-
-                let phase = interpolate_float(&animated.oscillate_phase, layer_time).unwrap_or(0.0);
-                let mag = interpolate_float(&animated.oscillate_mag, layer_time).unwrap_or(25.0);
-                let angle_deg =
-                    interpolate_float(&animated.oscillate_angle, layer_time).unwrap_or(45.0);
-
-                // AM formula: a = (90 - angle) * PI / 180
-                let a = (90.0 - angle_deg) * std::f32::consts::PI / 180.0;
-                let dx = a.sin();
-                let dy = a.cos();
-
-                // Wave value: sin((freq*2 + phase*2) * PI) or triangle variant
-                let m = match animated.oscillate_wave_type {
-                    0 => ((accumulated_freq * 2.0 + phase * 2.0) * std::f32::consts::PI).sin(),
-                    1 => {
-                        // AM.triangle((freq*2 + phase*2) / 2 + phase)
-                        let x = (accumulated_freq * 2.0 + phase * 2.0) / 2.0 + phase;
-                        let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
-                        x_mod.abs() * 4.0 - 1.0
-                    }
-                    _ => ((accumulated_freq * 2.0 + phase * 2.0) * std::f32::consts::PI).sin(),
-                };
-
-                match animated.oscillate_direction {
-                    1 => {
-                        // Depth (z): AM perspective camera maps z-offset to scale + position
-                        oscillate_z_offset = mag * m;
-                    }
-                    2 => {
-                        // Orbit: offset x/y and z (90° phase shift)
-                        bx += dx * mag * m;
-                        by -= dy * mag * m; // Y inverted for Bevy
-
-                        let m2 = match animated.oscillate_wave_type {
-                            0 => ((accumulated_freq * 2.0 + (phase + 0.25) * 2.0)
-                                * std::f32::consts::PI)
-                                .sin(),
-                            1 => {
-                                let x = (accumulated_freq * 2.0 + (phase + 0.125) * 2.0) / 2.0
-                                    + phase
-                                    + 0.125;
-                                let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
-                                x_mod.abs() * 4.0 - 1.0
-                            }
-                            _ => ((accumulated_freq * 2.0 + (phase + 0.25) * 2.0)
-                                * std::f32::consts::PI)
-                                .sin(),
-                        };
-                        oscillate_z_offset = mag * m2;
-                    }
-                    _ => {
-                        // Direction 0 (angle-based): offset x/y
-                        bx += dx * mag * m;
-                        by -= dy * mag * m; // Y inverted for Bevy
-                    }
-                }
-            }
-
-            // Apply z-depth perspective effect from oscillate direction=1/2
-            // AM default camera: Perspective, FOV=60°, at scene center z=-base_cam_dist
-            // zoom = base_cam_dist / (base_cam_dist + z_offset)
-            // Position scales from center, element scale multiplied by zoom
-            oscillate_z_zoom = if oscillate_z_offset != 0.0 {
-                let cam_dist = animated.canvas_width.max(animated.canvas_height)
-                    / (2.0 * (30.0_f32).to_radians().tan());
-                let denom = cam_dist + oscillate_z_offset;
-                if denom > 0.0 {
-                    let zoom = cam_dist / denom;
-                    bx *= zoom;
-                    by *= zoom;
-                    zoom
-                } else {
-                    0.001 // element behind camera, nearly invisible
-                }
-            } else {
-                1.0
-            };
+            // Apply oscillate effect (position oscillation + z-depth perspective)
+            oscillate_z_zoom = apply_oscillate(animated, layer_time, &mut bx, &mut by);
 
             // Apply jitter effect (simplex noise-based position displacement)
             if animated.jitter_enabled {
-                // AM uses integer millisecond scene time for both the jitter script
-                // and effect parameter evaluation. Truncate to integer ms to match.
-                let local_time_int = (local_time as f64).floor() as f32;
-                let duration = (animated.end_time - animated.start_time) as f32;
-                let am_layer_time = if duration > 0.0 {
-                    (local_time_int - animated.start_time as f32) / duration
-                } else {
-                    0.0
-                };
-
-                // Interpolate jitter parameters at AM's integer-ms-based layer_time
-                let jitter_freq_val =
-                    interpolate_float(&animated.jitter_freq, am_layer_time).unwrap_or(0.0);
-                let jitter_angle_val =
-                    interpolate_float(&animated.jitter_angle, am_layer_time).unwrap_or(0.0);
-                let jitter_mag_val =
-                    interpolate_float(&animated.jitter_mag, am_layer_time).unwrap_or(0.0);
-                let jitter_seed_val =
-                    interpolate_float(&animated.jitter_seed, am_layer_time).unwrap_or(0.0);
-                let jitter_slack_val =
-                    interpolate_float(&animated.jitter_slack, am_layer_time).unwrap_or(0.0);
-                let jitter_zjitter_val =
-                    interpolate_float(&animated.jitter_zjitter, am_layer_time).unwrap_or(0.0);
-
-                if jitter_freq_val > 0.0 {
-                    // Replicate AM's f32 precision chain for globalTime:
-                    // AM: env.time = (float)(sceneTime-startTime) / (float)(endTime-startTime)  [f32]
-                    //     env.duration = (endTime-startTime) / 1000.0  [f64]
-                    //     globalTime = env.duration * (double)env.time  [f64 * f32→f64]
-                    // The f32 division causes slight rounding that affects floor(gt*freq)
-                    // at boundary frames (e.g., frame 5: 0.199999995 vs exact 0.2).
-                    let duration_sec = (animated.end_time - animated.start_time) as f64 / 1000.0;
-                    let global_time = duration_sec * (am_layer_time as f64);
-                    let freq = jitter_freq_val as f64;
-                    let t = (global_time * freq).floor() / freq;
-
-                    let a = (jitter_angle_val as f64) * (std::f64::consts::PI / 180.0);
-                    let seed = jitter_seed_val as f64;
-                    let mag = jitter_mag_val as f64;
-
-                    // Primary displacement along angle direction
-                    let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
-                    let dx_primary = (a.sin() * mag * m) as f32;
-                    let dy_primary = (a.cos() * mag * m) as f32;
-                    bx += dx_primary;
-                    by -= dy_primary; // Y inverted for Bevy
-
-                    // Perpendicular slack displacement
-                    if jitter_slack_val > 0.0 {
-                        let a2 = a + std::f64::consts::FRAC_PI_2;
-                        let m2 =
-                            simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
-                        let slack = jitter_slack_val as f64;
-                        bx += (a2.sin() * mag * m2 * slack) as f32;
-                        by -= (a2.cos() * mag * m2 * slack) as f32;
-                    }
-
-                    // Z-axis jitter (affects perspective zoom like oscillate)
-                    if jitter_zjitter_val > 0.0 {
-                        let zm =
-                            simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
-                        let z_offset = (zm * jitter_zjitter_val as f64) as f32;
-                        if z_offset != 0.0 {
-                            let cam_dist = animated.canvas_width.max(animated.canvas_height)
-                                / (2.0 * (30.0_f32).to_radians().tan());
-                            let denom = cam_dist + z_offset;
-                            if denom > 0.0 {
-                                let zoom = cam_dist / denom;
-                                bx *= zoom;
-                                by *= zoom;
-                                oscillate_z_zoom *= zoom;
-                            }
-                        }
-                    }
-                }
+                let (jdx, jdy, jz) = compute_jitter(animated, local_time);
+                bx = (bx + jdx) * jz;
+                by = (by + jdy) * jz;
+                oscillate_z_zoom *= jz;
             }
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
@@ -533,7 +569,8 @@ pub fn animate_transform_system(
 
         // Interpolate rotation (negate for Bevy's coordinate system)
         // Get base rotation - default to 0 if not animated
-        let base_rotation = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+        let base_rotation =
+            interpolate_float_reverse(&animated.rotation, layer_time, frame_delta).unwrap_or(0.0);
         let mut final_rotation = -base_rotation; // Negate for Bevy's coordinate system
 
         // Apply swing effect (oscillating rotation)
@@ -548,25 +585,8 @@ pub fn animate_transform_system(
 
             // Hz accumulation: AM integrates freq over time for Hz-type parameters
             let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
-            let time_sec = layer_time * duration_sec;
-            let accumulated_freq = if animated.swing_freq.keyframes.is_empty() {
-                // Non-keyed: simple multiplication
-                swing_freq * time_sec
-            } else {
-                // Keyed: numerical integration at 120 steps/sec (matches AM)
-                let total_steps = (duration_sec * 120.0).round() as i32;
-                let current_step = (120.0 * time_sec).round() as i32;
-                let mut accum = 0.0f64;
-                if total_steps > 0 {
-                    for i in 0..=current_step.min(total_steps) {
-                        let frac_t = i as f32 / total_steps as f32;
-                        let freq_at_t =
-                            interpolate_float(&animated.swing_freq, frac_t).unwrap_or(0.0);
-                        accum += freq_at_t as f64 / 120.0;
-                    }
-                }
-                accum as f32
-            };
+            let accumulated_freq =
+                accumulate_hz(&animated.swing_freq, layer_time, duration_sec, 1.0, 120.0);
 
             // Waveform: AM script formula
             let wave_value = match animated.swing_type {
@@ -597,44 +617,21 @@ pub fn animate_transform_system(
         // Non-keyed: accumulated = rpm * time_seconds * 6.0
         if animated.spin_rpm.value.is_some() || !animated.spin_rpm.keyframes.is_empty() {
             let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
-            let time_sec = layer_time * duration_sec;
-            let spin_angle = if animated.spin_rpm.keyframes.is_empty() {
-                // Non-keyed: rpm * time_seconds * 6.0
-                let rpm = interpolate_float(&animated.spin_rpm, layer_time).unwrap_or(0.0);
-                rpm * time_sec * 6.0
-            } else {
-                // Keyed: numerical integration at 120 steps/sec, each step adds rpm(t) / 20.0
-                let total_steps = (duration_sec * 120.0).round() as i32;
-                let current_step = (120.0 * time_sec).round() as i32;
-                let mut accum = 0.0f64;
-                if total_steps > 0 {
-                    for i in 0..=current_step.min(total_steps) {
-                        let frac_t = i as f32 / total_steps as f32;
-                        let rpm_at_t = interpolate_float(&animated.spin_rpm, frac_t).unwrap_or(0.0);
-                        accum += rpm_at_t as f64 / 20.0;
-                    }
-                }
-                accum as f32
-            };
+            let spin_angle = accumulate_hz(&animated.spin_rpm, layer_time, duration_sec, 6.0, 20.0);
             // Negate for Bevy's coordinate system
             final_rotation -= spin_angle;
         }
 
         // Apply transform2 effect angle (additional rotation in degrees)
-        if let Some(mut effect_angle) = interpolate_float(&animated.effect_angle, layer_time) {
-            if animated.effect_ainv {
-                effect_angle = -effect_angle;
-            }
-            final_rotation -= effect_angle; // Negate for Bevy's coordinate system
+        if let Some(effect_angle) = interpolate_float(&animated.effect_angle, layer_time) {
+            final_rotation -= invert_if(effect_angle, animated.effect_ainv); // Negate for Bevy's coordinate system
         }
         // Apply extra stacked transform2 angles
         for extra in &animated.extra_transform2 {
-            if let Some(mut ea) = interpolate_float(&extra.angle, layer_time) {
-                if extra.ainv {
-                    ea = -ea;
-                }
-                final_rotation -= ea;
-            }
+            let Some(ea) = interpolate_float(&extra.angle, layer_time) else {
+                continue;
+            };
+            final_rotation -= invert_if(ea, extra.ainv);
         }
 
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
@@ -893,25 +890,28 @@ pub fn animate_size_system(
         let layer_time = animated.calc_layer_time(local_time);
 
         // Interpolate size (already stored as full dimensions, need half for SDF)
-        if let Some(size) = interpolate_vec2(&animated.size, layer_time) {
-            let half_width = size[0].abs() / 2.0;
-            let half_height = size[1].abs() / 2.0;
+        let Some(size) = interpolate_vec2(&animated.size, layer_time) else {
+            continue;
+        };
+        let half_width = size[0].abs() / 2.0;
+        let half_height = size[1].abs() / 2.0;
 
-            // Update SDF children
-            for child in children.iter() {
-                if let Ok((material_handle, mut sdf_params)) = sdf_query.get_mut(child) {
-                    // Update base params (these will be further modified by scale in animate_sdf_scale)
-                    sdf_params.base_half_width = half_width;
-                    sdf_params.base_half_height = half_height;
+        // Update SDF children
+        for child in children.iter() {
+            let Ok((material_handle, mut sdf_params)) = sdf_query.get_mut(child) else {
+                continue;
+            };
+            // Update base params (these will be further modified by scale in animate_sdf_scale)
+            sdf_params.base_half_width = half_width;
+            sdf_params.base_half_height = half_height;
 
-                    // Also update the actual material params directly
-                    // (animate_sdf_scale will run after and apply scale on top if needed)
-                    if let Some(material) = materials.get_mut(&material_handle.0) {
-                        material.uniform_data.params.x = half_width;
-                        material.uniform_data.params.y = half_height;
-                    }
-                }
-            }
+            // Also update the actual material params directly
+            // (animate_sdf_scale will run after and apply scale on top if needed)
+            let Some(material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            material.uniform_data.params.x = half_width;
+            material.uniform_data.params.y = half_height;
         }
     }
 

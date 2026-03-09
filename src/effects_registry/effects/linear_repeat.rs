@@ -40,6 +40,15 @@ define_effect! {
 </effect>"##,
     tests: [
         "effects/linear-repeat/basic.amproj",
+        "effects/linear-repeat/dual.amproj",
+        "effects/linear-repeat/dual-16-9.amproj",
+        "effects/linear-repeat/random.amproj",
+        "effects/linear-repeat/random_generated1/1.amproj",
+        "effects/linear-repeat/random_generated1/2.amproj",
+        "effects/linear-repeat/random_generated1/3.amproj",
+        "effects/linear-repeat/random_generated2/1.amproj",
+        "effects/linear-repeat/random_generated2/2.amproj",
+        "effects/linear-repeat/random_generated2/3.amproj",
     ],
     fields: [
         define_field! {

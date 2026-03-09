@@ -1,9 +1,4 @@
-#![allow(
-    dead_code,
-    clippy::collapsible_if,
-    clippy::cast_abs_to_unsigned,
-    unused_imports
-)]
+#![allow(dead_code, unused_imports)]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,37 +40,47 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
     ];
     let extensions = ["mp4", "mov", "avi", "webm", "mkv"];
 
+    fn search_videos(dir: &Path, extensions: &[&str], latest: &mut Option<(PathBuf, SystemTime)>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                search_videos(&entry.path(), extensions, latest);
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+            let file_name_os = entry.file_name();
+            let Some(file_name) = file_name_os.to_str() else {
+                continue;
+            };
+            let Some(extension) = file_name.split('.').next_back() else {
+                continue;
+            };
+            if !extensions.contains(&extension.to_lowercase().as_str()) {
+                continue;
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
+            if latest.is_none() || latest.as_ref().unwrap().1 < modified {
+                *latest = Some((entry.path(), modified));
+            }
+        }
+    }
+
     for projects_path in &possible_paths {
         let base_path = Path::new(projects_path);
         if !base_path.exists() {
             continue;
-        }
-
-        // Recursively search for video files
-        fn search_videos(
-            dir: &Path,
-            extensions: &[&str],
-            latest: &mut Option<(PathBuf, SystemTime)>,
-        ) {
-            if let Ok(entries) = fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    if let Ok(file_type) = entry.file_type() {
-                        if file_type.is_dir() {
-                            search_videos(&entry.path(), extensions, latest);
-                        } else if file_type.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str()
-                                && let Some(extension) = file_name.split('.').next_back()
-                                && extensions.contains(&extension.to_lowercase().as_str())
-                                && let Ok(metadata) = entry.metadata()
-                                && let Ok(modified) = metadata.modified()
-                                && (latest.is_none() || latest.as_ref().unwrap().1 < modified)
-                            {
-                                *latest = Some((entry.path(), modified));
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         search_videos(base_path, &extensions, &mut latest_file);
@@ -259,6 +264,65 @@ pub struct ComparisonResult {
     pub differing_pixels: u64,
 }
 
+/// Check if a pixel is "empty" (transparent or black).
+#[cfg(feature = "video-comparison")]
+fn is_pixel_empty(p: &image::Rgba<u8>) -> bool {
+    p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0)
+}
+
+/// Check if a pixel lies on the edge of content within a 3-pixel Manhattan radius.
+#[cfg(feature = "video-comparison")]
+fn is_edge_pixel(img: &image::RgbaImage, x: u32, y: u32) -> bool {
+    if is_pixel_empty(img.get_pixel(x, y)) {
+        return false;
+    }
+    let w = img.width();
+    let h = img.height();
+    for dx in -3i32..=3 {
+        for dy in -3i32..=3 {
+            if dx == 0 && dy == 0 || dx.abs() + dy.abs() > 3 {
+                continue;
+            }
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0
+                && nx < w as i32
+                && ny >= 0
+                && ny < h as i32
+                && is_pixel_empty(img.get_pixel(nx as u32, ny as u32))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Compression tolerance threshold for a given perceptual luminance.
+#[cfg(feature = "video-comparison")]
+fn compression_tolerance(max_lum: f64) -> f64 {
+    const BASE: f64 = 10.0;
+    const DARK_LUM_CUTOFF: f64 = 40.0;
+    const MAX_DARK_BONUS: f64 = 60.0;
+    let dark_bonus = if max_lum < DARK_LUM_CUTOFF {
+        MAX_DARK_BONUS * (1.0 - max_lum / DARK_LUM_CUTOFF)
+    } else {
+        0.0
+    };
+    BASE + dark_bonus
+}
+
+/// Build the diff-image pixel for a given raw per-channel difference.
+#[cfg(feature = "video-comparison")]
+fn diff_pixel(pixel_diff: u64, is_edge: bool) -> image::Rgba<u8> {
+    let intensity = (pixel_diff.min(255) as u8).max(50);
+    if is_edge {
+        image::Rgba([intensity / 2, 0, 0, 128])
+    } else {
+        image::Rgba([intensity, 0, 0, 255])
+    }
+}
+
 /// Compare two images and return detailed similarity metrics and a diff image.
 ///
 /// `img1` = rendered shot (sRGB), `img2` = reference from video.
@@ -292,60 +356,15 @@ pub fn compare_images(
     // Threshold for considering a pixel a "match" (out of 255*4 = 1020)
     const MATCH_THRESHOLD: u64 = 10;
 
-    // Video compression tolerance parameters.
-    // H.264 with 4:2:0 chroma subsampling introduces noise in all luminance
-    // ranges: chroma subsampling causes ±2-4 per channel at color edges, DCT
-    // quantization adds ±2-3 per channel. A small baseline tolerance absorbs
-    // this unavoidable codec noise so content_similarity focuses on actual
-    // rendering differences.
-    const BASE_COMPRESSION_TOLERANCE: f64 = 10.0;
-    // Pixels with perceptual luminance below DARK_LUM_CUTOFF get additional
-    // tolerance that linearly increases as luminance decreases, up to MAX.
-    const DARK_LUM_CUTOFF: f64 = 40.0;
-    const MAX_COMPRESSION_TOLERANCE: f64 = 60.0;
-
-    // Helper function to check if a pixel is "empty" (transparent or black)
-    let is_empty =
-        |p: &image::Rgba<u8>| -> bool { p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0) };
-
-    // Helper function to check if a pixel is on the edge of content
-    // (has at least one empty neighbor within 3-pixel Manhattan radius)
-    let is_edge_pixel = |img: &image::RgbaImage, x: u32, y: u32| -> bool {
-        let p = img.get_pixel(x, y);
-        if is_empty(p) {
-            return false;
-        }
-        let w = img.width();
-        let h = img.height();
-        for dx in -3i32..=3 {
-            for dy in -3i32..=3 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                if dx.abs() + dy.abs() > 3 {
-                    continue;
-                }
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
-                    if is_empty(img.get_pixel(nx as u32, ny as u32)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    };
-
     for y in 0..height {
         for x in 0..width {
             let p1 = img1.get_pixel(x, y);
             let p2 = img2.get_pixel(x, y);
 
-            let r_diff = (p1[0] as i32 - p2[0] as i32).abs() as u64;
-            let g_diff = (p1[1] as i32 - p2[1] as i32).abs() as u64;
-            let b_diff = (p1[2] as i32 - p2[2] as i32).abs() as u64;
-            let a_diff = (p1[3] as i32 - p2[3] as i32).abs() as u64;
+            let r_diff = (p1[0] as i32 - p2[0] as i32).unsigned_abs() as u64;
+            let g_diff = (p1[1] as i32 - p2[1] as i32).unsigned_abs() as u64;
+            let b_diff = (p1[2] as i32 - p2[2] as i32).unsigned_abs() as u64;
+            let a_diff = (p1[3] as i32 - p2[3] as i32).unsigned_abs() as u64;
 
             let pixel_diff = r_diff + g_diff + b_diff + a_diff;
 
@@ -353,14 +372,8 @@ pub fn compare_images(
             total_diff_global += pixel_diff;
             total_max_global += 255 * 4;
 
-            let p1_edge = is_edge_pixel(img1, x, y);
-            let p2_edge = is_edge_pixel(img2, x, y);
-            let is_edge = p1_edge || p2_edge;
-
-            let p1_empty = is_empty(p1);
-            let p2_empty = is_empty(p2);
-
-            let is_content = !p1_empty || !p2_empty;
+            let is_edge = is_edge_pixel(img1, x, y) || is_edge_pixel(img2, x, y);
+            let is_content = !is_pixel_empty(p1) || !is_pixel_empty(p2);
 
             // Content similarity with dark-pixel compression tolerance
             if is_content && !is_edge {
@@ -369,18 +382,7 @@ pub fn compare_images(
                 let lum2 = 0.2126 * p2[0] as f64 + 0.7152 * p2[1] as f64 + 0.0722 * p2[2] as f64;
                 let max_lum = lum1.max(lum2);
 
-                // Video codecs quantize dark areas aggressively (especially
-                // chroma at 4:2:0 subsampling), so we forgive noise proportional
-                // to darkness. A small baseline tolerance also absorbs general
-                // H.264 compression noise (DCT quantization, chroma subsampling).
-                let tolerance = BASE_COMPRESSION_TOLERANCE
-                    + if max_lum < DARK_LUM_CUTOFF {
-                        MAX_COMPRESSION_TOLERANCE * (1.0 - max_lum / DARK_LUM_CUTOFF)
-                    } else {
-                        0.0
-                    };
-
-                let effective_diff = (pixel_diff as f64 - tolerance).max(0.0);
+                let effective_diff = (pixel_diff as f64 - compression_tolerance(max_lum)).max(0.0);
                 total_diff_content += effective_diff;
                 total_max_content += 1020.0;
             }
@@ -394,12 +396,7 @@ pub fn compare_images(
 
             // Generate diff pixel (emphasize difference)
             if pixel_diff > MATCH_THRESHOLD {
-                let intensity = (pixel_diff.min(255) as u8).max(50);
-                if is_edge {
-                    diff_image.put_pixel(x, y, image::Rgba([intensity / 2, 0, 0, 128]));
-                } else {
-                    diff_image.put_pixel(x, y, image::Rgba([intensity, 0, 0, 255]));
-                }
+                diff_image.put_pixel(x, y, diff_pixel(pixel_diff, is_edge));
             } else {
                 diff_image.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
             }

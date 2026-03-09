@@ -16,7 +16,6 @@ use crate::scene::{
 };
 use crate::sdf_material::SdfMaterial;
 
-use super::components::DEBUG_NEGATIVE_HEIGHT_SCALE;
 use super::helpers::get_initial_scale_from_animated;
 use super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
@@ -31,7 +30,6 @@ use super::visual::add_visual_components;
 /// - But its coordinates remain in world space (relative to RTT camera at origin)
 /// - The container has identity Transform so GlobalTransform equals Transform
 /// - This provides organization while maintaining correct rendering
-#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_layer_entity(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -62,7 +60,11 @@ pub(super) fn spawn_layer_entity(
         || layer.animated.stretch_offset.value.is_some()
         || !layer.animated.stretch_offset.keyframes.is_empty()
         || layer.animated.stretch_smooth.value.is_some()
-        || !layer.animated.stretch_smooth.keyframes.is_empty();
+        || !layer.animated.stretch_smooth.keyframes.is_empty()
+        || layer.animated.stretch_seg2_amount.value.is_some()
+        || !layer.animated.stretch_seg2_amount.keyframes.is_empty()
+        || layer.animated.stretch_seg2_angle.value.is_some()
+        || !layer.animated.stretch_seg2_angle.keyframes.is_empty();
 
     let has_blur = layer.animated.blur_strength.value.is_some()
         || !layer.animated.blur_strength.keyframes.is_empty();
@@ -163,18 +165,10 @@ pub(super) fn spawn_layer_entity(
         }
         // Apply extra stacked transform2 position offsets
         for extra in &animated.extra_transform2 {
-            if let Some(mut ex) = interpolate_float(&extra.pos_x, layer_time) {
-                if extra.xinv {
-                    ex = -ex;
-                }
-                bx += ex;
-            }
-            if let Some(mut ey) = interpolate_float(&extra.pos_y, layer_time) {
-                if extra.yinv {
-                    ey = -ey;
-                }
-                by -= ey;
-            }
+            let ex = interpolate_float(&extra.pos_x, layer_time).unwrap_or(0.0);
+            bx += if extra.xinv { -ex } else { ex };
+            let ey = interpolate_float(&extra.pos_y, layer_time).unwrap_or(0.0);
+            by -= if extra.yinv { -ey } else { ey };
         }
 
         // Apply font Y offset for text layers (to compensate for different font metrics)
@@ -359,7 +353,11 @@ pub(super) fn spawn_layer_entity(
             || layer.animated.stretch_offset.value.is_some()
             || !layer.animated.stretch_offset.keyframes.is_empty()
             || layer.animated.stretch_smooth.value.is_some()
-            || !layer.animated.stretch_smooth.keyframes.is_empty();
+            || !layer.animated.stretch_smooth.keyframes.is_empty()
+            || layer.animated.stretch_seg2_amount.value.is_some()
+            || !layer.animated.stretch_seg2_amount.keyframes.is_empty()
+            || layer.animated.stretch_seg2_angle.value.is_some()
+            || !layer.animated.stretch_seg2_angle.keyframes.is_empty();
 
         // Check if layer has blur effect
         let has_blur = layer.animated.blur_strength.value.is_some()
@@ -404,12 +402,13 @@ pub(super) fn spawn_layer_entity(
 
         // Calculate maximum blur strength from keyframes for mesh expansion
         let max_blur_radius = if has_blur {
-            let mut max_strength = layer.animated.blur_strength.value.unwrap_or(0.0);
-            for kf in &layer.animated.blur_strength.keyframes {
-                if let Ok(v) = kf.value.parse::<f32>() {
-                    max_strength = max_strength.max(v);
-                }
-            }
+            let max_strength = layer
+                .animated
+                .blur_strength
+                .keyframes
+                .iter()
+                .filter_map(|kf| kf.value.parse::<f32>().ok())
+                .fold(layer.animated.blur_strength.value.unwrap_or(0.0), f32::max);
             // Same multiplier as used in animation system
             max_strength * 80.0
         } else {
@@ -434,88 +433,51 @@ pub(super) fn spawn_layer_entity(
             let angle_deg =
                 interpolate_float(&layer.animated.stretch_angle, layer_time).unwrap_or(0.0);
             let transform_rotation_rad = initial_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
-            let angle_rad = angle_deg.to_radians() + transform_rotation_rad;
-            let stretch_px =
+            // Pass original AM angle to shader (NOT rotation-compensated)
+            let angle_rad = angle_deg.to_radians();
+            let stretch_raw =
                 interpolate_float(&layer.animated.stretch_amount, layer_time).unwrap_or(0.0);
-            let offset_px =
+            let offset_raw =
                 interpolate_float(&layer.animated.stretch_offset, layer_time).unwrap_or(0.0);
 
-            // Calculate base_size (same logic as animate_unified_effect_system)
-            let has_negative_size_y = sprite_size[1] < 0.0;
-            let base_size = if has_negative_size_y {
-                (orig_width * orig_width + orig_height * orig_height).sqrt()
-                    * DEBUG_NEGATIVE_HEIGHT_SCALE
-            } else if orig_width >= orig_height {
-                orig_width
-            } else {
-                let rot_cos = transform_rotation_rad.cos().abs();
-                let rot_sin = transform_rotation_rad.sin().abs();
-                let world_w = orig_width * rot_cos + orig_height * rot_sin;
-                0.8 * world_w + 0.2 * orig_width
-            };
-            let base_divisor = base_size / 4.27; // Best match for reference
-            let stretch_factor = 1.0 + stretch_px / base_divisor;
+            // AM formula: convert to scene-normalized coords
+            let scene_width = layer.animated.canvas_width;
+            let scene_height = layer.animated.canvas_height;
+            let adj_stretch = stretch_raw / 500.0;
+            let _offset_norm = offset_raw / 1000.0;
 
-            let mut actual_stretch_px = orig_width * stretch_factor - orig_width;
-
-            // Apply embed RTT compensation if this is embed content
-            if layer.containing_embed_id != 0 {
-                let ratio = layer.animated.canvas_height / 960.0;
-                actual_stretch_px *= ratio;
-            }
-
-            let angle_factor = 1.0 - 0.1 * angle_rad.sin().abs();
-            let half_gap = actual_stretch_px * 0.5 * angle_factor;
-
-            let rotate = |x: f32, y: f32, angle: f32| -> (f32, f32) {
-                let c = angle.cos();
-                let s = angle.sin();
-                (x * c - y * s, x * s + y * c)
-            };
-
-            let transform_vertex = |vx: f32, vy: f32| -> (f32, f32) {
-                let (rx, ry) = rotate(vx, vy, angle_rad);
-                let shifted_x = rx + offset_px;
-                let pushed_x = rx + shifted_x.signum() * half_gap;
-                rotate(pushed_x, ry, -angle_rad)
-            };
+            // Mesh bounds: compute displacement in screen space, rotate to local space
+            let dx_screen = angle_rad.cos().abs() * adj_stretch * scene_width;
+            let dy_screen = angle_rad.sin().abs() * adj_stretch * scene_height;
+            let rot_cos = transform_rotation_rad.cos().abs();
+            let rot_sin = transform_rotation_rad.sin().abs();
+            let max_dx = rot_cos * dx_screen + rot_sin * dy_screen;
+            let max_dy = rot_sin * dx_screen + rot_cos * dy_screen;
 
             let hw = orig_width / 2.0;
             let hh = orig_height / 2.0;
-            let corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
-
-            let mut min_x = f32::MAX;
-            let mut max_x = f32::MIN;
-            let mut min_y = f32::MAX;
-            let mut max_y = f32::MIN;
-
-            for (cx, cy) in corners {
-                let (tx, ty) = transform_vertex(cx, cy);
-                min_x = min_x.min(tx);
-                max_x = max_x.max(tx);
-                min_y = min_y.min(ty);
-                max_y = max_y.max(ty);
-            }
-
-            // No padding - the calculated bounds should be exact for stretch effect
-            // Padding would cause sample_uv to go outside [0,1] range
-
-            let center_offset_x = (min_x + max_x) / 2.0;
-            let center_offset_y = (min_y + max_y) / 2.0;
+            let min_x = -hw - max_dx;
+            let max_x = hw + max_dx;
+            let min_y = -hh - max_dy;
+            let max_y = hh + max_dy;
 
             bevy::log::trace!(
-                "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) stretch_px={:.1} actual={:.1} offset=({:.2},{:.2})",
+                "[SpawnStretch] layer '{}' orig=({:.1},{:.1}) adj_stretch={:.4} expansion=({:.2},{:.2})",
                 layer.label,
                 orig_width,
                 orig_height,
-                stretch_px,
-                actual_stretch_px,
-                center_offset_x,
-                center_offset_y
+                adj_stretch,
+                max_dx,
+                max_dy
             );
 
             (
-                Some(Vec4::new(center_offset_x, center_offset_y, 0.0, 0.0)),
+                Some(Vec4::new(
+                    transform_rotation_rad,
+                    0.0,
+                    scene_width,
+                    scene_height,
+                )),
                 Some((min_x, max_x, min_y, max_y)),
             )
         } else {
@@ -617,27 +579,29 @@ pub(super) fn spawn_layer_entity(
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area
-                let mut max_size = layer.animated.pixelate_size.value.unwrap_or(0.0);
-                for kf in &layer.animated.pixelate_size.keyframes {
-                    if let Ok(v) = kf.value.parse::<f32>() {
-                        max_size = max_size.max(v);
-                    }
-                }
+                let max_size = layer
+                    .animated
+                    .pixelate_size
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| kf.value.parse::<f32>().ok())
+                    .fold(layer.animated.pixelate_size.value.unwrap_or(0.0), f32::max);
                 let mut max_stretch = 1.0f32;
                 if let Some(v) = layer.animated.pixelate_stretch.value {
                     max_stretch = max_stretch.max(v[0].abs()).max(v[1].abs());
                 }
-                for kf in &layer.animated.pixelate_stretch.keyframes {
-                    let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2
-                        && let (Ok(x), Ok(y)) = (
-                            parts[0].trim().parse::<f32>(),
-                            parts[1].trim().parse::<f32>(),
-                        )
-                    {
-                        max_stretch = max_stretch.max(x.abs()).max(y.abs());
-                    }
-                }
+                max_stretch = layer
+                    .animated
+                    .pixelate_stretch
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| {
+                        let mut parts = kf.value.split(',');
+                        let x = parts.next()?.trim().parse::<f32>().ok()?;
+                        let y = parts.next()?.trim().parse::<f32>().ok()?;
+                        Some(x.abs().max(y.abs()))
+                    })
+                    .fold(max_stretch, f32::max);
                 max_size * max_stretch / 2.0
             }, // pixelate_expansion
             global_time as u64,    // current playback time for mask initialization
@@ -645,14 +609,18 @@ pub(super) fn spawn_layer_entity(
             {
                 // Compute max animated scale for SDF mesh sizing
                 let mut max_s = initial_scale.0.abs().max(initial_scale.1.abs());
-                for kf in &layer.animated.scale.keyframes {
-                    let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2
-                        && let (Ok(sx), Ok(sy)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
-                    {
-                        max_s = max_s.max(sx.abs()).max(sy.abs());
-                    }
-                }
+                max_s = layer
+                    .animated
+                    .scale
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| {
+                        let mut parts = kf.value.split(',');
+                        let sx = parts.next()?.parse::<f32>().ok()?;
+                        let sy = parts.next()?.parse::<f32>().ok()?;
+                        Some(sx.abs().max(sy.abs()))
+                    })
+                    .fold(max_s, f32::max);
                 // Also account for max animated size relative to initial size
                 let base_half = match &layer.spec {
                     crate::scene::AmLayerSpec::SdfShape { width, height, .. } => {
@@ -660,34 +628,36 @@ pub(super) fn spawn_layer_entity(
                     }
                     _ => 1.0,
                 };
-                let mut max_size_ratio = 1.0f32;
-                for kf in &layer.animated.size.keyframes {
-                    let parts: Vec<&str> = kf.value.split(',').collect();
-                    if parts.len() >= 2
-                        && let (Ok(w), Ok(h)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
-                    {
-                        max_size_ratio = max_size_ratio.max((w / 2.0).max(h / 2.0) / base_half);
-                    }
-                }
+                let max_size_ratio = layer
+                    .animated
+                    .size
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| {
+                        let mut parts = kf.value.split(',');
+                        let w = parts.next()?.parse::<f32>().ok()?;
+                        let h = parts.next()?.parse::<f32>().ok()?;
+                        Some((w / 2.0).max(h / 2.0) / base_half)
+                    })
+                    .fold(1.0f32, f32::max);
                 // Account for border/stroke expansion in mesh sizing
-                let stroke_expansion = {
-                    let mut max_stroke = layer.animated.stroke_width.value.unwrap_or(0.0);
-                    for kf in &layer.animated.stroke_width.keyframes {
-                        if let Ok(v) = kf.value.parse::<f32>() {
-                            max_stroke = max_stroke.max(v);
-                        }
-                    }
-                    let direction = match &layer.spec {
-                        crate::scene::AmLayerSpec::SdfShape {
-                            stroke_direction, ..
-                        } => stroke_direction.as_str(),
-                        _ => "inside",
-                    };
-                    match direction {
-                        "outside" => max_stroke,
-                        "centered" => max_stroke * 0.5,
-                        _ => 0.0,
-                    }
+                let max_stroke = layer
+                    .animated
+                    .stroke_width
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| kf.value.parse::<f32>().ok())
+                    .fold(layer.animated.stroke_width.value.unwrap_or(0.0), f32::max);
+                let stroke_direction = match &layer.spec {
+                    crate::scene::AmLayerSpec::SdfShape {
+                        stroke_direction, ..
+                    } => stroke_direction.as_str(),
+                    _ => "inside",
+                };
+                let stroke_expansion = match stroke_direction {
+                    "outside" => max_stroke,
+                    "centered" => max_stroke * 0.5,
+                    _ => 0.0,
                 };
                 // Also account for border2 (static)
                 let border2_expansion = match &layer.spec {

@@ -1,11 +1,11 @@
 # Swing
 
 > ⚠️ **This documentation is auto-generated. Do not edit manually.**
-> Last tested: 2026-03-01 17:45:43
+> Last tested: 2026-03-07 20:20:21
 
 Makes the layer swing back and forth with specified frequency and amplitude.
 
-**Support Status**: ✅ Fully Supported
+**Support Status**: ❌ Not Supported
 
 - **Frequency (freq)**: ✅ Implemented (Oscillation frequency in Hz)
 - **Min Angle (a1)**: ✅ Implemented (Minimum oscillation angle (degrees))
@@ -14,7 +14,7 @@ Makes the layer swing back and forth with specified frequency and amplitude.
 - **Type (type)**: ✅ Implemented (Oscillation waveform type (0=sine, 1=triangle))
 
 **Related Test Files:**
-- `effects/swing/basic.amproj` ✅
+- `effects/swing/basic.amproj` ❌
 
 ---
 

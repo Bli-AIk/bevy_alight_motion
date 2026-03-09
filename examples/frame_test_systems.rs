@@ -111,18 +111,17 @@ pub fn setup_frame_test(mut state: ResMut<FrameTestState>, project_file: Res<Pro
             .or_else(|_| std::fs::read_to_string("comparison_config.toml"))
             .ok();
 
-    if let Some(content) = config_content {
-        if let Ok(cfg) = toml::from_str::<ConfigFile>(&content) {
-            if let Some(ft) = cfg.frame_test {
-                state.pass_fps = ft.pass_fps;
-                state.fail_fps = ft.fail_fps;
-                state.max_below_fail_rate = ft.max_below_fail_rate;
-                state.max_below_pass_rate = ft.max_below_pass_rate;
-                state.min_sample_frames = ft.min_sample_frames;
-                state.warmup_frames = ft.warmup_frames;
-                state.measure_duration_secs = ft.measure_duration_secs;
-            }
-        }
+    if let Some(content) = config_content
+        && let Ok(cfg) = toml::from_str::<ConfigFile>(&content)
+        && let Some(ft) = cfg.frame_test
+    {
+        state.pass_fps = ft.pass_fps;
+        state.fail_fps = ft.fail_fps;
+        state.max_below_fail_rate = ft.max_below_fail_rate;
+        state.max_below_pass_rate = ft.max_below_pass_rate;
+        state.min_sample_frames = ft.min_sample_frames;
+        state.warmup_frames = ft.warmup_frames;
+        state.measure_duration_secs = ft.measure_duration_secs;
     }
 
     state.warmup_frames_remaining = state.warmup_frames;

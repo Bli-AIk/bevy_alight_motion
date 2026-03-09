@@ -193,64 +193,78 @@ pub(super) fn process_linear_repeat_effect(
             .keyframes
             .iter()
             .any(|kf| kf.value.parse::<f32>().unwrap_or(0.0) > 0.0);
-    if has_linear_repeat {
-        let count = interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0);
-        let position =
-            interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
-        let offset =
-            interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
-        let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
-        let scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
-        let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
-        let fill_color_srgb = interpolate_color(&animated.linear_repeat_fill_color, layer_time)
-            .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
-        // Convert sRGB to Linear to match uniforms.color
-        let fill_color = Vec4::new(
-            fill_color_srgb.x.powf(2.2),
-            fill_color_srgb.y.powf(2.2),
-            fill_color_srgb.z.powf(2.2),
-            fill_color_srgb.w, // alpha stays the same
-        );
-        let blend = interpolate_float(&animated.linear_repeat_blend, layer_time).unwrap_or(0.0);
-        let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
-        let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
-        let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
-        let ease_in = interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
-        let ease_out =
-            interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
-        let overlap = interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
+    if !has_linear_repeat {
+        // Reset linear repeat params when effect is disabled
+        // Use count=-1.0 to indicate "not activated" (distinguishes from count=0 which means "activated but hide")
+        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        return;
+    }
 
-        // Pack shape, invert, and color_alt_copies into a single int
-        let shape_invert_alt = animated.linear_repeat_shape * 100
-            + if animated.linear_repeat_invert { 10 } else { 0 }
-            + if animated.linear_repeat_color_alt_copies {
-                1
-            } else {
-                0
-            };
+    let count = interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0);
+    let position =
+        interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
+    let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+    let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
+    let scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
+    let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
+    let fill_color_srgb = interpolate_color(&animated.linear_repeat_fill_color, layer_time)
+        .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
+    // Convert sRGB to Linear to match uniforms.color
+    let fill_color = Vec4::new(
+        fill_color_srgb.x.powf(2.2),
+        fill_color_srgb.y.powf(2.2),
+        fill_color_srgb.z.powf(2.2),
+        fill_color_srgb.w, // alpha stays the same
+    );
+    let blend = interpolate_float(&animated.linear_repeat_blend, layer_time).unwrap_or(0.0);
+    let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
+    let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
+    let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
+    let ease_in = interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
+    let ease_out = interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
+    let overlap = interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
 
-        // Use round for count to get integer copy counts
-        let count_rounded = count.round();
-
-        material.uniform_data.linear_repeat_params1 =
-            Vec4::new(count_rounded, position[0], position[1], angle);
-        material.uniform_data.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
-        material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
-        material.uniform_data.linear_repeat_params4 =
-            Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
-        material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
-            let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
-            let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
-            Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+    // Pack shape, invert, and color_alt_copies into a single int
+    let shape_invert_alt = animated.linear_repeat_shape * 100
+        + if animated.linear_repeat_invert { 10 } else { 0 }
+        + if animated.linear_repeat_color_alt_copies {
+            1
         } else {
-            Vec4::new(0.0, 0.0, 0.0, 0.0)
+            0
         };
-        material.uniform_data.linear_repeat_fill_color = fill_color;
 
-        // Process second linear repeat effect if present
-        let (has_lr2, count2_rounded, position2, offset2, angle2, scale2) = if let Some(ref lr2) =
-            animated.linear_repeat2
-        {
+    // Use round for count to get integer copy counts
+    let count_rounded = count.round();
+
+    material.uniform_data.linear_repeat_params1 =
+        Vec4::new(count_rounded, position[0], position[1], angle);
+    material.uniform_data.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
+    material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
+    material.uniform_data.linear_repeat_params4 =
+        Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
+    material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
+        let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
+        let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
+        Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+    } else {
+        Vec4::new(0.0, 0.0, 0.0, 0.0)
+    };
+    material.uniform_data.linear_repeat_fill_color = fill_color;
+
+    // Process second linear repeat effect if present
+    let (has_lr2, count2_rounded, position2, offset2, angle2, scale2) =
+        if let Some(ref lr2) = animated.linear_repeat2 {
             let c2 = interpolate_float(&lr2.count, layer_time).unwrap_or(0.0);
             let p2 = interpolate_vec2(&lr2.position, layer_time).unwrap_or([0.0, 0.0]);
             let o2 = interpolate_vec2(&lr2.offset, layer_time).unwrap_or([0.0, 0.0]);
@@ -300,188 +314,169 @@ pub(super) fn process_linear_repeat_effect(
             (false, 0.0, [0.0, 0.0], [0.0, 0.0], 0.0, 1.0)
         };
 
-        // Calculate mesh expansion using AM's repeatWithEasing algorithm
-        // This must match the shader's calculation exactly
-        let n = count_rounded as i32;
-        let angle_rad = angle.to_radians();
+    // Calculate mesh expansion using AM's repeatWithEasing algorithm
+    // This must match the shader's calculation exactly
+    let n = count_rounded as i32;
+    let angle_rad = angle.to_radians();
 
-        let mut min_x = -orig_width / 2.0;
-        let mut max_x = orig_width / 2.0;
-        let mut min_y = -orig_height / 2.0;
-        let mut max_y = orig_height / 2.0;
+    let mut min_x = -orig_width / 2.0;
+    let mut max_x = orig_width / 2.0;
+    let mut min_y = -orig_height / 2.0;
+    let mut max_y = orig_height / 2.0;
 
-        // Compute bounding box for effect 1 copies
-        // When dual effects exist, this will be further expanded by effect 2
-        let interp_progress = 1.0; // Use max for bounding box
+    // Compute bounding box for effect 1 copies
+    // When dual effects exist, this will be further expanded by effect 2
+    let interp_progress = 1.0; // Use max for bounding box
 
-        // Helper: compute displacement for a single effect's copy
-        let compute_displacement =
-            |idx: i32, count: i32, pos: [f32; 2], off: [f32; 2]| -> (f32, f32) {
-                let base = if count > 1 {
-                    idx as f32 / (count as f32 - 1.0)
-                } else {
-                    0.0
-                };
+    // Helper: compute displacement for a single effect's copy
+    let compute_displacement = |idx: i32, count: i32, pos: [f32; 2], off: [f32; 2]| -> (f32, f32) {
+        let base = if count > 1 {
+            idx as f32 / (count as f32 - 1.0)
+        } else {
+            0.0
+        };
+        (
+            pos[0] * base + off[0] * interp_progress,
+            pos[1] * base + off[1] * interp_progress,
+        )
+    };
+
+    // Effect 2 iteration (or just 1 iteration if no effect 2)
+    let n2 = if has_lr2 { count2_rounded as i32 } else { 1 };
+    let angle2_rad = angle2.to_radians();
+
+    for j in 0..n2 {
+        // Effect 2 displacement (0,0 if no effect 2)
+        let (d2x, d2y) = if has_lr2 {
+            compute_displacement(j, n2, position2, offset2)
+        } else {
+            (0.0, 0.0)
+        };
+        let cum_scale2 = if has_lr2 {
+            1.0 + (scale2 - 1.0) * interp_progress
+        } else {
+            1.0
+        };
+        let cum_angle2 = if has_lr2 {
+            angle2_rad * interp_progress
+        } else {
+            0.0
+        };
+
+        for i in 0..n {
+            let (d1x, d1y) = compute_displacement(i, n, position, offset);
+            let cum_scale1 = 1.0 + (scale - 1.0) * interp_progress;
+            let cum_angle1 = angle_rad * interp_progress;
+
+            // Combined transform: effect2(effect1(shape))
+            // In world space: displacement = d2 + rotate2(scale2 * d1)
+            let scaled_d1x = d1x * cum_scale2;
+            let scaled_d1y = d1y * cum_scale2;
+            let (rot_d1x, rot_d1y) = if cum_angle2.abs() > 0.001 {
+                let c = cum_angle2.cos();
+                let s = cum_angle2.sin();
                 (
-                    pos[0] * base + off[0] * interp_progress,
-                    pos[1] * base + off[1] * interp_progress,
+                    scaled_d1x * c - scaled_d1y * s,
+                    scaled_d1x * s + scaled_d1y * c,
                 )
-            };
-
-        // Effect 2 iteration (or just 1 iteration if no effect 2)
-        let n2 = if has_lr2 { count2_rounded as i32 } else { 1 };
-        let angle2_rad = angle2.to_radians();
-
-        for j in 0..n2 {
-            // Effect 2 displacement (0,0 if no effect 2)
-            let (d2x, d2y) = if has_lr2 {
-                compute_displacement(j, n2, position2, offset2)
             } else {
-                (0.0, 0.0)
+                (scaled_d1x, scaled_d1y)
             };
-            let cum_scale2 = if has_lr2 {
-                1.0 + (scale2 - 1.0) * interp_progress
-            } else {
-                1.0
-            };
-            let cum_angle2 = if has_lr2 {
-                angle2_rad * interp_progress
-            } else {
-                0.0
-            };
+            let total_dx = d2x + rot_d1x;
+            let total_dy = d2y + rot_d1y;
 
-            for i in 0..n {
-                let (d1x, d1y) = compute_displacement(i, n, position, offset);
-                let cum_scale1 = 1.0 + (scale - 1.0) * interp_progress;
-                let cum_angle1 = angle_rad * interp_progress;
+            // Convert to Bevy coords (flip Y)
+            let cum_offset_x = total_dx;
+            let cum_offset_y = -total_dy;
 
-                // Combined transform: effect2(effect1(shape))
-                // In world space: displacement = d2 + rotate2(scale2 * d1)
-                let scaled_d1x = d1x * cum_scale2;
-                let scaled_d1y = d1y * cum_scale2;
-                let (rot_d1x, rot_d1y) = if cum_angle2.abs() > 0.001 {
-                    let c = cum_angle2.cos();
-                    let s = cum_angle2.sin();
-                    (
-                        scaled_d1x * c - scaled_d1y * s,
-                        scaled_d1x * s + scaled_d1y * c,
-                    )
-                } else {
-                    (scaled_d1x, scaled_d1y)
-                };
-                let total_dx = d2x + rot_d1x;
-                let total_dy = d2y + rot_d1y;
+            let total_scale = cum_scale1 * cum_scale2;
+            let total_angle = cum_angle1 + cum_angle2;
 
-                // Convert to Bevy coords (flip Y)
-                let cum_offset_x = total_dx;
-                let cum_offset_y = -total_dy;
-
-                let total_scale = cum_scale1 * cum_scale2;
-                let total_angle = cum_angle1 + cum_angle2;
-
-                let half_w = orig_width / 2.0 * total_scale;
-                let half_h = orig_height / 2.0 * total_scale;
-                let corners = [
-                    (-half_w, -half_h),
-                    (half_w, -half_h),
-                    (half_w, half_h),
-                    (-half_w, half_h),
-                ];
-                let cos_a = total_angle.cos();
-                let sin_a = total_angle.sin();
-                for (cx, cy) in corners {
-                    let rx = cx * cos_a - cy * sin_a + cum_offset_x;
-                    let ry = cx * sin_a + cy * cos_a + cum_offset_y;
-                    min_x = min_x.min(rx);
-                    max_x = max_x.max(rx);
-                    min_y = min_y.min(ry);
-                    max_y = max_y.max(ry);
-                }
+            let half_w = orig_width / 2.0 * total_scale;
+            let half_h = orig_height / 2.0 * total_scale;
+            let corners = [
+                (-half_w, -half_h),
+                (half_w, -half_h),
+                (half_w, half_h),
+                (-half_w, half_h),
+            ];
+            let cos_a = total_angle.cos();
+            let sin_a = total_angle.sin();
+            for (cx, cy) in corners {
+                let rx = cx * cos_a - cy * sin_a + cum_offset_x;
+                let ry = cx * sin_a + cy * cos_a + cum_offset_y;
+                min_x = min_x.min(rx);
+                max_x = max_x.max(rx);
+                min_y = min_y.min(ry);
+                max_y = max_y.max(ry);
             }
         }
-
-        // Add padding for safety - larger padding to handle edge cases
-        // Also scale padding by the maximum possible scale factor
-        let max_scale = scale.abs().max(1.0) * (if has_lr2 { scale2.abs().max(1.0) } else { 1.0 });
-        let padding = 20.0 * max_scale
-            + offset[0].abs()
-            + offset[1].abs()
-            + if has_lr2 {
-                offset2[0].abs() + offset2[1].abs()
-            } else {
-                0.0
-            };
-        min_x -= padding;
-        max_x += padding;
-        min_y -= padding;
-        max_y += padding;
-
-        // Calculate new mesh dimensions
-        let new_width = max_x - min_x;
-        let new_height = max_y - min_y;
-
-        // Update original_size uniform so shader knows the original shape dimensions
-        // x,y = original shape size (for pixel coordinate calculation)
-        // z,w = expanded mesh size (for reference)
-        material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, new_width, new_height);
-
-        // UV mapping: match standard mesh Y-flip convention
-        let uv_min_x = min_x / orig_width + 0.5;
-        let uv_max_x = max_x / orig_width + 0.5;
-        let uv_at_bottom = 0.5 - min_y / orig_height;
-        let uv_at_top = 0.5 - max_y / orig_height;
-
-        let vertices = vec![
-            [min_x, min_y, 0.0],
-            [max_x, min_y, 0.0],
-            [max_x, max_y, 0.0],
-            [min_x, max_y, 0.0],
-        ];
-        let normals = vec![
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-        ];
-        let uvs = vec![
-            [uv_min_x, uv_at_bottom],
-            [uv_max_x, uv_at_bottom],
-            [uv_max_x, uv_at_top],
-            [uv_min_x, uv_at_top],
-        ];
-        let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-        let mut new_mesh = Mesh::new(
-            bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD
-                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-        );
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-        new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-        let new_mesh_handle = meshes.add(new_mesh);
-        commands
-            .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
-    } else {
-        // Reset linear repeat params when effect is disabled
-        // Use count=-1.0 to indicate "not activated" (distinguishes from count=0 which means "activated but hide")
-        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
-        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
-        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
-        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
-        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
-        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
+
+    // Add padding for safety - larger padding to handle edge cases
+    // Also scale padding by the maximum possible scale factor
+    let max_scale = scale.abs().max(1.0) * (if has_lr2 { scale2.abs().max(1.0) } else { 1.0 });
+    let padding = 20.0 * max_scale
+        + offset[0].abs()
+        + offset[1].abs()
+        + if has_lr2 {
+            offset2[0].abs() + offset2[1].abs()
+        } else {
+            0.0
+        };
+    min_x -= padding;
+    max_x += padding;
+    min_y -= padding;
+    max_y += padding;
+
+    // Calculate new mesh dimensions
+    let new_width = max_x - min_x;
+    let new_height = max_y - min_y;
+
+    // Update original_size uniform so shader knows the original shape dimensions
+    // x,y = original shape size (for pixel coordinate calculation)
+    // z,w = expanded mesh size (for reference)
+    material.uniform_data.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
+
+    // UV mapping: match standard mesh Y-flip convention
+    let uv_min_x = min_x / orig_width + 0.5;
+    let uv_max_x = max_x / orig_width + 0.5;
+    let uv_at_bottom = 0.5 - min_y / orig_height;
+    let uv_at_top = 0.5 - max_y / orig_height;
+
+    let vertices = vec![
+        [min_x, min_y, 0.0],
+        [max_x, min_y, 0.0],
+        [max_x, max_y, 0.0],
+        [min_x, max_y, 0.0],
+    ];
+    let normals = vec![
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+    ];
+    let uvs = vec![
+        [uv_min_x, uv_at_bottom],
+        [uv_max_x, uv_at_bottom],
+        [uv_max_x, uv_at_top],
+        [uv_min_x, uv_at_top],
+    ];
+    let indices = vec![0u32, 1, 2, 0, 2, 3];
+
+    let mut new_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+    );
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+
+    let new_mesh_handle = meshes.add(new_mesh);
+    commands
+        .entity(entity)
+        .insert(bevy::mesh::Mesh2d(new_mesh_handle));
 }
 
 /// Process the radial repeat effect for an entity, updating material params and mesh bounds.

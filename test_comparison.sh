@@ -53,11 +53,19 @@ elif [ "$1" == "--frame-test" ]; then
         shift
     elif [ -n "$1" ]; then
         FILTER_PATTERN="$1"
+        FILTER_PATTERN="${FILTER_PATTERN#./}"
+        FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
+        FILTER_PATTERN="${FILTER_PATTERN#projects/}"
     else
         FILTER_PATTERN="basic/"
     fi
 elif [ -n "$1" ]; then
     FILTER_PATTERN="$1"
+    # Strip common path prefixes so users can pass paths like
+    # "projects/private/..." or "assets/projects/private/..." and still match.
+    FILTER_PATTERN="${FILTER_PATTERN#./}"
+    FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
+    FILTER_PATTERN="${FILTER_PATTERN#projects/}"
 else
     # Default: only run basic/* tests
     FILTER_PATTERN="basic/"
@@ -166,7 +174,7 @@ while IFS= read -r amproj; do
             fi
         fi
     fi
-done < <(find "$PROJECTS_DIR" -name "*.amproj" -type f | sort)
+done < <(find "$PROJECTS_DIR" \( -name "*.amproj" -type d -print -prune \) -o \( -name "*.amproj" -type f -print \) | sort)
 EXAMPLES=$(echo $EXAMPLES | tr ' ' '\n' | sort | tr '\n' ' ')
 
 EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)

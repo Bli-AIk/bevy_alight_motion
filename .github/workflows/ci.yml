@@ -53,11 +53,17 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Install tokei
+        run: cargo install tokei
+
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Lint checks
+        run: bash tokei_check.sh
 
       - name: Build
         run: cargo build --verbose

@@ -29,7 +29,6 @@ pub fn count_total_layers(layers: &[PendingLayer]) -> usize {
 }
 
 /// Process pending layers recursively.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn process_pending_layers(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -100,11 +99,11 @@ pub(crate) fn process_pending_layers(
             None => return true, // Parent not in our list, assume active
         };
 
-        // Use lifecycle_time for visibility (NOT affected by element speed).
-        // start_time/end_time are in scene time, not speed-adjusted time.
-        let parent_lifecycle_time = parent.animated.calc_lifecycle_time(global_time);
-        let parent_active = parent_lifecycle_time >= parent.start_time as f32
-            && parent_lifecycle_time < parent.end_time as f32;
+        // Use calc_local_time for visibility (applies accumulated parent speed).
+        // start_time/end_time are in parent-scene time, so we need speed scaling.
+        let parent_local_time = parent.animated.calc_local_time(global_time);
+        let parent_active = parent_local_time >= parent.start_time as f32
+            && parent_local_time < parent.end_time as f32;
 
         if !parent_active {
             return false; // Parent is not active
@@ -115,14 +114,14 @@ pub(crate) fn process_pending_layers(
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
-        // Use lifecycle_time for visibility (NOT affected by element speed).
-        // start_time/end_time are in scene time, not speed-adjusted time.
-        let lifecycle_time = layer.animated.calc_lifecycle_time(global_time);
+        // Use calc_local_time for visibility (applies accumulated parent speed).
+        // start_time/end_time are in parent-scene time, so we need speed scaling.
+        let local_time = layer.animated.calc_local_time(global_time);
 
         // Check if layer should be active (considering both own time range and parent's time range)
         // Note: AM uses half-open interval [start, end) for layer visibility
         let own_time_active =
-            lifecycle_time >= layer.start_time as f32 && lifecycle_time < layer.end_time as f32;
+            local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 
         // Check if all ancestors are active
         let ancestors_active =
@@ -137,12 +136,12 @@ pub(crate) fn process_pending_layers(
         unsafe {
             if DEBUG_FRAME < 5 && idx < 10 {
                 bevy::log::debug!(
-                    "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, lifecycle_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
+                    "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, local_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
                     layer.label,
                     layer.id,
                     layer.parent,
                     global_time,
-                    lifecycle_time,
+                    local_time,
                     layer.start_time,
                     layer.end_time,
                     own_time_active,
@@ -167,41 +166,43 @@ pub(crate) fn process_pending_layers(
 
     // Despawn entities that are no longer active
     for layer_id in to_despawn {
-        if let Some(entity) = pending.spawned_entities.remove(&layer_id) {
-            // Find layer info for logging
-            if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+        let Some(entity) = pending.spawned_entities.remove(&layer_id) else {
+            continue;
+        };
+
+        // Find layer info for logging
+        if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+            bevy::log::trace!(
+                "  [Lifecycle] Despawning '{}' (id={})",
+                layer.label,
+                layer_id
+            );
+        }
+
+        // Find all children of this layer (direct and nested) and despawn them first
+        let children_to_remove: Vec<u64> = pending
+            .layers
+            .iter()
+            .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
+            .map(|l| l.id)
+            .collect();
+
+        // Remove children from spawned_entities tracking (parent despawn will handle
+        // the actual ECS despawn recursively)
+        for child_id in children_to_remove {
+            if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
+                && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
+            {
                 bevy::log::trace!(
-                    "  [Lifecycle] Despawning '{}' (id={})",
-                    layer.label,
-                    layer_id
+                    "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
+                    child.label,
+                    child_id
                 );
             }
-
-            // Find all children of this layer (direct and nested) and despawn them first
-            let children_to_remove: Vec<u64> = pending
-                .layers
-                .iter()
-                .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
-                .map(|l| l.id)
-                .collect();
-
-            // Remove children from spawned_entities tracking (parent despawn will handle
-            // the actual ECS despawn recursively)
-            for child_id in children_to_remove {
-                if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
-                    && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
-                {
-                    bevy::log::trace!(
-                        "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
-                        child.label,
-                        child_id
-                    );
-                }
-            }
-
-            // Despawn the entity (and all ECS children recursively)
-            commands.entity(entity).despawn();
         }
+
+        // Despawn the entity (and all ECS children recursively)
+        commands.entity(entity).despawn();
     }
 
     // Sort layers to spawn by dependency (parents before children) using topological sort
