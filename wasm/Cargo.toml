@@ -22,8 +22,11 @@ bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_sprite",
+    "bevy_sprite_render",
     "bevy_pbr",
     "bevy_text",
+    "bevy_ui",
+    "bevy_ui_render",
     # 图片格式
     "png",
     "jpeg",

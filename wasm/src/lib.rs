@@ -6,11 +6,9 @@
 //! 使用 Bevy 原生的 MemoryAssetReader 实现动态资产加载。
 
 use bevy::asset::io::memory::{Dir, MemoryAssetReader};
-use bevy::asset::io::{AssetSource, AssetSourceId};
+use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
-use bevy::text::{TextFont, TextColor};
-use bevy::ui::Node;
 use bevy::window::WindowPlugin;
 use bevy_alight_motion::prelude::*;
 use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
@@ -63,7 +61,7 @@ impl Plugin for UploadedAssetSourcePlugin {
         // Register "uploaded://" as an asset source using MemoryAssetReader
         app.register_asset_source(
             AssetSourceId::from("uploaded"),
-            AssetSource::build().with_reader(move || {
+            AssetSourceBuilder::new(move || {
                 Box::new(MemoryAssetReader { root: dir.clone() })
             }),
         );
