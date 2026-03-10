@@ -57,6 +57,21 @@ fi
 touch ../doc/public/.nojekyll
 echo "📄 Ensured .nojekyll exists"
 
+# Write build metadata (供 Playground 页面显示版本信息)
+BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+GIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+WASM_SIZE=$(stat -c%s ../doc/public/wasm/bevy_alight_motion_bg.wasm 2>/dev/null || echo "0")
+cat > ../doc/public/wasm/build_info.json <<EOF
+{
+  "build_time": "$BUILD_TIME",
+  "git_hash": "$GIT_HASH",
+  "git_branch": "$GIT_BRANCH",
+  "wasm_size_bytes": $WASM_SIZE
+}
+EOF
+echo "📝 Build metadata written to build_info.json"
+
 echo ""
 echo "✅ Build complete!"
 echo "   Output: ../doc/public/wasm/"
