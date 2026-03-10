@@ -1036,59 +1036,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
     
-    // Apply stretch segment effect if enabled (before blur)
-    if stretch_enabled {
-        let seg2_stretch = uniforms.stretch_seg2_params.y;
-        let has_seg2 = abs(seg2_stretch) > 0.001;
-
-        if has_seg2 {
-            // Dual stretch: AM applies effects as sequential render passes.
-            // The LAST effect (seg2) runs on the output pixel position first,
-            // then the FIRST effect (seg1) runs at the displaced position.
-            // So: apply seg2 at mesh UV, then seg1 at the result.
-            sample_uv = apply_stretch_segment_gen(
-                mesh.uv,
-                uniforms.stretch_seg2_params,
-                uniforms.original_size.z, uniforms.original_size.w,
-            );
-            sample_uv = apply_stretch_segment_gen(
-                sample_uv,
-                uniforms.stretch_params,
-                uniforms.original_size.x, uniforms.original_size.y,
-            );
-        } else {
-            // Single stretch
-            sample_uv = apply_stretch_segment(mesh.uv);
-        }
-        
-        // Add small tolerance to prevent edge clipping due to floating point precision
-        let eps = 0.002;
-        if sample_uv.x < -eps || sample_uv.x > 1.0 + eps || sample_uv.y < -eps || sample_uv.y > 1.0 + eps {
-            discard;
-        }
-        // Clamp to valid range for texture sampling
-        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
-    }
-    
-    // Apply stretch2 effect (directional stretch)
-    let stretch2_scale = uniforms.stretch2_params.x;
-    if stretch2_scale > 0.001 && abs(stretch2_scale - 1.0) > 0.0001 {
-        sample_uv = apply_stretch2(sample_uv);
-        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
-    }
-    
-    // Apply pixelate effect (AM pixelate2 algorithm)
-    // AM renders pixelation in the inner-scene coordinate space (sceneSize = embed's
-    // own scene resolution). The cell size is `size` scene-pixels, which equals `size`
-    // layer-pixels for layers at 1:1 scale within their scene.  Embed hierarchy scaling
-    // is applied AFTER the effect, so scene_scale is NOT used in cell sizing.
-    //
-    // Grid alignment: dp = (sample_uv - 0.5) * display_size already gives the
-    // equivalent of AM's (fragCoord - layerCenter) because both have texel centers
-    // at half-pixel positions.  Y is negated to match GL Y-up convention.
+    // Apply pixelate effect FIRST (before stretch) to match AM's sequential render pipeline.
+    // In AM, pixelate runs AFTER stretch as a separate render pass, sampling the stretch
+    // output at grid-snapped screen positions.  In our single-pass shader, the equivalent
+    // UV lookup is:  original[ stretch_inv( pixelate_snap(P) ) ]
+    // i.e. snap the SCREEN position first, then apply stretch displacement.
+    // Using original_size.zw (= mesh dimensions, which include stretch expansion when active)
+    // ensures correct UV↔pixel mapping for the current mesh geometry.
     var pixelate_dist_center = 0.0;
     if pixelate_enabled {
-        let display_size = vec2<f32>(uniforms.original_size.x, uniforms.original_size.y);
+        let display_size = vec2<f32>(uniforms.original_size.z, uniforms.original_size.w);
 
         // Cell size in layer pixels (= inner-scene pixels for 1:1 layers)
         let size_vec = vec2<f32>(
@@ -1096,14 +1053,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             pixelate_size * pixelate_stretch.y
         );
 
-        // Position in layer pixels relative to center
-        let dp = (sample_uv - vec2<f32>(0.5)) * display_size;
+        // Position in pixels relative to center (mesh.uv = screen position)
+        let dp = (mesh.uv - vec2<f32>(0.5)) * display_size;
 
-        // Convert to AM's inner-scene coordinate convention.
-        // dp already equals (fragCoord - layerCenter) in AM's coordinate space:
-        // at the first texel (UV = 0.5/W), dp.x = -W/2 + 0.5 which matches
-        // AM's gl_FragCoord.x - layerCenter.x = -W/2 + 0.5.
-        // Y is negated (GL Y-up → WebGPU Y-down).
+        // Convert to AM's coordinate convention (Y negated: GL Y-up → WebGPU Y-down)
         var st_am = vec2<f32>(dp.x, -dp.y);
 
         // Apply rotation: pixelate angle adjusted for parent rotation
@@ -1130,14 +1083,58 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // Distance from pixel center (for vignette)
         pixelate_dist_center = smoothstep(0.0, 1.0, length((pos_in_pixel / size_vec) - vec2<f32>(0.5)));
 
-        // Snap to cell center in AM coords, then convert back to dp
+        // Snap to cell center in AM coords, then convert back to UV
         let snapped_am = st_am - pos_in_pixel + size_vec * 0.5;
         let snapped_dp = vec2<f32>(snapped_am.x, -snapped_am.y);
         sample_uv = snapped_dp / display_size + vec2<f32>(0.5);
-        // Discard if the grid cell center maps outside the texture
-        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+
+        // Discard out-of-bounds only when no stretch follows (stretch has its own bounds check)
+        if !stretch_enabled {
+            if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+                discard;
+            }
+        }
+    }
+    
+    // Apply stretch segment effect (after pixelate snap).
+    // sample_uv is the pixelate-snapped screen position (or mesh.uv if no pixelate).
+    // Stretch computes displacement at this snapped position, matching AM's pipeline:
+    //   AM: original[ stretch1( stretch2( pixelate_snap(P) ) ) ]
+    if stretch_enabled {
+        let seg2_stretch = uniforms.stretch_seg2_params.y;
+        let has_seg2 = abs(seg2_stretch) > 0.001;
+
+        if has_seg2 {
+            // Dual stretch: apply seg2 at (snapped) screen position, then seg1 at result.
+            sample_uv = apply_stretch_segment_gen(
+                sample_uv,
+                uniforms.stretch_seg2_params,
+                uniforms.original_size.z, uniforms.original_size.w,
+            );
+            sample_uv = apply_stretch_segment_gen(
+                sample_uv,
+                uniforms.stretch_params,
+                uniforms.original_size.x, uniforms.original_size.y,
+            );
+        } else {
+            // Single stretch
+            sample_uv = apply_stretch_segment(sample_uv);
+        }
+        
+        // Add small tolerance to prevent edge clipping due to floating point precision
+        let eps = 0.002;
+        if sample_uv.x < -eps || sample_uv.x > 1.0 + eps || sample_uv.y < -eps || sample_uv.y > 1.0 + eps {
             discard;
         }
+        // Clamp to valid range for texture sampling
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    }
+    
+    // Apply stretch2 effect (directional stretch)
+    let stretch2_scale = uniforms.stretch2_params.x;
+    if stretch2_scale > 0.001 && abs(stretch2_scale - 1.0) > 0.0001 {
+        sample_uv = apply_stretch2(sample_uv);
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
     // Sample texture - with or without blur, with or without repeat
