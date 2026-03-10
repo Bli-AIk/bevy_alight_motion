@@ -61,11 +61,16 @@
       <summary>🔍 {{ i18n.consoleLogs }} ({{ logs.length }})</summary>
       <pre class="log-content">{{ logs.join('\n') }}</pre>
     </details>
+
+    <!-- WASM 构建信息 -->
+    <div class="build-info" v-if="buildInfo">
+      <span>WASM Build: {{ buildInfo.build_time }} ({{ buildInfo.git_branch }}@{{ buildInfo.git_hash }}) · {{ formatSize(buildInfo.wasm_size_bytes) }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useData, withBase } from 'vitepress'
 import FileUploader from './FileUploader.vue'
 import ValidationReport from './ValidationReport.vue'
@@ -117,6 +122,23 @@ const isLoaded = ref(false)
 
 // 存储上传的文件数据，以便在 WASM 加载后使用
 let pendingFileBytes: Uint8Array | null = null
+
+// WASM 构建信息
+const buildInfo = ref<{ build_time: string; git_hash: string; git_branch: string; wasm_size_bytes: number } | null>(null)
+
+const formatSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const mb = bytes / (1024 * 1024)
+  return `${mb.toFixed(1)} MB`
+}
+
+// 加载构建信息
+onMounted(async () => {
+  try {
+    const resp = await fetch(withBase('/wasm/build_info.json'))
+    if (resp.ok) buildInfo.value = await resp.json()
+  } catch { /* ignore */ }
+})
 
 // Console 捕获
 const { validationReport, logs, clearLogs } = useConsoleCapture()
@@ -444,5 +466,14 @@ onUnmounted(() => {
   .shortcut {
     padding: 0.2rem 0.4rem;
   }
+}
+
+/* 构建信息 */
+.build-info {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--vp-c-text-3);
+  text-align: right;
 }
 </style>
