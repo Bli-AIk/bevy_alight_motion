@@ -588,44 +588,80 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
     let feather = uniforms.replace_color_params.y;
     let effect_alpha = uniforms.replace_color_params.z;
     let lock_luminance = uniforms.replace_color_flags.y > 0.5;
-    
-    // Uniform colors are passed in sRGB space, convert to linear for blending
-    // since input_color from texture is already in linear space
-    let old_rgb = srgb_to_linear(uniforms.replace_old_color.rgb);
-    var new_rgb = srgb_to_linear(uniforms.replace_new_color.rgb);
-    
-    // Calculate color distance in linear RGB space (normalized 0-1)
-    let input_rgb = input_color.rgb;
-    let diff = input_rgb - old_rgb;
-    let distance = length(diff) / sqrt(3.0); // Normalize to 0-1 range
-    
-    // Calculate replacement factor based on threshold and feather
-    // If distance < threshold: full replacement
-    // If distance > threshold + feather: no replacement
-    // In between: smooth transition
-    var replace_factor: f32;
-    if feather > 0.001 {
-        replace_factor = 1.0 - smoothstep(threshold, threshold + feather, distance);
+
+    // Uniform colors are in sRGB space (from XML). Process in sRGB to match AM.
+    let old_color = uniforms.replace_old_color;  // sRGB RGBA
+    let new_color = uniforms.replace_new_color;  // sRGB RGBA
+
+    // Convert texture from linear to sRGB (AM works in sRGB on mobile)
+    let tex_srgb = vec4<f32>(linear_to_srgb(input_color.rgb), input_color.a);
+
+    // Un-premultiply alpha (AM: srcColor = texColor.rgb / texColor.a)
+    var src_color: vec3<f32>;
+    if tex_srgb.a > 0.0001 {
+        src_color = tex_srgb.rgb / tex_srgb.a;
     } else {
-        replace_factor = select(0.0, 1.0, distance <= threshold);
+        return input_color;
     }
-    
-    // Apply effect alpha
-    replace_factor *= effect_alpha;
-    
-    // If lock_luminance is enabled, preserve original brightness
+
+    // RGB→YUV using AM's matrix
+    let old_rgb_norm = old_color.rgb / max(old_color.a, 0.001);
+    let new_rgb_norm = new_color.rgb / max(new_color.a, 0.001);
+
+    let old_yuv = vec3<f32>(
+        dot(old_color.rgb, vec3<f32>(0.299, 0.587, 0.114)),
+        dot(old_color.rgb, vec3<f32>(-0.14713, -0.28886, 0.436)),
+        dot(old_color.rgb, vec3<f32>(0.615, -0.51499, -0.10001))
+    );
+    let src_yuv = vec3<f32>(
+        dot(src_color, vec3<f32>(0.299, 0.587, 0.114)),
+        dot(src_color, vec3<f32>(-0.14713, -0.28886, 0.436)),
+        dot(src_color, vec3<f32>(0.615, -0.51499, -0.10001))
+    );
+
+    // Weighted YUV distance (AM: Y×0.5, UV×4.0)
+    var diff_yuv = abs(old_yuv - src_yuv);
+    diff_yuv.x *= 0.5;
+    diff_yuv.y *= 4.0;
+    diff_yuv.z *= 4.0;
+    let diff = length(diff_yuv);
+
+    // AM's smoothstep with reversed edges: p=1 when close match, p=0 when far
+    // GLSL allows smoothstep(high, low, x) but WGSL requires low < high,
+    // so we use 1.0 - smoothstep(low, high, x) to get the reversed behavior.
+    let eff_feather = max(feather, 0.0005);
+    let b = max(threshold - eff_feather, 0.0);
+    let a = min(threshold + eff_feather, 4.0);
+    let low_edge = min(b, a - 0.0005);
+    let p = 1.0 - smoothstep(low_edge, a, diff);
+
+    // Compute adjusted new color
+    var new_color_adj: vec3<f32>;
     if lock_luminance {
-        let input_lum = dot(input_rgb, vec3<f32>(0.299, 0.587, 0.114));
-        let new_lum = dot(new_rgb, vec3<f32>(0.299, 0.587, 0.114));
-        if new_lum > 0.001 {
-            new_rgb = new_rgb * (input_lum / new_lum);
-        }
+        // Keep source luminance, use new chrominance
+        let new_yuv = vec3<f32>(
+            dot(new_rgb_norm, vec3<f32>(0.299, 0.587, 0.114)),
+            dot(new_rgb_norm, vec3<f32>(-0.14713, -0.28886, 0.436)),
+            dot(new_rgb_norm, vec3<f32>(0.615, -0.51499, -0.10001))
+        );
+        let adj_yuv = vec3<f32>(src_yuv.x, new_yuv.y, new_yuv.z);
+        new_color_adj = vec3<f32>(
+            dot(adj_yuv, vec3<f32>(1.0, 0.0, 1.13983)),
+            dot(adj_yuv, vec3<f32>(1.0, -0.39465, -0.58060)),
+            dot(adj_yuv, vec3<f32>(1.0, 2.03211, 0.0))
+        );
+    } else {
+        // Additive color shift (AM: srcColor - oldColor + newColor)
+        new_color_adj = src_color - old_rgb_norm + new_rgb_norm;
     }
-    
-    // Blend between original and new color (all in linear space)
-    let result_rgb = mix(input_rgb, new_rgb, replace_factor);
-    
-    return vec4<f32>(result_rgb, input_color.a);
+
+    // Final blend (AM formula): mix with newcolor.a * alpha
+    let blended = mix(src_color, new_color_adj, p);
+    let result_premul = vec4<f32>(blended, 1.0) * tex_srgb.a;
+    let final_srgb = mix(tex_srgb, result_premul, new_color.a * effect_alpha);
+
+    // Convert back to linear
+    return vec4<f32>(srgb_to_linear(final_srgb.rgb), final_srgb.a);
 }
 
 // AM-compatible 2D cubic bezier easing
