@@ -3,7 +3,7 @@
 
 /**
  * Download runtime logs as a text file
- * 下载运行时日志为文本文件
+ * 下载运行时日志为文本文件 (兼容移动端)
  */
 export function download_logs(): void;
 

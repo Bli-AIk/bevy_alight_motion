@@ -404,7 +404,7 @@ pub fn get_current_frame_pixels() -> Vec<u8> {
 }
 
 /// Download runtime logs as a text file
-/// 下载运行时日志为文本文件
+/// 下载运行时日志为文本文件 (兼容移动端)
 #[wasm_bindgen]
 pub fn download_logs() {
     let logs = {
@@ -415,18 +415,21 @@ pub fn download_logs() {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
 
-    let js_logs = JsValue::from_str(&logs);
-    let blob = Blob::new_with_str_sequence(&js_sys::Array::of1(&js_logs)).ok();
-    if let Some(blob) = blob {
-        let url = Url::create_object_url_with_blob(&blob).ok();
-        if let Some(url) = url {
-            let a = document.create_element("a").ok().unwrap();
-            a.set_attribute("href", &url).ok();
-            a.set_attribute("download", "bevy_alight_motion_logs.txt")
-                .ok();
-            a.dispatch_event(&web_sys::MouseEvent::new("click").ok().unwrap())
-                .ok();
-            Url::revoke_object_url(&url).ok();
+    // 移动端兼容：使用 data URL 方案
+    // 将日志内容编码为 base64
+    let encoded = js_sys::encode_uri_component(&logs);
+    let data_url = format!("data:text/plain;charset=utf-8,{}", encoded);
+
+    // 创建隐藏的 a 标签
+    if let Ok(a) = document.create_element("a") {
+        let _ = a.set_attribute("href", &data_url);
+        let _ = a.set_attribute("download", "bevy_alight_motion_logs.txt");
+
+        // 尝试使用 PointerEvent (更兼容移动端)
+        if let Ok(pe) = web_sys::PointerEvent::new("click") {
+            let _ = a.dispatch_event(&pe);
+        } else if let Ok(me) = web_sys::MouseEvent::new("click") {
+            let _ = a.dispatch_event(&me);
         }
     }
 
