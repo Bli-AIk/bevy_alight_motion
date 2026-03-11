@@ -36,11 +36,6 @@ export function get_state(): any;
 export function load_project_from_bytes(data: Uint8Array): boolean;
 
 /**
- * Main entry point for WASM
- */
-export function main(): void;
-
-/**
  * Pause the animation
  * 暂停动画
  */
@@ -64,6 +59,18 @@ export function reset(): void;
  */
 export function seek(frame: number): void;
 
+/**
+ * Start the Bevy application.
+ * Must be called AFTER `<canvas id="bevy-canvas">` is visible and has non-zero dimensions.
+ */
+export function start_app(): void;
+
+/**
+ * WASM module initialization — lightweight, no Bevy.
+ * Bevy app is started separately via `start_app()` after the canvas is visible.
+ */
+export function wasm_init(): void;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -73,17 +80,18 @@ export interface InitOutput {
     readonly get_logs: () => [number, number];
     readonly get_state: () => any;
     readonly load_project_from_bytes: (a: number, b: number) => number;
-    readonly main: () => void;
     readonly pause: () => void;
     readonly play: () => void;
     readonly reset: () => void;
     readonly seek: (a: number) => void;
-    readonly wasm_bindgen__closure__destroy__hdf3faa8823fb45b1: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__h0e85d404d5815f0c: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h39e0519b9a57829e: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h1d39109c163c02ca: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h1c74287b7016c2e4: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h864ad5f95b4281c7: (a: number, b: number) => void;
+    readonly start_app: () => void;
+    readonly wasm_init: () => void;
+    readonly wasm_bindgen__closure__destroy__h07aa81d6da615279: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h38046e54fe5330f7: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hf8ac97678b257160: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h58816ab24383e09a: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h2f7f4daf63d4d5ba: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h6bf14f86a9d7779d: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __externref_table_alloc: () => number;
