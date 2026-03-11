@@ -185,6 +185,14 @@ pub struct UnifiedEffectUniform {
     pub mask1_stretch2_params: Vec4,
     /// Mask1 stretch aspect info: (aspect_w, aspect_h, orig_half_w, orig_half_h)
     pub mask1_stretch_info: Vec4,
+
+    // Wavewarp2 effect (波浪歪曲)
+    /// Wavewarp2 params1: (phase, a1_rad, m1_spacing, m2_magnitude)
+    pub wavewarp2_params1: Vec4,
+    /// Wavewarp2 params2: (a2_rad, damping, damping_space, damping_origin)
+    pub wavewarp2_params2: Vec4,
+    /// Wavewarp2 flags: (screen_space, enabled, 0, 0)
+    pub wavewarp2_flags: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -442,6 +450,9 @@ impl Default for UnifiedEffectUniform {
             mask1_stretch1_params: Vec4::ZERO,
             mask1_stretch2_params: Vec4::ZERO,
             mask1_stretch_info: Vec4::ZERO,
+            wavewarp2_params1: Vec4::ZERO,
+            wavewarp2_params2: Vec4::ZERO,
+            wavewarp2_flags: Vec4::ZERO,
         }
     }
 }

@@ -278,6 +278,55 @@ pub fn animate_unified_effect_system(
             material.uniform_data.stretch2_params = Vec4::ZERO;
         }
 
+        // Update wavewarp2 parameters (波浪歪曲 / Wave Warp)
+        if animated.wavewarp2_has_effect {
+            let phase =
+                interpolate_float(&animated.wavewarp2_phase, layer_time).unwrap_or(0.0);
+            let a1d_rad =
+                interpolate_float(&animated.wavewarp2_a1d, layer_time)
+                    .unwrap_or(0.0)
+                    .to_radians();
+            let m1 =
+                interpolate_float(&animated.wavewarp2_m1, layer_time).unwrap_or(20.0);
+            let m2 =
+                interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(4.0);
+            let a2d =
+                interpolate_float(&animated.wavewarp2_a2d, layer_time).unwrap_or(90.0);
+            let a2_rad = (a1d_rad.to_degrees() + a2d).to_radians();
+            let damping_val =
+                interpolate_float(&animated.wavewarp2_damping, layer_time).unwrap_or(0.0);
+            let damping_space =
+                interpolate_float(&animated.wavewarp2_damping_space, layer_time)
+                    .unwrap_or(0.0);
+            let damping_origin =
+                interpolate_float(&animated.wavewarp2_damping_origin, layer_time)
+                    .unwrap_or(0.5);
+
+            material.uniform_data.wavewarp2_params1 =
+                Vec4::new(phase, a1d_rad, m1, m2);
+            material.uniform_data.wavewarp2_params2 =
+                Vec4::new(a2_rad, damping_val, damping_space, damping_origin);
+            // AM computes offset in acLayerNorm but applies to acScreenNorm,
+            // causing magnification by (canvas_size / layer_display_size).
+            // Pass per-axis scale factors so the shader can replicate this.
+            let mag_x = animated.canvas_width / orig_width.max(1.0);
+            let mag_y = animated.canvas_height / orig_height.max(1.0);
+            material.uniform_data.wavewarp2_flags = Vec4::new(
+                if animated.wavewarp2_screen_space {
+                    1.0
+                } else {
+                    0.0
+                },
+                1.0, // enabled
+                mag_x,
+                mag_y,
+            );
+        } else {
+            material.uniform_data.wavewarp2_params1 = Vec4::ZERO;
+            material.uniform_data.wavewarp2_params2 = Vec4::ZERO;
+            material.uniform_data.wavewarp2_flags = Vec4::ZERO;
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
@@ -595,25 +644,38 @@ pub fn animate_unified_effect_system(
                 0.0
             };
 
+            // Wavewarp2 expansion: wave displacement can push content beyond original bounds
+            let warp_expansion = if animated.wavewarp2_has_effect {
+                let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(0.0).abs();
+                // AM applies displacement in acScreenNorm but computes in acLayerNorm,
+                // causing magnification by (canvas_size / layer_display_size).
+                // We replicate this: expansion = m2/100 * magnification * content_size
+                let mag = animated.canvas_height / orig_height.max(1.0);
+                m2 / 100.0 * mag * orig_width.max(orig_height)
+            } else {
+                0.0
+            };
+            let total_expansion = pix_expansion + warp_expansion;
+
             let vertices = vec![
                 [
-                    offset_x - half_w - pix_expansion,
-                    offset_y - half_h - pix_expansion,
+                    offset_x - half_w - total_expansion,
+                    offset_y - half_h - total_expansion,
                     0.0,
                 ],
                 [
-                    offset_x + half_w + pix_expansion,
-                    offset_y - half_h - pix_expansion,
+                    offset_x + half_w + total_expansion,
+                    offset_y - half_h - total_expansion,
                     0.0,
                 ],
                 [
-                    offset_x + half_w + pix_expansion,
-                    offset_y + half_h + pix_expansion,
+                    offset_x + half_w + total_expansion,
+                    offset_y + half_h + total_expansion,
                     0.0,
                 ],
                 [
-                    offset_x - half_w - pix_expansion,
-                    offset_y + half_h + pix_expansion,
+                    offset_x - half_w - total_expansion,
+                    offset_y + half_h + total_expansion,
                     0.0,
                 ],
             ];
@@ -623,9 +685,9 @@ pub fn animate_unified_effect_system(
                 [0.0, 0.0, 1.0],
                 [0.0, 0.0, 1.0],
             ];
-            // UV range: expanded by stretch2 for content_only=false, plus pixelate margin
-            let uv_exp_x = pix_expansion / orig_width;
-            let uv_exp_y = pix_expansion / orig_height;
+            // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
+            let uv_exp_x = total_expansion / orig_width;
+            let uv_exp_y = total_expansion / orig_height;
             let uvs = vec![
                 [s2_uv_min_x - uv_exp_x, (1.0 - s2_uv_min_y) + uv_exp_y],
                 [

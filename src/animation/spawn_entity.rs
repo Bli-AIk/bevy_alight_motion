@@ -576,6 +576,7 @@ pub(super) fn spawn_layer_entity(
             has_stretch2, // has_stretch2 - needs UnifiedEffectMaterial
             layer.animated.solid_color_alpha.value.is_some()
                 || !layer.animated.solid_color_alpha.keyframes.is_empty(), // has_solidcolor - needs UnifiedEffectMaterial
+            layer.animated.wavewarp2_has_effect, // has_wavewarp2 - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area
@@ -604,6 +605,16 @@ pub(super) fn spawn_layer_entity(
                     .fold(max_stretch, f32::max);
                 max_size * max_stretch / 2.0
             }, // pixelate_expansion
+            {
+                // Calculate max wavewarp2 magnitude for mesh expansion
+                let mut max_m2 = layer.animated.wavewarp2_m2.value.unwrap_or(0.0);
+                for kf in &layer.animated.wavewarp2_m2.keyframes {
+                    max_m2 = max_m2.max(
+                        kf.value.parse::<f32>().unwrap_or(0.0).abs(),
+                    );
+                }
+                max_m2
+            }, // wavewarp2_max_m2
             global_time as u64,    // current playback time for mask initialization
             initial_replace_color, // replace color params
             {

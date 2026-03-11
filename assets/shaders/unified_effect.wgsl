@@ -87,6 +87,10 @@ struct UnifiedEffectUniform {
     mask1_stretch1_params: vec4<f32>,  // (angle_rad, adj_stretch, offset, smooth)
     mask1_stretch2_params: vec4<f32>,  // (angle_rad, adj_stretch, offset, smooth)
     mask1_stretch_info: vec4<f32>,     // (aspect_w, aspect_h, orig_half_w, orig_half_h)
+    // Wavewarp2 effect (波浪歪曲)
+    wavewarp2_params1: vec4<f32>,      // (phase, a1_rad, m1_spacing, m2_magnitude)
+    wavewarp2_params2: vec4<f32>,      // (a2_rad, damping, damping_space, damping_origin)
+    wavewarp2_flags: vec4<f32>,        // (screen_space, enabled, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -148,6 +152,71 @@ fn apply_stretch2(uv: vec2<f32>) -> vec2<f32> {
     let stretched = rotated * vec2<f32>(1.0 / scale, 1.0);
     let unrotated = rotate_vec(stretched, -angle);
     return unrotated + vec2<f32>(0.5);
+}
+
+// Apply wavewarp2 effect (波浪歪曲 / Wave Warp)
+// From AM wavewarp2.xml fragment shader.
+// Displaces UV coordinates based on a sine wave pattern with damping.
+// AM computes offset in acLayerNorm but applies to acScreenNorm, causing
+// magnification by (canvas_size / layer_display_size). wavewarp2_flags.zw
+// carries per-axis magnification factors from the CPU.
+fn apply_wavewarp2(uv: vec2<f32>) -> vec2<f32> {
+    let phase = uniforms.wavewarp2_params1.x;
+    let a1_rad = uniforms.wavewarp2_params1.y;
+    let m1 = uniforms.wavewarp2_params1.z;
+    let m2 = uniforms.wavewarp2_params1.w;
+    let a2_rad = uniforms.wavewarp2_params2.x;
+    let damping_val = uniforms.wavewarp2_params2.y;
+    let damping_space_val = uniforms.wavewarp2_params2.z;
+    let damping_origin_val = uniforms.wavewarp2_params2.w;
+    let screen_space = uniforms.wavewarp2_flags.x > 0.5;
+    let mag = vec2<f32>(uniforms.wavewarp2_flags.z, uniforms.wavewarp2_flags.w);
+
+    // AM's acLayerNorm is Y-up (OpenGL FBO convention: y=0 at bottom).
+    // Our UV is Y-down (wgpu: v=0 at top). Flip Y to match AM's coordinate space
+    // so wave phase computation (dot products with dir1) produces identical results.
+    let st = vec2<f32>(uv.x, 1.0 - uv.y);
+
+    // Wave direction vector
+    let raw_v = vec2<f32>(cos(a1_rad), -sin(a1_rad));
+    let raw_p = dot(st, raw_v);
+
+    // Space damping: modifies wave frequency based on position
+    var space_damp = 1.0;
+    if damping_space_val < 0.0 {
+        space_damp = 1.0 - (clamp(abs(raw_p - damping_origin_val), 0.0, 1.0) * (0.0 - damping_space_val));
+    } else if damping_space_val > 0.0 {
+        space_damp = 1.0 - ((1.0 - clamp(abs(raw_p - damping_origin_val), 0.0, 1.0)) * damping_space_val);
+    }
+
+    let space = m1 * space_damp;
+
+    // Main wave: project position onto direction, scaled by spacing
+    let v = vec2<f32>(cos(a1_rad), -sin(a1_rad)) * space;
+    let p = dot(st, v);
+
+    // Distance for magnitude damping (guard against division by zero)
+    var ddist = 0.0;
+    if abs(space) > 0.0001 {
+        ddist = abs(p / space);
+    }
+
+    // Magnitude damping
+    var damp = 1.0;
+    if damping_val < 0.0 {
+        damp = 1.0 - (clamp(abs(ddist - damping_origin_val), 0.0, 1.0) * (0.0 - damping_val));
+    } else if damping_val > 0.0 {
+        damp = 1.0 - ((1.0 - clamp(abs(ddist - damping_origin_val), 0.0, 1.0)) * damping_val);
+    }
+
+    // Displacement: direction from combined angle, amplitude from m2 * damp / 100
+    // AM uses texture2DCv which Y-flips sampling (OpenGL FBO convention),
+    // so the Y component of the offset is effectively negated. We use +sin(a2)
+    // instead of AM's -sin(a2) to match the effective displacement direction.
+    let offs_dir = vec2<f32>(cos(a2_rad), sin(a2_rad)) * (m2 * damp) / 100.0;
+    let offs = offs_dir * sin(p + phase * 6.28318) * mag;
+
+    return uv + offs;
 }
 
 // Smooth minimum (cubic polynomial) - matches AM's sminCubic
@@ -1067,7 +1136,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     var sample_uv = mesh.uv;
     
     // Discard fragments in expansion area when no expansion-capable effect is active
-    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled
+    let wavewarp2_enabled = uniforms.wavewarp2_flags.y > 0.5;
+    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled
         && (mesh.uv.x < 0.0 || mesh.uv.x > 1.0 || mesh.uv.y < 0.0 || mesh.uv.y > 1.0) {
         discard;
     }
@@ -1171,6 +1241,17 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if stretch2_scale > 0.001 && abs(stretch2_scale - 1.0) > 0.0001 {
         sample_uv = apply_stretch2(sample_uv);
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    }
+    
+    // Apply wavewarp2 effect (波浪歪曲)
+    if wavewarp2_enabled {
+        let warped = apply_wavewarp2(sample_uv);
+        // Discard fragments where displaced UV falls outside texture bounds
+        // (mesh is expanded beyond content; these pixels should be transparent)
+        if warped.x < 0.0 || warped.x > 1.0 || warped.y < 0.0 || warped.y > 1.0 {
+            discard;
+        }
+        sample_uv = warped;
     }
     
     // Sample texture - with or without blur, with or without repeat

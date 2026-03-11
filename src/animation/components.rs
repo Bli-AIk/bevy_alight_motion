@@ -277,6 +277,27 @@ pub struct AmAnimated {
     pub stretch2_angle: AmAnimatedFloat,
     /// Stretch2 contentOnly flag.
     pub stretch2_content_only: bool,
+    // Wavewarp2 effect (波浪歪曲)
+    /// Wave phase offset. / 波浪相位偏移。
+    pub wavewarp2_phase: AmAnimatedFloat,
+    /// Wave direction angle (degrees). / 波浪方向角度。
+    pub wavewarp2_a1d: AmAnimatedFloat,
+    /// Wave spacing/frequency. / 波浪间距。
+    pub wavewarp2_m1: AmAnimatedFloat,
+    /// Wave displacement magnitude. / 波浪幅度。
+    pub wavewarp2_m2: AmAnimatedFloat,
+    /// Warp direction angle offset (degrees). / 翘曲角度偏移。
+    pub wavewarp2_a2d: AmAnimatedFloat,
+    /// Magnitude damping. / 幅度阻尼。
+    pub wavewarp2_damping: AmAnimatedFloat,
+    /// Spacing damping. / 间距阻尼。
+    pub wavewarp2_damping_space: AmAnimatedFloat,
+    /// Damping origin. / 阻尼原点。
+    pub wavewarp2_damping_origin: AmAnimatedFloat,
+    /// Use screen-space coordinates. / 屏幕空间坐标。
+    pub wavewarp2_screen_space: bool,
+    /// Whether wavewarp2 is present on this layer.
+    pub wavewarp2_has_effect: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)

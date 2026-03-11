@@ -29,6 +29,7 @@ pub mod textspacing;
 pub mod threshold;
 pub mod transform2;
 pub mod transform_legacy;
+pub mod wavewarp2;
 pub mod wipe2;
 
 use super::types::EffectDef;
@@ -61,6 +62,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &spin::EFFECT,
         &textprogress::EFFECT,
         &textspacing::EFFECT,
+        &wavewarp2::EFFECT,
     ]
 }
 

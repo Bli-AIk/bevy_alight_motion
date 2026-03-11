@@ -87,6 +87,7 @@ pub(crate) fn spawn_embed_scene(
     };
     let embed_extra_transform2 = all_embed_transform2;
     let fade_effect = extract_fade_effect(&embed.effects);
+    let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -164,6 +165,16 @@ pub(crate) fn spawn_embed_scene(
                 stretch2_scale: AmAnimatedFloat::default(),
                 stretch2_angle: AmAnimatedFloat::default(),
                 stretch2_content_only: false,
+                wavewarp2_phase: wavewarp2_effect.phase,
+                wavewarp2_a1d: wavewarp2_effect.a1d,
+                wavewarp2_m1: wavewarp2_effect.m1,
+                wavewarp2_m2: wavewarp2_effect.m2,
+                wavewarp2_a2d: wavewarp2_effect.a2d,
+                wavewarp2_damping: wavewarp2_effect.damping,
+                wavewarp2_damping_space: wavewarp2_effect.damping_space,
+                wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
+                wavewarp2_screen_space: wavewarp2_effect.screen_space,
+                wavewarp2_has_effect: wavewarp2_effect.has_effect,
                 replace_old_color: Vec4::ZERO,
                 replace_new_color: crate::schema::AmAnimatedColor::default(),
                 replace_threshold: AmAnimatedFloat::default(),

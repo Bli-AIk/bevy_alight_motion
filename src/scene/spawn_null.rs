@@ -49,6 +49,7 @@ pub(crate) fn spawn_null(
     let pixelate_effect = extract_pixelate_effect(&null.effects);
     let solid_color_effect = extract_solid_color_effect(&null.effects);
     let fade_effect = extract_fade_effect(&null.effects);
+    let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -142,6 +143,16 @@ pub(crate) fn spawn_null(
                 stretch2_scale: stretch2_effect.scale,
                 stretch2_angle: stretch2_effect.angle,
                 stretch2_content_only: stretch2_effect.content_only,
+                wavewarp2_phase: wavewarp2_effect.phase,
+                wavewarp2_a1d: wavewarp2_effect.a1d,
+                wavewarp2_m1: wavewarp2_effect.m1,
+                wavewarp2_m2: wavewarp2_effect.m2,
+                wavewarp2_a2d: wavewarp2_effect.a2d,
+                wavewarp2_damping: wavewarp2_effect.damping,
+                wavewarp2_damping_space: wavewarp2_effect.damping_space,
+                wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
+                wavewarp2_screen_space: wavewarp2_effect.screen_space,
+                wavewarp2_has_effect: wavewarp2_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,

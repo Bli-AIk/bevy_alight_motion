@@ -7,6 +7,9 @@ use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe, AmPr
 /// Effect ID for fade effect.
 const FADE_ID: &str = "com.alightcreative.effects.fade";
 
+/// Effect ID for wavewarp2 effect.
+const WAVEWARP2_ID: &str = "com.alightcreative.effects.wavewarp2";
+
 /// Effect IDs for transform variants.
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
 /// Legacy transform effect (older Alight Motion versions).
@@ -507,6 +510,72 @@ pub(crate) fn extract_fade_effect(effects: &[AmEffect]) -> FadeParams {
             match prop.name.as_str() {
                 "inTime" => apply_animated_float(&mut params.in_time, prop),
                 "outTime" => apply_animated_float(&mut params.out_time, prop),
+                _ => (),
+            }
+        }
+    }
+
+    params
+}
+
+/// Wave warp effect parameters.
+/// 波浪歪曲效果参数。
+#[derive(Debug, Clone, Default)]
+pub struct Wavewarp2Params {
+    /// Wave phase offset. / 波浪相位偏移。
+    pub phase: AmAnimatedFloat,
+    /// Wave direction angle (degrees). / 波浪方向角度（度）。
+    pub a1d: AmAnimatedFloat,
+    /// Wave spacing/frequency. / 波浪间距/频率。
+    pub m1: AmAnimatedFloat,
+    /// Wave displacement magnitude. / 波浪位移幅度。
+    pub m2: AmAnimatedFloat,
+    /// Warp direction angle offset (degrees). / 翘曲方向角度偏移（度）。
+    pub a2d: AmAnimatedFloat,
+    /// Magnitude damping [-1, 1]. / 幅度阻尼。
+    pub damping: AmAnimatedFloat,
+    /// Spacing damping [-1, 1]. / 间距阻尼。
+    pub damping_space: AmAnimatedFloat,
+    /// Damping origin [0, 1]. / 阻尼原点。
+    pub damping_origin: AmAnimatedFloat,
+    /// Use screen-space coordinates. / 使用屏幕空间坐标。
+    pub screen_space: bool,
+    /// Whether this effect is present.
+    pub has_effect: bool,
+}
+
+/// Extract wavewarp2 effect parameters from effects list.
+/// 从效果列表中提取波浪歪曲效果参数。
+pub(crate) fn extract_wavewarp2_effect(effects: &[AmEffect]) -> Wavewarp2Params {
+    let mut params = Wavewarp2Params::default();
+
+    for effect in effects {
+        if effect.id != WAVEWARP2_ID {
+            continue;
+        }
+        params.has_effect = true;
+        bevy::prelude::warn!("[extract_wavewarp2] Found wavewarp2 effect! props={}", effect.properties.len());
+        // Set defaults matching AM
+        params.phase.value = Some(0.0);
+        params.a1d.value = Some(0.0);
+        params.m1.value = Some(20.0);
+        params.m2.value = Some(4.0);
+        params.a2d.value = Some(90.0);
+        params.damping.value = Some(0.0);
+        params.damping_space.value = Some(0.0);
+        params.damping_origin.value = Some(0.5);
+
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "phase" => apply_animated_float(&mut params.phase, prop),
+                "a1d" => apply_animated_float(&mut params.a1d, prop),
+                "m1" => apply_animated_float(&mut params.m1, prop),
+                "m2" => apply_animated_float(&mut params.m2, prop),
+                "a2d" => apply_animated_float(&mut params.a2d, prop),
+                "damping" => apply_animated_float(&mut params.damping, prop),
+                "dampingSpace" => apply_animated_float(&mut params.damping_space, prop),
+                "dampingOrigin" => apply_animated_float(&mut params.damping_origin, prop),
+                "screenSpace" => params.screen_space = prop.value == "true",
                 _ => (),
             }
         }

@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-11T15:17:36.971771+08:00",
+  "timestamp": "2026-03-11T17:20:37.767488+08:00",
   "summary": {
-    "passed": 116,
+    "passed": 120,
     "warnings": 0,
     "skipped": 2,
     "failed": 35
@@ -264,6 +264,18 @@
       "status": "pass"
     },
     "effects/transform/complex2": {
+      "status": "pass"
+    },
+    "effects/wavewarp/basic": {
+      "status": "pass"
+    },
+    "effects/wavewarp/damping": {
+      "status": "pass"
+    },
+    "effects/wavewarp/phase_warp": {
+      "status": "pass"
+    },
+    "effects/wavewarp/rotation": {
       "status": "pass"
     },
     "effects/z_qq_group_logo/basic": {

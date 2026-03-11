@@ -162,7 +162,9 @@ pub(crate) fn add_visual_components(
     has_pixelate: bool,     // True if layer has pixelate effect (needs UnifiedEffectMaterial)
     has_stretch2: bool,     // True if layer has stretch2 effect (needs UnifiedEffectMaterial)
     has_solidcolor: bool,   // True if layer has solidcolor effect (needs UnifiedEffectMaterial)
+    has_wavewarp2: bool,    // True if layer has wavewarp2 effect (needs UnifiedEffectMaterial)
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
+    wavewarp2_max_m2: f32,  // Max wavewarp2 magnitude across keyframes (for mesh expansion)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
     max_animated_scale: f32, // Max scale from animation keyframes for SDF mesh sizing
@@ -204,7 +206,8 @@ pub(crate) fn add_visual_components(
         || has_grid
         || has_pixelate
         || has_stretch2
-        || has_solidcolor;
+        || has_solidcolor
+        || has_wavewarp2;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -237,6 +240,12 @@ pub(crate) fn add_visual_components(
         anchor: &bevy::sprite::Anchor,
         blur_expansion: f32,
     ) -> Handle<Mesh> {
+        if blur_expansion > 0.001 {
+            bevy::log::warn!(
+                "[MESH] create_anchored_rectangle_with_blur: size=({:.1},{:.1}) expansion={:.2}",
+                width, height, blur_expansion
+            );
+        }
         let anchor_vec = anchor.as_vec();
         // Anchor offset based on original size (this positions the image center)
         let offset_x = -anchor_vec.x * width;
@@ -452,7 +461,19 @@ pub(crate) fn add_visual_components(
                 // Use UnifiedEffectMaterial for combined effects (mask/wipe/stretch + optional blur)
                 let scaled_width = base_width * initial_scale.0.abs();
                 let scaled_height = base_height * initial_scale.1.abs();
-                let blur_expansion = pixelate_expansion;
+                let blur_expansion = pixelate_expansion
+                    + if has_wavewarp2 {
+                        // Expand mesh by max displacement magnitude to show content beyond original bounds
+                        let exp = wavewarp2_max_m2 / 100.0
+                            * scaled_width.max(scaled_height);
+                        bevy::log::warn!(
+                            "[wavewarp2 mesh] expansion={:.2} max_m2={:.2} scaled=({:.1},{:.1}) base=({:.1},{:.1}) scale=({:.4},{:.4})",
+                            exp, wavewarp2_max_m2, scaled_width, scaled_height, base_width, base_height, initial_scale.0, initial_scale.1
+                        );
+                        exp
+                    } else {
+                        0.0
+                    };
 
                 let stretch_mesh =
                     initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
@@ -531,14 +552,36 @@ pub(crate) fn add_visual_components(
                     label
                 );
                 let color = extract_fill_color(fill_color, false);
+                let scaled_width = base_width * initial_scale.0.abs();
+                let scaled_height = base_height * initial_scale.1.abs();
+                let blur_expansion = pixelate_expansion
+                    + if has_wavewarp2 {
+                        let exp = wavewarp2_max_m2 / 100.0
+                            * scaled_width.max(scaled_height);
+                        bevy::log::warn!(
+                            "[wavewarp2 mesh fill] expansion={:.2} max_m2={:.2} scaled=({:.1},{:.1})",
+                            exp, wavewarp2_max_m2, scaled_width, scaled_height
+                        );
+                        exp
+                    } else {
+                        0.0
+                    };
                 let stretch_mesh =
                     initial_stretch_mesh_bounds.map(|(min_x, max_x, min_y, max_y)| {
                         create_stretch_bounds_mesh(meshes, min_x, max_x, min_y, max_y)
                     });
                 let mesh = stretch_mesh.unwrap_or_else(|| {
-                    create_anchored_rectangle(meshes, base_width, base_height, anchor)
+                    create_anchored_rectangle_with_blur(
+                        meshes,
+                        scaled_width,
+                        scaled_height,
+                        anchor,
+                        blur_expansion,
+                    )
                 });
 
+                let blur_params_with_expansion = blur_params
+                    .map(|bp| Vec4::new(bp.x, scaled_width, scaled_height, blur_expansion));
                 let mesh_size = initial_stretch_mesh_bounds
                     .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
@@ -551,7 +594,7 @@ pub(crate) fn add_visual_components(
                     mask_info,
                     wipe_params,
                     stretch_params,
-                    blur_params,
+                    blur_params_with_expansion.or(blur_params),
                     palette_params,
                     initial_mesh_offset,
                     mesh_size,
