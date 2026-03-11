@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const download_logs: () => void;
 export const get_current_frame_pixels: () => [number, number];
 export const get_state: () => any;
 export const load_project_from_bytes: (a: number, b: number) => number;
