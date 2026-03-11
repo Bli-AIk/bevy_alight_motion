@@ -243,7 +243,9 @@ pub(crate) fn add_visual_components(
         if blur_expansion > 0.001 {
             bevy::log::warn!(
                 "[MESH] create_anchored_rectangle_with_blur: size=({:.1},{:.1}) expansion={:.2}",
-                width, height, blur_expansion
+                width,
+                height,
+                blur_expansion
             );
         }
         let anchor_vec = anchor.as_vec();
@@ -464,11 +466,17 @@ pub(crate) fn add_visual_components(
                 let blur_expansion = pixelate_expansion
                     + if has_wavewarp2 {
                         // Expand mesh by max displacement magnitude to show content beyond original bounds
-                        let exp = wavewarp2_max_m2 / 100.0
-                            * scaled_width.max(scaled_height);
+                        let exp = wavewarp2_max_m2 / 100.0 * scaled_width.max(scaled_height);
                         bevy::log::warn!(
                             "[wavewarp2 mesh] expansion={:.2} max_m2={:.2} scaled=({:.1},{:.1}) base=({:.1},{:.1}) scale=({:.4},{:.4})",
-                            exp, wavewarp2_max_m2, scaled_width, scaled_height, base_width, base_height, initial_scale.0, initial_scale.1
+                            exp,
+                            wavewarp2_max_m2,
+                            scaled_width,
+                            scaled_height,
+                            base_width,
+                            base_height,
+                            initial_scale.0,
+                            initial_scale.1
                         );
                         exp
                     } else {
@@ -556,11 +564,13 @@ pub(crate) fn add_visual_components(
                 let scaled_height = base_height * initial_scale.1.abs();
                 let blur_expansion = pixelate_expansion
                     + if has_wavewarp2 {
-                        let exp = wavewarp2_max_m2 / 100.0
-                            * scaled_width.max(scaled_height);
+                        let exp = wavewarp2_max_m2 / 100.0 * scaled_width.max(scaled_height);
                         bevy::log::warn!(
                             "[wavewarp2 mesh fill] expansion={:.2} max_m2={:.2} scaled=({:.1},{:.1})",
-                            exp, wavewarp2_max_m2, scaled_width, scaled_height
+                            exp,
+                            wavewarp2_max_m2,
+                            scaled_width,
+                            scaled_height
                         );
                         exp
                     } else {

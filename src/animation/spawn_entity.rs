@@ -609,14 +609,12 @@ pub(super) fn spawn_layer_entity(
                 // Calculate max wavewarp2 magnitude for mesh expansion
                 let mut max_m2 = layer.animated.wavewarp2_m2.value.unwrap_or(0.0);
                 for kf in &layer.animated.wavewarp2_m2.keyframes {
-                    max_m2 = max_m2.max(
-                        kf.value.parse::<f32>().unwrap_or(0.0).abs(),
-                    );
+                    max_m2 = max_m2.max(kf.value.parse::<f32>().unwrap_or(0.0).abs());
                 }
                 max_m2
             }, // wavewarp2_max_m2
-            global_time as u64,    // current playback time for mask initialization
-            initial_replace_color, // replace color params
+            global_time as u64,                  // current playback time for mask initialization
+            initial_replace_color,               // replace color params
             {
                 // Compute max animated scale for SDF mesh sizing
                 let mut max_s = initial_scale.0.abs().max(initial_scale.1.abs());

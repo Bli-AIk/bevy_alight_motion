@@ -627,10 +627,8 @@ impl AmAnimated {
             return 1.0;
         }
 
-        let in_time_secs =
-            interpolate_float(&self.fade_in_time, layer_time).unwrap_or(0.0);
-        let out_time_secs =
-            interpolate_float(&self.fade_out_time, layer_time).unwrap_or(0.0);
+        let in_time_secs = interpolate_float(&self.fade_in_time, layer_time).unwrap_or(0.0);
+        let out_time_secs = interpolate_float(&self.fade_out_time, layer_time).unwrap_or(0.0);
 
         // Normalize to 0.0-1.0 range
         let in_time = in_time_secs / duration_secs;

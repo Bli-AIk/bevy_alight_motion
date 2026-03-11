@@ -280,30 +280,22 @@ pub fn animate_unified_effect_system(
 
         // Update wavewarp2 parameters (波浪歪曲 / Wave Warp)
         if animated.wavewarp2_has_effect {
-            let phase =
-                interpolate_float(&animated.wavewarp2_phase, layer_time).unwrap_or(0.0);
-            let a1d_rad =
-                interpolate_float(&animated.wavewarp2_a1d, layer_time)
-                    .unwrap_or(0.0)
-                    .to_radians();
-            let m1 =
-                interpolate_float(&animated.wavewarp2_m1, layer_time).unwrap_or(20.0);
-            let m2 =
-                interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(4.0);
-            let a2d =
-                interpolate_float(&animated.wavewarp2_a2d, layer_time).unwrap_or(90.0);
+            let phase = interpolate_float(&animated.wavewarp2_phase, layer_time).unwrap_or(0.0);
+            let a1d_rad = interpolate_float(&animated.wavewarp2_a1d, layer_time)
+                .unwrap_or(0.0)
+                .to_radians();
+            let m1 = interpolate_float(&animated.wavewarp2_m1, layer_time).unwrap_or(20.0);
+            let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(4.0);
+            let a2d = interpolate_float(&animated.wavewarp2_a2d, layer_time).unwrap_or(90.0);
             let a2_rad = (a1d_rad.to_degrees() + a2d).to_radians();
             let damping_val =
                 interpolate_float(&animated.wavewarp2_damping, layer_time).unwrap_or(0.0);
             let damping_space =
-                interpolate_float(&animated.wavewarp2_damping_space, layer_time)
-                    .unwrap_or(0.0);
+                interpolate_float(&animated.wavewarp2_damping_space, layer_time).unwrap_or(0.0);
             let damping_origin =
-                interpolate_float(&animated.wavewarp2_damping_origin, layer_time)
-                    .unwrap_or(0.5);
+                interpolate_float(&animated.wavewarp2_damping_origin, layer_time).unwrap_or(0.5);
 
-            material.uniform_data.wavewarp2_params1 =
-                Vec4::new(phase, a1d_rad, m1, m2);
+            material.uniform_data.wavewarp2_params1 = Vec4::new(phase, a1d_rad, m1, m2);
             material.uniform_data.wavewarp2_params2 =
                 Vec4::new(a2_rad, damping_val, damping_space, damping_origin);
             // AM computes offset in acLayerNorm but applies to acScreenNorm,
@@ -646,7 +638,9 @@ pub fn animate_unified_effect_system(
 
             // Wavewarp2 expansion: wave displacement can push content beyond original bounds
             let warp_expansion = if animated.wavewarp2_has_effect {
-                let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(0.0).abs();
+                let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time)
+                    .unwrap_or(0.0)
+                    .abs();
                 // AM applies displacement in acScreenNorm but computes in acLayerNorm,
                 // causing magnification by (canvas_size / layer_display_size).
                 // We replicate this: expansion = m2/100 * magnification * content_size

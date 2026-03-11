@@ -554,7 +554,10 @@ pub(crate) fn extract_wavewarp2_effect(effects: &[AmEffect]) -> Wavewarp2Params 
             continue;
         }
         params.has_effect = true;
-        bevy::prelude::warn!("[extract_wavewarp2] Found wavewarp2 effect! props={}", effect.properties.len());
+        bevy::prelude::warn!(
+            "[extract_wavewarp2] Found wavewarp2 effect! props={}",
+            effect.properties.len()
+        );
         // Set defaults matching AM
         params.phase.value = Some(0.0);
         params.a1d.value = Some(0.0);
