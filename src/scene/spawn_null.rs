@@ -48,6 +48,7 @@ pub(crate) fn spawn_null(
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
     let solid_color_effect = extract_solid_color_effect(&null.effects);
+    let fade_effect = extract_fade_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -131,6 +132,9 @@ pub(crate) fn spawn_null(
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: 1.0, // Null objects are fully opaque
+                fade_in_time: fade_effect.in_time,
+                fade_out_time: fade_effect.out_time,
+                fade_layer_duration_ms: (null.end_time - null.start_time) as f32,
                 palette_alpha: AmAnimatedFloat::default(),
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,

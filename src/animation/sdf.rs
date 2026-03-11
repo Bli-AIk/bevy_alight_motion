@@ -407,6 +407,8 @@ pub fn animate_sdf_opacity_system(
             };
             // Multiply by base_alpha to preserve original fill color transparency
             let mut final_alpha = opacity * animated.base_alpha;
+            // Apply fade effect (fade in/out)
+            final_alpha *= animated.calc_fade_alpha(layer_time);
             // Apply echo alpha (for echokf effect) to both fill and stroke
             let echo_mult = if let Some(ref echo_cfg) = animated.echo_alpha_config {
                 echo_cfg.evaluate(global_time)

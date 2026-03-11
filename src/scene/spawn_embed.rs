@@ -86,6 +86,7 @@ pub(crate) fn spawn_embed_scene(
         all_embed_transform2.remove(0)
     };
     let embed_extra_transform2 = all_embed_transform2;
+    let fade_effect = extract_fade_effect(&embed.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -153,6 +154,9 @@ pub(crate) fn spawn_embed_scene(
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
                 base_alpha: get_base_alpha(&embed.fill_color, false),
+                fade_in_time: fade_effect.in_time,
+                fade_out_time: fade_effect.out_time,
+                fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,
                 palette_alpha: AmAnimatedFloat::default(),
                 scale_assist: AmAnimatedFloat::default(),
                 scale_assist_damp: AmAnimatedFloat::default(),

@@ -741,6 +741,8 @@ pub fn animate_opacity_system(
         // Multiply by base_alpha to preserve original fill color transparency
         // e.g., if fillColor has alpha=0, the sprite should remain invisible regardless of opacity animation
         let mut final_alpha = (opacity * animated.base_alpha).clamp(0.0, 1.0);
+        // Apply fade effect (fade in/out)
+        final_alpha *= animated.calc_fade_alpha(layer_time);
         // Apply echo alpha (for echokf effect)
         if let Some(ref echo_cfg) = animated.echo_alpha_config {
             final_alpha *= echo_cfg.evaluate(global_time);
@@ -837,6 +839,8 @@ pub fn animate_text_opacity_system(
         let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
         // Multiply by base_alpha to preserve original fill color transparency
         let mut final_alpha = opacity * animated.base_alpha;
+        // Apply fade effect (fade in/out)
+        final_alpha *= animated.calc_fade_alpha(layer_time);
         // Apply echo alpha (for echokf effect)
         if let Some(ref echo_cfg) = animated.echo_alpha_config {
             final_alpha *= echo_cfg.evaluate(global_time);

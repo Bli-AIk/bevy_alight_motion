@@ -256,6 +256,13 @@ pub struct AmAnimated {
     /// Base alpha from fill color (0.0-1.0).
     /// Opacity animation is multiplied by this value to preserve original fill transparency.
     pub base_alpha: f32,
+    /// Fade-in duration in seconds (animated). / 渐入持续时间（秒）。
+    pub fade_in_time: AmAnimatedFloat,
+    /// Fade-out duration in seconds (animated). / 渐出持续时间（秒）。
+    pub fade_out_time: AmAnimatedFloat,
+    /// Layer duration in milliseconds (used by fade effect for time normalization).
+    /// 图层持续时间（毫秒，用于渐入渐出效果的时间归一化）。
+    pub fade_layer_duration_ms: f32,
     /// Palette map effect alpha (effect strength, 0.0-1.0).
     pub palette_alpha: AmAnimatedFloat,
     /// Scale assist effect scale multiplier (animated).
@@ -574,6 +581,67 @@ impl AmAnimated {
         } else {
             0.0
         }
+    }
+
+    /// Calculate fade alpha multiplier at the given normalized layer time.
+    /// Uses easeInOutQuad easing to smoothly fade in at the beginning and out at the end.
+    ///
+    /// 计算给定归一化图层时间下的渐入渐出透明度乘数。
+    /// 使用 easeInOutQuad 缓动函数在开头平滑淡入，在结尾平滑淡出。
+    pub fn calc_fade_alpha(&self, layer_time: f32) -> f32 {
+        use super::interpolation::interpolate_float;
+
+        let has_fade = self.fade_in_time.value.is_some()
+            || !self.fade_in_time.keyframes.is_empty()
+            || self.fade_out_time.value.is_some()
+            || !self.fade_out_time.keyframes.is_empty();
+
+        if !has_fade {
+            return 1.0;
+        }
+
+        // Duration in seconds
+        let duration_secs = self.fade_layer_duration_ms / 1000.0;
+        if duration_secs <= 0.0 {
+            return 1.0;
+        }
+
+        let in_time_secs =
+            interpolate_float(&self.fade_in_time, layer_time).unwrap_or(0.0);
+        let out_time_secs =
+            interpolate_float(&self.fade_out_time, layer_time).unwrap_or(0.0);
+
+        // Normalize to 0.0-1.0 range
+        let in_time = in_time_secs / duration_secs;
+        let out_time = out_time_secs / duration_secs;
+
+        let t = layer_time;
+        let mut alpha = 1.0_f32;
+
+        // Fade in: during the first `in_time` portion
+        if in_time > 0.0 && t < in_time {
+            let progress = t / in_time;
+            alpha *= ease_in_out_quad(progress);
+        }
+
+        // Fade out: during the last `out_time` portion
+        if out_time > 0.0 && t > 1.0 - out_time {
+            let progress = (1.0 - t) / out_time;
+            alpha *= ease_in_out_quad(progress);
+        }
+
+        alpha.clamp(0.0, 1.0)
+    }
+}
+
+/// Quadratic ease-in-out function (matches AM's EasingFunctions.easeInOutQuad).
+/// easeInOutQuad: t < 0.5 ? 2*t*t : -1+(4-2*t)*t
+fn ease_in_out_quad(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        2.0 * t * t
+    } else {
+        -1.0 + (4.0 - 2.0 * t) * t
     }
 }
 

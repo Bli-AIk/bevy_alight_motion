@@ -57,6 +57,7 @@ pub(crate) fn spawn_shape(
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
     let solid_color_effect = extract_solid_color_effect(&shape.effects);
     let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
+    let fade_effect = extract_fade_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -338,6 +339,9 @@ pub(crate) fn spawn_shape(
                 inv_fit_scale: 1.0,
                 stroke_width: stroke_width_anim,
                 base_alpha,
+                fade_in_time: fade_effect.in_time,
+                fade_out_time: fade_effect.out_time,
+                fade_layer_duration_ms: (shape.end_time - shape.start_time) as f32,
                 palette_alpha: palette_map.alpha.clone(),
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,

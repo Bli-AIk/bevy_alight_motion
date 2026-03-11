@@ -52,6 +52,7 @@ pub(crate) fn collect_null(
     let grid_effect = extract_grid_effect(&null.effects);
     let pixelate_effect = extract_pixelate_effect(&null.effects);
     let solid_color_effect = extract_solid_color_effect(&null.effects);
+    let fade_effect = extract_fade_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -121,6 +122,9 @@ pub(crate) fn collect_null(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Null objects are fully opaque
+            fade_in_time: fade_effect.in_time,
+            fade_out_time: fade_effect.out_time,
+            fade_layer_duration_ms: (null.end_time - null.start_time) as f32,
             palette_alpha: AmAnimatedFloat::default(),
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
@@ -392,6 +396,9 @@ pub(crate) fn collect_text(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&text.fill_color, false),
+            fade_in_time: AmAnimatedFloat::default(),
+            fade_out_time: AmAnimatedFloat::default(),
+            fade_layer_duration_ms: (text.end_time - text.start_time) as f32,
             palette_alpha: AmAnimatedFloat::default(),
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
@@ -583,6 +590,7 @@ pub(crate) fn collect_image(
     let grid_effect = extract_grid_effect(&image.effects);
     let pixelate_effect = extract_pixelate_effect(&image.effects);
     let solid_color_effect = extract_solid_color_effect(&image.effects);
+    let fade_effect = extract_fade_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -659,6 +667,9 @@ pub(crate) fn collect_image(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: 1.0, // Image layers are fully opaque
+            fade_in_time: fade_effect.in_time,
+            fade_out_time: fade_effect.out_time,
+            fade_layer_duration_ms: (image.end_time - image.start_time) as f32,
             palette_alpha: palette_map.alpha.clone(),
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,

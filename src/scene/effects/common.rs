@@ -1,8 +1,11 @@
-//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist).
+//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist, Fade).
 
 use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe, AmProperty};
+
+/// Effect ID for fade effect.
+const FADE_ID: &str = "com.alightcreative.effects.fade";
 
 /// Effect IDs for transform variants.
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
@@ -473,6 +476,37 @@ pub(crate) fn extract_stretch2_effect(effects: &[AmEffect]) -> Stretch2Params {
                 "scale" => apply_animated_float(&mut params.scale, prop),
                 "angle" => apply_animated_float(&mut params.angle, prop),
                 "contentOnly" => params.content_only = prop.value == "true",
+                _ => (),
+            }
+        }
+    }
+
+    params
+}
+
+/// Fade effect parameters.
+/// 渐入渐出效果参数。
+#[derive(Debug, Clone, Default)]
+pub struct FadeParams {
+    /// Fade-in duration (seconds). / 淡入持续时间（秒）。
+    pub in_time: AmAnimatedFloat,
+    /// Fade-out duration (seconds). / 淡出持续时间（秒）。
+    pub out_time: AmAnimatedFloat,
+}
+
+/// Extract fade effect parameters from effects list.
+/// 从效果列表中提取渐入渐出效果参数。
+pub(crate) fn extract_fade_effect(effects: &[AmEffect]) -> FadeParams {
+    let mut params = FadeParams::default();
+
+    for effect in effects {
+        if effect.id != FADE_ID {
+            continue;
+        }
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "inTime" => apply_animated_float(&mut params.in_time, prop),
+                "outTime" => apply_animated_float(&mut params.out_time, prop),
                 _ => (),
             }
         }

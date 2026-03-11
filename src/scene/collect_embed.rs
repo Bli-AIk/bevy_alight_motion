@@ -199,6 +199,7 @@ pub(crate) fn collect_embed_scene(
 
     // Extract jitter effect from embed
     let jitter_effect = extract_jitter_effect(&embed.effects);
+    let fade_effect = extract_fade_effect(&embed.effects);
 
     // Extract group fill data from embed's fillType
     let group_fill = build_group_fill(embed);
@@ -260,6 +261,9 @@ pub(crate) fn collect_embed_scene(
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
             base_alpha: get_base_alpha(&embed.fill_color, false),
+            fade_in_time: fade_effect.in_time,
+            fade_out_time: fade_effect.out_time,
+            fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,
             palette_alpha: AmAnimatedFloat::default(),
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),

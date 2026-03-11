@@ -107,7 +107,8 @@ pub fn animate_unified_effect_system(
             // Layer is active - restore alpha (will be updated by opacity below)
             let layer_time = animated.calc_layer_time(local_time);
             let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-            material.uniform_data.color.w = opacity * animated.base_alpha;
+            let fade_alpha = animated.calc_fade_alpha(layer_time);
+            material.uniform_data.color.w = opacity * animated.base_alpha * fade_alpha;
         } else if !animated.is_active(local_time) {
             continue;
         }

@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-11T11:47:15.685238+08:00",
+  "timestamp": "2026-03-11T15:17:36.971771+08:00",
   "summary": {
-    "passed": 115,
+    "passed": 116,
     "warnings": 0,
     "skipped": 2,
     "failed": 35
@@ -123,6 +123,9 @@
       "status": "pass"
     },
     "effects/echo-keyframes/basic": {
+      "status": "pass"
+    },
+    "effects/fade/fade": {
       "status": "pass"
     },
     "effects/gaussian-blur/basic": {

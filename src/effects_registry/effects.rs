@@ -6,6 +6,7 @@
 //! 所有效果定义的入口模块。
 
 pub mod echokf;
+pub mod fade;
 pub mod gaussian_blur;
 pub mod grid;
 pub mod jitter;
@@ -54,6 +55,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &radial_repeat::EFFECT,
         &path_repeat::EFFECT,
         &echokf::EFFECT,
+        &fade::EFFECT,
         &solidcolor::EFFECT,
         &swing::EFFECT,
         &spin::EFFECT,

@@ -69,6 +69,7 @@ pub(crate) fn collect_shape(
     let grid_effect = extract_grid_effect(&shape.effects);
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
     let solid_color_effect = extract_solid_color_effect(&shape.effects);
+    let fade_effect = extract_fade_effect(&shape.effects);
     if scale_assist.axis != 0 {
         bevy::log::info!(
             "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
@@ -377,6 +378,9 @@ pub(crate) fn collect_shape(
             } else {
                 get_base_alpha(&shape.fill_color, shape.fill_type == "none")
             },
+            fade_in_time: fade_effect.in_time,
+            fade_out_time: fade_effect.out_time,
+            fade_layer_duration_ms: (shape.end_time - shape.start_time) as f32,
             palette_alpha: palette_map.alpha.clone(),
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
