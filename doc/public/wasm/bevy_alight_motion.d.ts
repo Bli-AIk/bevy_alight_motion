@@ -62,8 +62,9 @@ export function seek(frame: number): void;
 /**
  * Start the Bevy application.
  * Must be called AFTER `<canvas id="bevy-canvas">` is visible and has non-zero dimensions.
+ * `max_dpr` caps the device pixel ratio to avoid exceeding WebGL max texture size (4096).
  */
-export function start_app(): void;
+export function start_app(max_dpr: number): void;
 
 /**
  * WASM module initialization — lightweight, no Bevy.
@@ -84,7 +85,7 @@ export interface InitOutput {
     readonly play: () => void;
     readonly reset: () => void;
     readonly seek: (a: number) => void;
-    readonly start_app: () => void;
+    readonly start_app: (a: number) => void;
     readonly wasm_init: () => void;
     readonly wasm_bindgen__closure__destroy__h07aa81d6da615279: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h38046e54fe5330f7: (a: number, b: number) => void;
