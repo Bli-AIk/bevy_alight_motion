@@ -667,7 +667,16 @@ pub fn animate_unified_effect_system(
             } else {
                 0.0
             };
-            let total_expansion = pix_expansion + warp_expansion;
+            // Mirror offset pushes reflected content beyond layer bounds
+            let mirror_expansion = if animated.mirror_has_effect {
+                let offset = interpolate_float(&animated.mirror_offset, layer_time)
+                    .unwrap_or(0.0)
+                    .abs();
+                offset * orig_width.max(orig_height)
+            } else {
+                0.0
+            };
+            let total_expansion = pix_expansion + warp_expansion + mirror_expansion;
 
             let vertices = vec![
                 [

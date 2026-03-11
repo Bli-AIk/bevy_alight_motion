@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-11T17:50:06.986257+08:00",
+  "timestamp": "2026-03-11T18:38:29.984486+08:00",
   "summary": {
-    "passed": 121,
+    "passed": 123,
     "warnings": 0,
     "skipped": 2,
     "failed": 35
@@ -171,7 +171,13 @@
     "effects/linear-repeat/random_generated2/3": {
       "status": "pass"
     },
+    "effects/mirror/alpha": {
+      "status": "pass"
+    },
     "effects/mirror/basic": {
+      "status": "pass"
+    },
+    "effects/mirror/offset": {
       "status": "pass"
     },
     "effects/palette/basic": {

@@ -166,6 +166,7 @@ pub(crate) fn add_visual_components(
     has_mirror: bool,       // True if layer has mirror effect (needs UnifiedEffectMaterial)
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     wavewarp2_max_m2: f32,  // Max wavewarp2 magnitude across keyframes (for mesh expansion)
+    mirror_max_offset: f32, // Max mirror offset across keyframes (for mesh expansion)
     global_time_ms: u64,    // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
     max_animated_scale: f32, // Max scale from animation keyframes for SDF mesh sizing
@@ -483,6 +484,12 @@ pub(crate) fn add_visual_components(
                         exp
                     } else {
                         0.0
+                    }
+                    + if has_mirror && mirror_max_offset > 0.001 {
+                        // Mirror offset pushes reflected content beyond layer bounds
+                        mirror_max_offset * scaled_width.max(scaled_height)
+                    } else {
+                        0.0
                     };
 
                 let stretch_mesh =
@@ -575,6 +582,11 @@ pub(crate) fn add_visual_components(
                             scaled_height
                         );
                         exp
+                    } else {
+                        0.0
+                    }
+                    + if has_mirror && mirror_max_offset > 0.001 {
+                        mirror_max_offset * scaled_width.max(scaled_height)
                     } else {
                         0.0
                     };

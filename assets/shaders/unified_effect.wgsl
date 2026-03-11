@@ -1139,10 +1139,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // Discard fragments in expansion area when no expansion-capable effect is active
     let wavewarp2_enabled = uniforms.wavewarp2_flags.y > 0.5;
-    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled
+    let mirror_enabled = uniforms.mirror_params.x > 0.5;
+    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled && !mirror_enabled
         && (mesh.uv.x < 0.0 || mesh.uv.x > 1.0 || mesh.uv.y < 0.0 || mesh.uv.y > 1.0) {
         discard;
     }
+    
     
     // Apply pixelate effect FIRST (before stretch) to match AM's sequential render pipeline.
     // In AM, pixelate runs AFTER stretch as a separate render pass, sampling the stretch
@@ -1632,6 +1634,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let mirror_alpha = uniforms.mirror_params.z;
         let mirror_offset = uniforms.mirror_params.w;
 
+        // In the mesh expansion area, the original content is transparent.
+        // AM treats pixels outside the layer FBO as rgba(0,0,0,0).
+        // Texture clamping would return edge pixels instead, so we override.
+        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+            tex_color = vec4<f32>(0.0);
+        }
+
         var mirror_uv = sample_uv;
         if mirror_type > 1.5 {
             // Vertical: flip Y. AM uses Y-up acLayerNorm, our UV is Y-down.
@@ -1643,7 +1652,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             mirror_uv.x = 1.0 - mirror_uv.x + mirror_offset;
         }
 
-        let mirror_color = textureSample(base_texture, base_sampler, mirror_uv);
+        // Sample mirrored UV (treat out-of-bounds as transparent like AM's FBO)
+        var mirror_color: vec4<f32>;
+        if mirror_uv.x < 0.0 || mirror_uv.x > 1.0 || mirror_uv.y < 0.0 || mirror_uv.y > 1.0 {
+            mirror_color = vec4<f32>(0.0);
+        } else {
+            mirror_color = textureSample(base_texture, base_sampler, mirror_uv);
+        }
 
         // Blend modes matching AM's mirror shader
         var mirror_result: vec4<f32>;

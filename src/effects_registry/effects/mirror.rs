@@ -18,6 +18,8 @@ define_effect! {
 </effect>"##,
     tests: [
         "effects/mirror/basic",
+        "effects/mirror/alpha",
+        "effects/mirror/offset",
     ],
     fields: [
         define_field! {

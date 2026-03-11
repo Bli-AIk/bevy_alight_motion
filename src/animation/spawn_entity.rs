@@ -614,6 +614,14 @@ pub(super) fn spawn_layer_entity(
                 }
                 max_m2
             }, // wavewarp2_max_m2
+            {
+                // Calculate max mirror offset for mesh expansion
+                let mut max_off = layer.animated.mirror_offset.value.unwrap_or(0.0).abs();
+                for kf in &layer.animated.mirror_offset.keyframes {
+                    max_off = max_off.max(kf.value.parse::<f32>().unwrap_or(0.0).abs());
+                }
+                max_off
+            }, // mirror_max_offset
             global_time as u64,                  // current playback time for mask initialization
             initial_replace_color,               // replace color params
             {
