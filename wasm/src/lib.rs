@@ -9,6 +9,8 @@ use bevy::asset::io::memory::{Dir, MemoryAssetReader};
 use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
+use bevy::text::{TextColor, TextFont};
+use bevy::ui::Node;
 use bevy::window::WindowPlugin;
 use bevy_alight_motion::prelude::*;
 use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
@@ -57,15 +59,13 @@ impl Plugin for UploadedAssetSourcePlugin {
     fn build(&self, app: &mut App) {
         // Get or create the upload directory
         let dir = UPLOAD_DIR.get_or_init(Dir::default).clone();
-        
+
         // Register "uploaded://" as an asset source using MemoryAssetReader
         app.register_asset_source(
             AssetSourceId::from("uploaded"),
-            AssetSourceBuilder::new(move || {
-                Box::new(MemoryAssetReader { root: dir.clone() })
-            }),
+            AssetSourceBuilder::new(move || Box::new(MemoryAssetReader { root: dir.clone() })),
         );
-        
+
         info!("[WASM] Registered 'uploaded://' asset source");
     }
 }
@@ -87,7 +87,9 @@ pub fn main() -> Result<(), JsValue> {
         // 必须在 DefaultPlugins 之前添加
         // ReplaceDefault 模式会替换默认资产源，使 "shaders/xxx.wgsl" 路径可正常工作
         .add_plugins((
-            EmbeddedAssetPlugin { mode: PluginMode::ReplaceDefault },
+            EmbeddedAssetPlugin {
+                mode: PluginMode::ReplaceDefault,
+            },
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
@@ -108,7 +110,17 @@ pub fn main() -> Result<(), JsValue> {
         .insert_resource(AmProjectResolution::FitWindow) // 适应窗口大小
         .init_resource::<PendingProjectLoad>()
         .add_systems(Startup, setup_camera)
-        .add_systems(Update, (check_pending_load, handle_input, update_ui, sync_state_to_js, handle_pending_load).chain())
+        .add_systems(
+            Update,
+            (
+                check_pending_load,
+                handle_input,
+                update_ui,
+                sync_state_to_js,
+                handle_pending_load,
+            )
+                .chain(),
+        )
         .run();
 
     Ok(())
@@ -118,7 +130,7 @@ pub fn main() -> Result<(), JsValue> {
 fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
     info!("[WASM] Camera2d spawned");
-    
+
     // Status text (top-left)
     commands.spawn((
         Text::new("Loading..."),
@@ -164,7 +176,14 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: Option<ResMut
     // Play/Pause toggle (Space)
     if keyboard.just_pressed(KeyCode::Space) {
         playback.toggle();
-        info!("[WASM] Toggle playback: {}", if playback.playing { "playing" } else { "paused" });
+        info!(
+            "[WASM] Toggle playback: {}",
+            if playback.playing {
+                "playing"
+            } else {
+                "paused"
+            }
+        );
     }
 
     // Reset (R)
@@ -189,8 +208,12 @@ fn handle_input(keyboard: Res<ButtonInput<KeyCode>>, mut playback: Option<ResMut
     }
     if keyboard.just_pressed(KeyCode::ArrowRight) {
         playback.playing = false;
-        playback.current_time_ms = (playback.current_time_ms + frame_duration_ms).min(playback.total_time_ms);
-        info!("[WASM] Frame step forward: {:.1}ms", playback.current_time_ms);
+        playback.current_time_ms =
+            (playback.current_time_ms + frame_duration_ms).min(playback.total_time_ms);
+        info!(
+            "[WASM] Frame step forward: {:.1}ms",
+            playback.current_time_ms
+        );
     }
 
     // Speed control (Up = faster, Down = slower)
@@ -245,7 +268,7 @@ fn handle_pending_load(
 ) {
     if pending.should_load {
         pending.should_load = false;
-        
+
         // Load the project from the uploaded asset source
         info!("[WASM] Loading project from uploaded://project.amproj");
         load_am_project(&mut commands, &asset_server, "uploaded://project.amproj");
@@ -276,38 +299,38 @@ fn sync_state_to_js(playback: Option<Res<AmPlayback>>) {
 #[wasm_bindgen]
 pub fn load_project_from_bytes(data: &[u8]) -> bool {
     info!("[WASM] Received project data: {} bytes", data.len());
-    
+
     // Get the upload directory
     let Some(dir) = UPLOAD_DIR.get() else {
         web_sys::console::error_1(&"[WASM] Upload directory not initialized".into());
         return false;
     };
-    
+
     // Insert the project bytes into the memory directory
     // 将项目字节插入内存目录
     dir.insert_asset(Path::new("project.amproj"), data.to_vec());
     info!("[WASM] Project bytes inserted into uploaded:// source");
-    
+
     // We can't directly access Bevy's World from here, so we use a static flag
     // The handle_pending_load system will pick this up
     // 我们无法从这里直接访问 Bevy 的 World，所以使用静态标志
     // handle_pending_load 系统会处理这个
-    
+
     // Set the pending load flag via APP_STATE
     if let Ok(mut state) = APP_STATE.lock() {
         if let Some(ref mut s) = *state {
             s.project_loaded = false; // Reset until actually loaded
         }
     }
-    
+
     // Signal that we need to load - we'll use a different mechanism
     // For now, we need to trigger the load from Bevy's Update loop
     // This is a limitation of WASM - we can't call Bevy systems directly
     web_sys::console::log_1(&"[WASM] Project ready for loading. Triggering load...".into());
-    
+
     // Use atomic flag to signal pending load (thread-safe)
     PENDING_LOAD.store(true, Ordering::SeqCst);
-    
+
     true
 }
 
