@@ -19,7 +19,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use wasm_bindgen::prelude::*;
-use web_sys::{Blob, BlobPropertyBag, Url};
 
 /// Global state for JavaScript interop
 /// 用于与 JavaScript 交互的全局状态
@@ -75,27 +74,25 @@ impl Plugin for UploadedAssetSourcePlugin {
     }
 }
 
-/// Main entry point for WASM
+/// WASM module initialization — lightweight, no Bevy.
+/// Bevy app is started separately via `start_app()` after the canvas is visible.
 #[wasm_bindgen(start)]
-pub fn main() -> Result<(), JsValue> {
-    // Set up panic hook for better error messages in browser console
+pub fn wasm_init() {
     console_error_panic_hook::set_once();
-
-    // 记录初始化日志
     add_log("WASM module initialized");
 
-    // Initialize app state
     *APP_STATE.lock().unwrap() = Some(AppState::default());
+    add_log("App state initialized, call start_app() when canvas is ready");
+}
 
-    add_log("App state initialized");
+/// Start the Bevy application.
+/// Must be called AFTER `<canvas id="bevy-canvas">` is visible and has non-zero dimensions.
+#[wasm_bindgen]
+pub fn start_app() {
+    add_log("start_app() called, launching Bevy...");
 
     App::new()
-        // Register uploaded asset source BEFORE other plugins
-        // 在其他插件之前注册上传资产源
         .add_plugins(UploadedAssetSourcePlugin)
-        // 使用嵌入式资产插件，在编译时将 assets 目录嵌入 WASM
-        // 必须在 DefaultPlugins 之前添加
-        // ReplaceDefault 模式会替换默认资产源，使 "shaders/xxx.wgsl" 路径可正常工作
         .add_plugins((
             EmbeddedAssetPlugin {
                 mode: PluginMode::ReplaceDefault,
@@ -117,7 +114,7 @@ pub fn main() -> Result<(), JsValue> {
                 }),
         ))
         .add_plugins(AlightMotionPlugin)
-        .insert_resource(AmProjectResolution::FitWindow) // 适应窗口大小
+        .insert_resource(AmProjectResolution::FitWindow)
         .init_resource::<PendingProjectLoad>()
         .add_systems(Startup, setup_camera)
         .add_systems(
@@ -132,8 +129,6 @@ pub fn main() -> Result<(), JsValue> {
                 .chain(),
         )
         .run();
-
-    Ok(())
 }
 
 /// Setup the 2D camera and UI text

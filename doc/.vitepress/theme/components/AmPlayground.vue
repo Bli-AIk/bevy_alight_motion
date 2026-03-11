@@ -11,7 +11,7 @@
     </div>
 
     <!-- 文件上传区（WASM 未加载时显示） -->
-    <div class="upload-section" v-if="!isLoaded && !wasmError">
+    <div class="upload-section" v-if="!isLoaded && !isLoading && !wasmError">
       <FileUploader
         :label="i18n.uploadLabel"
         accept=".amproj"
@@ -20,28 +20,27 @@
       <p class="upload-hint">{{ i18n.uploadHint }}</p>
     </div>
 
-    <!-- 加载中 -->
-    <div class="loading-section" v-if="isLoading">
-      <div class="spinner"></div>
-      <span>{{ i18n.loading }}</span>
-    </div>
-
-    <!-- 播放区域（加载后显示） -->
-    <div class="player-section" v-show="isLoaded && !isLoading">
+    <!-- 加载中（canvas 区域已可见，叠加 loading overlay） -->
+    <div class="player-section" v-show="isLoading || isLoaded">
       <div class="canvas-container" ref="canvasContainer">
         <canvas id="bevy-canvas" ref="canvas"></canvas>
+        <!-- Loading overlay (on top of canvas) -->
+        <div class="loading-overlay" v-if="isLoading">
+          <div class="spinner"></div>
+          <span>{{ i18n.loading }}</span>
+        </div>
         <!-- 全屏按钮 -->
-        <button class="fullscreen-btn" @click="toggleFullscreen" :title="i18n.fullscreen">
+        <button v-if="isLoaded" class="fullscreen-btn" @click="toggleFullscreen" :title="i18n.fullscreen">
           ⛶
         </button>
         <!-- 关闭按钮 -->
-        <button class="close-btn" @click="closePlayer" :title="i18n.close">
+        <button v-if="isLoaded" class="close-btn" @click="closePlayer" :title="i18n.close">
           ✕
         </button>
       </div>
 
       <!-- 快捷键提示 -->
-      <div class="shortcuts-bar">
+      <div class="shortcuts-bar" v-if="isLoaded">
         <span class="shortcut">[Space] {{ i18n.playPause }}</span>
         <span class="shortcut">[R] {{ i18n.reset }}</span>
         <span class="shortcut">[←/→] {{ i18n.frameStep }}</span>
@@ -237,26 +236,47 @@ const loadProject = async (file: File) => {
   }
 
   clearLogs()
+
+  // 读取文件
+  const arrayBuffer = await file.arrayBuffer()
+  pendingFileBytes = new Uint8Array(arrayBuffer)
+  console.log(`[Playground] File loaded: ${file.name} (${pendingFileBytes.length} bytes)`)
+
+  // 显示 canvas 区域（loading overlay 覆盖在上面）
   isLoading.value = true
 
-  try {
-    // 读取文件
-    const arrayBuffer = await file.arrayBuffer()
-    pendingFileBytes = new Uint8Array(arrayBuffer)
-    console.log(`[Playground] File loaded: ${file.name} (${pendingFileBytes.length} bytes)`)
+  // 等待两帧，确保 canvas 已渲染并有非零尺寸
+  await new Promise(resolve => requestAnimationFrame(resolve))
+  await new Promise(resolve => requestAnimationFrame(resolve))
 
-    // 加载 WASM
+  const canvasEl = document.getElementById('bevy-canvas')
+  if (canvasEl) {
+    console.log(`[Playground] Canvas ready: ${canvasEl.clientWidth}x${canvasEl.clientHeight}`)
+  }
+
+  try {
+    // 加载 WASM（init 只做轻量初始化，不启动 Bevy）
     const wasmLoaded = await loadWasm()
     if (!wasmLoaded) {
       throw new Error('WASM load failed')
     }
 
-    // 等待一帧让 Bevy 初始化
-    await new Promise(resolve => requestAnimationFrame(resolve))
-    await new Promise(resolve => setTimeout(resolve, 500)) // 额外等待 500ms
+    // 启动 Bevy（此时 canvas 已可见且有尺寸）
+    const wasmModule = (window as any).__bevy_wasm
+    if (wasmModule && wasmModule.start_app) {
+      console.log('[Playground] Calling start_app()...')
+      wasmModule.start_app()
+    } else {
+      throw new Error('start_app() not found in WASM module')
+    }
+
+    // 等待 Bevy 初始化（移动端需更长时间）
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+    const initDelay = isMobile ? 3000 : 1000
+    console.log(`[Playground] Waiting ${initDelay}ms for Bevy init (mobile: ${isMobile})...`)
+    await new Promise(resolve => setTimeout(resolve, initDelay))
 
     // 加载项目
-    const wasmModule = (window as any).__bevy_wasm
     if (wasmModule && pendingFileBytes) {
       console.log('[Playground] Loading project into WASM...')
       const success = wasmModule.load_project_from_bytes(pendingFileBytes)
@@ -265,7 +285,7 @@ const loadProject = async (file: File) => {
         console.log('[Playground] Project loaded successfully')
         
         // 启动日志更新定时器
-        showLogs.value = true // 默认展开日志区域
+        showLogs.value = true
         logUpdateInterval = window.setInterval(() => {
           updateLogs()
         }, 1000)
@@ -275,7 +295,6 @@ const loadProject = async (file: File) => {
     }
   } catch (error) {
     console.error('[Playground] Error:', error)
-    // 显示日志区域以便查看错误
     showLogs.value = true
     updateLogs()
     wasmError.value = true
@@ -383,21 +402,22 @@ onUnmounted(() => {
   text-align: center;
 }
 
-/* 加载中 */
-.loading-section {
+/* 加载中 overlay (覆盖在 canvas 上) */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem;
-  background: var(--vp-c-bg-soft);
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 20;
+  border-radius: 4px;
 }
 
-.loading-section span {
+.loading-overlay span {
   margin-top: 1rem;
-  color: var(--vp-c-text-2);
+  color: #e0e0e0;
 }
 
 .spinner {
