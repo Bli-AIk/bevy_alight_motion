@@ -324,9 +324,9 @@ pub(crate) fn spawn_embed_scene(
                 retime: config.retime.clone(),
                 echo_time_shift_ms: config.echo_time_shift_ms,
                 echo_alpha_config: config.echo_alpha_config.clone(),
-            repeat_rotation_offset_deg: 0.0,
-            repeat_scale_factor: 1.0,
-            repeat_position_offset: Vec2::ZERO,
+            repeat_rotation_offset_deg: -config.repeat_rotation_deg,
+            repeat_scale_factor: config.repeat_scale_factor,
+            repeat_position_offset: config.repeat_offset,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)
@@ -444,6 +444,23 @@ pub(crate) fn spawn_embed_scene(
         config.retime.clone()
     };
 
+    // Calculate nested render fps (same as collect path)
+    let element_duration = (embed.end_time - embed.start_time) as f64;
+    let inner_total_time = embed.scene.total_time as f64;
+    let x_z = if inner_total_time > 0.0 {
+        (element_duration / inner_total_time).max(1.0).ceil() as u32
+    } else {
+        1
+    };
+    let coerce_at_least = if effective_speed < 0.99999 {
+        (1.0 / effective_speed.max(1e-6)).round().max(1.0) as u32
+    } else {
+        1
+    };
+    let parent_fphs = (config.render_fps * 100.0) as u32;
+    let nested_fphs = (parent_fphs * x_z * coerce_at_least * 16).min(192000);
+    let nested_render_fps = nested_fphs as f32 / 100.0;
+
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
@@ -455,6 +472,7 @@ pub(crate) fn spawn_embed_scene(
         scene_fps: embed.scene.fps as f32,
         scene_total_time: embed.scene.total_time as f32,
         retime: retime_info,
+        render_fps: nested_render_fps,
         // Reset repeat spatial transforms — they apply only to THIS embed, not children
         repeat_offset: Vec2::ZERO,
         repeat_rotation_deg: 0.0,

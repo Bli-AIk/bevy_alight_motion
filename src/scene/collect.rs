@@ -404,8 +404,10 @@ fn collect_repeat_copies(
     let scale_val = repeat.scale.value.unwrap_or(1.0);
     let alpha_val = repeat.alpha.value.unwrap_or(1.0);
 
-    // AM's time parameter is in FRAMES, convert to ms per-copy
-    let frame_duration_ms = 1000.0 / config.scene_fps;
+    // AM's time parameter is in FRAMES of the current rendering context.
+    // When inside a nested embed, AM's retimeNestedScene multiplies fps by 16x+,
+    // so frame duration is much shorter. Use render_fps (not scene_fps) to match AM.
+    let frame_duration_ms = 1000.0 / config.render_fps;
 
     // AM accumulates transforms per-copy: offset/angle/time linear, scale exponential, alpha linear decrease
     let mut acc_offset = Vec2::ZERO;

@@ -281,6 +281,7 @@ fn spawn_loaded_projects_system(
             canvas_height: project.scene.height as f32,
             scene_fps: project.scene.fps as f32,
             scene_total_time: project.scene.total_time as f32,
+            render_fps: project.scene.fps as f32,
             ..Default::default()
         };
 

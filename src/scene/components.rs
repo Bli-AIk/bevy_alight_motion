@@ -535,6 +535,11 @@ pub struct AmSceneConfig {
     pub repeat_rotation_deg: f32,
     /// Repeat effect: scale multiplier (1.0 = no change).
     pub repeat_scale_factor: f32,
+    /// Effective rendering FPS for the current context.
+    /// AM multiplies fps by 16x (or more) when entering nested embeds via retimeNestedScene.
+    /// This affects repeat effect frame-to-ms conversion: at 480fps, 3.3 frames = 6.9ms vs 110ms at 30fps.
+    /// See NestedSceneElementKt.java:100: `fphs = parent_fphs * xZ * coerceAtLeast * 16`
+    pub render_fps: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -557,6 +562,7 @@ impl Default for AmSceneConfig {
             repeat_offset: Vec2::ZERO,
             repeat_rotation_deg: 0.0,
             repeat_scale_factor: 1.0,
+            render_fps: 30.0,
         }
     }
 }
