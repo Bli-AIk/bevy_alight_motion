@@ -11,6 +11,7 @@
 //!
 //! 混合渲染管线。支持无限层级嵌套。
 
+pub(crate) mod lift_composite;
 mod rtt;
 mod types;
 
@@ -50,4 +51,9 @@ pub use rtt::{
     evaluate_render_strategy_system, fix_nested_embed_render_layers_system,
     propagate_render_layers_system, propagate_render_layers_to_children_system,
     setup_embed_scene_rtt_system, sync_rtt_camera_position_system,
+};
+
+pub use lift_composite::{
+    LiftCompositeCameraMarker, LiftCompositeState, propagate_lift_render_layers_system,
+    setup_lift_composite_system, update_lift_comp_material_system,
 };

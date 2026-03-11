@@ -1633,6 +1633,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply lift (copy background) effect: blend layer content with background composite.
     // lift_params = (fill, canvas_width, canvas_height, enabled)
     let lift_enabled = uniforms.lift_params.w > 0.5;
+    var lift_skip_color_tint = false;
     if lift_enabled {
         let lift_fill = uniforms.lift_params.x;
         let lift_canvas_w = uniforms.lift_params.y;
@@ -1643,8 +1644,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             (lift_canvas_h / 2.0 - mesh.world_position.y) / lift_canvas_h
         );
         let comp_color = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv);
+        // AM renders the layer to an FBO with fill color already baked in, then lift
+        // replaces that content with the background composite. In our single-pass shader,
+        // uniforms.color (fill color) is applied later, so we pre-apply it here for the
+        // original content portion and skip the later multiplication.
+        let tinted_tex = tex_color * uniforms.color;
         // AM: gl_FragColor = mix(comp * texColor.a, texColor, fill)
-        tex_color = mix(comp_color * tex_color.a, tex_color, lift_fill);
+        tex_color = mix(comp_color * tinted_tex.a, tinted_tex, lift_fill);
+        lift_skip_color_tint = true;
     }
 
     // Apply mirror effect (镜子): sample at mirrored UV and blend with original.
@@ -1867,8 +1874,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     
     // Apply color tint and wipe alpha
     // Skip color multiplication for linear-repeat since we already applied the color blend
+    // Skip for lift since we pre-applied color tint before the lift blend
     var final_color: vec4<f32>;
-    if linear_repeat_color_applied {
+    if linear_repeat_color_applied || lift_skip_color_tint {
         // Just apply the alpha from uniforms.color, not the RGB
         final_color = vec4<f32>(tex_color.rgb, tex_color.a * uniforms.color.a);
     } else {

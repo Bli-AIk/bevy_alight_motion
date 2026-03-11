@@ -84,6 +84,7 @@ impl Plugin for AlightMotionPlugin {
             .init_asset_loader::<AlightMotionLoader>()
             .init_resource::<AmPlayback>()
             .init_resource::<AmProjectResolution>()
+            .init_resource::<crate::effects::LiftCompositeState>()
             // 注意: AmEntitySpawned 使用 EntityEvent derive，不需要 add_event 注册
             // Note: AmEntitySpawned uses EntityEvent derive, no need for add_event registration
             // 用户可以通过 commands.add_observer() 或 app.add_observer() 来监听事件
@@ -104,6 +105,10 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::fix_nested_embed_render_layers_system,
                     // Propagate RenderLayers immediately after RTT setup
                     crate::effects::propagate_render_layers_system,
+                    // Lift composite setup (must run after layer spawn and RTT setup)
+                    crate::effects::setup_lift_composite_system,
+                    crate::effects::propagate_lift_render_layers_system,
+                    crate::effects::update_lift_comp_material_system,
                     // TODO: propagate_render_layers_to_children_system disabled - causes transform issues
                     // crate::effects::propagate_render_layers_to_children_system,
                 )

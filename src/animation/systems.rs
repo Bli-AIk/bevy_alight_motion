@@ -961,7 +961,7 @@ pub fn animate_am_camera_system(
     pending_query: Query<&crate::scene::AmPendingLayers>,
     mut bevy_camera_query: Query<
         (&mut Transform, &mut Projection),
-        (With<Camera2d>, Without<crate::effects::EmbedSceneRttCamera>),
+        (With<Camera2d>, Without<crate::effects::EmbedSceneRttCamera>, Without<crate::effects::LiftCompositeCameraMarker>),
     >,
 ) {
     if playback.force_stopped {
