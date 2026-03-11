@@ -264,13 +264,15 @@ const loadProject = async (file: File) => {
     // 启动 Bevy（此时 canvas 已可见且有尺寸）
     const wasmModule = (window as any).__bevy_wasm
     if (wasmModule && wasmModule.start_app) {
-      // Clamp DPR to avoid exceeding WebGL max texture size (4096)
+      // Clamp DPR to avoid exceeding WebGL max texture size (4096).
+      // Use viewport size (not canvas size) because fit_canvas_to_parent
+      // will expand the canvas to the full container width.
       const dpr = window.devicePixelRatio || 1
-      const maxCssDim = Math.max(canvasEl!.clientWidth, canvasEl!.clientHeight)
+      const maxCssDim = Math.max(window.innerWidth, window.innerHeight)
       const maxPhysical = maxCssDim * dpr
       const MAX_TEXTURE = 4096
       const safeDpr = maxPhysical > MAX_TEXTURE ? MAX_TEXTURE / maxCssDim : dpr
-      console.log(`[Playground] DPR: ${dpr}, canvas: ${canvasEl!.clientWidth}x${canvasEl!.clientHeight}, physical: ${Math.round(maxPhysical)}, safeDPR: ${safeDpr.toFixed(2)}`)
+      console.log(`[Playground] DPR: ${dpr}, viewport: ${window.innerWidth}x${window.innerHeight}, maxPhysical: ${Math.round(maxPhysical)}, safeDPR: ${safeDpr.toFixed(2)}`)
       wasmModule.start_app(safeDpr)
     } else {
       throw new Error('start_app() not found in WASM module')
