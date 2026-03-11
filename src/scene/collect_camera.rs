@@ -68,6 +68,9 @@ pub(crate) fn collect_camera(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
             ..Default::default()
         },
         spec: AmLayerSpec::Camera {

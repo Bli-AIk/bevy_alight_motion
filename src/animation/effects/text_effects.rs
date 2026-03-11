@@ -441,16 +441,6 @@ pub fn animate_text_spacing_system(
         let has_line = animated.textspacing_line.value.is_some()
             || !animated.textspacing_line.keyframes.is_empty();
 
-        if global_time < 100.0 {
-            eprintln!(
-                "DBG_INNER gt={:.0} has_letter={} kf={} glyphs={}",
-                global_time,
-                has_letter,
-                animated.textspacing_letter.keyframes.len(),
-                layout_info.glyphs.len()
-            );
-        }
-
         if !has_letter && !has_line {
             continue;
         }

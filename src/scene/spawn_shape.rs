@@ -60,6 +60,7 @@ pub(crate) fn spawn_shape(
     let fade_effect = extract_fade_effect(&shape.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&shape.effects);
     let mirror_effect = extract_mirror_effect(&shape.effects);
+    let lift_effect = extract_lift_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -274,7 +275,7 @@ pub(crate) fn spawn_shape(
     let base_alpha = if shape.hidden {
         0.0
     } else {
-        get_base_alpha(&shape.fill_color, no_fill)
+        get_base_alpha(&shape.fill_color, no_fill) * config.repeat_alpha_factor
     };
     let palette_map = extract_palette_map_effect(&shape.effects);
     let replace_color = extract_replace_color_effect(&shape.effects);
@@ -366,6 +367,8 @@ pub(crate) fn spawn_shape(
                 mirror_alpha: mirror_effect.alpha,
                 mirror_offset: mirror_effect.offset,
                 mirror_has_effect: mirror_effect.has_effect,
+                lift_fill: lift_effect.fill,
+                lift_has_effect: lift_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -462,6 +465,7 @@ pub(crate) fn spawn_shape(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: get_initial_fill_color_rgba(&shape.fill_color, no_fill),
+                fill_color: fill_color_to_animated(&shape.fill_color),
                 path_repeat: if path_repeat_effect.has_effect() {
                     Some(path_repeat_effect)
                 } else {
@@ -491,6 +495,9 @@ pub(crate) fn spawn_shape(
                 retime: config.retime.clone(),
                 echo_time_shift_ms: config.echo_time_shift_ms,
                 echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
             },
             layer_spec,
             transform,

@@ -368,6 +368,28 @@ pub(crate) fn get_initial_fill_color_rgba(
     [1.0, 1.0, 1.0, 1.0]
 }
 
+/// Convert AmFillColor to AmAnimatedColor for runtime fill color animation.
+pub(crate) fn fill_color_to_animated(
+    fill_color: &Option<crate::schema::AmFillColor>,
+) -> crate::schema::AmAnimatedColor {
+    match fill_color {
+        Some(fc) => {
+            let value = if !fc.value.is_empty() {
+                crate::schema::parse_color(&fc.value)
+                    .ok()
+                    .map(|c| bevy::prelude::Vec4::new(c[0], c[1], c[2], c[3]))
+            } else {
+                None
+            };
+            crate::schema::AmAnimatedColor {
+                value,
+                keyframes: fc.keyframes.clone(),
+            }
+        }
+        None => Default::default(),
+    }
+}
+
 pub(crate) fn pivot_to_anchor_and_offset(
     pivot_x: f32,
     pivot_y: f32,

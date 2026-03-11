@@ -308,6 +308,10 @@ pub struct AmAnimated {
     pub mirror_offset: AmAnimatedFloat,
     /// Whether mirror is present on this layer.
     pub mirror_has_effect: bool,
+    /// Lift (copy background) fill amount: 0=background, 1=original content. / 复制背景填充量。
+    pub lift_fill: AmAnimatedFloat,
+    /// Whether lift effect is present on this layer.
+    pub lift_has_effect: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)
@@ -470,6 +474,8 @@ pub struct AmAnimated {
     pub solid_color_blend_mode: i32,
     /// Base fill color (stored for solidcolor mixing)
     pub base_fill_color: [f32; 4],
+    /// Animated fill color keyframes (for runtime fill color animation)
+    pub fill_color: crate::schema::AmAnimatedColor,
     // Path Repeat effect (com.alightcreative.effects.repeat.path)
     /// Path repeat params (None = no effect)
     pub path_repeat: Option<PathRepeatParams>,
@@ -523,6 +529,15 @@ pub struct AmAnimated {
     /// Echo alpha config (for echokf effect). If present, entity is an echo copy.
     /// Contains alpha keyframes, fraction, and parent timing for per-frame alpha evaluation.
     pub echo_alpha_config: Option<EchoAlphaConfig>,
+    /// Accumulated repeat rotation offset in degrees (for group repeat copies).
+    /// Applied additively to the final rotation in animate_transform_system.
+    pub repeat_rotation_offset_deg: f32,
+    /// Accumulated repeat scale factor (for group repeat copies).
+    /// Applied multiplicatively to the final scale in animate_transform_system.
+    pub repeat_scale_factor: f32,
+    /// Accumulated repeat position offset in Bevy coords (for group repeat copies).
+    /// Applied additively to the final position in animate_transform_system.
+    pub repeat_position_offset: Vec2,
 }
 
 impl AmAnimated {
@@ -597,8 +612,11 @@ impl AmAnimated {
     }
 
     /// Check if layer is active at the given local time.
+    /// For echo/repeat entities with echo_time_shift_ms > 0, extends the active window
+    /// so the shifted animation has time to play out fully.
     pub fn is_active(&self, local_time: f32) -> bool {
-        local_time >= self.start_time as f32 && local_time <= self.end_time as f32
+        local_time >= self.start_time as f32
+            && local_time <= self.end_time as f32 + self.echo_time_shift_ms
     }
 
     /// Calculate normalized layer time (0.0 to 1.0) from local time.

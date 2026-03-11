@@ -218,9 +218,17 @@ pub fn interpolate_color(
     ))
 }
 
-/// Parse Vec4 color from keyframe value string (format: "r,g,b,a").
+/// Parse Vec4 color from keyframe value string.
+/// Supports both "r,g,b,a" comma-separated format and "#AARRGGBB" hex format.
 pub fn parse_keyframe_color(s: &str) -> Option<bevy::prelude::Vec4> {
     use bevy::prelude::Vec4;
+    // Handle #AARRGGBB hex color format (used by fillColor keyframes)
+    if s.starts_with('#') {
+        if let Ok(c) = crate::schema::parse_color(s) {
+            return Some(Vec4::new(c[0], c[1], c[2], c[3]));
+        }
+    }
+    // Handle r,g,b,a comma-separated format
     let parts: Vec<f32> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();
     if parts.len() >= 4 {
         Some(Vec4::new(parts[0], parts[1], parts[2], parts[3]))

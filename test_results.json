@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-11T18:38:29.984486+08:00",
+  "timestamp": "2026-03-11T21:47:18.109060+08:00",
   "summary": {
     "passed": 123,
     "warnings": 0,
     "skipped": 2,
-    "failed": 35
+    "failed": 37
   },
   "results": {
     "basic/bezier/bezier": {
@@ -206,6 +206,12 @@
     },
     "effects/repeat/basic": {
       "status": "pass"
+    },
+    "effects/repeat/group": {
+      "status": "fail"
+    },
+    "effects/repeat/group_bug": {
+      "status": "fail"
     },
     "effects/replace-color/basic": {
       "status": "pass"

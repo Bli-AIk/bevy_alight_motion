@@ -564,6 +564,10 @@ pub fn animate_transform_system(
                 oscillate_z_zoom *= jz;
             }
 
+            // Apply repeat group position offset (accumulated per-copy offset)
+            bx += animated.repeat_position_offset.x;
+            by += animated.repeat_position_offset.y;
+
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
 
@@ -634,6 +638,9 @@ pub fn animate_transform_system(
             final_rotation -= invert_if(ea, extra.ainv);
         }
 
+        // Apply repeat group rotation offset (accumulated per-copy)
+        final_rotation += animated.repeat_rotation_offset_deg;
+
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
         // Interpolate scale
@@ -642,8 +649,8 @@ pub fn animate_transform_system(
         // However, transform2 posz/angle/position must also be applied via Transform
         if sdf_parent.is_none() && effect_marker.is_none() {
             transform.scale = Vec3::new(
-                current_scale[0] * oscillate_z_zoom,
-                current_scale[1] * oscillate_z_zoom,
+                current_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
+                current_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
                 1.0,
             );
         } else if effect_marker.is_some() {

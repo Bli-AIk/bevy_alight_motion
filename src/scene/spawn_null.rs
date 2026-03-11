@@ -51,6 +51,7 @@ pub(crate) fn spawn_null(
     let fade_effect = extract_fade_effect(&null.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
     let mirror_effect = extract_mirror_effect(&null.effects);
+    let lift_effect = extract_lift_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -133,7 +134,7 @@ pub(crate) fn spawn_null(
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
                 stroke_width: AmAnimatedFloat::default(),
-                base_alpha: 1.0, // Null objects are fully opaque
+                base_alpha: config.repeat_alpha_factor, // Null: base 1.0 * repeat factor
                 fade_in_time: fade_effect.in_time,
                 fade_out_time: fade_effect.out_time,
                 fade_layer_duration_ms: (null.end_time - null.start_time) as f32,
@@ -159,6 +160,8 @@ pub(crate) fn spawn_null(
                 mirror_alpha: mirror_effect.alpha.clone(),
                 mirror_offset: mirror_effect.offset.clone(),
                 mirror_has_effect: mirror_effect.has_effect,
+                lift_fill: lift_effect.fill.clone(),
+                lift_has_effect: lift_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -255,6 +258,7 @@ pub(crate) fn spawn_null(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: [0.0; 4],
+                fill_color: Default::default(),
                 path_repeat: None,
                 textspacing_letter: Default::default(),
                 textspacing_line: AmAnimatedFloat {
@@ -280,6 +284,9 @@ pub(crate) fn spawn_null(
                 retime: config.retime.clone(),
                 echo_time_shift_ms: config.echo_time_shift_ms,
                 echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
             },
             AmLayerSpec::Null,
             transform,

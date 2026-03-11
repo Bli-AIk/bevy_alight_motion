@@ -196,6 +196,8 @@ pub struct UnifiedEffectUniform {
     /// Mirror params: (type_plus_1, blend_mode, alpha, offset)
     /// type_plus_1 = 0 → disabled, 1 → horizontal, 2 → vertical
     pub mirror_params: Vec4,
+    /// Lift (copy background) params: (fill, canvas_width, canvas_height, enabled)
+    pub lift_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -208,6 +210,11 @@ pub struct UnifiedEffectMaterial {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
+
+    /// Lift (copy background) composite texture - background rendered to RTT
+    #[texture(3)]
+    #[sampler(4)]
+    pub lift_comp_texture: Option<Handle<Image>>,
 }
 
 // Proxy accessors for backward compatibility
@@ -457,6 +464,7 @@ impl Default for UnifiedEffectUniform {
             wavewarp2_params2: Vec4::ZERO,
             wavewarp2_flags: Vec4::ZERO,
             mirror_params: Vec4::ZERO,
+            lift_params: Vec4::ZERO,
         }
     }
 }

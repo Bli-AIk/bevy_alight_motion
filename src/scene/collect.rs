@@ -369,7 +369,104 @@ pub(crate) fn flatten_pending_layers_inner(
     result
 }
 
-/// Collect an embed scene layer, handling echokf effects if present.
+/// Recursively extend the lifecycle end_time of all children in a PendingLayer tree.
+/// Only extends PendingLayer.end_time (for spawn/despawn lifecycle), NOT animated.end_time
+/// (which is used for animation duration normalization in calc_layer_time).
+/// The is_active() method in AmAnimated accounts for echo_time_shift_ms separately.
+fn extend_children_lifecycle(pl: &mut PendingLayer, extension_ms: f32) {
+    let ext = extension_ms as i32;
+    for child in &mut pl.children {
+        child.end_time += ext;
+        // NOTE: Do NOT extend child.animated.end_time — that would change the animation
+        // duration in calc_layer_time, making the animation play slower.
+        // Instead, is_active() uses echo_time_shift_ms to extend its active window.
+        extend_children_lifecycle(child, extension_ms);
+    }
+}
+
+/// Collect N copies of an embedScene for the repeat effect.
+/// Each copy gets cumulative transform offsets and time delay.
+///
+/// 为重复效果收集 N 个 embedScene 副本。
+fn collect_repeat_copies(
+    pending: &mut Vec<PendingLayer>,
+    embed: &AmEmbedScene,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    config: &AmSceneConfig,
+    z: f32,
+    repeat: &super::effects::RepeatParams,
+    count: usize,
+) {
+    let time_val = repeat.time.value.unwrap_or(0.0);
+    let offset_val = repeat.offset.value.unwrap_or([0.0, 0.0]);
+    let angle_val = repeat.angle.value.unwrap_or(0.0);
+    let scale_val = repeat.scale.value.unwrap_or(1.0);
+    let alpha_val = repeat.alpha.value.unwrap_or(1.0);
+
+    // AM's time parameter is in FRAMES, convert to ms per-copy
+    let frame_duration_ms = 1000.0 / config.scene_fps;
+
+    // AM accumulates transforms per-copy: offset/angle/time linear, scale exponential, alpha linear decrease
+    let mut acc_offset = Vec2::ZERO;
+    let mut acc_angle: f32 = 0.0;
+    let mut acc_scale: f32 = 1.0;
+    let mut acc_alpha: f32 = 1.0;
+    let mut acc_time: f32 = 0.0; // in frames
+
+    for i in 0..count {
+        // Skip rendering if alpha has gone to zero or below (matches AM behavior)
+        if acc_alpha <= 0.0 && i > 0 {
+            break;
+        }
+
+        let mut copy_config = config.clone();
+
+        // Time offset: shift animation state via echo_time_shift_ms
+        // AM shifts the render frame by accTime frames, converting to ms.
+        let time_shift_ms = acc_time * frame_duration_ms;
+        copy_config.echo_time_shift_ms += time_shift_ms;
+
+        // Alpha
+        copy_config.repeat_alpha_factor *= acc_alpha;
+
+        // Position offset: AM coords (Y-down) → Bevy coords (Y-up)
+        copy_config.repeat_offset = acc_offset;
+
+        // Rotation: degrees
+        copy_config.repeat_rotation_deg = acc_angle;
+
+        // Scale: exponential (scale^i)
+        copy_config.repeat_scale_factor = acc_scale;
+
+        // Z ordering: copy 0 at bottom, copy N-1 on top
+        let copy_z = z + i as f32 * config.z_spacing * 0.001;
+
+        let mut pl = collect_embed_scene(embed, fonts, font_metrics, &copy_config, copy_z);
+
+        // Extend children's lifecycles to account for animation time shift.
+        if time_shift_ms > 0.0 {
+            extend_children_lifecycle(&mut pl, time_shift_ms);
+        }
+
+        // Remap IDs for copies > 0 to avoid conflicts
+        if i > 0 {
+            remap_echo_pl_ids(&mut pl);
+        }
+
+        pending.push(pl);
+
+        // Accumulate transforms for next copy (AM-style: linear for offset/angle/time,
+        // multiplicative for scale, linear decrease for alpha)
+        acc_offset += Vec2::new(offset_val[0], -offset_val[1]);
+        acc_angle += angle_val;
+        acc_scale *= scale_val;
+        acc_alpha -= 1.0 - alpha_val;
+        acc_time += time_val;
+    }
+}
+
+/// Collect an embed scene layer, handling echokf and repeat effects if present.
 fn collect_embed_layer(
     pending: &mut Vec<PendingLayer>,
     embed: &AmEmbedScene,
@@ -382,6 +479,24 @@ fn collect_embed_layer(
     let max_count = echokf.max_count();
 
     if !echokf.enabled || max_count == 0 {
+        // No echo — check for repeat effect on this group
+        let repeat = super::effects::extract_repeat_effect(&embed.effects);
+        let repeat_count = repeat.count.value.unwrap_or(0.0) as i32;
+
+        if repeat_count > 1 {
+            collect_repeat_copies(
+                pending,
+                embed,
+                fonts,
+                font_metrics,
+                config,
+                z,
+                &repeat,
+                repeat_count as usize,
+            );
+            return;
+        }
+
         let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
         bevy::log::trace!(
             "  Collected embed '{}' (id={}, time={}..{}ms, inTime={:?}, outTime={:?}, children={})",

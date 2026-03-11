@@ -337,6 +337,20 @@ pub fn animate_unified_effect_system(
             material.uniform_data.mirror_params = Vec4::ZERO;
         }
 
+        // Update lift (copy background) effect
+        if animated.lift_has_effect {
+            let fill =
+                interpolate_float(&animated.lift_fill, layer_time).unwrap_or(0.0);
+            material.uniform_data.lift_params = Vec4::new(
+                fill,
+                animated.canvas_width,
+                animated.canvas_height,
+                1.0, // enabled
+            );
+        } else {
+            material.uniform_data.lift_params = Vec4::ZERO;
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

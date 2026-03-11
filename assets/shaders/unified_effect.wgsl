@@ -93,11 +93,15 @@ struct UnifiedEffectUniform {
     wavewarp2_flags: vec4<f32>,        // (screen_space, enabled, mag_x, mag_y)
     // Mirror effect (镜子)
     mirror_params: vec4<f32>,          // (type_plus_1, blend_mode, alpha, offset)
+    // Lift (copy background) effect (复制背景)
+    lift_params: vec4<f32>,            // (fill, canvas_width, canvas_height, enabled)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
 @group(2) @binding(1) var base_texture: texture_2d<f32>;
 @group(2) @binding(2) var base_sampler: sampler;
+@group(2) @binding(3) var lift_comp_texture: texture_2d<f32>;
+@group(2) @binding(4) var lift_comp_sampler: sampler;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -1624,6 +1628,23 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+
+    // Apply lift (copy background) effect: blend layer content with background composite.
+    // lift_params = (fill, canvas_width, canvas_height, enabled)
+    let lift_enabled = uniforms.lift_params.w > 0.5;
+    if lift_enabled {
+        let lift_fill = uniforms.lift_params.x;
+        let lift_canvas_w = uniforms.lift_params.y;
+        let lift_canvas_h = uniforms.lift_params.z;
+        // Convert world position to screen-space UV for background sampling
+        let screen_uv = vec2<f32>(
+            (mesh.world_position.x + lift_canvas_w / 2.0) / lift_canvas_w,
+            (lift_canvas_h / 2.0 - mesh.world_position.y) / lift_canvas_h
+        );
+        let comp_color = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv);
+        // AM: gl_FragColor = mix(comp * texColor.a, texColor, fill)
+        tex_color = mix(comp_color * tex_color.a, tex_color, lift_fill);
     }
 
     // Apply mirror effect (镜子): sample at mirrored UV and blend with original.

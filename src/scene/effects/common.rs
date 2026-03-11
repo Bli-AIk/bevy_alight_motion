@@ -13,6 +13,9 @@ const WAVEWARP2_ID: &str = "com.alightcreative.effects.wavewarp2";
 /// Effect ID for mirror effect.
 const MIRROR_ID: &str = "com.alightcreative.effects.mirror";
 
+/// Effect ID for lift (copy background) effect.
+const LIFT_ID: &str = "com.alightcreative.effects.lift";
+
 /// Effect IDs for transform variants.
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
 /// Legacy transform effect (older Alight Motion versions).
@@ -629,6 +632,37 @@ pub(crate) fn extract_mirror_effect(effects: &[AmEffect]) -> MirrorParams {
                 "alpha" => apply_animated_float(&mut params.alpha, prop),
                 "offset" => apply_animated_float(&mut params.offset, prop),
                 _ => (),
+            }
+        }
+    }
+
+    params
+}
+
+/// Lift (copy background) effect parameters. / 复制背景效果参数。
+#[derive(Debug, Clone, Default)]
+pub struct LiftParams {
+    /// Fill amount: 0=full background, 1=original content. / 填充量。
+    pub fill: AmAnimatedFloat,
+    /// Whether this effect is present.
+    pub has_effect: bool,
+}
+
+/// Extract lift effect parameters from effects list.
+/// 从效果列表中提取复制背景效果参数。
+pub(crate) fn extract_lift_effect(effects: &[AmEffect]) -> LiftParams {
+    let mut params = LiftParams::default();
+
+    for effect in effects {
+        if effect.id != LIFT_ID {
+            continue;
+        }
+        params.has_effect = true;
+        params.fill.value = Some(0.0);
+
+        for prop in &effect.properties {
+            if prop.name == "fill" {
+                apply_animated_float(&mut params.fill, prop);
             }
         }
     }

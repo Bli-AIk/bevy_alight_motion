@@ -405,6 +405,14 @@ pub fn animate_sdf_opacity_system(
             let Some(material) = materials.get_mut(&material_handle.0) else {
                 continue;
             };
+
+            // Animate fill color RGB (interpolate keyframes, convert sRGB→linear)
+            if let Some(fc_srgb) = interpolate_color(&animated.fill_color, layer_time) {
+                material.uniform_data.color.x = fc_srgb.x.powf(2.2);
+                material.uniform_data.color.y = fc_srgb.y.powf(2.2);
+                material.uniform_data.color.z = fc_srgb.z.powf(2.2);
+            }
+
             // Multiply by base_alpha to preserve original fill color transparency
             let mut final_alpha = opacity * animated.base_alpha;
             // Apply fade effect (fade in/out)

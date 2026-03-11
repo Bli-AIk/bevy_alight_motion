@@ -27,9 +27,14 @@ pub(crate) fn collect_embed_scene(
 ) -> PendingLayer {
     let has_parent = embed.parent != 0;
     let (mut tx, mut ty) = get_initial_location(&embed.transform.location, config, has_parent);
-    let rotation = get_initial_rotation(&embed.transform.rotation);
-    let (sx, sy) = get_initial_scale(&embed.transform.scale);
+    let mut rotation = get_initial_rotation(&embed.transform.rotation);
+    let (mut sx, mut sy) = get_initial_scale(&embed.transform.scale);
     let pivot = get_initial_pivot(&embed.transform.pivot);
+
+    // Apply repeat effect transform offsets (if any)
+    rotation += -config.repeat_rotation_deg;
+    sx *= config.repeat_scale_factor;
+    sy *= config.repeat_scale_factor;
 
     // For embed scenes with rotation/scale and non-zero pivot, we need to calculate
     // the correct position compensation. In AM, objects rotate/scale around (location + pivot).
@@ -38,6 +43,10 @@ pub(crate) fn collect_embed_scene(
         calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
+
+    // Apply repeat position offset (already in Bevy Y-up coords)
+    tx += config.repeat_offset.x;
+    ty += config.repeat_offset.y;
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -136,6 +145,10 @@ pub(crate) fn collect_embed_scene(
         scene_fps: embed.scene.fps as f32,
         scene_total_time: embed.scene.total_time as f32,
         retime: retime_info,
+        // Reset repeat spatial transforms — they apply only to THIS embed, not children
+        repeat_offset: Vec2::ZERO,
+        repeat_rotation_deg: 0.0,
+        repeat_scale_factor: 1.0,
         ..config.clone()
     };
 
@@ -202,6 +215,7 @@ pub(crate) fn collect_embed_scene(
     let fade_effect = extract_fade_effect(&embed.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
     let mirror_effect = extract_mirror_effect(&embed.effects);
+    let lift_effect = extract_lift_effect(&embed.effects);
 
     // Extract group fill data from embed's fillType
     let group_fill = build_group_fill(embed);
@@ -262,7 +276,8 @@ pub(crate) fn collect_embed_scene(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&embed.fill_color, false),
+            base_alpha: get_base_alpha(&embed.fill_color, false)
+                * config.repeat_alpha_factor,
             fade_in_time: fade_effect.in_time,
             fade_out_time: fade_effect.out_time,
             fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,
@@ -288,6 +303,8 @@ pub(crate) fn collect_embed_scene(
             mirror_alpha: mirror_effect.alpha,
             mirror_offset: mirror_effect.offset,
             mirror_has_effect: mirror_effect.has_effect,
+            lift_fill: lift_effect.fill,
+            lift_has_effect: lift_effect.has_effect,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -395,6 +412,7 @@ pub(crate) fn collect_embed_scene(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            fill_color: Default::default(),
             path_repeat: None,
             textspacing_letter: Default::default(),
             textspacing_line: AmAnimatedFloat {
@@ -421,6 +439,9 @@ pub(crate) fn collect_embed_scene(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: -config.repeat_rotation_deg,
+            repeat_scale_factor: config.repeat_scale_factor,
+            repeat_position_offset: config.repeat_offset,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,

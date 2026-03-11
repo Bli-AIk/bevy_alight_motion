@@ -183,6 +183,10 @@ pub(super) fn spawn_layer_entity(
             by += animated.anchor_offset.y;
         }
 
+        // Apply repeat group position offset
+        bx += animated.repeat_position_offset.x;
+        by += animated.repeat_position_offset.y;
+
         Vec3::new(bx, by, layer.transform.translation.z)
     } else {
         layer.transform.translation
@@ -191,19 +195,21 @@ pub(super) fn spawn_layer_entity(
     // Calculate initial rotation
     let initial_rotation = if let Some(rot_deg) = interpolate_float(&animated.rotation, layer_time)
     {
-        Quat::from_rotation_z((-rot_deg).to_radians())
+        let total_deg = -rot_deg + animated.repeat_rotation_offset_deg;
+        Quat::from_rotation_z(total_deg.to_radians())
     } else {
         layer.transform.rotation
     };
 
     // Calculate initial scale
+    let rsf = animated.repeat_scale_factor;
     let initial_scale =
         if needs_effect || matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
             // For effect layers and SDF shapes, keep only the sign of scale for flipping
             // The magnitude is baked into the mesh
             Vec3::new(actual_scale[0].signum(), actual_scale[1].signum(), 1.0)
         } else {
-            Vec3::new(current_scale[0], current_scale[1], 1.0)
+            Vec3::new(current_scale[0] * rsf, current_scale[1] * rsf, 1.0)
         };
 
     bevy::log::debug!(
@@ -578,6 +584,7 @@ pub(super) fn spawn_layer_entity(
                 || !layer.animated.solid_color_alpha.keyframes.is_empty(), // has_solidcolor - needs UnifiedEffectMaterial
             layer.animated.wavewarp2_has_effect, // has_wavewarp2 - needs UnifiedEffectMaterial
             layer.animated.mirror_has_effect,    // has_mirror - needs UnifiedEffectMaterial
+            layer.animated.lift_has_effect,      // has_lift - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area

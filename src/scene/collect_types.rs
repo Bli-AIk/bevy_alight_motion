@@ -55,6 +55,7 @@ pub(crate) fn collect_null(
     let fade_effect = extract_fade_effect(&null.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
     let mirror_effect = extract_mirror_effect(&null.effects);
+    let lift_effect = extract_lift_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -123,7 +124,7 @@ pub(crate) fn collect_null(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: 1.0, // Null objects are fully opaque
+            base_alpha: config.repeat_alpha_factor, // Null: base 1.0 * repeat factor
             fade_in_time: fade_effect.in_time,
             fade_out_time: fade_effect.out_time,
             fade_layer_duration_ms: (null.end_time - null.start_time) as f32,
@@ -149,6 +150,8 @@ pub(crate) fn collect_null(
             mirror_alpha: mirror_effect.alpha.clone(),
             mirror_offset: mirror_effect.offset.clone(),
             mirror_has_effect: mirror_effect.has_effect,
+            lift_fill: lift_effect.fill.clone(),
+            lift_has_effect: lift_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,
@@ -244,6 +247,7 @@ pub(crate) fn collect_null(
             solid_color_alpha: solid_color_effect.alpha,
             solid_color_blend_mode: solid_color_effect.blend_mode,
             base_fill_color: [0.0; 4],
+            fill_color: Default::default(),
             path_repeat: None,
             textspacing_letter: Default::default(),
             textspacing_line: AmAnimatedFloat {
@@ -270,6 +274,9 @@ pub(crate) fn collect_null(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -412,7 +419,8 @@ pub(crate) fn collect_text(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&text.fill_color, false),
+            base_alpha: get_base_alpha(&text.fill_color, false)
+                * config.repeat_alpha_factor,
             fade_in_time: AmAnimatedFloat::default(),
             fade_out_time: AmAnimatedFloat::default(),
             fade_layer_duration_ms: (text.end_time - text.start_time) as f32,
@@ -438,6 +446,8 @@ pub(crate) fn collect_text(
             mirror_alpha: AmAnimatedFloat::default(),
             mirror_offset: AmAnimatedFloat::default(),
             mirror_has_effect: false,
+            lift_fill: AmAnimatedFloat::default(),
+            lift_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -545,6 +555,7 @@ pub(crate) fn collect_text(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            fill_color: Default::default(),
             path_repeat: None,
             textspacing_letter: extract_text_spacing_effect(&text.effects).letter_spacing,
             textspacing_line: extract_text_spacing_effect(&text.effects).line_spacing,
@@ -565,6 +576,9 @@ pub(crate) fn collect_text(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -625,6 +639,7 @@ pub(crate) fn collect_image(
     let fade_effect = extract_fade_effect(&image.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&image.effects);
     let mirror_effect = extract_mirror_effect(&image.effects);
+    let lift_effect = extract_lift_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -700,7 +715,7 @@ pub(crate) fn collect_image(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: 1.0, // Image layers are fully opaque
+            base_alpha: config.repeat_alpha_factor, // Image: base 1.0 * repeat factor
             fade_in_time: fade_effect.in_time,
             fade_out_time: fade_effect.out_time,
             fade_layer_duration_ms: (image.end_time - image.start_time) as f32,
@@ -726,6 +741,8 @@ pub(crate) fn collect_image(
             mirror_alpha: mirror_effect.alpha,
             mirror_offset: mirror_effect.offset,
             mirror_has_effect: mirror_effect.has_effect,
+            lift_fill: lift_effect.fill,
+            lift_has_effect: lift_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,
@@ -823,6 +840,7 @@ pub(crate) fn collect_image(
             base_fill_color: [0.0; 4],
             path_repeat: None,
             textspacing_letter: Default::default(),
+            fill_color: Default::default(),
             textspacing_line: AmAnimatedFloat {
                 value: Some(1.0),
                 keyframes: vec![],
@@ -847,6 +865,9 @@ pub(crate) fn collect_image(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),

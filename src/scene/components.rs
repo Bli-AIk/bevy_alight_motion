@@ -526,6 +526,15 @@ pub struct AmSceneConfig {
     pub echo_time_shift_ms: f32,
     /// Echo alpha config propagated to all entities in the echo subtree.
     pub echo_alpha_config: Option<crate::animation::EchoAlphaConfig>,
+    /// Repeat alpha factor for cascading opacity to all children (default 1.0).
+    /// When a group has a repeat effect, each copy gets a different alpha factor.
+    pub repeat_alpha_factor: f32,
+    /// Repeat effect: additional position offset in parent-local coords (Bevy Y-up).
+    pub repeat_offset: Vec2,
+    /// Repeat effect: additional rotation in degrees (AM convention, will be negated).
+    pub repeat_rotation_deg: f32,
+    /// Repeat effect: scale multiplier (1.0 = no change).
+    pub repeat_scale_factor: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -544,6 +553,10 @@ impl Default for AmSceneConfig {
             retime: None,
             echo_time_shift_ms: 0.0,
             echo_alpha_config: None,
+            repeat_alpha_factor: 1.0,
+            repeat_offset: Vec2::ZERO,
+            repeat_rotation_deg: 0.0,
+            repeat_scale_factor: 1.0,
         }
     }
 }

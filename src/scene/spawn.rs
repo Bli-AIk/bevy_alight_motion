@@ -35,7 +35,99 @@ fn attach_to_parent(
     }
 }
 
-/// Handles spawning of an embedded scene layer, including echo (echokf) effect duplication.
+/// Spawns N copies of an embedScene for the repeat effect.
+/// Each copy gets cumulative transform offsets (position, rotation, scale, alpha)
+/// and optional time shift via the echo_time_shift_ms mechanism.
+///
+/// 为重复效果生成 N 个 embedScene 副本。
+/// 每个副本获得累积的变换偏移（位置、旋转、缩放、透明度）
+/// 以及通过 echo_time_shift_ms 机制实现的可选时间偏移。
+fn spawn_repeat_copies(
+    commands: &mut Commands,
+    shaders: &mut Assets<Shader>,
+    embed: &AmEmbedScene,
+    images: &HashMap<String, Handle<Image>>,
+    fonts: &HashMap<String, Handle<Font>>,
+    font_metrics: &HashMap<String, FontMetrics>,
+    white_pixel: &Handle<Image>,
+    sdf_shaders: &AmSdfShaders,
+    config: &AmSceneConfig,
+    z: f32,
+    entity_map: &mut HashMap<u64, Entity>,
+    parent_relations: &mut Vec<(Entity, u64)>,
+    scene_parent: Entity,
+    repeat: &RepeatParams,
+    count: usize,
+) {
+    let time_val = repeat.time.value.unwrap_or(0.0);
+    let offset_val = repeat.offset.value.unwrap_or([0.0, 0.0]);
+    let angle_val = repeat.angle.value.unwrap_or(0.0);
+    let scale_val = repeat.scale.value.unwrap_or(1.0);
+    let alpha_val = repeat.alpha.value.unwrap_or(1.0);
+
+    // AM's time parameter is in FRAMES, convert to ms per-copy
+    let frame_duration_ms = 1000.0 / config.scene_fps;
+
+    // AM accumulates transforms per-copy
+    let mut acc_offset = Vec2::ZERO;
+    let mut acc_angle: f32 = 0.0;
+    let mut acc_scale: f32 = 1.0;
+    let mut acc_alpha: f32 = 1.0;
+    let mut acc_time: f32 = 0.0;
+
+    for i in 0..count {
+        if acc_alpha <= 0.0 && i > 0 {
+            break;
+        }
+
+        let mut copy_config = config.clone();
+
+        // Time offset: shift animation state via echo_time_shift_ms
+        let time_shift_ms = acc_time * frame_duration_ms;
+        copy_config.echo_time_shift_ms += time_shift_ms;
+        copy_config.repeat_alpha_factor *= acc_alpha;
+        copy_config.repeat_offset = acc_offset;
+        copy_config.repeat_rotation_deg = acc_angle;
+        copy_config.repeat_scale_factor = acc_scale;
+
+        // Z ordering: copy 0 at bottom, copy N-1 on top
+        let copy_z = z + i as f32 * config.z_spacing * 0.001;
+
+        let entity = spawn_embed_scene(
+            commands,
+            shaders,
+            embed,
+            images,
+            fonts,
+            font_metrics,
+            white_pixel,
+            sdf_shaders,
+            &copy_config,
+            copy_z,
+        );
+
+        // Only register copy 0 in entity_map (it's the "original")
+        if i == 0 {
+            entity_map.insert(embed.id, entity);
+        }
+        attach_to_parent(
+            commands,
+            entity,
+            embed.parent,
+            parent_relations,
+            scene_parent,
+        );
+
+        // Accumulate transforms for next copy (AM-style)
+        acc_offset += Vec2::new(offset_val[0], -offset_val[1]);
+        acc_angle += angle_val;
+        acc_scale *= scale_val;
+        acc_alpha -= 1.0 - alpha_val;
+        acc_time += time_val;
+    }
+}
+
+/// Handles spawning of an embedded scene layer, including echo (echokf) and repeat effects.
 fn handle_embed_layer(
     commands: &mut Commands,
     shaders: &mut Assets<Shader>,
@@ -55,6 +147,32 @@ fn handle_embed_layer(
     let max_count = echokf.max_count();
 
     if !echokf.enabled || max_count == 0 {
+        // No echo — check for repeat effect on this group
+        let repeat = extract_repeat_effect(&embed.effects);
+        let repeat_count = repeat.count.value.unwrap_or(0.0) as i32;
+
+        if repeat_count > 1 {
+            // Repeat effect on embedScene: spawn N copies with cumulative transforms
+            spawn_repeat_copies(
+                commands,
+                shaders,
+                embed,
+                images,
+                fonts,
+                font_metrics,
+                white_pixel,
+                sdf_shaders,
+                config,
+                z,
+                entity_map,
+                parent_relations,
+                scene_parent,
+                &repeat,
+                repeat_count as usize,
+            );
+            return;
+        }
+
         let entity = spawn_embed_scene(
             commands,
             shaders,
@@ -79,15 +197,6 @@ fn handle_embed_layer(
     }
 
     let seconds = echokf.static_seconds();
-    eprintln!(
-        "[ECHOKF] embed '{}' id={}: max_count={}, seconds={:.3}, mode={}, alpha_kf={}",
-        embed.label,
-        embed.id,
-        max_count,
-        seconds,
-        echokf.mode,
-        echokf.alpha.keyframes.len()
-    );
 
     let base_echo_alpha = crate::animation::EchoAlphaConfig {
         alpha_keyframes: echokf.alpha.clone(),
@@ -294,13 +403,6 @@ pub fn spawn_scene(
                 }
                 // Link path-repeat to previous layer
                 let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
-                eprintln!(
-                    "[Spawn] shape {}: effects_count={}, has_path_repeat={}, prev_layer={:?}",
-                    shape.id,
-                    shape.effects.len(),
-                    path_repeat_effect.has_effect(),
-                    prev_layer_info.as_ref().map(|(e, id, _)| (*e, *id))
-                );
                 if path_repeat_effect.has_effect()
                     && let Some((prev_entity, prev_id, ref prev_shape)) = prev_layer_info
                 {
