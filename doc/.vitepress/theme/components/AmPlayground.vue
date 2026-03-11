@@ -379,11 +379,16 @@ onUnmounted(() => {
   background: #000;
   border-radius: 4px;
   overflow: hidden;
+  touch-action: none;
 }
 
 #bevy-canvas {
   width: 100%;
   height: 100%;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* 全屏和关闭按钮 */
