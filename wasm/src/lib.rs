@@ -279,9 +279,11 @@ fn handle_pending_load(
     if pending.should_load {
         pending.should_load = false;
 
-        // Load the project from the uploaded asset source
+        add_log("Starting project load from uploaded://project.amproj");
         info!("[WASM] Loading project from uploaded://project.amproj");
-        load_am_project(&mut commands, &asset_server, "uploaded://project.amproj");
+
+        let entity = load_am_project(&mut commands, &asset_server, "uploaded://project.amproj");
+        add_log(&format!("Project loaded, entity: {:?}", entity));
     }
 }
 
@@ -290,11 +292,16 @@ fn sync_state_to_js(playback: Option<Res<AmPlayback>>) {
     if let Some(playback) = playback {
         if let Ok(mut state) = APP_STATE.lock() {
             if let Some(ref mut s) = *state {
+                let was_loaded = s.project_loaded;
                 s.is_playing = playback.playing;
                 s.current_frame = (playback.current_time_ms / 16.67) as u32;
                 s.total_frames = (playback.total_time_ms / 16.67) as u32;
                 s.fps = 60.0;
-                s.project_loaded = true;
+
+                if !was_loaded && playback.total_time_ms > 0.0 {
+                    s.project_loaded = true;
+                    add_log("Project loaded successfully!");
+                }
             }
         }
     }
@@ -308,10 +315,13 @@ fn sync_state_to_js(playback: Option<Res<AmPlayback>>) {
 /// 2. Triggers the Bevy asset system to load it
 #[wasm_bindgen]
 pub fn load_project_from_bytes(data: &[u8]) -> bool {
-    info!("[WASM] Received project data: {} bytes", data.len());
+    let msg = format!("Received project data: {} bytes", data.len());
+    add_log(&msg);
+    info!("[WASM] {}", msg);
 
     // Get the upload directory
     let Some(dir) = UPLOAD_DIR.get() else {
+        add_log("ERROR: Upload directory not initialized");
         web_sys::console::error_1(&"[WASM] Upload directory not initialized".into());
         return false;
     };
@@ -319,6 +329,7 @@ pub fn load_project_from_bytes(data: &[u8]) -> bool {
     // Insert the project bytes into the memory directory
     // 将项目字节插入内存目录
     dir.insert_asset(Path::new("project.amproj"), data.to_vec());
+    add_log("Project bytes inserted into uploaded:// source");
     info!("[WASM] Project bytes inserted into uploaded:// source");
 
     // We can't directly access Bevy's World from here, so we use a static flag
@@ -336,6 +347,7 @@ pub fn load_project_from_bytes(data: &[u8]) -> bool {
     // Signal that we need to load - we'll use a different mechanism
     // For now, we need to trigger the load from Bevy's Update loop
     // This is a limitation of WASM - we can't call Bevy systems directly
+    add_log("Project ready for loading. Triggering load...");
     web_sys::console::log_1(&"[WASM] Project ready for loading. Triggering load...".into());
 
     // Use atomic flag to signal pending load (thread-safe)
@@ -351,6 +363,7 @@ static PENDING_LOAD: AtomicBool = AtomicBool::new(false);
 fn check_pending_load(mut pending: ResMut<PendingProjectLoad>) {
     if PENDING_LOAD.swap(false, Ordering::SeqCst) {
         pending.should_load = true;
+        add_log("Detected pending load, will load project");
         info!("[WASM] Detected pending load, will load project");
     }
 }
