@@ -14,6 +14,12 @@ export function download_logs(): void;
 export function get_current_frame_pixels(): Uint8Array;
 
 /**
+ * Get logs as string for JavaScript
+ * 获取日志字符串供 JavaScript 使用
+ */
+export function get_logs(): string;
+
+/**
  * Get current player state as JSON
  * 获取当前播放器状态 (JSON 格式)
  */
@@ -64,6 +70,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly download_logs: () => void;
     readonly get_current_frame_pixels: () => [number, number];
+    readonly get_logs: () => [number, number];
     readonly get_state: () => any;
     readonly load_project_from_bytes: (a: number, b: number) => number;
     readonly main: () => void;
