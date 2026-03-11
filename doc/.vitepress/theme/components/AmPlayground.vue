@@ -39,14 +39,16 @@
         </button>
       </div>
 
-      <!-- 快捷键提示 -->
+      <!-- 快捷键提示（可点击，发送键盘事件到 canvas） -->
       <div class="shortcuts-bar" v-if="isLoaded">
-        <span class="shortcut">[Space] {{ i18n.playPause }}</span>
-        <span class="shortcut">[R] {{ i18n.reset }}</span>
-        <span class="shortcut">[←/→] {{ i18n.frameStep }}</span>
-        <span class="shortcut">[↑/↓] {{ i18n.speed }}</span>
-        <span class="shortcut">[L] {{ i18n.loop }}</span>
-        <button class="download-logs-btn" @click="downloadLogs" :title="i18n.downloadLogs">
+        <button class="shortcut" @pointerdown.prevent="sendKey('Space')">⏯ {{ i18n.playPause }}</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('KeyR')">↺ {{ i18n.reset }}</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('ArrowLeft')">⏪</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('ArrowRight')">⏩</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('ArrowDown')">🔽</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('ArrowUp')">🔼</button>
+        <button class="shortcut" @pointerdown.prevent="sendKey('KeyL')">🔁 {{ i18n.loop }}</button>
+        <button class="shortcut download-logs-btn" @click="downloadLogs" :title="i18n.downloadLogs">
           📥 {{ i18n.downloadLogs }}
         </button>
       </div>
@@ -263,11 +265,11 @@ const loadProject = async (file: File) => {
 
     // 启动 Bevy（此时 canvas 已可见且有尺寸）
     const wasmModule = (window as any).__bevy_wasm
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
     if (wasmModule && wasmModule.start_app) {
       // On mobile, cap devicePixelRatio to avoid exceeding WebGL max texture
       // size (4096). Bevy/winit reads window.devicePixelRatio directly and
       // scale_factor_override does NOT prevent physical surface oversizing.
-      const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
       const origDpr = window.devicePixelRatio || 1
       if (isMobile && origDpr > 2) {
         try {
@@ -287,7 +289,6 @@ const loadProject = async (file: File) => {
     }
 
     // 等待 Bevy 初始化（移动端需更长时间）
-    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
     const initDelay = isMobile ? 3000 : 1000
     console.log(`[Playground] Waiting ${initDelay}ms for Bevy init (mobile: ${isMobile})...`)
     await new Promise(resolve => setTimeout(resolve, initDelay))
@@ -350,6 +351,33 @@ const downloadLogs = () => {
   } else {
     console.warn('[Playground] download_logs not available')
   }
+}
+
+// 向 canvas 发送合成键盘事件（移动端触控用）
+const sendKey = (code: string) => {
+  const canvasEl = document.getElementById('bevy-canvas')
+  if (!canvasEl) return
+
+  // Key label lookup for the 'key' property
+  const keyMap: Record<string, string> = {
+    Space: ' ',
+    KeyR: 'r',
+    KeyL: 'l',
+    ArrowLeft: 'ArrowLeft',
+    ArrowRight: 'ArrowRight',
+    ArrowUp: 'ArrowUp',
+    ArrowDown: 'ArrowDown',
+  }
+
+  const opts: KeyboardEventInit = {
+    code,
+    key: keyMap[code] ?? code,
+    bubbles: true,
+    cancelable: true,
+  }
+  canvasEl.dispatchEvent(new KeyboardEvent('keydown', opts))
+  // Bevy/winit also expects a matching keyup
+  setTimeout(() => canvasEl.dispatchEvent(new KeyboardEvent('keyup', opts)), 50)
 }
 
 // 组件卸载时提示用户刷新页面
@@ -527,6 +555,22 @@ onUnmounted(() => {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   border: 1px solid var(--vp-c-divider);
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--vp-c-text-2);
+  transition: background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.shortcut:hover {
+  background: var(--vp-c-brand-soft);
+}
+
+.shortcut:active {
+  background: var(--vp-c-brand);
+  color: var(--vp-c-bg);
 }
 
 .download-logs-btn {
@@ -605,11 +649,15 @@ onUnmounted(() => {
 /* 响应式 */
 @media (max-width: 640px) {
   .shortcuts-bar {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
+    justify-content: center;
   }
-  
+
   .shortcut {
-    padding: 0.2rem 0.4rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
   }
 }
 
