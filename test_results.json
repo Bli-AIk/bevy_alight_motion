@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-08T19:18:27.827915+08:00",
+  "timestamp": "2026-03-11T11:47:15.685238+08:00",
   "summary": {
-    "passed": 114,
+    "passed": 115,
     "warnings": 0,
     "skipped": 2,
     "failed": 35
@@ -263,6 +263,9 @@
     "effects/transform/complex2": {
       "status": "pass"
     },
+    "effects/z_qq_group_logo/basic": {
+      "status": "pass"
+    },
     "private/USER_327/last": {
       "status": "skip"
     },
@@ -307,8 +310,7 @@
       "avg_similarity": 0.9619
     },
     "private/USER_bot_205/demo/bullet": {
-      "status": "fail",
-      "avg_similarity": 0.7696
+      "status": "fail"
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
