@@ -52,7 +52,11 @@ web-sys = { version = "0.3", features = [
     "ImageData",
     "Blob",
     "Url",
-    "FileReader"
+    "FileReader",
+    "Element",
+    "HtmlElement",
+    "MouseEvent",
+    "PointerEvent"
 ]}
 
 [profile.release]
