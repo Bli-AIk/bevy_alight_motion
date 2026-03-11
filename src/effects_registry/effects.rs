@@ -29,6 +29,7 @@ pub mod textspacing;
 pub mod threshold;
 pub mod transform2;
 pub mod transform_legacy;
+pub mod mirror;
 pub mod wavewarp2;
 pub mod wipe2;
 
@@ -63,6 +64,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &textprogress::EFFECT,
         &textspacing::EFFECT,
         &wavewarp2::EFFECT,
+        &mirror::EFFECT,
     ]
 }
 

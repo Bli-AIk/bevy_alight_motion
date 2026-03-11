@@ -163,6 +163,7 @@ pub(crate) fn add_visual_components(
     has_stretch2: bool,     // True if layer has stretch2 effect (needs UnifiedEffectMaterial)
     has_solidcolor: bool,   // True if layer has solidcolor effect (needs UnifiedEffectMaterial)
     has_wavewarp2: bool,    // True if layer has wavewarp2 effect (needs UnifiedEffectMaterial)
+    has_mirror: bool,       // True if layer has mirror effect (needs UnifiedEffectMaterial)
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
     wavewarp2_max_m2: f32,  // Max wavewarp2 magnitude across keyframes (for mesh expansion)
     global_time_ms: u64,    // Current playback time for mask initialization
@@ -207,7 +208,8 @@ pub(crate) fn add_visual_components(
         || has_pixelate
         || has_stretch2
         || has_solidcolor
-        || has_wavewarp2;
+        || has_wavewarp2
+        || has_mirror;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(

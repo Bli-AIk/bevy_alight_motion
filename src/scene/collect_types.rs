@@ -54,6 +54,7 @@ pub(crate) fn collect_null(
     let solid_color_effect = extract_solid_color_effect(&null.effects);
     let fade_effect = extract_fade_effect(&null.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
+    let mirror_effect = extract_mirror_effect(&null.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -143,6 +144,11 @@ pub(crate) fn collect_null(
             wavewarp2_damping_origin: wavewarp2_effect.damping_origin.clone(),
             wavewarp2_screen_space: wavewarp2_effect.screen_space,
             wavewarp2_has_effect: wavewarp2_effect.has_effect,
+            mirror_type: mirror_effect.mirror_type,
+            mirror_blend_mode: mirror_effect.blend_mode,
+            mirror_alpha: mirror_effect.alpha.clone(),
+            mirror_offset: mirror_effect.offset.clone(),
+            mirror_has_effect: mirror_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,
@@ -427,6 +433,11 @@ pub(crate) fn collect_text(
             wavewarp2_damping_origin: AmAnimatedFloat::default(),
             wavewarp2_screen_space: false,
             wavewarp2_has_effect: false,
+            mirror_type: 0,
+            mirror_blend_mode: 0,
+            mirror_alpha: AmAnimatedFloat::default(),
+            mirror_offset: AmAnimatedFloat::default(),
+            mirror_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -613,6 +624,7 @@ pub(crate) fn collect_image(
     let solid_color_effect = extract_solid_color_effect(&image.effects);
     let fade_effect = extract_fade_effect(&image.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&image.effects);
+    let mirror_effect = extract_mirror_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -709,6 +721,11 @@ pub(crate) fn collect_image(
             wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
             wavewarp2_screen_space: wavewarp2_effect.screen_space,
             wavewarp2_has_effect: wavewarp2_effect.has_effect,
+            mirror_type: mirror_effect.mirror_type,
+            mirror_blend_mode: mirror_effect.blend_mode,
+            mirror_alpha: mirror_effect.alpha,
+            mirror_offset: mirror_effect.offset,
+            mirror_has_effect: mirror_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,

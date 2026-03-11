@@ -577,6 +577,7 @@ pub(super) fn spawn_layer_entity(
             layer.animated.solid_color_alpha.value.is_some()
                 || !layer.animated.solid_color_alpha.keyframes.is_empty(), // has_solidcolor - needs UnifiedEffectMaterial
             layer.animated.wavewarp2_has_effect, // has_wavewarp2 - needs UnifiedEffectMaterial
+            layer.animated.mirror_has_effect,    // has_mirror - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area

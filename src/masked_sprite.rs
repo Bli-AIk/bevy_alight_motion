@@ -193,6 +193,9 @@ pub struct UnifiedEffectUniform {
     pub wavewarp2_params2: Vec4,
     /// Wavewarp2 flags: (screen_space, enabled, 0, 0)
     pub wavewarp2_flags: Vec4,
+    /// Mirror params: (type_plus_1, blend_mode, alpha, offset)
+    /// type_plus_1 = 0 → disabled, 1 → horizontal, 2 → vertical
+    pub mirror_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -453,6 +456,7 @@ impl Default for UnifiedEffectUniform {
             wavewarp2_params1: Vec4::ZERO,
             wavewarp2_params2: Vec4::ZERO,
             wavewarp2_flags: Vec4::ZERO,
+            mirror_params: Vec4::ZERO,
         }
     }
 }

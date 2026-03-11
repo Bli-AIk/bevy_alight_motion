@@ -201,6 +201,7 @@ pub(crate) fn collect_embed_scene(
     let jitter_effect = extract_jitter_effect(&embed.effects);
     let fade_effect = extract_fade_effect(&embed.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
+    let mirror_effect = extract_mirror_effect(&embed.effects);
 
     // Extract group fill data from embed's fillType
     let group_fill = build_group_fill(embed);
@@ -282,6 +283,11 @@ pub(crate) fn collect_embed_scene(
             wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
             wavewarp2_screen_space: wavewarp2_effect.screen_space,
             wavewarp2_has_effect: wavewarp2_effect.has_effect,
+            mirror_type: mirror_effect.mirror_type,
+            mirror_blend_mode: mirror_effect.blend_mode,
+            mirror_alpha: mirror_effect.alpha,
+            mirror_offset: mirror_effect.offset,
+            mirror_has_effect: mirror_effect.has_effect,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),

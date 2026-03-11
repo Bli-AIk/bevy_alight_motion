@@ -10,6 +10,9 @@ const FADE_ID: &str = "com.alightcreative.effects.fade";
 /// Effect ID for wavewarp2 effect.
 const WAVEWARP2_ID: &str = "com.alightcreative.effects.wavewarp2";
 
+/// Effect ID for mirror effect.
+const MIRROR_ID: &str = "com.alightcreative.effects.mirror";
+
 /// Effect IDs for transform variants.
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
 /// Legacy transform effect (older Alight Motion versions).
@@ -579,6 +582,52 @@ pub(crate) fn extract_wavewarp2_effect(effects: &[AmEffect]) -> Wavewarp2Params 
                 "dampingSpace" => apply_animated_float(&mut params.damping_space, prop),
                 "dampingOrigin" => apply_animated_float(&mut params.damping_origin, prop),
                 "screenSpace" => params.screen_space = prop.value == "true",
+                _ => (),
+            }
+        }
+    }
+
+    params
+}
+
+/// Mirror effect parameters. / 镜子效果参数。
+#[derive(Debug, Clone, Default)]
+pub struct MirrorParams {
+    /// Mirror type: 0=horizontal, 1=vertical. / 镜像方向。
+    pub mirror_type: i32,
+    /// Blend mode: 0=normal, 1=multiply, 2=screen, 3=over, 4=under.
+    pub blend_mode: i32,
+    /// Blend alpha. / 混合透明度。
+    pub alpha: AmAnimatedFloat,
+    /// Mirror axis offset. / 镜像轴偏移。
+    pub offset: AmAnimatedFloat,
+    /// Whether this effect is present.
+    pub has_effect: bool,
+}
+
+/// Extract mirror effect parameters from effects list.
+/// 从效果列表中提取镜子效果参数。
+pub(crate) fn extract_mirror_effect(effects: &[AmEffect]) -> MirrorParams {
+    let mut params = MirrorParams::default();
+
+    for effect in effects {
+        if effect.id != MIRROR_ID {
+            continue;
+        }
+        params.has_effect = true;
+        params.alpha.value = Some(1.0);
+        params.offset.value = Some(0.0);
+
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "type" => {
+                    params.mirror_type = prop.value.parse::<i32>().unwrap_or(0);
+                }
+                "blendMode" => {
+                    params.blend_mode = prop.value.parse::<i32>().unwrap_or(0);
+                }
+                "alpha" => apply_animated_float(&mut params.alpha, prop),
+                "offset" => apply_animated_float(&mut params.offset, prop),
                 _ => (),
             }
         }

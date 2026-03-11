@@ -319,6 +319,24 @@ pub fn animate_unified_effect_system(
             material.uniform_data.wavewarp2_flags = Vec4::ZERO;
         }
 
+        // Update mirror effect (镜子)
+        if animated.mirror_has_effect {
+            let alpha =
+                interpolate_float(&animated.mirror_alpha, layer_time).unwrap_or(1.0);
+            let offset =
+                interpolate_float(&animated.mirror_offset, layer_time).unwrap_or(0.0);
+            // Encode type+1: 0=disabled, 1=horizontal, 2=vertical
+            let type_plus_1 = (animated.mirror_type + 1) as f32;
+            material.uniform_data.mirror_params = Vec4::new(
+                type_plus_1,
+                animated.mirror_blend_mode as f32,
+                alpha,
+                offset,
+            );
+        } else {
+            material.uniform_data.mirror_params = Vec4::ZERO;
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

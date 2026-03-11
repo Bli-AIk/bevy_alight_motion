@@ -298,6 +298,16 @@ pub struct AmAnimated {
     pub wavewarp2_screen_space: bool,
     /// Whether wavewarp2 is present on this layer.
     pub wavewarp2_has_effect: bool,
+    /// Mirror type: 0=horizontal, 1=vertical. / 镜像方向。
+    pub mirror_type: i32,
+    /// Mirror blend mode. / 镜子混合模式。
+    pub mirror_blend_mode: i32,
+    /// Mirror alpha. / 镜子透明度。
+    pub mirror_alpha: AmAnimatedFloat,
+    /// Mirror offset. / 镜子偏移。
+    pub mirror_offset: AmAnimatedFloat,
+    /// Whether mirror is present on this layer.
+    pub mirror_has_effect: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)

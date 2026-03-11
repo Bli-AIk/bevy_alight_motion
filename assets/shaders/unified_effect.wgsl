@@ -90,7 +90,9 @@ struct UnifiedEffectUniform {
     // Wavewarp2 effect (波浪歪曲)
     wavewarp2_params1: vec4<f32>,      // (phase, a1_rad, m1_spacing, m2_magnitude)
     wavewarp2_params2: vec4<f32>,      // (a2_rad, damping, damping_space, damping_origin)
-    wavewarp2_flags: vec4<f32>,        // (screen_space, enabled, 0, 0)
+    wavewarp2_flags: vec4<f32>,        // (screen_space, enabled, mag_x, mag_y)
+    // Mirror effect (镜子)
+    mirror_params: vec4<f32>,          // (type_plus_1, blend_mode, alpha, offset)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1620,6 +1622,57 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+
+    // Apply mirror effect (镜子): sample at mirrored UV and blend with original.
+    // mirror_params.x encodes type+1 (0=disabled, 1=horizontal, 2=vertical).
+    let mirror_type = uniforms.mirror_params.x;
+    if mirror_type > 0.5 {
+        let mirror_blend_mode = i32(uniforms.mirror_params.y);
+        let mirror_alpha = uniforms.mirror_params.z;
+        let mirror_offset = uniforms.mirror_params.w;
+
+        var mirror_uv = sample_uv;
+        if mirror_type > 1.5 {
+            // Vertical: flip Y. AM uses Y-up acLayerNorm, our UV is Y-down.
+            // AM: st.y = 1 - st.y + offset → in Y-up space
+            // Ours: v_new = 1 - v - offset → negate offset for Y-down
+            mirror_uv.y = 1.0 - mirror_uv.y - mirror_offset;
+        } else {
+            // Horizontal: flip X (same convention in both coordinate systems)
+            mirror_uv.x = 1.0 - mirror_uv.x + mirror_offset;
+        }
+
+        let mirror_color = textureSample(base_texture, base_sampler, mirror_uv);
+
+        // Blend modes matching AM's mirror shader
+        var mirror_result: vec4<f32>;
+        if mirror_blend_mode == 1 {
+            // Multiply
+            if tex_color.a > 0.001 {
+                mirror_result = vec4((tex_color.rgb / tex_color.a) * mirror_color.rgb, 1.0) * tex_color.a;
+            } else {
+                mirror_result = vec4(0.0);
+            }
+        } else if mirror_blend_mode == 2 {
+            // Screen
+            if tex_color.a > 0.001 {
+                mirror_result = vec4(1.0 - ((1.0 - tex_color.rgb / tex_color.a) * (1.0 - mirror_color.rgb)), 1.0) * tex_color.a;
+            } else {
+                mirror_result = vec4(0.0);
+            }
+        } else if mirror_blend_mode == 3 {
+            // Over
+            mirror_result = tex_color * (1.0 - mirror_color.a) + mirror_color;
+        } else if mirror_blend_mode == 4 {
+            // Under
+            mirror_result = mirror_color * (1.0 - tex_color.a) + tex_color;
+        } else {
+            // Normal (blendMode == 0)
+            mirror_result = mirror_color;
+        }
+
+        tex_color = mix(tex_color, mirror_result, mirror_alpha);
     }
     
     // Apply pixelate post-effects (AM algorithm: threshold on alpha, saturation boost, cubic vignette)

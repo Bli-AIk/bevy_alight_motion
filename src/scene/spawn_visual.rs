@@ -58,6 +58,7 @@ pub(crate) fn spawn_image(
     let palette_map = extract_palette_map_effect(&image.effects);
     let fade_effect = extract_fade_effect(&image.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&image.effects);
+    let mirror_effect = extract_mirror_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -173,6 +174,11 @@ pub(crate) fn spawn_image(
                 wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
                 wavewarp2_screen_space: wavewarp2_effect.screen_space,
                 wavewarp2_has_effect: wavewarp2_effect.has_effect,
+                mirror_type: mirror_effect.mirror_type,
+                mirror_blend_mode: mirror_effect.blend_mode,
+                mirror_alpha: mirror_effect.alpha,
+                mirror_offset: mirror_effect.offset,
+                mirror_has_effect: mirror_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -480,6 +486,11 @@ pub(crate) fn spawn_text(
             wavewarp2_damping_origin: AmAnimatedFloat::default(),
             wavewarp2_screen_space: false,
             wavewarp2_has_effect: false,
+            mirror_type: 0,
+            mirror_blend_mode: 0,
+            mirror_alpha: AmAnimatedFloat::default(),
+            mirror_offset: AmAnimatedFloat::default(),
+            mirror_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
