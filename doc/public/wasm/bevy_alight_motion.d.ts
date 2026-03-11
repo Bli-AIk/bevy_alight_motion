@@ -2,6 +2,12 @@
 /* eslint-disable */
 
 /**
+ * Download runtime logs as a text file
+ * 下载运行时日志为文本文件
+ */
+export function download_logs(): void;
+
+/**
  * Get current frame pixels for video comparison
  * 获取当前帧像素数据用于视频对比
  */
@@ -56,6 +62,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly download_logs: () => void;
     readonly get_current_frame_pixels: () => [number, number];
     readonly get_state: () => any;
     readonly load_project_from_bytes: (a: number, b: number) => number;

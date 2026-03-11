@@ -19,10 +19,15 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use wasm_bindgen::prelude::*;
+use web_sys::{Blob, BlobPropertyBag, Url};
 
 /// Global state for JavaScript interop
 /// 用于与 JavaScript 交互的全局状态
 static APP_STATE: Mutex<Option<AppState>> = Mutex::new(None);
+
+/// Log buffer for collecting runtime logs
+/// 运行时日志缓冲区
+static LOG_BUFFER: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Global memory directory for uploaded assets
 /// 用于上传资产的全局内存目录
@@ -396,4 +401,44 @@ pub fn get_current_frame_pixels() -> Vec<u8> {
     // TODO: Implement frame capture from Bevy's render target
     // This requires access to the GPU texture which is complex in WASM
     vec![]
+}
+
+/// Download runtime logs as a text file
+/// 下载运行时日志为文本文件
+#[wasm_bindgen]
+pub fn download_logs() {
+    let logs = {
+        let buffer = LOG_BUFFER.lock().unwrap();
+        buffer.join("\n")
+    };
+
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+
+    let js_logs = JsValue::from_str(&logs);
+    let blob = Blob::new_with_str_sequence(&js_sys::Array::of1(&js_logs)).ok();
+    if let Some(blob) = blob {
+        let url = Url::create_object_url_with_blob(&blob).ok();
+        if let Some(url) = url {
+            let a = document.create_element("a").ok().unwrap();
+            a.set_attribute("href", &url).ok();
+            a.set_attribute("download", "bevy_alight_motion_logs.txt")
+                .ok();
+            a.dispatch_event(&web_sys::MouseEvent::new("click").ok().unwrap())
+                .ok();
+            Url::revoke_object_url(&url).ok();
+        }
+    }
+
+    web_sys::console::log_1(&"Logs downloaded".into());
+}
+
+/// Add a log entry to the buffer
+/// 向缓冲区添加日志条目
+pub fn add_log(message: &str) {
+    let timestamp = js_sys::Date::new_0().to_iso_string();
+    let entry = format!("[{}] {}", timestamp, message);
+    if let Ok(mut buffer) = LOG_BUFFER.lock() {
+        buffer.push(entry);
+    }
 }

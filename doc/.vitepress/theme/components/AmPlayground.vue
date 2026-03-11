@@ -47,6 +47,9 @@
         <span class="shortcut">[←/→] {{ i18n.frameStep }}</span>
         <span class="shortcut">[↑/↓] {{ i18n.speed }}</span>
         <span class="shortcut">[L] {{ i18n.loop }}</span>
+        <button class="download-logs-btn" @click="downloadLogs" :title="i18n.downloadLogs">
+          📥 {{ i18n.downloadLogs }}
+        </button>
       </div>
     </div>
 
@@ -95,7 +98,8 @@ const i18n = computed(() => isZhHans.value ? {
   frameStep: '帧步进',
   speed: '速度',
   loop: '循环',
-  consoleLogs: 'Console Logs'
+  consoleLogs: 'Console Logs',
+  downloadLogs: '下载日志'
 } : {
   uploadLabel: 'Upload .amproj file',
   uploadHint: 'WASM player will load automatically when you upload a file',
@@ -110,7 +114,8 @@ const i18n = computed(() => isZhHans.value ? {
   frameStep: 'Frame Step',
   speed: 'Speed',
   loop: 'Loop',
-  consoleLogs: 'Console Logs'
+  consoleLogs: 'Console Logs',
+  downloadLogs: 'Download Logs'
 })
 
 // 响应式状态
@@ -251,6 +256,16 @@ const toggleFullscreen = async () => {
     }
   } catch (err) {
     console.warn('[Playground] Fullscreen error:', err)
+  }
+}
+
+// 下载运行时日志
+const downloadLogs = () => {
+  const wasmModule = (window as any).__bevy_wasm
+  if (wasmModule && wasmModule.download_logs) {
+    wasmModule.download_logs()
+  } else {
+    console.warn('[Playground] download_logs not available')
   }
 }
 
@@ -420,6 +435,22 @@ onUnmounted(() => {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   border: 1px solid var(--vp-c-divider);
+}
+
+.download-logs-btn {
+  background: var(--vp-c-bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--vp-c-divider);
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--vp-c-text-2);
+  transition: background 0.2s, color 0.2s;
+}
+
+.download-logs-btn:hover {
+  background: var(--vp-c-brand);
+  color: var(--vp-c-bg);
 }
 
 /* 验证报告区域 */
