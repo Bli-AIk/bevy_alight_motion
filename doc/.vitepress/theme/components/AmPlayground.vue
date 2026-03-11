@@ -59,10 +59,14 @@
       <ValidationReport :report="validationReport" />
     </div>
 
-    <!-- 调试日志（可折叠） -->
-    <details class="debug-logs" v-if="logs.length > 0">
-      <summary>🔍 {{ i18n.consoleLogs }} ({{ logs.length }})</summary>
-      <pre class="log-content">{{ logs.join('\n') }}</pre>
+    <!-- 运行时日志（默认折叠，仅显示最后20行） -->
+    <details class="runtime-logs" :open="showLogs">
+      <summary>📜 {{ i18n.runtimeLogs }} ({{ totalLogLines }})</summary>
+      <div class="log-controls">
+        <button @click="toggleLogDisplay">{{ showAllLogs ? i18n.showLast20 : i18n.showAll }}</button>
+        <button @click="downloadLogs">📥 {{ i18n.downloadLogs }}</button>
+      </div>
+      <pre class="log-content">{{ displayLogs }}</pre>
     </details>
 
     <!-- WASM 构建信息 -->
@@ -98,7 +102,9 @@ const i18n = computed(() => isZhHans.value ? {
   frameStep: '帧步进',
   speed: '速度',
   loop: '循环',
-  consoleLogs: 'Console Logs',
+  runtimeLogs: '运行日志',
+  showLast20: '显示最近20行',
+  showAll: '显示全部',
   downloadLogs: '下载日志'
 } : {
   uploadLabel: 'Upload .amproj file',
@@ -114,7 +120,9 @@ const i18n = computed(() => isZhHans.value ? {
   frameStep: 'Frame Step',
   speed: 'Speed',
   loop: 'Loop',
-  consoleLogs: 'Console Logs',
+  runtimeLogs: 'Runtime Logs',
+  showLast20: 'Show Last 20',
+  showAll: 'Show All',
   downloadLogs: 'Download Logs'
 })
 
@@ -124,6 +132,37 @@ const canvasContainer = ref<HTMLElement | null>(null)
 const wasmError = ref(false)
 const isLoading = ref(false)
 const isLoaded = ref(false)
+
+// 运行时日志状态
+const runtimeLogs = ref<string[]>([])
+const showLogs = ref(false)
+const showAllLogs = ref(false)
+
+// 计算显示的日志
+const totalLogLines = computed(() => runtimeLogs.value.length)
+const displayLogs = computed(() => {
+  const logs = runtimeLogs.value
+  if (showAllLogs.value || logs.length <= 20) {
+    return logs.join('\n')
+  }
+  return logs.slice(-20).join('\n')
+})
+
+const toggleLogDisplay = () => {
+  showAllLogs.value = !showAllLogs.value
+}
+
+// 更新日志（定时从 WASM 获取）
+let logUpdateInterval: number | null = null
+const updateLogs = () => {
+  const wasmModule = (window as any).__bevy_wasm
+  if (wasmModule && wasmModule.get_logs) {
+    const logs = wasmModule.get_logs()
+    if (logs) {
+      runtimeLogs.value = logs.split('\n').filter(l => l.length > 0)
+    }
+  }
+}
 
 // 存储上传的文件数据，以便在 WASM 加载后使用
 let pendingFileBytes: Uint8Array | null = null
@@ -224,12 +263,21 @@ const loadProject = async (file: File) => {
       if (success) {
         isLoaded.value = true
         console.log('[Playground] Project loaded successfully')
+        
+        // 启动日志更新定时器
+        showLogs.value = true // 默认展开日志区域
+        logUpdateInterval = window.setInterval(() => {
+          updateLogs()
+        }, 1000)
       } else {
         throw new Error('Project load failed')
       }
     }
   } catch (error) {
     console.error('[Playground] Error:', error)
+    // 显示日志区域以便查看错误
+    showLogs.value = true
+    updateLogs()
     wasmError.value = true
   } finally {
     isLoading.value = false
@@ -271,6 +319,9 @@ const downloadLogs = () => {
 
 // 组件卸载时提示用户刷新页面
 onUnmounted(() => {
+  if (logUpdateInterval) {
+    clearInterval(logUpdateInterval)
+  }
   if (isLoaded.value) {
     console.log('[Playground] Component unmounted. WASM may still be running.')
   }
@@ -468,18 +519,40 @@ onUnmounted(() => {
   font-size: 1.1rem;
 }
 
-/* 调试日志 */
-.debug-logs {
+/* 运行时日志 */
+.runtime-logs {
   margin-top: 1rem;
 }
 
-.debug-logs summary {
+.runtime-logs summary {
   cursor: pointer;
   padding: 0.5rem;
   background: var(--vp-c-bg-soft);
   border-radius: 4px;
   font-size: 0.875rem;
   color: var(--vp-c-text-2);
+}
+
+.log-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.log-controls button {
+  background: var(--vp-c-bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--vp-c-divider);
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--vp-c-text-2);
+  transition: background 0.2s;
+}
+
+.log-controls button:hover {
+  background: var(--vp-c-brand);
+  color: var(--vp-c-bg);
 }
 
 .log-content {
