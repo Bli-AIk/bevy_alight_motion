@@ -101,11 +101,10 @@ export function seek(frame) {
 /**
  * Start the Bevy application.
  * Must be called AFTER `<canvas id="bevy-canvas">` is visible and has non-zero dimensions.
- * `max_dpr` caps the device pixel ratio to avoid exceeding WebGL max texture size (4096).
- * @param {number} max_dpr
+ * On high-DPI mobile devices, cap `window.devicePixelRatio` from JS before calling this.
  */
-export function start_app(max_dpr) {
-    wasm.start_app(max_dpr);
+export function start_app() {
+    wasm.start_app();
 }
 
 /**
