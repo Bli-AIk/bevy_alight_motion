@@ -81,8 +81,13 @@ pub fn main() -> Result<(), JsValue> {
     // Set up panic hook for better error messages in browser console
     console_error_panic_hook::set_once();
 
+    // 记录初始化日志
+    add_log("WASM module initialized");
+
     // Initialize app state
     *APP_STATE.lock().unwrap() = Some(AppState::default());
+
+    add_log("App state initialized");
 
     App::new()
         // Register uploaded asset source BEFORE other plugins
@@ -444,4 +449,12 @@ pub fn add_log(message: &str) {
     if let Ok(mut buffer) = LOG_BUFFER.lock() {
         buffer.push(entry);
     }
+}
+
+/// Get logs as string for JavaScript
+/// 获取日志字符串供 JavaScript 使用
+#[wasm_bindgen]
+pub fn get_logs() -> String {
+    let buffer = LOG_BUFFER.lock().unwrap();
+    buffer.join("\n")
 }
