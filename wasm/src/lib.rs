@@ -87,23 +87,10 @@ pub fn wasm_init() {
 
 /// Start the Bevy application.
 /// Must be called AFTER `<canvas id="bevy-canvas">` is visible and has non-zero dimensions.
-/// `max_dpr` caps the device pixel ratio to avoid exceeding WebGL max texture size (4096).
+/// On high-DPI mobile devices, cap `window.devicePixelRatio` from JS before calling this.
 #[wasm_bindgen]
-pub fn start_app(max_dpr: f32) {
-    add_log(&format!(
-        "start_app(max_dpr={:.2}) called, launching Bevy...",
-        max_dpr
-    ));
-
-    let mut window = Window {
-        canvas: Some("#bevy-canvas".into()),
-        fit_canvas_to_parent: true,
-        prevent_default_event_handling: true,
-        ..default()
-    };
-    if max_dpr > 0.0 {
-        window.resolution = window.resolution.with_scale_factor_override(max_dpr);
-    }
+pub fn start_app() {
+    add_log("start_app() called, launching Bevy...");
 
     App::new()
         .add_plugins(UploadedAssetSourcePlugin)
@@ -113,7 +100,12 @@ pub fn start_app(max_dpr: f32) {
             },
             DefaultPlugins
                 .set(WindowPlugin {
-                    primary_window: Some(window),
+                    primary_window: Some(Window {
+                        canvas: Some("#bevy-canvas".into()),
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: true,
+                        ..default()
+                    }),
                     ..default()
                 })
                 .set(bevy::log::LogPlugin {

@@ -264,16 +264,24 @@ const loadProject = async (file: File) => {
     // 启动 Bevy（此时 canvas 已可见且有尺寸）
     const wasmModule = (window as any).__bevy_wasm
     if (wasmModule && wasmModule.start_app) {
-      // Clamp DPR to avoid exceeding WebGL max texture size (4096).
-      // Use viewport size (not canvas size) because fit_canvas_to_parent
-      // will expand the canvas to the full container width.
-      const dpr = window.devicePixelRatio || 1
-      const maxCssDim = Math.max(window.innerWidth, window.innerHeight)
-      const maxPhysical = maxCssDim * dpr
-      const MAX_TEXTURE = 4096
-      const safeDpr = maxPhysical > MAX_TEXTURE ? MAX_TEXTURE / maxCssDim : dpr
-      console.log(`[Playground] DPR: ${dpr}, viewport: ${window.innerWidth}x${window.innerHeight}, maxPhysical: ${Math.round(maxPhysical)}, safeDPR: ${safeDpr.toFixed(2)}`)
-      wasmModule.start_app(safeDpr)
+      // On mobile, cap devicePixelRatio to avoid exceeding WebGL max texture
+      // size (4096). Bevy/winit reads window.devicePixelRatio directly and
+      // scale_factor_override does NOT prevent physical surface oversizing.
+      const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+      const origDpr = window.devicePixelRatio || 1
+      if (isMobile && origDpr > 2) {
+        try {
+          Object.defineProperty(window, 'devicePixelRatio', {
+            get: () => 2.0,
+            configurable: true
+          })
+          console.log(`[Playground] Capped devicePixelRatio: ${origDpr} → 2.0`)
+        } catch (e) {
+          console.warn(`[Playground] Failed to cap DPR:`, e)
+        }
+      }
+      console.log(`[Playground] Starting Bevy (DPR: ${window.devicePixelRatio})...`)
+      wasmModule.start_app()
     } else {
       throw new Error('start_app() not found in WASM module')
     }
