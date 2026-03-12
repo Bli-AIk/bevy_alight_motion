@@ -545,6 +545,17 @@ pub struct AmAnimated {
     pub jitter_slack: AmAnimatedFloat,
     /// Jitter effect: z-axis jitter magnitude - may be keyframed
     pub jitter_zjitter: AmAnimatedFloat,
+    // Simplex displace effect (com.alightcreative.effects.randomdisplace)
+    /// Whether simplex displace is enabled
+    pub sd_enabled: bool,
+    /// Simplex displace: displacement magnitude (pixels) - may be keyframed
+    pub sd_mag: AmAnimatedFloat,
+    /// Simplex displace: noise evolution (temporal) - may be keyframed
+    pub sd_evolution: AmAnimatedFloat,
+    /// Simplex displace: noise seed - may be keyframed
+    pub sd_seed: AmAnimatedFloat,
+    /// Simplex displace: spatial frequency (0.0-2.0) - may be keyframed
+    pub sd_scatter: AmAnimatedFloat,
     /// Retime info for children of retimed embed scenes.
     /// When present, overrides linear time mapping with retime mode.
     pub retime: Option<AmRetimeInfo>,

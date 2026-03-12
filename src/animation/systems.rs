@@ -18,7 +18,7 @@ use super::interpolation::{
     interpolate_float, interpolate_float_reverse, interpolate_vec2, interpolate_vec2_reverse,
     interpolate_vec3, interpolate_vec3_reverse,
 };
-use super::simplex_noise::simplex_noise_3d;
+use super::noise_effects::{compute_jitter, compute_simplex_displace};
 
 /// Negate value when `inv` is true.
 fn invert_if(val: f32, inv: bool) -> f32 {
@@ -77,7 +77,11 @@ fn compute_oscillate_wave(
 }
 
 /// Compute perspective zoom from a z-offset (shared by oscillate and jitter).
-fn compute_perspective_zoom(z_offset: f32, canvas_width: f32, canvas_height: f32) -> f32 {
+pub(super) fn compute_perspective_zoom(
+    z_offset: f32,
+    canvas_width: f32,
+    canvas_height: f32,
+) -> f32 {
     if z_offset == 0.0 {
         return 1.0;
     }
@@ -212,67 +216,6 @@ fn apply_pivot_offset(
     // For effect sprites: no pivot compensation needed here
     // The mesh vertices in animate_unified_effect_system include anchor offset
     // which keeps the pivot point fixed as the mesh size changes
-}
-
-/// Compute jitter effect offsets and z-zoom.
-/// Returns (dx, dy, z_zoom).
-fn compute_jitter(animated: &AmAnimated, local_time: f32) -> (f32, f32, f32) {
-    // AM uses integer millisecond scene time for both the jitter script
-    // and effect parameter evaluation. Truncate to integer ms to match.
-    let local_time_int = (local_time as f64).floor() as f32;
-    let duration = (animated.end_time - animated.start_time) as f32;
-    let am_layer_time = if duration > 0.0 {
-        (local_time_int - animated.start_time as f32) / duration
-    } else {
-        0.0
-    };
-
-    // Interpolate jitter parameters at AM's integer-ms-based layer_time
-    let jitter_freq_val = interpolate_float(&animated.jitter_freq, am_layer_time).unwrap_or(0.0);
-    if jitter_freq_val <= 0.0 {
-        return (0.0, 0.0, 1.0);
-    }
-
-    let jitter_angle_val = interpolate_float(&animated.jitter_angle, am_layer_time).unwrap_or(0.0);
-    let jitter_mag_val = interpolate_float(&animated.jitter_mag, am_layer_time).unwrap_or(0.0);
-    let jitter_seed_val = interpolate_float(&animated.jitter_seed, am_layer_time).unwrap_or(0.0);
-    let jitter_slack_val = interpolate_float(&animated.jitter_slack, am_layer_time).unwrap_or(0.0);
-    let jitter_zjitter_val =
-        interpolate_float(&animated.jitter_zjitter, am_layer_time).unwrap_or(0.0);
-
-    // Replicate AM's f32 precision chain for globalTime
-    let duration_sec = (animated.end_time - animated.start_time) as f64 / 1000.0;
-    let global_time = duration_sec * (am_layer_time as f64);
-    let freq = jitter_freq_val as f64;
-    let t = (global_time * freq).floor() / freq;
-
-    let a = (jitter_angle_val as f64) * (std::f64::consts::PI / 180.0);
-    let seed = jitter_seed_val as f64;
-    let mag = jitter_mag_val as f64;
-
-    // Primary displacement along angle direction
-    let m = simplex_noise_3d(t * 637.729, 0.0, seed * 394.417);
-    let mut dx_total = (a.sin() * mag * m) as f32;
-    let mut dy_total = -((a.cos() * mag * m) as f32); // Y inverted for Bevy
-
-    // Perpendicular slack displacement
-    if jitter_slack_val > 0.0 {
-        let a2 = a + std::f64::consts::FRAC_PI_2;
-        let m2 = simplex_noise_3d(t * 951.217 + 149.231, 0.0, seed * 894.417 + 2773.908);
-        let slack = jitter_slack_val as f64;
-        dx_total += (a2.sin() * mag * m2 * slack) as f32;
-        dy_total -= (a2.cos() * mag * m2 * slack) as f32;
-    }
-
-    // Z-axis jitter (affects perspective zoom like oscillate)
-    let mut z_zoom = 1.0_f32;
-    if jitter_zjitter_val > 0.0 {
-        let zm = simplex_noise_3d(t * 637.729 + 241.386, 0.0, seed * 394.417 + 1729.361);
-        let z_offset = (zm * jitter_zjitter_val as f64) as f32;
-        z_zoom = compute_perspective_zoom(z_offset, animated.canvas_width, animated.canvas_height);
-    }
-
-    (dx_total, dy_total, z_zoom)
 }
 
 /// System to advance playback time.
@@ -562,6 +505,13 @@ pub fn animate_transform_system(
                 bx = (bx + jdx) * jz;
                 by = (by + jdy) * jz;
                 oscillate_z_zoom *= jz;
+            }
+
+            // Apply simplex displace effect (spatially-varying noise displacement)
+            if animated.sd_enabled {
+                let (sdx, sdy) = compute_simplex_displace(animated, layer_time, bx, by);
+                bx += sdx;
+                by += sdy;
             }
 
             // Apply repeat group position offset (accumulated per-copy offset)

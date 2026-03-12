@@ -254,6 +254,7 @@ pub(crate) fn collect_embed_scene(
 
     // Extract jitter effect from embed
     let jitter_effect = extract_jitter_effect(&embed.effects);
+    let sd_effect = extract_simplex_displace_effect(&embed.effects);
     let fade_effect = extract_fade_effect(&embed.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
     let mirror_effect = extract_mirror_effect(&embed.effects);
@@ -488,6 +489,12 @@ pub(crate) fn collect_embed_scene(
             jitter_seed: jitter_effect.seed,
             jitter_slack: jitter_effect.slack,
             jitter_zjitter: jitter_effect.zjitter,
+            // Simplex displace effect
+            sd_enabled: sd_effect.enabled,
+            sd_mag: sd_effect.mag,
+            sd_evolution: sd_effect.evolution,
+            sd_seed: sd_effect.seed,
+            sd_scatter: sd_effect.scatter,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

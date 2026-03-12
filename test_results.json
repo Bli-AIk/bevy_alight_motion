@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-12T11:12:49.539962+08:00",
+  "timestamp": "2026-03-12T11:53:27.154216+08:00",
   "summary": {
-    "passed": 131,
+    "passed": 137,
     "warnings": 0,
     "skipped": 2,
     "failed": 37
@@ -139,6 +139,24 @@
       "status": "pass"
     },
     "effects/jetter/basic": {
+      "status": "pass"
+    },
+    "effects/jetter/basic/test": {
+      "status": "pass"
+    },
+    "effects/jetter/complex/test": {
+      "status": "pass"
+    },
+    "effects/jetter/evolution/test": {
+      "status": "pass"
+    },
+    "effects/jetter/scatter/test": {
+      "status": "pass"
+    },
+    "effects/jetter/seed/test": {
+      "status": "pass"
+    },
+    "effects/jetter/size/test": {
       "status": "pass"
     },
     "effects/lift/replacecolor": {

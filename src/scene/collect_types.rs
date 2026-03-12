@@ -47,6 +47,7 @@ pub(crate) fn collect_null(
     let swing_effect = extract_swing_effect(&null.effects);
     let oscillate_effect = extract_oscillate_effect(&null.effects);
     let jitter_effect = extract_jitter_effect(&null.effects);
+    let sd_effect = extract_simplex_displace_effect(&null.effects);
     let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
@@ -283,6 +284,12 @@ pub(crate) fn collect_null(
             jitter_seed: jitter_effect.seed,
             jitter_slack: jitter_effect.slack,
             jitter_zjitter: jitter_effect.zjitter,
+            // Simplex displace effect
+            sd_enabled: sd_effect.enabled,
+            sd_mag: sd_effect.mag,
+            sd_evolution: sd_effect.evolution,
+            sd_seed: sd_effect.seed,
+            sd_scatter: sd_effect.scatter,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
@@ -598,6 +605,12 @@ pub(crate) fn collect_text(
             jitter_seed: AmAnimatedFloat::default(),
             jitter_slack: AmAnimatedFloat::default(),
             jitter_zjitter: AmAnimatedFloat::default(),
+            // Simplex displace (defaults)
+            sd_enabled: false,
+            sd_mag: AmAnimatedFloat::default(),
+            sd_evolution: AmAnimatedFloat::default(),
+            sd_seed: AmAnimatedFloat::default(),
+            sd_scatter: AmAnimatedFloat::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

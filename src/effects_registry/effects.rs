@@ -23,6 +23,7 @@ pub mod rays;
 pub mod repeat;
 pub mod replace_color;
 pub mod scale_assist;
+pub mod simplex_displace;
 pub mod solidcolor;
 pub mod spin;
 pub mod stretch2;
@@ -71,6 +72,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &lift::EFFECT,
         &rays::EFFECT,
         &counter::EFFECT,
+        &simplex_displace::EFFECT,
     ]
 }
 

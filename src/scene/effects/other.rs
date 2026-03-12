@@ -1,8 +1,8 @@
-//! Swing, Threshold, Grid, and Pixelate effect parameter extraction.
+//! Swing, Threshold, Grid, Pixelate, and Simplex Displace effect parameter extraction.
 
 use bevy::prelude::*;
 
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect, AmKeyframe};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmEffect, AmKeyframe, AmProperty};
 
 fn parse_vec2_value(value: &str) -> Option<[f32; 2]> {
     let parts: Vec<&str> = value.split(',').collect();
@@ -942,4 +942,74 @@ pub(crate) fn extract_counter_effect(effects: &[AmEffect]) -> CounterParams {
     }
 
     params
+}
+
+/// Simplex displace effect parameters (`com.alightcreative.effects.randomdisplace`).
+/// Uses simplex noise to apply spatially-varying position displacement.
+/// 随机位移效果参数 — 使用 Simplex 噪声对位置进行基于空间坐标的随机位移
+#[derive(Debug, Clone)]
+pub struct SimplexDisplaceParams {
+    pub enabled: bool,
+    /// Displacement magnitude (pixels)
+    pub mag: AmAnimatedFloat,
+    /// Noise temporal evolution
+    pub evolution: AmAnimatedFloat,
+    /// Noise seed value
+    pub seed: AmAnimatedFloat,
+    /// Spatial frequency (0.0-2.0)
+    pub scatter: AmAnimatedFloat,
+}
+
+impl Default for SimplexDisplaceParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mag: AmAnimatedFloat {
+                value: Some(50.0),
+                keyframes: Vec::new(),
+            },
+            evolution: AmAnimatedFloat::default(),
+            seed: AmAnimatedFloat::default(),
+            scatter: AmAnimatedFloat {
+                value: Some(0.5),
+                keyframes: Vec::new(),
+            },
+        }
+    }
+}
+
+/// Extract simplex displace effect parameters.
+/// 从效果中提取随机位移效果参数
+pub(crate) fn extract_simplex_displace_effect(effects: &[AmEffect]) -> SimplexDisplaceParams {
+    let mut params = SimplexDisplaceParams::default();
+
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.randomdisplace")
+    else {
+        return params;
+    };
+
+    params.enabled = true;
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "mag" => extract_sd_float(prop, &mut params.mag, 50.0),
+            "evolution" => extract_sd_float(prop, &mut params.evolution, 0.0),
+            "seed" => extract_sd_float(prop, &mut params.seed, 0.0),
+            "scatter" => extract_sd_float(prop, &mut params.scatter, 0.5),
+            _ => {}
+        }
+    }
+
+    params
+}
+
+fn extract_sd_float(prop: &AmProperty, target: &mut AmAnimatedFloat, default: f32) {
+    if !prop.keyframes.is_empty() {
+        target.value = prop.value.parse::<f32>().ok().or(Some(default));
+        target.keyframes = prop.keyframes.clone();
+    } else if let Ok(v) = prop.value.parse::<f32>() {
+        target.value = Some(v);
+    }
 }
