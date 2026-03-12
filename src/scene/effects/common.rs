@@ -1,8 +1,17 @@
-//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist, Fade).
+//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist, Fade, Rays).
 
 use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe, AmProperty};
+
+/// Convert sRGB component to linear for shader (colors from AM are sRGB).
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
 
 /// Effect ID for fade effect.
 const FADE_ID: &str = "com.alightcreative.effects.fade";
@@ -15,6 +24,9 @@ const MIRROR_ID: &str = "com.alightcreative.effects.mirror";
 
 /// Effect ID for lift (copy background) effect.
 const LIFT_ID: &str = "com.alightcreative.effects.lift";
+
+/// Effect ID for rays (volumetric light rays) effect.
+const RAYS_ID: &str = "com.alightcreative.effects.rays";
 
 /// Effect IDs for transform variants.
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
@@ -663,6 +675,95 @@ pub(crate) fn extract_lift_effect(effects: &[AmEffect]) -> LiftParams {
         for prop in &effect.properties {
             if prop.name == "fill" {
                 apply_animated_float(&mut params.fill, prop);
+            }
+        }
+    }
+
+    params
+}
+
+/// Rays (volumetric light rays) effect parameters. / 射线效果参数。
+#[derive(Debug, Clone, Default)]
+pub struct RaysParams {
+    /// Center point X (AM coords, ±500). / 中心点X。
+    pub center_x: AmAnimatedFloat,
+    /// Center point Y (AM coords, ±500). / 中心点Y。
+    pub center_y: AmAnimatedFloat,
+    /// Ray length/spread (0.0-4.0). / 射线长度。
+    pub strength: AmAnimatedFloat,
+    /// Brightness multiplier (0.0-5.0). / 亮度倍数。
+    pub intensity: AmAnimatedFloat,
+    /// Brightness threshold (0.0-1.0). / 亮度阈值。
+    pub threshold: AmAnimatedFloat,
+    /// Color subtracted before luminance check (sRGB, linear Vec4). / 阈值颜色。
+    pub threshold_color: Vec4,
+    /// Ray color (sRGB, linear Vec4). / 射线颜色。
+    pub fill_color: Vec4,
+    /// Blend ratio between original and fill color (0.0-1.0). / 混合比例。
+    pub blend: AmAnimatedFloat,
+    /// Number of samples (10-800). / 采样数量。
+    pub quality: AmAnimatedFloat,
+    /// Whether this effect is present.
+    pub has_effect: bool,
+}
+
+/// Extract rays effect parameters from effects list.
+/// 从效果列表中提取射线效果参数。
+pub(crate) fn extract_rays_effect(effects: &[AmEffect]) -> RaysParams {
+    let mut params = RaysParams::default();
+
+    for effect in effects {
+        if effect.id != RAYS_ID {
+            continue;
+        }
+        params.has_effect = true;
+        // Set defaults matching AM
+        params.center_x.value = Some(0.0);
+        params.center_y.value = Some(0.0);
+        params.strength.value = Some(0.15);
+        params.intensity.value = Some(1.0);
+        params.threshold.value = Some(0.6);
+        params.threshold_color = Vec4::ZERO; // #ff000000 → sRGB black
+        // #ff2d1ef6 → keep in sRGB (shader does gamma-space math to match AM)
+        params.fill_color = Vec4::new(
+            0x2D as f32 / 255.0,
+            0x1E as f32 / 255.0,
+            0xF6 as f32 / 255.0,
+            1.0,
+        );
+        params.blend.value = Some(0.0);
+        params.quality.value = Some(150.0);
+
+        for prop in &effect.properties {
+            match prop.name.as_str() {
+                "centerPoint" => {
+                    if !prop.keyframes.is_empty() {
+                        let (kf_x, kf_y) = split_vec2_keyframes(&prop.keyframes);
+                        params.center_x.keyframes = kf_x;
+                        params.center_y.keyframes = kf_y;
+                    } else if let Some((x, y)) = parse_vec2_value(&prop.value) {
+                        params.center_x.value = Some(x);
+                        params.center_y.value = Some(y);
+                    }
+                }
+                "strength" => apply_animated_float(&mut params.strength, prop),
+                "intensity" => apply_animated_float(&mut params.intensity, prop),
+                "threshold" => apply_animated_float(&mut params.threshold, prop),
+                "thresholdColor" => {
+                    if let Some(c) = parse_color_vec4(&prop.value) {
+                        // Keep in sRGB space (shader matches AM's gamma-space math)
+                        params.threshold_color = c;
+                    }
+                }
+                "fillColor" => {
+                    if let Some(c) = parse_color_vec4(&prop.value) {
+                        // Keep in sRGB space (shader matches AM's gamma-space math)
+                        params.fill_color = c;
+                    }
+                }
+                "blend" => apply_animated_float(&mut params.blend, prop),
+                "quality" => apply_animated_float(&mut params.quality, prop),
+                _ => (),
             }
         }
     }

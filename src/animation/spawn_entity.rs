@@ -585,6 +585,7 @@ pub(super) fn spawn_layer_entity(
             layer.animated.wavewarp2_has_effect, // has_wavewarp2 - needs UnifiedEffectMaterial
             layer.animated.mirror_has_effect,    // has_mirror - needs UnifiedEffectMaterial
             layer.animated.lift_has_effect,      // has_lift - needs UnifiedEffectMaterial
+            layer.animated.rays_has_effect,      // has_rays - needs UnifiedEffectMaterial
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area

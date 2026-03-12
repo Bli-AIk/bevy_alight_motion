@@ -490,6 +490,9 @@ pub struct PendingLayer {
     pub echo_runtime: Option<crate::animation::AmEchoRuntime>,
     /// Group fill data for embed scenes with fillType != "" (color/gradient/none).
     pub group_fill: Option<crate::effects::AmGroupFill>,
+    /// For layers inside an embed: the inner scene's totalTime in ms.
+    /// Used to freeze content when the embed plays longer than its inner timeline.
+    pub embed_inner_total_time: Option<f32>,
 }
 
 /// Configuration for scene building.

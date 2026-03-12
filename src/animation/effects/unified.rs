@@ -351,6 +351,40 @@ pub fn animate_unified_effect_system(
             material.uniform_data.lift_params = Vec4::ZERO;
         }
 
+        // Update rays (volumetric light rays) effect / 更新射线效果
+        if animated.rays_has_effect {
+            let strength =
+                interpolate_float(&animated.rays_strength, layer_time).unwrap_or(0.15);
+            let intensity =
+                interpolate_float(&animated.rays_intensity, layer_time).unwrap_or(1.0);
+            let threshold =
+                interpolate_float(&animated.rays_threshold, layer_time).unwrap_or(0.6);
+            let quality =
+                interpolate_float(&animated.rays_quality, layer_time).unwrap_or(150.0);
+            let blend =
+                interpolate_float(&animated.rays_blend, layer_time).unwrap_or(0.0);
+            let center_x =
+                interpolate_float(&animated.rays_center_x, layer_time).unwrap_or(0.0);
+            let center_y =
+                interpolate_float(&animated.rays_center_y, layer_time).unwrap_or(0.0);
+
+            // Convert AM center coords to normalized (AM uses ±500 range)
+            let center_x_norm = 0.5 + center_x / 500.0;
+            let center_y_norm = 0.5 - center_y / 500.0;
+
+            material.uniform_data.rays_params1 =
+                Vec4::new(strength, intensity, threshold, quality);
+            material.uniform_data.rays_params2 =
+                Vec4::new(blend, center_x_norm, center_y_norm, 1.0); // w=1.0 → enabled
+            material.uniform_data.rays_threshold_color = animated.rays_threshold_color;
+            material.uniform_data.rays_fill_color = animated.rays_fill_color;
+        } else {
+            material.uniform_data.rays_params1 = Vec4::ZERO;
+            material.uniform_data.rays_params2 = Vec4::ZERO;
+            material.uniform_data.rays_threshold_color = Vec4::ZERO;
+            material.uniform_data.rays_fill_color = Vec4::ZERO;
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

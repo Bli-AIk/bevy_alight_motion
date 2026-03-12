@@ -312,6 +312,27 @@ pub struct AmAnimated {
     pub lift_fill: AmAnimatedFloat,
     /// Whether lift effect is present on this layer.
     pub lift_has_effect: bool,
+    // Rays effect (com.alightcreative.effects.rays) / 射线效果
+    /// Rays center X (AM coords, ±500). / 射线中心X。
+    pub rays_center_x: AmAnimatedFloat,
+    /// Rays center Y (AM coords, ±500). / 射线中心Y。
+    pub rays_center_y: AmAnimatedFloat,
+    /// Rays strength/length (0.0-4.0). / 射线长度。
+    pub rays_strength: AmAnimatedFloat,
+    /// Rays intensity (0.0-5.0). / 射线强度。
+    pub rays_intensity: AmAnimatedFloat,
+    /// Rays threshold (0.0-1.0). / 射线阈值。
+    pub rays_threshold: AmAnimatedFloat,
+    /// Rays threshold color (linear RGBA). / 阈值颜色。
+    pub rays_threshold_color: Vec4,
+    /// Rays fill color (linear RGBA). / 射线颜色。
+    pub rays_fill_color: Vec4,
+    /// Rays blend (0.0-1.0). / 混合比例。
+    pub rays_blend: AmAnimatedFloat,
+    /// Rays quality / sample count (10-800). / 采样数量。
+    pub rays_quality: AmAnimatedFloat,
+    /// Whether rays effect is present on this layer.
+    pub rays_has_effect: bool,
     /// Replace color effect: original color to replace (RGBA)
     pub replace_old_color: Vec4,
     /// Replace color effect: new color (animated RGBA)
@@ -538,6 +559,11 @@ pub struct AmAnimated {
     /// Accumulated repeat position offset in Bevy coords (for group repeat copies).
     /// Applied additively to the final position in animate_transform_system.
     pub repeat_position_offset: Vec2,
+    /// For embed children: the inner scene's totalTime in ms.
+    /// When local_time exceeds this, it gets clamped to freeze content at the last frame.
+    /// This matches AM behavior where inner content stays visible when the embed
+    /// plays longer than its inner scene duration.
+    pub embed_inner_total_time: Option<f32>,
 }
 
 impl AmAnimated {
@@ -600,7 +626,14 @@ impl AmAnimated {
         if let Some(nested_time) = self.apply_retime(global_time) {
             return nested_time;
         }
-        (global_time - self.time_offset as f32) * self.speed_multiplier
+        let t = (global_time - self.time_offset as f32) * self.speed_multiplier;
+        // When embed plays longer than its inner scene, clamp to freeze at last frame.
+        if let Some(inner_total) = self.embed_inner_total_time {
+            if t >= inner_total {
+                return inner_total - 1.0;
+            }
+        }
+        t
     }
 
     /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
@@ -608,7 +641,13 @@ impl AmAnimated {
         if let Some(nested_time) = self.apply_retime(global_time) {
             return nested_time;
         }
-        global_time - self.lifecycle_offset as f32
+        let t = global_time - self.lifecycle_offset as f32;
+        if let Some(inner_total) = self.embed_inner_total_time {
+            if t >= inner_total {
+                return inner_total - 1.0;
+            }
+        }
+        t
     }
 
     /// Check if layer is active at the given local time.

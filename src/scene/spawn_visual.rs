@@ -60,6 +60,7 @@ pub(crate) fn spawn_image(
     let wavewarp2_effect = extract_wavewarp2_effect(&image.effects);
     let mirror_effect = extract_mirror_effect(&image.effects);
     let lift_effect = extract_lift_effect(&image.effects);
+    let rays_effect = extract_rays_effect(&image.effects);
 
     // Get size from properties
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
@@ -182,6 +183,16 @@ pub(crate) fn spawn_image(
                 mirror_has_effect: mirror_effect.has_effect,
                 lift_fill: lift_effect.fill,
                 lift_has_effect: lift_effect.has_effect,
+                rays_center_x: rays_effect.center_x,
+                rays_center_y: rays_effect.center_y,
+                rays_strength: rays_effect.strength,
+                rays_intensity: rays_effect.intensity,
+                rays_threshold: rays_effect.threshold,
+                rays_threshold_color: rays_effect.threshold_color,
+                rays_fill_color: rays_effect.fill_color,
+                rays_blend: rays_effect.blend,
+                rays_quality: rays_effect.quality,
+                rays_has_effect: rays_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -307,6 +318,7 @@ pub(crate) fn spawn_image(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
             },
             AmLayerSpec::Image {
                 image_uri: image.fill_image.clone(),
@@ -501,6 +513,16 @@ pub(crate) fn spawn_text(
             mirror_has_effect: false,
             lift_fill: AmAnimatedFloat::default(),
             lift_has_effect: false,
+            rays_center_x: AmAnimatedFloat::default(),
+            rays_center_y: AmAnimatedFloat::default(),
+            rays_strength: AmAnimatedFloat::default(),
+            rays_intensity: AmAnimatedFloat::default(),
+            rays_threshold: AmAnimatedFloat::default(),
+            rays_threshold_color: Vec4::ZERO,
+            rays_fill_color: Vec4::ZERO,
+            rays_blend: AmAnimatedFloat::default(),
+            rays_quality: AmAnimatedFloat::default(),
+            rays_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -638,6 +660,7 @@ pub(crate) fn spawn_text(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
         },
         transform,
         GlobalTransform::default(),

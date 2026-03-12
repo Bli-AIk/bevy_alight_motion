@@ -176,6 +176,14 @@ pub(crate) fn collect_embed_scene(
 
     let mut children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
 
+    // Set inner scene totalTime on children so the lifecycle system and animation system
+    // can freeze content when the embed plays longer than its inner timeline.
+    let inner_total = embed.scene.total_time as f32;
+    for child in &mut children {
+        child.embed_inner_total_time = Some(inner_total);
+        child.animated.embed_inner_total_time = Some(inner_total);
+    }
+
     // Process mask relationships within this embed scene
     apply_mask_to_children(&mut children);
 
@@ -238,8 +246,7 @@ pub(crate) fn collect_embed_scene(
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
     let mirror_effect = extract_mirror_effect(&embed.effects);
     let lift_effect = extract_lift_effect(&embed.effects);
-
-    // Extract group fill data from embed's fillType
+    let rays_effect = extract_rays_effect(&embed.effects);
     let group_fill = build_group_fill(embed);
 
     PendingLayer {
@@ -327,6 +334,16 @@ pub(crate) fn collect_embed_scene(
             mirror_has_effect: mirror_effect.has_effect,
             lift_fill: lift_effect.fill,
             lift_has_effect: lift_effect.has_effect,
+            rays_center_x: rays_effect.center_x,
+            rays_center_y: rays_effect.center_y,
+            rays_strength: rays_effect.strength,
+            rays_intensity: rays_effect.intensity,
+            rays_threshold: rays_effect.threshold,
+            rays_threshold_color: rays_effect.threshold_color,
+            rays_fill_color: rays_effect.fill_color,
+            rays_blend: rays_effect.blend,
+            rays_quality: rays_effect.quality,
+            rays_has_effect: rays_effect.has_effect,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -464,6 +481,7 @@ pub(crate) fn collect_embed_scene(
             repeat_rotation_offset_deg: -config.repeat_rotation_deg,
             repeat_scale_factor: config.repeat_scale_factor,
             repeat_position_offset: config.repeat_offset,
+            embed_inner_total_time: None,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
@@ -476,6 +494,7 @@ pub(crate) fn collect_embed_scene(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill,
+        embed_inner_total_time: None,
     }
 }
 

@@ -95,6 +95,11 @@ struct UnifiedEffectUniform {
     mirror_params: vec4<f32>,          // (type_plus_1, blend_mode, alpha, offset)
     // Lift (copy background) effect (复制背景)
     lift_params: vec4<f32>,            // (fill, canvas_width, canvas_height, enabled)
+    // Rays (volumetric light rays) effect (射线)
+    rays_params1: vec4<f32>,           // (strength, intensity, threshold, quality)
+    rays_params2: vec4<f32>,           // (blend, center_x_norm, center_y_norm, enabled)
+    rays_threshold_color: vec4<f32>,   // (r, g, b, a) linear
+    rays_fill_color: vec4<f32>,        // (r, g, b, a) linear
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1022,6 +1027,82 @@ fn calc_linear_repeat_progress(
     return vec2<f32>(base_progress, interp_progress);
 }
 
+// Apply volumetric light rays (god rays) effect.
+// Samples along radial directions from center, accumulating brightness above threshold.
+// 射线效果：从中心沿径向采样，累积亮度超过阈值的像素。
+// AM operates in sRGB/gamma space (GLES 2.0 without sRGB framebuffers).
+// Our textures are Rgba8UnormSrgb, so textureSample returns linear values.
+// Convert linear↔sRGB to match AM's color-space behavior.
+fn linear_to_srgb_ch(c: f32) -> f32 {
+    return pow(clamp(c, 0.0, 1.0), 1.0 / 2.2);
+}
+fn srgb_to_linear_ch(c: f32) -> f32 {
+    return pow(clamp(c, 0.0, 1.0), 2.2);
+}
+fn linear_to_srgb3(c: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(linear_to_srgb_ch(c.x), linear_to_srgb_ch(c.y), linear_to_srgb_ch(c.z));
+}
+fn srgb_to_linear3(c: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(srgb_to_linear_ch(c.x), srgb_to_linear_ch(c.y), srgb_to_linear_ch(c.z));
+}
+
+fn apply_rays(base_color: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
+    let strength = uniforms.rays_params1.x;
+    let intensity = uniforms.rays_params1.y;
+    let threshold = uniforms.rays_params1.z;
+    let quality = uniforms.rays_params1.w;
+    let blend = uniforms.rays_params2.x;
+    let center = vec2<f32>(uniforms.rays_params2.y, uniforms.rays_params2.z);
+
+    // threshold_color and fill_color are passed in sRGB space (matching AM)
+    let threshold_color = uniforms.rays_threshold_color.rgb;
+    let fill_color_srgb = vec4<f32>(uniforms.rays_fill_color.rgb, uniforms.rays_fill_color.a);
+
+    let luminance_weight = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+    let orig_w = uniforms.original_size.x;
+    let orig_h = uniforms.original_size.y;
+    let texel_size = vec2<f32>(1.0 / orig_w, 1.0 / orig_h);
+
+    let v = uv - center;
+    let speed = length(vec2<f32>(strength / 2.0) / texel_size) * length(uv - center);
+    let n_samples = i32(clamp(quality, 2.0, 800.0));
+
+    let vnorm = normalize(v) * texel_size * speed;
+
+    // Aspect ratio correction (matches AM's acScreenSize-based offsetScale)
+    var offset_scale = vec2<f32>(1.0);
+    if orig_h > orig_w {
+        offset_scale.x *= orig_w / orig_h;
+    } else {
+        offset_scale.y *= orig_h / orig_w;
+    }
+
+    // Convert base color to sRGB for calculations (AM works in gamma space)
+    let base_srgb = vec4<f32>(linear_to_srgb3(base_color.rgb), base_color.a);
+
+    var out_color = vec4<f32>(0.0);
+    for (var i = 1; i < n_samples; i++) {
+        let p = f32(i) / f32(n_samples - 1);
+        var offs = vnorm * p;
+        offs *= offset_scale;
+
+        let sample_pos = uv - offs;
+        // Sample with clamp-to-edge (matches AM's texture2DCv behavior)
+        let tex_linear = textureSample(base_texture, base_sampler, sample_pos);
+        let tex_srgb = vec4<f32>(linear_to_srgb3(tex_linear.rgb), tex_linear.a);
+
+        let luminance = dot(tex_srgb.rgb - threshold_color, luminance_weight);
+        if luminance > threshold {
+            out_color += mix(tex_srgb, fill_color_srgb, blend) * (1.0 - p);
+        }
+    }
+
+    // Final composition in sRGB space, then convert back to linear
+    let result_srgb = base_srgb + out_color * intensity / f32(n_samples);
+    return vec4<f32>(srgb_to_linear3(result_srgb.rgb), result_srgb.a);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
@@ -1652,6 +1733,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // AM: gl_FragColor = mix(comp * texColor.a, texColor, fill)
         tex_color = mix(comp_color * tinted_tex.a, tinted_tex, lift_fill);
         lift_skip_color_tint = true;
+    }
+
+    // Apply rays (volumetric light rays) effect (射线效果)
+    let rays_enabled = uniforms.rays_params2.w > 0.5;
+    if rays_enabled {
+        tex_color = apply_rays(tex_color, sample_uv);
     }
 
     // Apply mirror effect (镜子): sample at mirrored UV and blend with original.

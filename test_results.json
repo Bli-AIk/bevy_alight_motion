@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-11T21:47:18.109060+08:00",
+  "timestamp": "2026-03-12T08:26:32.713040+08:00",
   "summary": {
-    "passed": 123,
+    "passed": 128,
     "warnings": 0,
     "skipped": 2,
-    "failed": 37
+    "failed": 39
   },
   "results": {
     "basic/bezier/bezier": {
@@ -137,6 +137,12 @@
     "effects/jetter/basic": {
       "status": "pass"
     },
+    "effects/lift/replacecolor": {
+      "status": "pass"
+    },
+    "effects/lift/wavewarp2": {
+      "status": "pass"
+    },
     "effects/linear-repeat/basic": {
       "status": "pass"
     },
@@ -204,14 +210,32 @@
     "effects/radial-repeat/basic": {
       "status": "pass"
     },
-    "effects/repeat/basic": {
+    "effects/rays/basic/test": {
       "status": "pass"
     },
-    "effects/repeat/group": {
+    "effects/rays/center/test": {
+      "status": "pass"
+    },
+    "effects/rays/intensity/test": {
+      "status": "fail",
+      "avg_similarity": 0.912
+    },
+    "effects/rays/length/test": {
+      "status": "fail",
+      "avg_similarity": 0.9646
+    },
+    "effects/rays/threshold/test": {
+      "status": "fail",
+      "avg_similarity": 0.9119
+    },
+    "effects/repeat/basic": {
       "status": "fail"
     },
+    "effects/repeat/group": {
+      "status": "pass"
+    },
     "effects/repeat/group_bug": {
-      "status": "fail"
+      "status": "pass"
     },
     "effects/replace-color/basic": {
       "status": "pass"

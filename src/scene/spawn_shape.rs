@@ -61,6 +61,7 @@ pub(crate) fn spawn_shape(
     let wavewarp2_effect = extract_wavewarp2_effect(&shape.effects);
     let mirror_effect = extract_mirror_effect(&shape.effects);
     let lift_effect = extract_lift_effect(&shape.effects);
+    let rays_effect = extract_rays_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
@@ -369,6 +370,16 @@ pub(crate) fn spawn_shape(
                 mirror_has_effect: mirror_effect.has_effect,
                 lift_fill: lift_effect.fill,
                 lift_has_effect: lift_effect.has_effect,
+                rays_center_x: rays_effect.center_x,
+                rays_center_y: rays_effect.center_y,
+                rays_strength: rays_effect.strength,
+                rays_intensity: rays_effect.intensity,
+                rays_threshold: rays_effect.threshold,
+                rays_threshold_color: rays_effect.threshold_color,
+                rays_fill_color: rays_effect.fill_color,
+                rays_blend: rays_effect.blend,
+                rays_quality: rays_effect.quality,
+                rays_has_effect: rays_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -498,6 +509,7 @@ pub(crate) fn spawn_shape(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
             },
             layer_spec,
             transform,

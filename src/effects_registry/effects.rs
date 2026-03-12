@@ -31,6 +31,7 @@ pub mod transform2;
 pub mod transform_legacy;
 pub mod mirror;
 pub mod lift;
+pub mod rays;
 pub mod wavewarp2;
 pub mod wipe2;
 
@@ -67,6 +68,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &wavewarp2::EFFECT,
         &mirror::EFFECT,
         &lift::EFFECT,
+        &rays::EFFECT,
     ]
 }
 

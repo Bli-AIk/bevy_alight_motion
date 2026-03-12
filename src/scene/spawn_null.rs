@@ -52,6 +52,7 @@ pub(crate) fn spawn_null(
     let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
     let mirror_effect = extract_mirror_effect(&null.effects);
     let lift_effect = extract_lift_effect(&null.effects);
+    let rays_effect = extract_rays_effect(&null.effects);
 
     bevy::log::trace!(
         "Registering nullobj '{}' (id={}, parent={}): pos=({:.1},{:.1}), scale=({:.2},{:.2})",
@@ -162,6 +163,16 @@ pub(crate) fn spawn_null(
                 mirror_has_effect: mirror_effect.has_effect,
                 lift_fill: lift_effect.fill.clone(),
                 lift_has_effect: lift_effect.has_effect,
+                rays_center_x: rays_effect.center_x.clone(),
+                rays_center_y: rays_effect.center_y.clone(),
+                rays_strength: rays_effect.strength.clone(),
+                rays_intensity: rays_effect.intensity.clone(),
+                rays_threshold: rays_effect.threshold.clone(),
+                rays_threshold_color: rays_effect.threshold_color,
+                rays_fill_color: rays_effect.fill_color,
+                rays_blend: rays_effect.blend.clone(),
+                rays_quality: rays_effect.quality.clone(),
+                rays_has_effect: rays_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -287,6 +298,7 @@ pub(crate) fn spawn_null(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
             },
             AmLayerSpec::Null,
             transform,

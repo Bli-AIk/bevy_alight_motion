@@ -101,6 +101,7 @@ pub(crate) fn spawn_embed_scene(
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
     let mirror_effect = extract_mirror_effect(&embed.effects);
     let lift_effect = extract_lift_effect(&embed.effects);
+    let rays_effect = extract_rays_effect(&embed.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -196,6 +197,16 @@ pub(crate) fn spawn_embed_scene(
                 mirror_has_effect: mirror_effect.has_effect,
                 lift_fill: lift_effect.fill,
                 lift_has_effect: lift_effect.has_effect,
+                rays_center_x: rays_effect.center_x,
+                rays_center_y: rays_effect.center_y,
+                rays_strength: rays_effect.strength,
+                rays_intensity: rays_effect.intensity,
+                rays_threshold: rays_effect.threshold,
+                rays_threshold_color: rays_effect.threshold_color,
+                rays_fill_color: rays_effect.fill_color,
+                rays_blend: rays_effect.blend,
+                rays_quality: rays_effect.quality,
+                rays_has_effect: rays_effect.has_effect,
                 replace_old_color: Vec4::ZERO,
                 replace_new_color: crate::schema::AmAnimatedColor::default(),
                 replace_threshold: AmAnimatedFloat::default(),
@@ -327,6 +338,7 @@ pub(crate) fn spawn_embed_scene(
             repeat_rotation_offset_deg: -config.repeat_rotation_deg,
             repeat_scale_factor: config.repeat_scale_factor,
             repeat_position_offset: config.repeat_offset,
+            embed_inner_total_time: None,
             },
             AmLayerSpec::EmbedScene,
             // Mark for render strategy evaluation (Hybrid Pipeline)

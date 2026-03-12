@@ -178,6 +178,27 @@ min_frame_similarity = 0.25
 [overrides."private/USER_327/last"]
 skip = true
 
+# Rays effect tests (射线效果测试)
+[overrides."effects/rays/basic/test"]
+max_failed_rate = 0.35
+min_frame_similarity = 0.30
+
+[overrides."effects/rays/center/test"]
+max_failed_rate = 0.35
+min_frame_similarity = 0.30
+
+[overrides."effects/rays/intensity/test"]
+max_failed_rate = 0.35
+min_frame_similarity = 0.30
+
+[overrides."effects/rays/length/test"]
+max_failed_rate = 0.35
+min_frame_similarity = 0.30
+
+[overrides."effects/rays/threshold/test"]
+max_failed_rate = 0.35
+min_frame_similarity = 0.30
+
 # =============================================================================
 # Frame Test (FPS Performance) Configuration
 # 帧测试（FPS 性能）配置

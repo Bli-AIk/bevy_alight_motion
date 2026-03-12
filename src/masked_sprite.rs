@@ -198,6 +198,15 @@ pub struct UnifiedEffectUniform {
     pub mirror_params: Vec4,
     /// Lift (copy background) params: (fill, canvas_width, canvas_height, enabled)
     pub lift_params: Vec4,
+    // Rays (volumetric light rays) effect / 射线效果
+    /// Rays params1: (strength, intensity, threshold, quality)
+    pub rays_params1: Vec4,
+    /// Rays params2: (blend, center_x_norm, center_y_norm, enabled)
+    pub rays_params2: Vec4,
+    /// Rays threshold color (linear RGBA)
+    pub rays_threshold_color: Vec4,
+    /// Rays fill color (linear RGBA)
+    pub rays_fill_color: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -465,6 +474,10 @@ impl Default for UnifiedEffectUniform {
             wavewarp2_flags: Vec4::ZERO,
             mirror_params: Vec4::ZERO,
             lift_params: Vec4::ZERO,
+            rays_params1: Vec4::ZERO,
+            rays_params2: Vec4::ZERO,
+            rays_threshold_color: Vec4::ZERO,
+            rays_fill_color: Vec4::ZERO,
         }
     }
 }

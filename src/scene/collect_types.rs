@@ -56,7 +56,7 @@ pub(crate) fn collect_null(
     let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
     let mirror_effect = extract_mirror_effect(&null.effects);
     let lift_effect = extract_lift_effect(&null.effects);
-
+    let rays_effect = extract_rays_effect(&null.effects);
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
@@ -152,6 +152,16 @@ pub(crate) fn collect_null(
             mirror_has_effect: mirror_effect.has_effect,
             lift_fill: lift_effect.fill.clone(),
             lift_has_effect: lift_effect.has_effect,
+            rays_center_x: rays_effect.center_x.clone(),
+            rays_center_y: rays_effect.center_y.clone(),
+            rays_strength: rays_effect.strength.clone(),
+            rays_intensity: rays_effect.intensity.clone(),
+            rays_threshold: rays_effect.threshold.clone(),
+            rays_threshold_color: rays_effect.threshold_color,
+            rays_fill_color: rays_effect.fill_color,
+            rays_blend: rays_effect.blend.clone(),
+            rays_quality: rays_effect.quality.clone(),
+            rays_has_effect: rays_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,
@@ -277,6 +287,7 @@ pub(crate) fn collect_null(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
         },
         spec: AmLayerSpec::Null,
         z_index: z,
@@ -289,6 +300,7 @@ pub(crate) fn collect_null(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_inner_total_time: None,
     })
 }
 
@@ -448,6 +460,16 @@ pub(crate) fn collect_text(
             mirror_has_effect: false,
             lift_fill: AmAnimatedFloat::default(),
             lift_has_effect: false,
+            rays_center_x: AmAnimatedFloat::default(),
+            rays_center_y: AmAnimatedFloat::default(),
+            rays_strength: AmAnimatedFloat::default(),
+            rays_intensity: AmAnimatedFloat::default(),
+            rays_threshold: AmAnimatedFloat::default(),
+            rays_threshold_color: Vec4::ZERO,
+            rays_fill_color: Vec4::ZERO,
+            rays_blend: AmAnimatedFloat::default(),
+            rays_quality: AmAnimatedFloat::default(),
+            rays_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -579,6 +601,7 @@ pub(crate) fn collect_text(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
         },
         spec: AmLayerSpec::Text {
             content: text.content.clone(),
@@ -602,6 +625,7 @@ pub(crate) fn collect_text(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_inner_total_time: None,
     })
 }
 
@@ -640,8 +664,7 @@ pub(crate) fn collect_image(
     let wavewarp2_effect = extract_wavewarp2_effect(&image.effects);
     let mirror_effect = extract_mirror_effect(&image.effects);
     let lift_effect = extract_lift_effect(&image.effects);
-
-    // Get size from properties
+    let rays_effect = extract_rays_effect(&image.effects);
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
 
     // Calculate anchor and position compensation
@@ -743,6 +766,16 @@ pub(crate) fn collect_image(
             mirror_has_effect: mirror_effect.has_effect,
             lift_fill: lift_effect.fill,
             lift_has_effect: lift_effect.has_effect,
+            rays_center_x: rays_effect.center_x,
+            rays_center_y: rays_effect.center_y,
+            rays_strength: rays_effect.strength,
+            rays_intensity: rays_effect.intensity,
+            rays_threshold: rays_effect.threshold,
+            rays_threshold_color: rays_effect.threshold_color,
+            rays_fill_color: rays_effect.fill_color,
+            rays_blend: rays_effect.blend,
+            rays_quality: rays_effect.quality,
+            rays_has_effect: rays_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
             replace_threshold: replace_color.threshold,
@@ -868,6 +901,7 @@ pub(crate) fn collect_image(
             repeat_rotation_offset_deg: 0.0,
             repeat_scale_factor: 1.0,
             repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
         },
         spec: AmLayerSpec::Image {
             image_uri: image.fill_image.clone(),
@@ -889,5 +923,6 @@ pub(crate) fn collect_image(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_inner_total_time: None,
     })
 }
