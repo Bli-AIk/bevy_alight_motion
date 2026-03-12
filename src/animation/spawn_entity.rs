@@ -238,6 +238,7 @@ pub(super) fn spawn_layer_entity(
     // Use containing_embed_id to detect embed content, not embed_offset
     // (embed_offset can be ZERO when embed is at canvas center)
     let mut animated = layer.animated.clone();
+    animated.blend_mode = layer.blending_mode;
     if animated.scale_assist_axis != 0 {
         bevy::log::info!(
             "[SPAWN] Layer '{}' has scale_assist_axis={}, keyframes={}",
@@ -588,6 +589,7 @@ pub(super) fn spawn_layer_entity(
             layer.animated.rays_has_effect,      // has_rays - needs UnifiedEffectMaterial
             layer.animated.rgb_split_enabled,    // has_rgb_split - needs UnifiedEffectMaterial
             layer.animated.exposure_has_effect,  // has_exposure - needs UnifiedEffectMaterial
+            layer.blending_mode.is_blend(),      // has_blend - needs UnifiedEffectMaterial
             if layer.animated.rgb_split_enabled {
                 // Max RGB split offset in UV space = max_strength / 8.0
                 let max_strength = layer

@@ -213,6 +213,9 @@ pub struct UnifiedEffectUniform {
     // Exposure / Gamma effect / 曝光/伽马效果
     /// Exposure/gamma params: (exposure, gamma, offset, enabled)
     pub exposure_gamma_params: Vec4,
+    // Blend mode / 混合模式
+    /// Blend mode params: (mode_id, canvas_w, canvas_h, enabled)
+    pub blend_mode_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -415,6 +418,12 @@ impl UnifiedEffectMaterial {
         self.uniform_data.exposure_gamma_params =
             Vec4::new(exposure, gamma, offset, if enabled { 1.0 } else { 0.0 });
     }
+
+    /// Set blend mode: (mode_id, canvas_w, canvas_h, enabled)
+    pub fn set_blend_mode(&mut self, mode_id: f32, canvas_w: f32, canvas_h: f32) {
+        self.uniform_data.blend_mode_params =
+            Vec4::new(mode_id, canvas_w, canvas_h, if mode_id > 0.5 { 1.0 } else { 0.0 });
+    }
 }
 
 impl Default for UnifiedEffectUniform {
@@ -491,6 +500,7 @@ impl Default for UnifiedEffectUniform {
             rays_fill_color: Vec4::ZERO,
             rgb_split_params: Vec4::new(0.0, 0.0, 0.0, -1.0),
             exposure_gamma_params: Vec4::ZERO,
+            blend_mode_params: Vec4::ZERO,
         }
     }
 }

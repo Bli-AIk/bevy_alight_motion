@@ -300,6 +300,7 @@ pub(crate) fn collect_image(
             exposure_gamma: exposure_gamma_effect.gamma,
             exposure_offset: exposure_gamma_effect.offset,
             exposure_has_effect: exposure_gamma_effect.has_effect,
+            blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

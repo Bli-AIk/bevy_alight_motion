@@ -429,6 +429,15 @@ pub fn animate_unified_effect_system(
         }
         material.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
 
+        // Update blend mode / 混合模式
+        if animated.blend_mode.is_blend() {
+            material.set_blend_mode(
+                animated.blend_mode.as_f32(),
+                animated.canvas_width,
+                animated.canvas_height,
+            );
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

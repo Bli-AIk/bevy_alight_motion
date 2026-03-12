@@ -11,6 +11,7 @@
 use bevy::prelude::*;
 
 use crate::scene::effects::PathRepeatParams;
+use crate::scene::AmBlendingMode;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
 /// Retime mode for embedded scenes.
@@ -576,6 +577,8 @@ pub struct AmAnimated {
     pub exposure_offset: AmAnimatedFloat,
     /// Whether exposure/gamma effect is present
     pub exposure_has_effect: bool,
+    /// Layer blend mode (Normal, Multiply, Screen, etc.)
+    pub blend_mode: AmBlendingMode,
     /// Retime info for children of retimed embed scenes.
     /// When present, overrides linear time mapping with retime mode.
     pub retime: Option<AmRetimeInfo>,

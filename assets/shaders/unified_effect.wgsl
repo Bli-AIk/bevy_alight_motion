@@ -104,6 +104,8 @@ struct UnifiedEffectUniform {
     rgb_split_params: vec4<f32>,       // (offset_x, offset_y, center_channel, mode)
     // Exposure / Gamma effect / 曝光/伽马
     exposure_gamma_params: vec4<f32>,  // (exposure, gamma, offset, enabled)
+    // Blend mode / 混合模式
+    blend_mode_params: vec4<f32>,      // (mode_id, canvas_w, canvas_h, enabled)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -120,6 +122,23 @@ fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
         v.x * c - v.y * s,
         v.x * s + v.y * c
     );
+}
+
+// Helper: RGB → HSV conversion (AM compatible)
+fn rgb2hsv(c: vec3<f32>) -> vec3<f32> {
+    let K = vec4<f32>(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    let p = mix(vec4<f32>(c.b, c.g, K.w, K.z), vec4<f32>(c.g, c.b, K.x, K.y), step(c.b, c.g));
+    let q = mix(vec4<f32>(p.x, p.y, p.w, c.r), vec4<f32>(c.r, p.y, p.z, p.x), step(p.x, c.r));
+    let d = q.x - min(q.w, q.y);
+    let e = 1.0e-10;
+    return vec3<f32>(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+// Helper: HSV → RGB conversion (AM compatible)
+fn hsv2rgb(c: vec3<f32>) -> vec3<f32> {
+    let K = vec4<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    let p = abs(fract(vec3<f32>(c.x, c.x, c.x) + K.xyz) * 6.0 - vec3<f32>(K.w, K.w, K.w));
+    return c.z * mix(vec3<f32>(K.x, K.x, K.x), clamp(p - vec3<f32>(K.x, K.x, K.x), vec3<f32>(0.0), vec3<f32>(1.0)), c.y);
 }
 
 // Helper: convert sRGB to linear RGB (single channel)
@@ -2136,6 +2155,178 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let max_channel = max(max(final_color.r, final_color.g), final_color.b);
     if final_color.a < 0.001 && max_channel < 0.001 {
         discard;
+    }
+
+    // ─── Layer Blend Modes ───────────────────────────────────────────────
+    // Apply blend mode if enabled. Uses the composite RTT (lift_comp_texture)
+    // as the background, same as lift effect. AM blend formulas operate on
+    // premultiplied colors: top = fg_premul, bot = bg_premul * fg_alpha.
+    let blend_mode_enabled = uniforms.blend_mode_params.w > 0.5;
+    if blend_mode_enabled && final_color.a > 0.001 {
+        let blend_canvas_w = uniforms.blend_mode_params.y;
+        let blend_canvas_h = uniforms.blend_mode_params.z;
+        let blend_screen_uv = vec2<f32>(
+            (mesh.world_position.x + blend_canvas_w / 2.0) / blend_canvas_w,
+            (blend_canvas_h / 2.0 - mesh.world_position.y) / blend_canvas_h
+        );
+        let bg_linear = textureSample(lift_comp_texture, lift_comp_sampler, blend_screen_uv);
+
+        // Convert from linear to sRGB premultiplied space (AM operates in sRGB).
+        // Unpremultiply → gamma encode → re-premultiply.
+        let fg_a = final_color.a;
+        var fg_srgb: vec3<f32>;
+        if fg_a > 0.001 {
+            fg_srgb = linear_to_srgb(final_color.rgb / fg_a) * fg_a;
+        } else {
+            fg_srgb = vec3<f32>(0.0);
+        }
+        var bg_srgb: vec3<f32>;
+        var bg_a = bg_linear.a;
+        if bg_a > 0.001 {
+            bg_srgb = linear_to_srgb(bg_linear.rgb / bg_a) * bg_a;
+        } else {
+            bg_srgb = vec3<f32>(0.0);
+        }
+
+        let top = fg_srgb;
+        let bot = bg_srgb * fg_a;
+        let blend_id = i32(uniforms.blend_mode_params.x + 0.5);
+        var blended = top; // fallback = normal
+
+        // Darken family
+        if blend_id == 1 {
+            // Multiply: fg * (bg on white)
+            let bg4 = vec4<f32>(bg_srgb, bg_a);
+            let backgrnd = vec4<f32>(1.0, 1.0, 1.0, 1.0) * (1.0 - bg4.a) + bg4 * bg4.a;
+            blended = vec4<f32>(fg_srgb, fg_a).rgb * backgrnd.rgb;
+        } else if blend_id == 2 {
+            // Darken: min(top, bot)
+            blended = min(top, bot);
+        } else if blend_id == 3 {
+            // Darker Color: pick whichever has lower luminance
+            let lum_w = vec3<f32>(0.2126, 0.7152, 0.0722);
+            blended = select(top, bot, length(lum_w * top) > length(lum_w * bot));
+        } else if blend_id == 4 {
+            // Color Burn: 1 - (1-bot) / top
+            blended = vec3<f32>(1.0) - (vec3<f32>(1.0) - bot) / max(top, vec3<f32>(0.001));
+        } else if blend_id == 5 {
+            // Linear Burn: top + bot - 1
+            blended = top + bot - vec3<f32>(1.0);
+        }
+        // Lighten family
+        else if blend_id == 6 {
+            // Screen: top + bot - top*bot (premul equivalent)
+            blended = top + bot - top * bot;
+        } else if blend_id == 7 {
+            // Lighten: max(top, bot)
+            blended = max(top, bot);
+        } else if blend_id == 8 {
+            // Lighter Color: pick whichever has higher luminance
+            let lum_w = vec3<f32>(0.2126, 0.7152, 0.0722);
+            blended = select(bot, top, length(lum_w * top) > length(lum_w * bot));
+        } else if blend_id == 9 {
+            // Color Dodge: bot / (1 - top)
+            blended = bot / max(vec3<f32>(1.0) - top, vec3<f32>(0.001));
+        } else if blend_id == 10 {
+            // Linear Dodge (Add): bot + top
+            blended = bot + top;
+        }
+        // Contrast family
+        else if blend_id == 11 {
+            // Overlay: conditional multiply/screen based on bot
+            let t = step(vec3<f32>(0.5), bot);
+            blended = t * (vec3<f32>(1.0) - (vec3<f32>(1.0) - 2.0 * (bot - 0.5)) * (vec3<f32>(1.0) - top))
+                    + (vec3<f32>(1.0) - t) * (2.0 * bot * top);
+        } else if blend_id == 12 {
+            // Soft Light
+            let t = step(vec3<f32>(0.5), top);
+            blended = t * (vec3<f32>(1.0) - (vec3<f32>(1.0) - bot) * (vec3<f32>(1.0) - (top - 0.5)))
+                    + (vec3<f32>(1.0) - t) * (bot * (top + 0.5));
+        } else if blend_id == 13 {
+            // Hard Light
+            let t = step(vec3<f32>(0.5), top);
+            blended = t * (vec3<f32>(1.0) - (vec3<f32>(1.0) - bot) * (vec3<f32>(1.0) - 2.0 * (top - 0.5)))
+                    + (vec3<f32>(1.0) - t) * (bot * 2.0 * top);
+        } else if blend_id == 14 {
+            // Soft Overlay (same as soft light but based on bot)
+            let t = step(vec3<f32>(0.5), bot);
+            blended = t * (vec3<f32>(1.0) - (vec3<f32>(1.0) - bot) * (vec3<f32>(1.0) - (top - 0.5)))
+                    + (vec3<f32>(1.0) - t) * (bot * (top + 0.5));
+        } else if blend_id == 15 {
+            // Vivid Light
+            let t = step(vec3<f32>(0.5), top);
+            blended = t * (vec3<f32>(1.0) - (vec3<f32>(1.0) - bot) * 2.0 * (top - 0.5))
+                    + (vec3<f32>(1.0) - t) * (bot * (vec3<f32>(1.0) - 2.0 * top));
+        }
+        // Difference family
+        else if blend_id == 16 {
+            // Pin Light
+            let t = step(vec3<f32>(0.5), top);
+            blended = t * max(bot, 2.0 * (top - 0.5))
+                    + (vec3<f32>(1.0) - t) * min(bot, 2.0 * top);
+        } else if blend_id == 17 {
+            // Difference: |bot - top| (AM formula)
+            blended = abs(bg_srgb * fg_a - fg_srgb);
+        } else if blend_id == 18 {
+            // Exclusion: 0.5 - 2*(bot-0.5)*(top-0.5)
+            blended = vec3<f32>(0.5) - 2.0 * (bot - 0.5) * (top - 0.5);
+        } else if blend_id == 19 {
+            // Subtract: bot - top
+            blended = bot - top;
+        } else if blend_id == 20 {
+            // Divide: bot / top
+            blended = bot / max(top, vec3<f32>(0.001));
+        }
+        // HSL / Component family
+        else if blend_id == 21 {
+            // Hue: take hue from top, saturation+value from bot
+            let top_hsv = rgb2hsv(top);
+            let bot_hsv = rgb2hsv(bot);
+            blended = hsv2rgb(vec3<f32>(top_hsv.x, bot_hsv.y, bot_hsv.z));
+        } else if blend_id == 22 {
+            // Saturation: take saturation from top, hue+value from bot
+            let top_hsv = rgb2hsv(top);
+            let bot_hsv = rgb2hsv(bot);
+            blended = hsv2rgb(vec3<f32>(bot_hsv.x, top_hsv.y, bot_hsv.z));
+        } else if blend_id == 23 {
+            // Color: take Y from bot, UV from top (YUV color space)
+            let rgb2yuv = mat3x3<f32>(
+                vec3<f32>(0.299, -0.14713, 0.615),
+                vec3<f32>(0.587, -0.28886, -0.51499),
+                vec3<f32>(0.114, 0.436, -0.10001)
+            );
+            let yuv2rgb = mat3x3<f32>(
+                vec3<f32>(1.0, 1.0, 1.0),
+                vec3<f32>(0.0, -0.39465, 2.03211),
+                vec3<f32>(1.13983, -0.58060, 0.0)
+            );
+            let bot_yuv = rgb2yuv * bot;
+            let top_yuv = rgb2yuv * top;
+            blended = yuv2rgb * vec3<f32>(bot_yuv.x, top_yuv.y, top_yuv.z);
+        } else if blend_id == 24 {
+            // Luminance: take Y from top, UV from bot (YUV color space)
+            let rgb2yuv = mat3x3<f32>(
+                vec3<f32>(0.299, -0.14713, 0.615),
+                vec3<f32>(0.587, -0.28886, -0.51499),
+                vec3<f32>(0.114, 0.436, -0.10001)
+            );
+            let yuv2rgb = mat3x3<f32>(
+                vec3<f32>(1.0, 1.0, 1.0),
+                vec3<f32>(0.0, -0.39465, 2.03211),
+                vec3<f32>(1.13983, -0.58060, 0.0)
+            );
+            let bot_yuv = rgb2yuv * bot;
+            let top_yuv = rgb2yuv * top;
+            blended = yuv2rgb * vec3<f32>(top_yuv.x, bot_yuv.y, bot_yuv.z);
+        }
+
+        // Convert blended result from sRGB back to linear premultiplied
+        let clamped = clamp(blended, vec3<f32>(0.0), vec3<f32>(1.0));
+        if fg_a > 0.001 {
+            final_color = vec4<f32>(srgb_to_linear(clamped / fg_a) * fg_a, fg_a);
+        } else {
+            final_color = vec4<f32>(vec3<f32>(0.0), fg_a);
+        }
     }
     
     return final_color;

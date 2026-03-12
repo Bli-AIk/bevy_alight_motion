@@ -383,15 +383,95 @@ pub enum AmLayerSpec {
 }
 
 /// Blending mode for layers.
-#[derive(Debug, Clone, Default, PartialEq)]
+///
+/// Covers all 24 AM blend modes plus mask/exclude (clipping modes).
+/// Blend modes require background texture access for compositing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[repr(u32)]
 pub enum AmBlendingMode {
-    /// Normal rendering
     #[default]
-    Normal,
-    /// Mask layer - clips content below it to show only inside the mask (not rendered itself)
-    Mask,
-    /// Exclude layer - clips content below it to hide inside the mask (not rendered itself)
-    Exclude,
+    Normal = 0,
+    // --- Darken family ---
+    Multiply = 1,
+    Darken = 2,
+    DarkerColor = 3,
+    ColorBurn = 4,
+    LinearBurn = 5,
+    // --- Lighten family ---
+    Screen = 6,
+    Lighten = 7,
+    LighterColor = 8,
+    ColorDodge = 9,
+    LinearDodge = 10,
+    // --- Contrast family ---
+    Overlay = 11,
+    SoftLight = 12,
+    HardLight = 13,
+    SoftOverlay = 14,
+    VividLight = 15,
+    // --- Difference family ---
+    PinLight = 16,
+    Difference = 17,
+    Exclusion = 18,
+    Subtract = 19,
+    Divide = 20,
+    // --- Component (HSL) family ---
+    Hue = 21,
+    Saturation = 22,
+    Color = 23,
+    Luminance = 24,
+    // --- Clipping modes (not rendered, used for masking) ---
+    Mask = 100,
+    Exclude = 101,
+}
+
+impl AmBlendingMode {
+    /// Parse an AM blend mode string from XML.
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "normal" => Self::Normal,
+            "multiply" => Self::Multiply,
+            "darken" => Self::Darken,
+            "darker-color" => Self::DarkerColor,
+            "color-burn" => Self::ColorBurn,
+            "linear-burn" => Self::LinearBurn,
+            "screen" => Self::Screen,
+            "lighten" => Self::Lighten,
+            "lighter-color" => Self::LighterColor,
+            "color-dodge" => Self::ColorDodge,
+            "linear-dodge" => Self::LinearDodge,
+            "overlay" => Self::Overlay,
+            "soft-light" => Self::SoftLight,
+            "hard-light" => Self::HardLight,
+            "soft-overlay" => Self::SoftOverlay,
+            "vivid-light" => Self::VividLight,
+            "pin-light" => Self::PinLight,
+            "diff" => Self::Difference,
+            "exclusion" => Self::Exclusion,
+            "subtract" => Self::Subtract,
+            "divide" => Self::Divide,
+            "hue" => Self::Hue,
+            "saturation" => Self::Saturation,
+            "color" => Self::Color,
+            "luminance" => Self::Luminance,
+            "mask" => Self::Mask,
+            "exclude" => Self::Exclude,
+            _ => {
+                bevy::log::warn!("Unknown blend mode: '{}', defaulting to Normal", s);
+                Self::Normal
+            }
+        }
+    }
+
+    /// Whether this is a visual blend mode (not a clipping mode).
+    pub fn is_blend(self) -> bool {
+        !matches!(self, Self::Normal | Self::Mask | Self::Exclude)
+    }
+
+    /// Numeric value for the shader uniform.
+    pub fn as_f32(self) -> f32 {
+        (self as u32) as f32
+    }
 }
 
 /// Information about a single mask that can clip this layer.

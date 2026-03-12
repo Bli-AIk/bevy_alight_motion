@@ -519,6 +519,7 @@ pub(crate) fn spawn_shape(
                 exposure_gamma: AmAnimatedFloat::default(),
                 exposure_offset: AmAnimatedFloat::default(),
                 exposure_has_effect: false,
+                blend_mode: AmBlendingMode::default(),
                 retime: config.retime.clone(),
                 echo_time_shift_ms: config.echo_time_shift_ms,
                 echo_alpha_config: config.echo_alpha_config.clone(),
