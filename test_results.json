@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-12T18:40:36.899984+08:00",
+  "timestamp": "2026-03-13T07:02:08.297843+08:00",
   "summary": {
-    "passed": 137,
+    "passed": 149,
     "warnings": 0,
     "skipped": 2,
-    "failed": 70
+    "failed": 58
   },
   "results": {
     "basic/bezier/bezier": {
@@ -14,24 +14,19 @@
       "status": "pass"
     },
     "basic/blend/color-mask/test": {
-      "status": "fail",
-      "avg_similarity": 0.842
+      "status": "pass"
     },
     "basic/blend/contrast/test": {
-      "status": "fail",
-      "avg_similarity": 0.8212
+      "status": "pass"
     },
     "basic/blend/darken/test": {
-      "status": "fail",
-      "avg_similarity": 0.8569
+      "status": "pass"
     },
     "basic/blend/difference/test": {
-      "status": "fail",
-      "avg_similarity": 0.7125
+      "status": "pass"
     },
     "basic/blend/lighten/test": {
-      "status": "fail",
-      "avg_similarity": 0.8049
+      "status": "pass"
     },
     "basic/bounce/box": {
       "status": "pass"
@@ -196,24 +191,19 @@
       "avg_similarity": 0.8453
     },
     "effects/exposure-gamma/complex/test": {
-      "status": "fail",
-      "avg_similarity": 0.7193
+      "status": "pass"
     },
     "effects/exposure-gamma/exposure-offset/test": {
-      "status": "fail",
-      "avg_similarity": 0.7437
+      "status": "pass"
     },
     "effects/exposure-gamma/exposure/test": {
-      "status": "fail",
-      "avg_similarity": 0.8704
+      "status": "pass"
     },
     "effects/exposure-gamma/gamma-offset/test": {
-      "status": "fail",
-      "avg_similarity": 0.7702
+      "status": "pass"
     },
     "effects/exposure-gamma/gamma/test": {
-      "status": "fail",
-      "avg_similarity": 0.9114
+      "status": "pass"
     },
     "effects/fade/fade": {
       "status": "pass"
@@ -326,15 +316,13 @@
       "status": "pass"
     },
     "effects/rays/intensity/test": {
-      "status": "fail",
-      "avg_similarity": 0.9525
+      "status": "pass"
     },
     "effects/rays/length/test": {
       "status": "pass"
     },
     "effects/rays/threshold/test": {
-      "status": "fail",
-      "avg_similarity": 0.968
+      "status": "pass"
     },
     "effects/repeat/basic": {
       "status": "pass"
