@@ -255,6 +255,7 @@ pub(crate) fn collect_embed_scene(
     // Extract jitter effect from embed
     let jitter_effect = extract_jitter_effect(&embed.effects);
     let sd_effect = extract_simplex_displace_effect(&embed.effects);
+    let rgb_split_effect = extract_rgb_split_effect(&embed.effects);
     let fade_effect = extract_fade_effect(&embed.effects);
     let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
     let mirror_effect = extract_mirror_effect(&embed.effects);
@@ -495,6 +496,11 @@ pub(crate) fn collect_embed_scene(
             sd_evolution: sd_effect.evolution,
             sd_seed: sd_effect.seed,
             sd_scatter: sd_effect.scatter,
+            rgb_split_enabled: rgb_split_effect.enabled,
+            rgb_split_strength: rgb_split_effect.strength,
+            rgb_split_angle: rgb_split_effect.angle,
+            rgb_split_center: rgb_split_effect.center_channel,
+            rgb_split_mode: rgb_split_effect.mode,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

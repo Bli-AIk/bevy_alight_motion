@@ -556,6 +556,17 @@ pub struct AmAnimated {
     pub sd_seed: AmAnimatedFloat,
     /// Simplex displace: spatial frequency (0.0-2.0) - may be keyframed
     pub sd_scatter: AmAnimatedFloat,
+    // RGB split effect (com.alightcreative.effects.rgbsep)
+    /// Whether RGB split is enabled
+    pub rgb_split_enabled: bool,
+    /// RGB split: channel offset strength - may be keyframed
+    pub rgb_split_strength: AmAnimatedFloat,
+    /// RGB split: separation angle (degrees) - may be keyframed
+    pub rgb_split_angle: AmAnimatedFloat,
+    /// RGB split: center channel (0=R, 1=G, 2=B)
+    pub rgb_split_center: i32,
+    /// RGB split: compositing mode (0=Mask, 1=Luma, 2=Light, 3=Dark)
+    pub rgb_split_mode: i32,
     /// Retime info for children of retimed embed scenes.
     /// When present, overrides linear time mapping with retime mode.
     pub retime: Option<AmRetimeInfo>,

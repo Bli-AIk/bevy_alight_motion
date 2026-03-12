@@ -374,6 +374,25 @@ pub fn animate_unified_effect_system(
             material.uniform_data.rays_fill_color = Vec4::ZERO;
         }
 
+        // Update RGB split (chromatic aberration) effect / RGB 分离效果
+        if animated.rgb_split_enabled {
+            let strength =
+                interpolate_float(&animated.rgb_split_strength, layer_time).unwrap_or(0.15);
+            let angle_deg = interpolate_float(&animated.rgb_split_angle, layer_time).unwrap_or(0.0);
+            let angle_rad = angle_deg.to_radians();
+            let adj_strength = strength / 8.0;
+            let offset_x = angle_rad.cos() * adj_strength;
+            let offset_y = -(angle_rad.sin()) * adj_strength;
+            material.uniform_data.rgb_split_params = Vec4::new(
+                offset_x,
+                offset_y,
+                animated.rgb_split_center as f32,
+                animated.rgb_split_mode as f32,
+            );
+        } else {
+            material.uniform_data.rgb_split_params = Vec4::new(0.0, 0.0, 0.0, -1.0);
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

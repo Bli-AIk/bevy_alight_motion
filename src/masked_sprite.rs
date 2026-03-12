@@ -207,6 +207,9 @@ pub struct UnifiedEffectUniform {
     pub rays_threshold_color: Vec4,
     /// Rays fill color (linear RGBA)
     pub rays_fill_color: Vec4,
+    // RGB split (chromatic aberration) effect / RGB 分离效果
+    /// RGB split params: (offset_x, offset_y, center_channel, mode)
+    pub rgb_split_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -478,6 +481,7 @@ impl Default for UnifiedEffectUniform {
             rays_params2: Vec4::ZERO,
             rays_threshold_color: Vec4::ZERO,
             rays_fill_color: Vec4::ZERO,
+            rgb_split_params: Vec4::new(0.0, 0.0, 0.0, -1.0),
         }
     }
 }

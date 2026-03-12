@@ -48,6 +48,7 @@ pub(crate) fn collect_null(
     let oscillate_effect = extract_oscillate_effect(&null.effects);
     let jitter_effect = extract_jitter_effect(&null.effects);
     let sd_effect = extract_simplex_displace_effect(&null.effects);
+    let rgb_split_effect = extract_rgb_split_effect(&null.effects);
     let spin_rpm = extract_spin_rpm(&null.effects);
     let threshold_effect = extract_threshold_effect(&null.effects);
     let grid_effect = extract_grid_effect(&null.effects);
@@ -290,6 +291,11 @@ pub(crate) fn collect_null(
             sd_evolution: sd_effect.evolution,
             sd_seed: sd_effect.seed,
             sd_scatter: sd_effect.scatter,
+            rgb_split_enabled: rgb_split_effect.enabled,
+            rgb_split_strength: rgb_split_effect.strength,
+            rgb_split_angle: rgb_split_effect.angle,
+            rgb_split_center: rgb_split_effect.center_channel,
+            rgb_split_mode: rgb_split_effect.mode,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
@@ -611,6 +617,12 @@ pub(crate) fn collect_text(
             sd_evolution: AmAnimatedFloat::default(),
             sd_seed: AmAnimatedFloat::default(),
             sd_scatter: AmAnimatedFloat::default(),
+            // RGB split (defaults)
+            rgb_split_enabled: false,
+            rgb_split_strength: AmAnimatedFloat::default(),
+            rgb_split_angle: AmAnimatedFloat::default(),
+            rgb_split_center: 1,
+            rgb_split_mode: 2,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

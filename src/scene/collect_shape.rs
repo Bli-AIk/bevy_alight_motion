@@ -65,6 +65,7 @@ pub(crate) fn collect_shape(
     let oscillate_effect = extract_oscillate_effect(&shape.effects);
     let jitter_effect = extract_jitter_effect(&shape.effects);
     let sd_effect = extract_simplex_displace_effect(&shape.effects);
+    let rgb_split_effect = extract_rgb_split_effect(&shape.effects);
     let spin_rpm = extract_spin_rpm(&shape.effects);
     let threshold_effect = extract_threshold_effect(&shape.effects);
     let grid_effect = extract_grid_effect(&shape.effects);
@@ -554,6 +555,11 @@ pub(crate) fn collect_shape(
             sd_evolution: sd_effect.evolution,
             sd_seed: sd_effect.seed,
             sd_scatter: sd_effect.scatter,
+            rgb_split_enabled: rgb_split_effect.enabled,
+            rgb_split_strength: rgb_split_effect.strength,
+            rgb_split_angle: rgb_split_effect.angle,
+            rgb_split_center: rgb_split_effect.center_channel,
+            rgb_split_mode: rgb_split_effect.mode,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

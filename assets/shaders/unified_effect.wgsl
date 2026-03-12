@@ -100,6 +100,8 @@ struct UnifiedEffectUniform {
     rays_params2: vec4<f32>,           // (blend, center_x_norm, center_y_norm, enabled)
     rays_threshold_color: vec4<f32>,   // (r, g, b, a) linear
     rays_fill_color: vec4<f32>,        // (r, g, b, a) linear
+    // RGB split (chromatic aberration) / RGB 分离
+    rgb_split_params: vec4<f32>,       // (offset_x, offset_y, center_channel, mode)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1103,6 +1105,55 @@ fn apply_rays(base_color: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(srgb_to_linear3(result_srgb.rgb), result_srgb.a);
 }
 
+/// Apply RGB split (chromatic aberration) effect.
+/// 应用 RGB 分离（色差）效果
+/// Samples texture at offset UVs to separate R/G/B channels.
+fn apply_rgb_split(uv: vec2<f32>) -> vec4<f32> {
+    let params = uniforms.rgb_split_params;
+    let offset = params.xy;
+    let center_channel = i32(params.z);
+    let mode = i32(params.w);
+
+    let color_mid = textureSample(base_texture, base_sampler, uv);
+    let color_low = textureSample(base_texture, base_sampler, uv - offset);
+    let color_high = textureSample(base_texture, base_sampler, uv + offset);
+
+    // Recombine channels: the center channel stays from color_mid
+    var out_color: vec4<f32>;
+    if center_channel == 0 {
+        out_color = vec4<f32>(color_mid.r, color_low.g, color_high.b, 1.0);
+    } else if center_channel == 1 {
+        out_color = vec4<f32>(color_low.r, color_mid.g, color_high.b, 1.0);
+    } else {
+        out_color = vec4<f32>(color_low.r, color_high.g, color_mid.b, 1.0);
+    }
+
+    let luminance_weighting = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+    if mode == 0 {
+        // Mask: multiply by center alpha
+        return out_color * color_mid.a;
+    } else if mode == 1 {
+        // Luma: luminance-based compositing
+        let r = vec4<f32>(out_color.r, 0.0, 0.0, out_color.r);
+        let g = vec4<f32>(0.0, out_color.g, 0.0, out_color.g);
+        let b = vec4<f32>(0.0, 0.0, out_color.b, out_color.b);
+        let m = (r + g + b) / 3.0;
+        var c = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        let lum = dot(luminance_weighting * color_mid.rgb, vec3<f32>(1.0));
+        let l = vec4<f32>(lum, lum, lum, lum);
+        c = m + (c * (1.0 - m.a));
+        c = l + (c * (1.0 - l.a));
+        return c;
+    } else if mode == 2 {
+        // Light: keep center alpha
+        return vec4<f32>(out_color.rgb, color_mid.a);
+    } else {
+        // Dark: average alpha
+        return out_color * ((color_low.a + color_mid.a + color_high.a) / 3.0);
+    }
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Extract effect flags
@@ -1709,6 +1760,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
     } else {
         tex_color = textureSample(base_texture, base_sampler, sample_uv);
+    }
+
+    // Apply RGB split (chromatic aberration) effect / RGB 分离效果
+    // Uses mode >= 0 as enabled flag (-1.0 in .w = disabled)
+    let rgb_split_mode_raw = uniforms.rgb_split_params.w;
+    if rgb_split_mode_raw >= -0.5 {
+        tex_color = apply_rgb_split(sample_uv);
     }
 
     // Apply lift (copy background) effect: blend layer content with background composite.

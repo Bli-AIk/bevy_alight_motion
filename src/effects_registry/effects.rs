@@ -22,6 +22,7 @@ pub mod radial_repeat;
 pub mod rays;
 pub mod repeat;
 pub mod replace_color;
+pub mod rgb_split;
 pub mod scale_assist;
 pub mod simplex_displace;
 pub mod solidcolor;
@@ -73,6 +74,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &rays::EFFECT,
         &counter::EFFECT,
         &simplex_displace::EFFECT,
+        &rgb_split::EFFECT,
     ]
 }
 

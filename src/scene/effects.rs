@@ -6,10 +6,12 @@
 //! AM 图层的效果参数提取。
 
 mod common;
+mod extended;
 mod other;
 mod repeat;
 
 pub use common::*;
+pub use extended::*;
 pub use other::*;
 pub use repeat::*;
 
