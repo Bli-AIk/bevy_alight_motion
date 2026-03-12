@@ -348,25 +348,32 @@ pub fn animate_unified_effect_system(
             material.uniform_data.lift_params = Vec4::ZERO;
         }
 
-        // Update rays (volumetric light rays) effect / 更新射线效果
-        if animated.rays_has_effect {
-            let strength = interpolate_float(&animated.rays_strength, layer_time).unwrap_or(0.15);
-            let intensity = interpolate_float(&animated.rays_intensity, layer_time).unwrap_or(1.0);
-            let threshold = interpolate_float(&animated.rays_threshold, layer_time).unwrap_or(0.6);
-            let quality = interpolate_float(&animated.rays_quality, layer_time).unwrap_or(150.0);
-            let blend = interpolate_float(&animated.rays_blend, layer_time).unwrap_or(0.0);
-            let center_x = interpolate_float(&animated.rays_center_x, layer_time).unwrap_or(0.0);
-            let center_y = interpolate_float(&animated.rays_center_y, layer_time).unwrap_or(0.0);
-
-            // Convert AM center coords to normalized (AM uses ±500 range)
-            let center_x_norm = 0.5 + center_x / 500.0;
-            let center_y_norm = 0.5 - center_y / 500.0;
-
+        // Update rays effect; propagate parent embed's rays to children
+        let mut has_rays = animated.rays_has_effect;
+        let rays_src = if has_rays {
+            animated
+        } else if let Some(marker) = _embed_marker
+            && let Ok((parent_anim, _)) = parent_animated_query.get(marker.embed_entity)
+            && parent_anim.rays_has_effect
+        {
+            has_rays = true;
+            parent_anim
+        } else {
+            animated // won't be used since has_rays=false
+        };
+        if has_rays {
+            let rt = rays_src.calc_layer_time(rays_src.calc_local_time(global_time));
+            let strength = interpolate_float(&rays_src.rays_strength, rt).unwrap_or(0.15);
+            let intensity = interpolate_float(&rays_src.rays_intensity, rt).unwrap_or(1.0);
+            let threshold = interpolate_float(&rays_src.rays_threshold, rt).unwrap_or(0.6);
+            let quality = interpolate_float(&rays_src.rays_quality, rt).unwrap_or(150.0);
+            let blend = interpolate_float(&rays_src.rays_blend, rt).unwrap_or(0.0);
+            let cx = 0.5 + interpolate_float(&rays_src.rays_center_x, rt).unwrap_or(0.0) / 500.0;
+            let cy = 0.5 - interpolate_float(&rays_src.rays_center_y, rt).unwrap_or(0.0) / 500.0;
             material.uniform_data.rays_params1 = Vec4::new(strength, intensity, threshold, quality);
-            material.uniform_data.rays_params2 =
-                Vec4::new(blend, center_x_norm, center_y_norm, 1.0); // w=1.0 → enabled
-            material.uniform_data.rays_threshold_color = animated.rays_threshold_color;
-            material.uniform_data.rays_fill_color = animated.rays_fill_color;
+            material.uniform_data.rays_params2 = Vec4::new(blend, cx, cy, 1.0);
+            material.uniform_data.rays_threshold_color = rays_src.rays_threshold_color;
+            material.uniform_data.rays_fill_color = rays_src.rays_fill_color;
         } else {
             material.uniform_data.rays_params1 = Vec4::ZERO;
             material.uniform_data.rays_params2 = Vec4::ZERO;
