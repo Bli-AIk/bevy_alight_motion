@@ -59,6 +59,7 @@ pub(crate) fn collect_null(
     let mirror_effect = extract_mirror_effect(&null.effects);
     let lift_effect = extract_lift_effect(&null.effects);
     let rays_effect = extract_rays_effect(&null.effects);
+    let exposure_gamma_effect = extract_exposure_gamma_effect(&null.effects);
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
@@ -296,6 +297,10 @@ pub(crate) fn collect_null(
             rgb_split_angle: rgb_split_effect.angle,
             rgb_split_center: rgb_split_effect.center_channel,
             rgb_split_mode: rgb_split_effect.mode,
+            exposure_value: exposure_gamma_effect.exposure,
+            exposure_gamma: exposure_gamma_effect.gamma,
+            exposure_offset: exposure_gamma_effect.offset,
+            exposure_has_effect: exposure_gamma_effect.has_effect,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
@@ -623,6 +628,11 @@ pub(crate) fn collect_text(
             rgb_split_angle: AmAnimatedFloat::default(),
             rgb_split_center: 1,
             rgb_split_mode: 2,
+            // Exposure / Gamma (defaults for text layers)
+            exposure_value: AmAnimatedFloat::default(),
+            exposure_gamma: AmAnimatedFloat::default(),
+            exposure_offset: AmAnimatedFloat::default(),
+            exposure_has_effect: false,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

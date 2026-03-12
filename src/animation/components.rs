@@ -567,6 +567,15 @@ pub struct AmAnimated {
     pub rgb_split_center: i32,
     /// RGB split: compositing mode (0=Mask, 1=Luma, 2=Light, 3=Dark)
     pub rgb_split_mode: i32,
+    // Exposure / Gamma effect (com.alightcreative.effects.exposure)
+    /// Exposure adjustment value
+    pub exposure_value: AmAnimatedFloat,
+    /// Gamma curve value
+    pub exposure_gamma: AmAnimatedFloat,
+    /// Brightness offset value
+    pub exposure_offset: AmAnimatedFloat,
+    /// Whether exposure/gamma effect is present
+    pub exposure_has_effect: bool,
     /// Retime info for children of retimed embed scenes.
     /// When present, overrides linear time mapping with retime mode.
     pub retime: Option<AmRetimeInfo>,

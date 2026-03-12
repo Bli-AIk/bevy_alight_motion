@@ -102,6 +102,8 @@ struct UnifiedEffectUniform {
     rays_fill_color: vec4<f32>,        // (r, g, b, a) linear
     // RGB split (chromatic aberration) / RGB 分离
     rgb_split_params: vec4<f32>,       // (offset_x, offset_y, center_channel, mode)
+    // Exposure / Gamma effect / 曝光/伽马
+    exposure_gamma_params: vec4<f32>,  // (exposure, gamma, offset, enabled)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1897,6 +1899,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
     
+    // Apply exposure/gamma effect if enabled
+    // AM shader: rgb += offset*a; rgb = pow(rgb, 1/gamma); rgb *= pow(2, exposure)
+    // AM processes in sRGB space (not linear)
+    let exposure_enabled = uniforms.exposure_gamma_params.w > 0.5;
+    if exposure_enabled {
+        let exposure_val = uniforms.exposure_gamma_params.x;
+        let gamma_val = uniforms.exposure_gamma_params.y;
+        let offset_val = uniforms.exposure_gamma_params.z;
+        
+        // Convert to sRGB space for processing (AM works in sRGB)
+        var eg_rgb = linear_to_srgb(tex_color.rgb);
+        let eg_a = tex_color.a;
+        
+        // Apply AM formula: offset → gamma → exposure
+        eg_rgb = eg_rgb + vec3<f32>(offset_val) * eg_a;
+        eg_rgb = pow(max(eg_rgb, vec3<f32>(0.0)), vec3<f32>(1.0 / gamma_val));
+        eg_rgb = eg_rgb * pow(2.0, exposure_val);
+        
+        // Convert back to linear
+        tex_color = vec4<f32>(srgb_to_linear(eg_rgb), eg_a);
+    }
+
     // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
     // AM works in sRGB space, so we convert linear→sRGB before processing
     let threshold_enabled = uniforms.replace_color_flags.z > 0.5;

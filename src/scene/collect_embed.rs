@@ -261,6 +261,7 @@ pub(crate) fn collect_embed_scene(
     let mirror_effect = extract_mirror_effect(&embed.effects);
     let lift_effect = extract_lift_effect(&embed.effects);
     let rays_effect = extract_rays_effect(&embed.effects);
+    let exposure_gamma_effect = extract_exposure_gamma_effect(&embed.effects);
     let group_fill = build_group_fill(embed);
 
     PendingLayer {
@@ -501,6 +502,10 @@ pub(crate) fn collect_embed_scene(
             rgb_split_angle: rgb_split_effect.angle,
             rgb_split_center: rgb_split_effect.center_channel,
             rgb_split_mode: rgb_split_effect.mode,
+            exposure_value: exposure_gamma_effect.exposure,
+            exposure_gamma: exposure_gamma_effect.gamma,
+            exposure_offset: exposure_gamma_effect.offset,
+            exposure_has_effect: exposure_gamma_effect.has_effect,
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),

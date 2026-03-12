@@ -207,8 +207,6 @@ pub struct NeedsStrategyEvaluation {
 pub fn evaluate_render_strategy_system(
     mut commands: Commands,
     query: Query<(Entity, &NeedsStrategyEvaluation, Option<&AmGroupFill>), Without<RenderStrategy>>,
-    // Query to check if embed has any effects that require Composite
-    // For now, we can check for specific components or use heuristics
 ) {
     // Log periodically to track query count
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -234,13 +232,10 @@ pub fn evaluate_render_strategy_system(
         let needs_fill = group_fill.is_some();
 
         let strategy = if needs_fill {
-            // Fill requires rendering children to texture for alpha masking
             RenderStrategy::Composite
         } else if needs_eval.has_scale_animation {
-            // Embeds with scale animation need bounds clipping
             RenderStrategy::Stencil
         } else {
-            // Default to Direct for most embeds
             RenderStrategy::Direct
         };
 
@@ -296,6 +291,7 @@ pub fn setup_embed_scene_rtt_system(
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
     mut fill_materials: ResMut<Assets<crate::group_fill::GroupFillMaterial>>,
+    mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     query: Query<
         (
@@ -304,6 +300,7 @@ pub fn setup_embed_scene_rtt_system(
             &Transform,
             &GlobalTransform,
             Option<&AmGroupFill>,
+            &crate::animation::AmAnimated,
         ),
         Without<EmbedSceneRtt>,
     >,
@@ -322,7 +319,7 @@ pub fn setup_embed_scene_rtt_system(
         query.iter().count()
     );
 
-    for (entity, needs_rtt, embed_transform, embed_global, group_fill) in query.iter() {
+    for (entity, needs_rtt, embed_transform, embed_global, group_fill, animated) in query.iter() {
         // Log embed transform for debugging
         bevy::log::trace!(
             "[RTT] Embed {:?} transform: scale=({:.3},{:.3}), pos=({:.1},{:.1})",
@@ -506,12 +503,41 @@ pub fn setup_embed_scene_rtt_system(
                     .insert((Mesh2d(mesh), MeshMaterial2d(material)));
             }
         } else {
-            // No fill - use plain Sprite to display RTT output
-            commands.entity(entity).insert(Sprite {
-                image: render_texture_handle,
-                custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
-                ..default()
-            });
+            // Check if embed has any effects that need UnifiedEffectMaterial
+            let needs_unified = animated.exposure_has_effect
+                || animated.wavewarp2_has_effect
+                || animated.mirror_has_effect
+                || animated.lift_has_effect
+                || animated.rays_has_effect
+                || animated.rgb_split_enabled;
+
+            if needs_unified {
+                // Use UnifiedEffectMaterial so effects can be applied to RTT output
+                let width = needs_rtt.scene_width;
+                let height = needs_rtt.scene_height;
+                let material = unified_materials.add(crate::masked_sprite::UnifiedEffectMaterial {
+                    uniform_data: crate::masked_sprite::UnifiedEffectUniform {
+                        color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                        original_size: Vec4::new(width, height, width, height),
+                        ..default()
+                    },
+                    texture: Some(render_texture_handle),
+                    lift_comp_texture: None,
+                });
+                let mesh = meshes.add(Rectangle::new(width, height));
+                commands.entity(entity).insert((
+                    Mesh2d(mesh),
+                    MeshMaterial2d(material),
+                    crate::masked_sprite::UnifiedEffectMarker,
+                ));
+            } else {
+                // No effects - use plain Sprite to display RTT output
+                commands.entity(entity).insert(Sprite {
+                    image: render_texture_handle,
+                    custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
+                    ..default()
+                });
+            }
         }
 
         bevy::log::trace!(

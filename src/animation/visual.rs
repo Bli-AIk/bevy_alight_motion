@@ -57,6 +57,7 @@ pub(crate) fn add_visual_components(
     has_lift: bool, // True if layer has lift (copy background) effect (needs UnifiedEffectMaterial)
     has_rays: bool, // True if layer has rays effect (needs UnifiedEffectMaterial)
     has_rgb_split: bool, // True if layer has RGB split effect (needs UnifiedEffectMaterial)
+    has_exposure: bool, // True if layer has exposure/gamma effect (needs UnifiedEffectMaterial)
     rgb_split_max_offset: f32, // Max RGB split offset in UV space (max_strength / 8.0) for mesh expansion
     pixelate_expansion: f32,   // Max pixelate expansion in display units (half max grid cell size)
     wavewarp2_max_m2: f32,     // Max wavewarp2 magnitude across keyframes (for mesh expansion)
@@ -107,7 +108,8 @@ pub(crate) fn add_visual_components(
         || has_mirror
         || has_lift
         || has_rays
-        || has_rgb_split;
+        || has_rgb_split
+        || has_exposure;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(

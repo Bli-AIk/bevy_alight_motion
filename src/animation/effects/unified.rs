@@ -393,6 +393,16 @@ pub fn animate_unified_effect_system(
             material.uniform_data.rgb_split_params = Vec4::new(0.0, 0.0, 0.0, -1.0);
         }
 
+        // Update exposure/gamma effect / 曝光/伽马效果
+        if animated.exposure_has_effect {
+            let exposure = interpolate_float(&animated.exposure_value, layer_time).unwrap_or(0.0);
+            let gamma = interpolate_float(&animated.exposure_gamma, layer_time).unwrap_or(1.0);
+            let offset = interpolate_float(&animated.exposure_offset, layer_time).unwrap_or(0.0);
+            material.set_exposure_gamma(exposure, gamma, offset, true);
+        } else {
+            material.set_exposure_gamma(0.0, 1.0, 0.0, false);
+        }
+
         // Update solidcolor effect
         let sc_alpha_val =
             interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);

@@ -1,4 +1,4 @@
-//! Swing, Threshold, Grid, Pixelate, and Simplex Displace effect parameter extraction.
+//! Swing, Threshold, Grid, Pixelate, Simplex Displace, and Exposure/Gamma effect parameter extraction.
 
 use bevy::prelude::*;
 
@@ -814,6 +814,74 @@ pub(crate) fn extract_pixelate_effect(effects: &[AmEffect]) -> PixelateParams {
             }
             "screenSpace" => {
                 params.screen_space = prop.value == "true";
+            }
+            _ => {}
+        }
+    }
+
+    params
+}
+
+/// Exposure / Gamma effect parameters
+/// Adjusts exposure, gamma curve, and brightness offset
+/// 曝光 / 伽马效果参数
+/// 调整曝光、伽马曲线和亮度偏移
+#[derive(Debug, Clone, Default)]
+pub struct ExposureGammaParams {
+    /// Exposure adjustment (-2.0 to 2.0)
+    /// 曝光调整
+    pub exposure: AmAnimatedFloat,
+    /// Gamma curve (0.01 to 9.99, default 1.0)
+    /// 伽马曲线
+    pub gamma: AmAnimatedFloat,
+    /// Brightness offset (-0.9 to 0.9)
+    /// 亮度偏移
+    pub offset: AmAnimatedFloat,
+    /// Whether the effect is present
+    /// 效果是否存在
+    pub has_effect: bool,
+}
+
+/// Extract exposure/gamma effect parameters from effects.
+/// 从效果中提取曝光/伽马效果参数
+pub(crate) fn extract_exposure_gamma_effect(effects: &[AmEffect]) -> ExposureGammaParams {
+    let mut params = ExposureGammaParams::default();
+
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.exposure")
+    else {
+        return params;
+    };
+
+    params.has_effect = true;
+    // Defaults matching AM
+    params.exposure.value = Some(0.0);
+    params.gamma.value = Some(1.0);
+    params.offset.value = Some(0.0);
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "exposure" => {
+                if !prop.keyframes.is_empty() {
+                    params.exposure.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.exposure.value = Some(v);
+                }
+            }
+            "gamma" => {
+                if !prop.keyframes.is_empty() {
+                    params.gamma.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.gamma.value = Some(v);
+                }
+            }
+            "offset" => {
+                if !prop.keyframes.is_empty() {
+                    params.offset.keyframes = prop.keyframes.clone();
+                } else if let Ok(v) = prop.value.parse::<f32>() {
+                    params.offset.value = Some(v);
+                }
             }
             _ => {}
         }

@@ -210,6 +210,9 @@ pub struct UnifiedEffectUniform {
     // RGB split (chromatic aberration) effect / RGB 分离效果
     /// RGB split params: (offset_x, offset_y, center_channel, mode)
     pub rgb_split_params: Vec4,
+    // Exposure / Gamma effect / 曝光/伽马效果
+    /// Exposure/gamma params: (exposure, gamma, offset, enabled)
+    pub exposure_gamma_params: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -407,6 +410,11 @@ impl UnifiedEffectMaterial {
         self.uniform_data.replace_new_color = new_color;
         self.uniform_data.replace_color_params = Vec4::new(threshold, feather, alpha, 0.0);
     }
+
+    pub fn set_exposure_gamma(&mut self, exposure: f32, gamma: f32, offset: f32, enabled: bool) {
+        self.uniform_data.exposure_gamma_params =
+            Vec4::new(exposure, gamma, offset, if enabled { 1.0 } else { 0.0 });
+    }
 }
 
 impl Default for UnifiedEffectUniform {
@@ -482,6 +490,7 @@ impl Default for UnifiedEffectUniform {
             rays_threshold_color: Vec4::ZERO,
             rays_fill_color: Vec4::ZERO,
             rgb_split_params: Vec4::new(0.0, 0.0, 0.0, -1.0),
+            exposure_gamma_params: Vec4::ZERO,
         }
     }
 }

@@ -7,6 +7,7 @@
 
 pub mod counter;
 pub mod echokf;
+pub mod exposure_gamma;
 pub mod fade;
 pub mod gaussian_blur;
 pub mod grid;
@@ -75,6 +76,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &counter::EFFECT,
         &simplex_displace::EFFECT,
         &rgb_split::EFFECT,
+        &exposure_gamma::EFFECT,
     ]
 }
 
