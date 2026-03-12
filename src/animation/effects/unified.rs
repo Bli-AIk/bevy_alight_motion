@@ -732,7 +732,27 @@ pub fn animate_unified_effect_system(
             } else {
                 0.0
             };
-            let total_expansion = pix_expansion + warp_expansion + mirror_expansion;
+            // RGB split expansion: shifted channels extend beyond layer bounds
+            let rgb_split_expansion = if animated.rgb_split_enabled {
+                let strength =
+                    interpolate_float(&animated.rgb_split_strength, layer_time).unwrap_or(0.15);
+                let adj_strength = (strength / 8.0).abs();
+                adj_strength * orig_width.max(orig_height)
+            } else {
+                0.0
+            };
+            let total_expansion =
+                pix_expansion + warp_expansion + mirror_expansion + rgb_split_expansion;
+            if rgb_split_expansion > 0.1 {
+                bevy::log::warn!(
+                    "[RGB_SPLIT_MESH] layer_id={} rgb_split_expansion={:.1} total={:.1} orig=({:.1},{:.1})",
+                    animated.layer_id,
+                    rgb_split_expansion,
+                    total_expansion,
+                    orig_width,
+                    orig_height
+                );
+            }
 
             let vertices = vec![
                 [

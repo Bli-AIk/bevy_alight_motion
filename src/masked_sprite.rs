@@ -9,9 +9,9 @@
 use bevy::{
     prelude::*,
     reflect::TypePath,
-    render::render_resource::{AsBindGroup, ShaderType},
+    render::render_resource::{AsBindGroup, BlendState, ShaderType},
     shader::ShaderRef,
-    sprite_render::{AlphaMode2d, Material2d},
+    sprite_render::{AlphaMode2d, Material2d, Material2dKey},
 };
 
 /// Packed uniform data for unified effect material.
@@ -492,6 +492,24 @@ impl Material2d for UnifiedEffectMaterial {
     }
     fn alpha_mode(&self) -> AlphaMode2d {
         AlphaMode2d::Blend
+    }
+    fn specialize(
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: Material2dKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        // Override blend state to premultiplied alpha (ONE, ONE_MINUS_SRC_ALPHA).
+        // AM composites layers with premultiplied blending. This is required for
+        // RGB split (chromatic aberration) where the effect outputs non-premultiplied
+        // RGB with mode-specific alpha — producing additive color fringes at
+        // transparent regions. The fragment shader premultiplies all non-RGB-split
+        // outputs manually so other rendering is unchanged.
+        if let Some(fragment) = &mut descriptor.fragment {
+            for target_state in fragment.targets.iter_mut().flatten() {
+                target_state.blend = Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING);
+            }
+        }
+        Ok(())
     }
 }
 

@@ -1108,15 +1108,24 @@ fn apply_rays(base_color: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
 /// Apply RGB split (chromatic aberration) effect.
 /// 应用 RGB 分离（色差）效果
 /// Samples texture at offset UVs to separate R/G/B channels.
+// Sample texture with transparent fallback for out-of-bounds UVs
+// Used by RGB split to avoid edge clamping artifacts
+fn sample_transparent(uv: vec2<f32>) -> vec4<f32> {
+    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+    return textureSample(base_texture, base_sampler, uv);
+}
+
 fn apply_rgb_split(uv: vec2<f32>) -> vec4<f32> {
     let params = uniforms.rgb_split_params;
     let offset = params.xy;
     let center_channel = i32(params.z);
     let mode = i32(params.w);
 
-    let color_mid = textureSample(base_texture, base_sampler, uv);
-    let color_low = textureSample(base_texture, base_sampler, uv - offset);
-    let color_high = textureSample(base_texture, base_sampler, uv + offset);
+    let color_mid = sample_transparent(uv);
+    let color_low = sample_transparent(uv - offset);
+    let color_high = sample_transparent(uv + offset);
 
     // Recombine channels: the center channel stays from color_mid
     var out_color: vec4<f32>;
@@ -2084,7 +2093,24 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
 
-    if final_color.a < 0.001 {
+    // Convert to premultiplied alpha for AlphaMode2d::Premultiplied blending.
+    // AM uses premultiplied compositing (ONE, ONE_MINUS_SRC_ALPHA):
+    //   screen = src.rgb + dst.rgb * (1 - src.a)
+    // For RGB split, the effect outputs non-premultiplied RGB (especially mode 2/Light)
+    // which creates additive color fringes at transparent regions. We keep that
+    // output as-is but scale by layer opacity. For all other cases, we premultiply
+    // normally: rgb *= alpha.
+    if rgb_split_mode_raw >= -0.5 {
+        // RGB split: scale RGB by layer opacity (preserves additive fringe behavior)
+        final_color = vec4<f32>(final_color.rgb * uniforms.color.a, final_color.a);
+    } else {
+        // Standard: premultiply rgb by alpha
+        final_color = vec4<f32>(final_color.rgb * final_color.a, final_color.a);
+    }
+
+    // Discard fully invisible pixels (both alpha and RGB are near zero)
+    let max_channel = max(max(final_color.r, final_color.g), final_color.b);
+    if final_color.a < 0.001 && max_channel < 0.001 {
         discard;
     }
     

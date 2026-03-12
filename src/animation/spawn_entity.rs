@@ -586,6 +586,28 @@ pub(super) fn spawn_layer_entity(
             layer.animated.mirror_has_effect,    // has_mirror - needs UnifiedEffectMaterial
             layer.animated.lift_has_effect,      // has_lift - needs UnifiedEffectMaterial
             layer.animated.rays_has_effect,      // has_rays - needs UnifiedEffectMaterial
+            layer.animated.rgb_split_enabled,    // has_rgb_split - needs UnifiedEffectMaterial
+            if layer.animated.rgb_split_enabled {
+                // Max RGB split offset in UV space = max_strength / 8.0
+                let max_strength = layer
+                    .animated
+                    .rgb_split_strength
+                    .keyframes
+                    .iter()
+                    .filter_map(|kf| kf.value.parse::<f32>().ok())
+                    .fold(
+                        layer
+                            .animated
+                            .rgb_split_strength
+                            .value
+                            .unwrap_or(0.15)
+                            .abs(),
+                        |acc, v| acc.max(v.abs()),
+                    );
+                max_strength / 8.0
+            } else {
+                0.0
+            }, // rgb_split_max_offset
             {
                 // Calculate max pixelate expansion for mesh sizing
                 // Edge blocks extend up to half a grid cell beyond the content area

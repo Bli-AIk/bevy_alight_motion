@@ -91,24 +91,6 @@ avg_threshold = 0.90
 frame_threshold = 0.90
 max_failed_rate = 0.35
 
-# Repeat effect - keyframe transitions cause timing differences
-# During count transitions, frame timing differs slightly between AM export and our render
-# 重复效果 - 关键帧过渡导致时序差异
-[overrides."effects/repeat/basic"]
-max_failed_rate = 0.25
-min_frame_similarity = 0.40
-
-# Repeat on groups (编组重复效果)
-# Time offsets between copies may cause frame alignment differences
-[overrides."effects/repeat/group"]
-max_failed_rate = 0.35
-min_frame_similarity = 0.30
-
-# Repeat on groups - bug test (extra nesting layer causes AM time miscalculation)
-[overrides."effects/repeat/group_bug"]
-max_failed_rate = 0.35
-min_frame_similarity = 0.30
-
 # Gaussian blur - not implemented
 [overrides."effects/gaussian-blur/basic"]
 skip = true
