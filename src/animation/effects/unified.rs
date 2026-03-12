@@ -394,14 +394,33 @@ pub fn animate_unified_effect_system(
         }
 
         // Update exposure/gamma effect / 曝光/伽马效果
-        if animated.exposure_has_effect {
-            let exposure = interpolate_float(&animated.exposure_value, layer_time).unwrap_or(0.0);
-            let gamma = interpolate_float(&animated.exposure_gamma, layer_time).unwrap_or(1.0);
-            let offset = interpolate_float(&animated.exposure_offset, layer_time).unwrap_or(0.0);
-            material.set_exposure_gamma(exposure, gamma, offset, true);
+        // Also propagate parent embed's exposure to children (for Direct strategy embeds)
+        let (mut exp_val, mut gam_val, mut off_val, mut has_exp) = if animated.exposure_has_effect {
+            (
+                interpolate_float(&animated.exposure_value, layer_time).unwrap_or(0.0),
+                interpolate_float(&animated.exposure_gamma, layer_time).unwrap_or(1.0),
+                interpolate_float(&animated.exposure_offset, layer_time).unwrap_or(0.0),
+                true,
+            )
         } else {
-            material.set_exposure_gamma(0.0, 1.0, 0.0, false);
+            (0.0, 1.0, 0.0, false)
+        };
+        // Inherit parent embed's exposure if this entity is embed content
+        if let Some(marker) = _embed_marker
+            && let Ok((parent_anim, _)) = parent_animated_query.get(marker.embed_entity)
+            && parent_anim.exposure_has_effect
+        {
+            let pt = parent_anim.calc_local_time(global_time);
+            let plt = parent_anim.calc_layer_time(pt);
+            let pe = interpolate_float(&parent_anim.exposure_value, plt).unwrap_or(0.0);
+            let pg = interpolate_float(&parent_anim.exposure_gamma, plt).unwrap_or(1.0);
+            let po = interpolate_float(&parent_anim.exposure_offset, plt).unwrap_or(0.0);
+            exp_val += pe;
+            gam_val *= pg;
+            off_val += po;
+            has_exp = true;
         }
+        material.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
 
         // Update solidcolor effect
         let sc_alpha_val =

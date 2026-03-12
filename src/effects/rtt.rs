@@ -208,27 +208,17 @@ pub fn evaluate_render_strategy_system(
     mut commands: Commands,
     query: Query<(Entity, &NeedsStrategyEvaluation, Option<&AmGroupFill>), Without<RenderStrategy>>,
 ) {
-    // Log periodically to track query count
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    if frame <= 10 || frame.is_multiple_of(60) {
-        let count = query.iter().count();
-        bevy::log::trace!("[Strategy] Frame {}: query count = {}", frame, count);
-    }
-
     for (entity, needs_eval, group_fill) in query.iter() {
         // Determine render strategy based on embed properties
         //
         // - Direct: No RTT, content renders to parent's layer (most embeds)
         // - Stencil: For embeds that need bounds clipping (e.g., scale animation)
-        // - Composite: For embeds with shader effects or group fill
+        // - Composite: For embeds with group fill (children texture used as alpha mask)
         //
-        // Key insight: Embeds with scale animation need bounds clipping because
-        // content that was within bounds at scale=1.0 may exceed bounds when scaled.
+        // Note: Shader effects on embeds are handled by propagating to children
+        // (see apply_embed_effects_to_children_system) rather than using Composite,
+        // because the Composite RTT pipeline has rendering issues.
 
-        // Group fill requires Composite (RTT) - we need the rendered children as a texture
-        // to use as an alpha mask for the fill color/gradient.
         let needs_fill = group_fill.is_some();
 
         let strategy = if needs_fill {
@@ -240,12 +230,9 @@ pub fn evaluate_render_strategy_system(
         };
 
         bevy::log::trace!(
-            "[Strategy] Embed {:?} evaluated as {:?} (size={}x{}, has_scale_anim={}, has_fill={})",
+            "[Strategy] Embed {:?} → {:?} (fill={})",
             entity,
             strategy,
-            needs_eval.scene_width,
-            needs_eval.scene_height,
-            needs_eval.has_scale_animation,
             needs_fill
         );
 
@@ -314,22 +301,7 @@ pub fn setup_embed_scene_rtt_system(
         .next()
         .and_then(|p| p.rtt_cameras_container);
 
-    bevy::log::trace!(
-        "[RTT] setup_embed_scene_rtt_system: {} embeds need RTT setup",
-        query.iter().count()
-    );
-
-    for (entity, needs_rtt, embed_transform, embed_global, group_fill, animated) in query.iter() {
-        // Log embed transform for debugging
-        bevy::log::trace!(
-            "[RTT] Embed {:?} transform: scale=({:.3},{:.3}), pos=({:.1},{:.1})",
-            entity,
-            embed_transform.scale.x,
-            embed_transform.scale.y,
-            embed_transform.translation.x,
-            embed_transform.translation.y
-        );
-
+    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated) in query.iter() {
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
