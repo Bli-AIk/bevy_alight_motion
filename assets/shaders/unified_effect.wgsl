@@ -1795,32 +1795,84 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply RGB split (chromatic aberration) effect / RGB 分离效果
     // Uses mode >= 0 as enabled flag (-1.0 in .w = disabled)
     let rgb_split_mode_raw = uniforms.rgb_split_params.w;
-    if rgb_split_mode_raw >= -0.5 {
-        tex_color = apply_rgb_split(sample_uv);
-    }
+    let rgb_split_enabled = rgb_split_mode_raw >= -0.5;
 
     // Apply lift (copy background) effect: blend layer content with background composite.
     // lift_params = (fill, canvas_width, canvas_height, enabled)
     let lift_enabled = uniforms.lift_params.w > 0.5;
     var lift_skip_color_tint = false;
+
     if lift_enabled {
         let lift_fill = uniforms.lift_params.x;
         let lift_canvas_w = uniforms.lift_params.y;
         let lift_canvas_h = uniforms.lift_params.z;
-        // Convert world position to screen-space UV for background sampling
         let screen_uv = vec2<f32>(
             (mesh.world_position.x + lift_canvas_w / 2.0) / lift_canvas_w,
             (lift_canvas_h / 2.0 - mesh.world_position.y) / lift_canvas_h
         );
-        let comp_color = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv);
-        // AM renders the layer to an FBO with fill color already baked in, then lift
-        // replaces that content with the background composite. In our single-pass shader,
-        // uniforms.color (fill color) is applied later, so we pre-apply it here for the
-        // original content portion and skip the later multiplication.
-        let tinted_tex = tex_color * uniforms.color;
-        // AM: gl_FragColor = mix(comp * texColor.a, texColor, fill)
-        tex_color = mix(comp_color * tinted_tex.a, tinted_tex, lift_fill);
+
+        if rgb_split_enabled {
+            // Lift + RGB-split: AM applies lift first, then rgb-split on the composite.
+            // Sample composite texture at 3 offset screen positions for RGB channel split.
+            let offset = uniforms.rgb_split_params.xy;
+            let center_channel = i32(uniforms.rgb_split_params.z);
+            let mode = i32(uniforms.rgb_split_params.w);
+            // Use original texture size (not expanded mesh size) for UV-to-screen conversion.
+            // RGB-split offset is in texture UV space (0-1), and orig_size maps texture to world.
+            let orig_w = uniforms.original_size.x;
+            let orig_h = uniforms.original_size.y;
+            let screen_offset = vec2<f32>(
+                offset.x * orig_w / lift_canvas_w,
+                offset.y * orig_h / lift_canvas_h
+            );
+            let color_mid = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv);
+            let color_low = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv - screen_offset);
+            let color_high = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv + screen_offset);
+
+            var out_color: vec4<f32>;
+            if center_channel == 0 {
+                out_color = vec4<f32>(color_mid.r, color_low.g, color_high.b, 1.0);
+            } else if center_channel == 1 {
+                out_color = vec4<f32>(color_low.r, color_mid.g, color_high.b, 1.0);
+            } else {
+                out_color = vec4<f32>(color_low.r, color_high.g, color_mid.b, 1.0);
+            }
+
+            let luminance_weighting = vec3<f32>(0.2126, 0.7152, 0.0722);
+            if mode == 0 {
+                tex_color = out_color * color_mid.a;
+            } else if mode == 1 {
+                let r = vec4<f32>(out_color.r, 0.0, 0.0, out_color.r);
+                let g = vec4<f32>(0.0, out_color.g, 0.0, out_color.g);
+                let b = vec4<f32>(0.0, 0.0, out_color.b, out_color.b);
+                let m = (r + g + b) / 3.0;
+                var c = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+                let lum = dot(luminance_weighting * color_mid.rgb, vec3<f32>(1.0));
+                let l = vec4<f32>(lum, lum, lum, lum);
+                c = m + (c * (1.0 - m.a));
+                c = l + (c * (1.0 - l.a));
+                tex_color = c;
+            } else if mode == 2 {
+                tex_color = vec4<f32>(out_color.rgb, color_mid.a);
+            } else {
+                tex_color = out_color * ((color_low.a + color_mid.a + color_high.a) / 3.0);
+            }
+
+            // Apply fill blending: for fill > 0, mix with original layer content
+            if lift_fill > 0.001 {
+                let orig_tinted = textureSample(base_texture, base_sampler, sample_uv) * uniforms.color;
+                tex_color = mix(tex_color, orig_tinted, lift_fill);
+            }
+        } else {
+            // Lift without rgb-split: standard background composite blending
+            let comp_color = textureSample(lift_comp_texture, lift_comp_sampler, screen_uv);
+            let tinted_tex = tex_color * uniforms.color;
+            tex_color = mix(comp_color * tinted_tex.a, tinted_tex, lift_fill);
+        }
         lift_skip_color_tint = true;
+    } else if rgb_split_enabled {
+        // No lift: apply rgb-split normally on base texture
+        tex_color = apply_rgb_split(sample_uv);
     }
 
     // Apply rays (volumetric light rays) effect (射线效果)
