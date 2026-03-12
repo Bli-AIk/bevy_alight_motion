@@ -9,7 +9,7 @@ define_effect! {
     en: "Text Spacing",
     desc_zh: "控制文本的字间距和行间距。",
     desc_en: "Controls letter spacing and line spacing for text layers.",
-    support: Full,
+    support: Unsupported,
     xml: r##"<effect id="com.alightcreative.effects.textspacing">
     <property name="letterspacing" type="float" value="0.0" />
     <property name="linespacing" type="float" value="1.0" />

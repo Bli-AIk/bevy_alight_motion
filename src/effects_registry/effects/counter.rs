@@ -9,7 +9,7 @@ define_effect! {
     en: "Counter",
     desc_zh: "将文本中的数字替换为经过偏移和缩放的值，实现计数器动画效果。",
     desc_en: "Replaces numeric values in text with offset/scaled values for counter animation.",
-    support: Full,
+    support: Unsupported,
     xml: r##"<effect id="com.alightcreative.effects.counter">
     <property name="offset" type="float" value="0.0" />
     <property name="scale" type="float" value="1.0" />

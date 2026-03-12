@@ -9,7 +9,7 @@ define_effect! {
     en: "Text Progress",
     desc_zh: "显示文字的部分内容，实现打字机效果。",
     desc_en: "Displays part of the text as a string, enabling typewriter effects.",
-    support: Partial,
+    support: Unsupported,
     xml: r##"<effect id="com.alightcreative.effects.textprogress">
     <property name="start" type="float" value="0.0" />
     <property name="end" type="float" value="1.0" />
