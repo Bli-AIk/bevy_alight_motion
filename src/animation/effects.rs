@@ -19,6 +19,7 @@ pub use mask::update_unified_mask_system;
 pub use path_repeat::animate_path_repeat_system;
 pub use rtt_blur::animate_rtt_blur_system;
 pub use text_effects::{
-    animate_text_progress_system, animate_text_spacing_system, fix_rtl_line_alignment_system,
+    animate_counter_system, animate_text_progress_system, animate_text_spacing_system,
+    fix_rtl_line_alignment_system,
 };
 pub use unified::animate_unified_effect_system;

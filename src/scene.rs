@@ -73,7 +73,7 @@ mod tests {
             canvas_height: 960.0,
             flip_y: true,
             z_spacing: 0.001,
-            time_offset: 0,
+            time_offset: 0.0,
             speed_multiplier: 1.0,
             nesting_depth: 0,
             lifecycle_offset: 0,

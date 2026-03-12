@@ -78,7 +78,7 @@ pub fn manage_layer_lifecycle_system(
             white_pixel_handle.as_ref(),
             global_time,
             parent_for_layers,
-            0, // root time offset
+            0.0, // root time offset
             filter,
         );
     }

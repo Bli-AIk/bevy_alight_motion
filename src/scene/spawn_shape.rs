@@ -494,6 +494,8 @@ pub(crate) fn spawn_shape(
                 },
                 textprogress_cursor: 0,
                 textprogress_blink: false,
+                counter_offset: AmAnimatedFloat::default(),
+                counter_scale: AmAnimatedFloat::default(),
                 shape_props: Default::default(),
                 shape_points: Default::default(),
                 jitter_enabled: false,

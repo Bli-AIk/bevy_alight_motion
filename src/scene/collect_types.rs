@@ -271,6 +271,8 @@ pub(crate) fn collect_null(
             },
             textprogress_cursor: 0,
             textprogress_blink: false,
+            counter_offset: AmAnimatedFloat::default(),
+            counter_scale: AmAnimatedFloat::default(),
             shape_props: Default::default(),
             shape_points: Default::default(),
             // Jitter effect
@@ -584,6 +586,8 @@ pub(crate) fn collect_text(
             textprogress_end: extract_text_progress_effect(&text.effects).end,
             textprogress_cursor: extract_text_progress_effect(&text.effects).cursor,
             textprogress_blink: extract_text_progress_effect(&text.effects).blink,
+            counter_offset: extract_counter_effect(&text.effects).offset,
+            counter_scale: extract_counter_effect(&text.effects).scale,
             shape_props: Default::default(),
             shape_points: Default::default(),
             // Jitter effect (not extracted for text - defaults)

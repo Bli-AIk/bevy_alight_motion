@@ -5,6 +5,7 @@
 //! Entry point for all effect definitions.
 //! 所有效果定义的入口模块。
 
+pub mod counter;
 pub mod echokf;
 pub mod fade;
 pub mod gaussian_blur;
@@ -69,6 +70,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &mirror::EFFECT,
         &lift::EFFECT,
         &rays::EFFECT,
+        &counter::EFFECT,
     ]
 }
 

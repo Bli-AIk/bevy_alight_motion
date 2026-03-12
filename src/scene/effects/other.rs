@@ -909,3 +909,37 @@ pub(crate) fn extract_text_progress_effect(effects: &[AmEffect]) -> TextProgress
 
     params
 }
+
+/// Counter effect parameters.
+#[derive(Debug, Clone, Default)]
+pub struct CounterParams {
+    pub offset: AmAnimatedFloat,
+    pub scale: AmAnimatedFloat,
+}
+
+/// Extract counter effect (`com.alightcreative.effects.counter`) parameters.
+pub(crate) fn extract_counter_effect(effects: &[AmEffect]) -> CounterParams {
+    let mut params = CounterParams::default();
+    params.scale.value = Some(1.0);
+
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.counter")
+    else {
+        return params;
+    };
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "offset" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.offset);
+            }
+            "scale" => {
+                crate::scene::effects::extract_float_prop(prop, &mut params.scale);
+            }
+            _ => {}
+        }
+    }
+
+    params
+}

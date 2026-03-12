@@ -535,6 +535,8 @@ pub(crate) fn collect_shape(
             },
             textprogress_cursor: 0,
             textprogress_blink: false,
+            counter_offset: AmAnimatedFloat::default(),
+            counter_scale: AmAnimatedFloat::default(),
             shape_props,
             shape_points,
             // Jitter effect

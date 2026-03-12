@@ -453,7 +453,9 @@ pub fn comparison_loop(
 
             // DON'T set time immediately - store it as pending to be applied in next frame's First schedule
             // This ensures lifecycle_system won't run with new time in this frame's Update schedule
-            let time_ms = time_sec * 1000.0;
+            // AM uses integer millisecond times via frameStartTimeFromFrameNumber which does
+            // integer division: (frame * 100000) / fphs. Floor to match AM's truncation.
+            let time_ms = (time_sec * 1000.0).floor();
             state.pending_time_ms = Some(time_ms);
 
             // Debug: log time setting for frame 30

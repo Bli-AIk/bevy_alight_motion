@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-12T08:37:32.654222+08:00",
+  "timestamp": "2026-03-12T11:12:49.539962+08:00",
   "summary": {
     "passed": 131,
     "warnings": 0,
     "skipped": 2,
-    "failed": 36
+    "failed": 37
   },
   "results": {
     "basic/bezier/bezier": {
@@ -121,6 +121,10 @@
     },
     "basic/tween/step": {
       "status": "pass"
+    },
+    "effects/count/basic/test": {
+      "status": "fail",
+      "avg_similarity": 0.4874
     },
     "effects/echo-keyframes/basic": {
       "status": "pass"

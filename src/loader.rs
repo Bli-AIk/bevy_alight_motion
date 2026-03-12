@@ -731,6 +731,14 @@ fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
             font_name,
             suffix
         ),
+        // Debian/Ubuntu unhinted font path (e.g., fonts-roboto package)
+        format!(
+            "/usr/share/fonts/truetype/{}/unhinted/{}TTF/{}-{}.ttf",
+            font_name.to_lowercase(),
+            font_name,
+            font_name,
+            suffix
+        ),
         format!("/usr/share/fonts/TTF/{}.ttf", font_name),
     ];
 
@@ -740,9 +748,25 @@ fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
         }
     }
 
-    // Try fc-match as last resort
+    // Try fc-match as last resort (use style name for more accurate matching)
+    let style_name = match weight {
+        100 => "Thin",
+        200 => "Extra-Light",
+        300 => "Light",
+        400 => "Regular",
+        500 => "Medium",
+        600 => "Semi-Bold",
+        700 => "Bold",
+        800 => "Extra-Bold",
+        900 => "Black",
+        _ => "Regular",
+    };
     if let Ok(output) = std::process::Command::new("fc-match")
-        .args(["-f", "%{file}", &format!("{}:weight={}", font_name, weight)])
+        .args([
+            "-f",
+            "%{file}",
+            &format!("{}:style={}", font_name, style_name),
+        ])
         .output()
         && output.status.success()
     {

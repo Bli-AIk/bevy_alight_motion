@@ -105,7 +105,7 @@ pub struct EchoAlphaConfig {
     /// Parent element end time (ms)
     pub parent_end: i32,
     /// Parent element time_offset
-    pub parent_time_offset: i32,
+    pub parent_time_offset: f32,
     /// Parent element speed_multiplier
     pub parent_speed: f32,
 }
@@ -114,7 +114,7 @@ impl EchoAlphaConfig {
     /// Evaluate echo alpha at the given global time.
     /// Returns the multiplier for opacity (0.0 = invisible, 1.0 = fully opaque).
     pub fn evaluate(&self, global_time: f32) -> f32 {
-        let parent_local = (global_time - self.parent_time_offset as f32) * self.parent_speed;
+        let parent_local = (global_time - self.parent_time_offset) * self.parent_speed;
         let parent_duration = (self.parent_end - self.parent_start) as f32;
         let parent_layer_time = if parent_duration > 0.0 {
             (parent_local - self.parent_start as f32) / parent_duration
@@ -160,7 +160,7 @@ pub struct AmAnimated {
     pub end_time: i32,
     /// Time offset from parent scene (for embedded scenes).
     /// Used for animation interpolation: local_time = (global - time_offset) * speed
-    pub time_offset: i32,
+    pub time_offset: f32,
     /// Lifecycle offset for visibility calculation (not affected by speed).
     /// Used for spawn/despawn: lifecycle_time = global - lifecycle_offset
     /// For embeds: lifecycle_offset = embed_start - in_time
@@ -514,6 +514,10 @@ pub struct AmAnimated {
     pub textprogress_cursor: i32,
     /// Text progress blink enabled
     pub textprogress_blink: bool,
+    /// Counter effect offset (added to numeric values in text)
+    pub counter_offset: AmAnimatedFloat,
+    /// Counter effect scale (multiplied with numeric values in text)
+    pub counter_scale: AmAnimatedFloat,
     // Shape-specific animated properties
     /// Generic shape float properties (up to 4).
     /// Meaning depends on shape_type:
@@ -626,7 +630,7 @@ impl AmAnimated {
         if let Some(nested_time) = self.apply_retime(global_time) {
             return nested_time;
         }
-        let t = (global_time - self.time_offset as f32) * self.speed_multiplier;
+        let t = (global_time - self.time_offset) * self.speed_multiplier;
         // When embed plays longer than its inner scene, clamp to freeze at last frame.
         if let Some(inner_total) = self.embed_inner_total_time
             && t >= inner_total

@@ -1089,7 +1089,7 @@ pub fn update_echo_runtime_system(
             fraction: 0.0, // Already computed into mix
             parent_start: echo_rt.embed_start as i32,
             parent_end: echo_rt.embed_end as i32,
-            parent_time_offset: echo_rt.embed_time_offset as i32,
+            parent_time_offset: echo_rt.embed_time_offset,
             parent_speed: echo_rt.embed_speed,
         };
         animated.echo_alpha_config = Some(echo_cfg.clone());

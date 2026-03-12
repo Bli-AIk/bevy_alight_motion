@@ -508,7 +508,7 @@ pub struct AmSceneConfig {
     pub z_spacing: f32,
     /// Time offset from parent scene (for embedded scenes).
     /// Used for animation interpolation: local_time = (global - time_offset) * speed
-    pub time_offset: i32,
+    pub time_offset: f32,
     /// Lifecycle offset for visibility (not affected by speed).
     /// Used for spawn/despawn: lifecycle_time = global - lifecycle_offset
     pub lifecycle_offset: i32,
@@ -552,7 +552,7 @@ impl Default for AmSceneConfig {
             canvas_height: 960.0,
             flip_y: true,
             z_spacing: 0.1, // Base spacing for root scene
-            time_offset: 0,
+            time_offset: 0.0,
             lifecycle_offset: 0,
             speed_multiplier: 1.0,
             nesting_depth: 0,

@@ -322,6 +322,8 @@ pub(crate) fn spawn_embed_scene(
                 },
                 textprogress_cursor: 0,
                 textprogress_blink: false,
+                counter_offset: AmAnimatedFloat::default(),
+                counter_scale: AmAnimatedFloat::default(),
                 shape_props: Default::default(),
                 shape_points: Default::default(),
                 jitter_enabled: false,
@@ -426,12 +428,21 @@ pub(crate) fn spawn_embed_scene(
     // Parent internal time = (global_time - parent_time_offset) * parent_speed
     // global_start = parent_time_offset + embed.start_time / parent_speed
     let global_start = if config.speed_multiplier > 0.0 {
-        config.time_offset as f32 + embed.start_time as f32 / config.speed_multiplier
+        config.time_offset + embed.start_time as f32 / config.speed_multiplier
     } else {
-        config.time_offset as f32 + embed.start_time as f32
+        config.time_offset + embed.start_time as f32
     };
     let time_offset_with_in_time = if effective_speed > 0.0 {
-        global_start - in_time / effective_speed
+        // AM's retimeNestedScene computes the parent time via
+        //   timeFromFrameNumber(parentFrame, parentFPHS)
+        // which includes a +50000/fphs half-frame offset (the frame CENTER time).
+        // See NestedSceneElementKt.java:103 and TimeKt.java timeFromFrameNumber.
+        let half_frame_ms = if config.render_fps > 0.0 {
+            500.0 / config.render_fps
+        } else {
+            0.0
+        };
+        global_start - in_time / effective_speed - half_frame_ms / effective_speed
     } else {
         global_start
     };
@@ -475,7 +486,7 @@ pub(crate) fn spawn_embed_scene(
     let nested_config = AmSceneConfig {
         canvas_width: embed.scene.width as f32,
         canvas_height: embed.scene.height as f32,
-        time_offset: time_offset_with_in_time as i32,
+        time_offset: time_offset_with_in_time,
         lifecycle_offset: lifecycle_offset_with_in_time as i32,
         z_spacing: nested_z_spacing,
         nesting_depth: config.nesting_depth + 1,

@@ -40,7 +40,7 @@ pub(crate) fn process_pending_layers(
     white_pixel: Option<&Handle<Image>>,
     global_time: f32,
     parent_entity: Entity,
-    time_offset: i32,
+    time_offset: f32,
     filter: &crate::scene::LayerFilter,
 ) {
     // We need to collect actions to avoid borrowing issues
@@ -52,7 +52,7 @@ pub(crate) fn process_pending_layers(
         layer_id: u64,
         layers: &[PendingLayer],
         global_time: f32,
-        _time_offset: i32,
+        _time_offset: f32,
     ) -> bool {
         is_ancestor_active_impl(layer_id, layers, global_time, _time_offset, &mut Vec::new())
     }
@@ -61,7 +61,7 @@ pub(crate) fn process_pending_layers(
         layer_id: u64,
         layers: &[PendingLayer],
         global_time: f32,
-        _time_offset: i32,
+        _time_offset: f32,
         visited: &mut Vec<u64>,
     ) -> bool {
         // Cycle detection: if we've already visited this layer, assume active to break cycle

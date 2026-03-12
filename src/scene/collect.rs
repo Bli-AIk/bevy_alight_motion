@@ -538,7 +538,7 @@ fn collect_embed_layer(
             alpha_kf: echokf.alpha.clone(),
             embed_start: embed.start_time as f32,
             embed_end: embed.end_time as f32,
-            embed_time_offset: config.time_offset as f32,
+            embed_time_offset: config.time_offset,
             embed_speed: config.speed_multiplier,
         })
     } else {

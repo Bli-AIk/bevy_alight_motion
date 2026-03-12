@@ -25,13 +25,13 @@ use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback_system, animate_am_camera_system, animate_opacity_system,
-    animate_path_repeat_system, animate_rtt_blur_system, animate_sdf_opacity_system,
-    animate_sdf_scale_system, animate_size_system, animate_text_opacity_system,
-    animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
-    animate_unified_effect_system, apply_mask_clipping_system, fix_rtl_line_alignment_system,
-    manage_layer_lifecycle_system, update_echo_runtime_system, update_sdf_mask_system,
-    update_unified_mask_system,
+    AmPlayback, advance_playback_system, animate_am_camera_system, animate_counter_system,
+    animate_opacity_system, animate_path_repeat_system, animate_rtt_blur_system,
+    animate_sdf_opacity_system, animate_sdf_scale_system, animate_size_system,
+    animate_text_opacity_system, animate_text_progress_system, animate_text_spacing_system,
+    animate_transform_system, animate_unified_effect_system, apply_mask_clipping_system,
+    fix_rtl_line_alignment_system, manage_layer_lifecycle_system, update_echo_runtime_system,
+    update_sdf_mask_system, update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -127,6 +127,7 @@ impl Plugin for AlightMotionPlugin {
                     animate_sdf_opacity_system,
                     animate_text_opacity_system,
                     fix_rtl_line_alignment_system, // Fix RTL line alignment before spacing
+                    animate_counter_system,        // Counter effect modifies text content
                     animate_text_spacing_system,   // Text spacing post-layout modification
                     animate_text_progress_system,  // Text progress visibility
                     animate_unified_effect_system, // Unified effect system (RTT-ready)

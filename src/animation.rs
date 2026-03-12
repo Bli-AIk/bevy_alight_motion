@@ -33,9 +33,9 @@ pub use components::{
 
 // Re-export systems
 pub use effects::{
-    animate_path_repeat_system, animate_rtt_blur_system, animate_text_progress_system,
-    animate_text_spacing_system, animate_unified_effect_system, fix_rtl_line_alignment_system,
-    update_unified_mask_system,
+    animate_counter_system, animate_path_repeat_system, animate_rtt_blur_system,
+    animate_text_progress_system, animate_text_spacing_system, animate_unified_effect_system,
+    fix_rtl_line_alignment_system, update_unified_mask_system,
 };
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use sdf::{
