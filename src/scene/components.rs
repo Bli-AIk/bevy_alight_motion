@@ -427,7 +427,7 @@ pub enum AmBlendingMode {
 
 impl AmBlendingMode {
     /// Parse an AM blend mode string from XML.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_am(s: &str) -> Self {
         match s {
             "normal" => Self::Normal,
             "multiply" => Self::Multiply,

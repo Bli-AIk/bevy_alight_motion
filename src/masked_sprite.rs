@@ -421,8 +421,12 @@ impl UnifiedEffectMaterial {
 
     /// Set blend mode: (mode_id, canvas_w, canvas_h, enabled)
     pub fn set_blend_mode(&mut self, mode_id: f32, canvas_w: f32, canvas_h: f32) {
-        self.uniform_data.blend_mode_params =
-            Vec4::new(mode_id, canvas_w, canvas_h, if mode_id > 0.5 { 1.0 } else { 0.0 });
+        self.uniform_data.blend_mode_params = Vec4::new(
+            mode_id,
+            canvas_w,
+            canvas_h,
+            if mode_id > 0.5 { 1.0 } else { 0.0 },
+        );
     }
 }
 

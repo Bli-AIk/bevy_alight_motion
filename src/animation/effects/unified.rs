@@ -799,34 +799,16 @@ pub fn animate_unified_effect_system(
                 );
             }
 
-            let vertices = vec![
-                [
-                    offset_x - half_w - total_expansion,
-                    offset_y - half_h - total_expansion,
-                    0.0,
-                ],
-                [
-                    offset_x + half_w + total_expansion,
-                    offset_y - half_h - total_expansion,
-                    0.0,
-                ],
-                [
-                    offset_x + half_w + total_expansion,
-                    offset_y + half_h + total_expansion,
-                    0.0,
-                ],
-                [
-                    offset_x - half_w - total_expansion,
-                    offset_y + half_h + total_expansion,
-                    0.0,
-                ],
-            ];
-            let normals = vec![
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
-            ];
+            let (lx, rx) = (
+                offset_x - half_w - total_expansion,
+                offset_x + half_w + total_expansion,
+            );
+            let (by, ty) = (
+                offset_y - half_h - total_expansion,
+                offset_y + half_h + total_expansion,
+            );
+            let vertices = vec![[lx, by, 0.0], [rx, by, 0.0], [rx, ty, 0.0], [lx, ty, 0.0]];
+            let normals = vec![[0.0, 0.0, 1.0]; 4];
             // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
             let uv_exp_x = total_expansion / orig_width;
             let uv_exp_y = total_expansion / orig_height;

@@ -192,11 +192,10 @@ pub fn setup_lift_composite_system(
         sdf_count,
         min_z
     );
-    for (layer_entity, layer_transform) in
-        unified_layers_query
-            .iter()
-            .chain(sdf_layers_query.iter())
-            .chain(sprite_layers_query.iter())
+    for (layer_entity, layer_transform) in unified_layers_query
+        .iter()
+        .chain(sdf_layers_query.iter())
+        .chain(sprite_layers_query.iter())
     {
         bevy::log::trace!(
             "[LiftComposite] Checking entity {:?} at z={:.6} (below cutoff {}? {})",
@@ -274,11 +273,10 @@ pub fn propagate_lift_render_layers_system(
         return;
     }
 
-    for (entity, transform, current_layers) in
-        new_unified_layers
-            .iter()
-            .chain(new_sdf_layers.iter())
-            .chain(new_sprite_layers.iter())
+    for (entity, transform, current_layers) in new_unified_layers
+        .iter()
+        .chain(new_sdf_layers.iter())
+        .chain(new_sprite_layers.iter())
     {
         let already_has = current_layers
             .is_some_and(|l| l.intersects(&RenderLayers::layer(LIFT_COMPOSITE_RENDER_LAYER)));

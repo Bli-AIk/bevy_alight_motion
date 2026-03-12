@@ -577,7 +577,7 @@ pub(crate) fn collect_shape(
         spec,
         z_index: z,
         children: Vec::new(),
-        blending_mode: AmBlendingMode::from_str(shape.blending.as_str()),
+        blending_mode: AmBlendingMode::parse_am(shape.blending.as_str()),
         mask_info: None,
         palette_params: if palette_map.has_effect() {
             Some(AmPaletteMapParams::from_params(&palette_map))

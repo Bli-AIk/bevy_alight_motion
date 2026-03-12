@@ -10,8 +10,8 @@
 
 use bevy::prelude::*;
 
-use crate::scene::effects::PathRepeatParams;
 use crate::scene::AmBlendingMode;
+use crate::scene::effects::PathRepeatParams;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmAnimatedVec3};
 
 /// Retime mode for embedded scenes.
