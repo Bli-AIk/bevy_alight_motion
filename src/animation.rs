@@ -22,6 +22,7 @@ mod spawn;
 mod spawn_entity;
 mod systems;
 mod visual;
+mod visual_helpers;
 
 // Re-export components
 pub use components::{

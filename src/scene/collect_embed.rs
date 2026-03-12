@@ -305,8 +305,7 @@ pub(crate) fn collect_embed_scene(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&embed.fill_color, false)
-                * config.repeat_alpha_factor,
+            base_alpha: get_base_alpha(&embed.fill_color, false) * config.repeat_alpha_factor,
             fade_in_time: fade_effect.in_time,
             fade_out_time: fade_effect.out_time,
             fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,

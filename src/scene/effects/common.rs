@@ -4,15 +4,6 @@ use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect, AmKeyframe, AmProperty};
 
-/// Convert sRGB component to linear for shader (colors from AM are sRGB).
-fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
 /// Effect ID for fade effect.
 const FADE_ID: &str = "com.alightcreative.effects.fade";
 
@@ -709,6 +700,7 @@ pub struct RaysParams {
 
 /// Extract rays effect parameters from effects list.
 /// 从效果列表中提取射线效果参数。
+#[expect(clippy::excessive_nesting)] // reason: match arms inside for loop create inherent nesting
 pub(crate) fn extract_rays_effect(effects: &[AmEffect]) -> RaysParams {
     let mut params = RaysParams::default();
 

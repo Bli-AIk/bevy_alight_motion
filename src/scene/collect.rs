@@ -14,6 +14,7 @@ use crate::schema::{AmEmbedScene, AmLayer, AmScene};
 
 use super::collect_camera::*;
 use super::collect_embed::*;
+use super::collect_image::*;
 use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;

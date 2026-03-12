@@ -223,10 +223,10 @@ pub fn interpolate_color(
 pub fn parse_keyframe_color(s: &str) -> Option<bevy::prelude::Vec4> {
     use bevy::prelude::Vec4;
     // Handle #AARRGGBB hex color format (used by fillColor keyframes)
-    if s.starts_with('#') {
-        if let Ok(c) = crate::schema::parse_color(s) {
-            return Some(Vec4::new(c[0], c[1], c[2], c[3]));
-        }
+    if s.starts_with('#')
+        && let Ok(c) = crate::schema::parse_color(s)
+    {
+        return Some(Vec4::new(c[0], c[1], c[2], c[3]));
     }
     // Handle r,g,b,a comma-separated format
     let parts: Vec<f32> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();

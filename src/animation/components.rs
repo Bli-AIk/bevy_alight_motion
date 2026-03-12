@@ -628,10 +628,10 @@ impl AmAnimated {
         }
         let t = (global_time - self.time_offset as f32) * self.speed_multiplier;
         // When embed plays longer than its inner scene, clamp to freeze at last frame.
-        if let Some(inner_total) = self.embed_inner_total_time {
-            if t >= inner_total {
-                return inner_total - 1.0;
-            }
+        if let Some(inner_total) = self.embed_inner_total_time
+            && t >= inner_total
+        {
+            return inner_total - 1.0;
         }
         t
     }
@@ -642,10 +642,10 @@ impl AmAnimated {
             return nested_time;
         }
         let t = global_time - self.lifecycle_offset as f32;
-        if let Some(inner_total) = self.embed_inner_total_time {
-            if t >= inner_total {
-                return inner_total - 1.0;
-            }
+        if let Some(inner_total) = self.embed_inner_total_time
+            && t >= inner_total
+        {
+            return inner_total - 1.0;
         }
         t
     }

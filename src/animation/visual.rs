@@ -16,117 +16,7 @@ use crate::scene::{AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, A
 use crate::sdf_material::SdfMaterial;
 
 use super::sdf_spawn::spawn_sdf_visual;
-
-/// Pre-calculate initial mask params from mask_info for first-frame correctness.
-/// Returns (effect_flags_x, mask_params, mask2_flags_x, mask2_params).
-fn compute_initial_mask_params(
-    mask_info: &Option<AmMaskInfo>,
-    fit_scale: f32,
-    global_time_ms: u64,
-) -> (f32, Vec4, f32, Vec4) {
-    let default_mask = (
-        0.0,
-        Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-        0.0,
-        Vec4::new(0.0, 0.0, 10000.0, 10000.0),
-    );
-    let Some(mask_info) = mask_info else {
-        return default_mask;
-    };
-    let active_masks = mask_info.get_active_masks(global_time_ms);
-    if active_masks.is_empty() {
-        bevy::log::trace!(
-            "[MaterialInit] No active mask at time {}, mask_info has {} masks",
-            global_time_ms,
-            mask_info.masks.len()
-        );
-        return default_mask;
-    }
-
-    let mask1 = active_masks[0];
-    let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-    let mask1_type = if mask1.is_exclude {
-        base_type1 + 2.0
-    } else {
-        base_type1
-    };
-    let mask1_params = Vec4::new(
-        mask1.center.x * fit_scale,
-        mask1.center.y * fit_scale,
-        mask1.half_size.x * fit_scale * mask1.scale.x,
-        mask1.half_size.y * fit_scale * mask1.scale.y,
-    );
-
-    let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
-        let mask2 = active_masks[1];
-        let base_type2 = if mask2.is_circle { 2.0 } else { 1.0 };
-        let m2_type = if mask2.is_exclude {
-            base_type2 + 2.0
-        } else {
-            base_type2
-        };
-        let m2_params = Vec4::new(
-            mask2.center.x * fit_scale,
-            mask2.center.y * fit_scale,
-            mask2.half_size.x * fit_scale * mask2.scale.x,
-            mask2.half_size.y * fit_scale * mask2.scale.y,
-        );
-        bevy::log::trace!(
-            "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
-            mask1_type,
-            m2_type,
-            fit_scale
-        );
-        (m2_type, m2_params)
-    } else {
-        bevy::log::trace!(
-            "[MaterialInit] Mask init: effect_flags.x={}, center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.4}",
-            mask1_type,
-            mask1.center.x * fit_scale,
-            mask1.center.y * fit_scale,
-            mask1.half_size.x * fit_scale * mask1.scale.x,
-            mask1.half_size.y * fit_scale * mask1.scale.y,
-            fit_scale
-        );
-        (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))
-    };
-
-    (mask1_type, mask1_params, mask2_type, mask2_params)
-}
-
-/// Create a mesh from stretch bounds (min_x, max_x, min_y, max_y).
-fn create_stretch_bounds_mesh(
-    meshes: &mut Assets<Mesh>,
-    min_x: f32,
-    max_x: f32,
-    min_y: f32,
-    max_y: f32,
-) -> Handle<Mesh> {
-    let vertices = vec![
-        [min_x, min_y, 0.0],
-        [max_x, min_y, 0.0],
-        [max_x, max_y, 0.0],
-        [min_x, max_y, 0.0],
-    ];
-    let normals = vec![
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-    ];
-    let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
-    let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-    let mut new_mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
-        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-    );
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-    meshes.add(new_mesh)
-}
+use super::visual_helpers::{compute_initial_mask_params, create_stretch_bounds_mesh};
 
 #[expect(clippy::too_many_arguments)] // reason: visual setup requires many GPU resource handles
 pub(crate) fn add_visual_components(
@@ -164,12 +54,12 @@ pub(crate) fn add_visual_components(
     has_solidcolor: bool,   // True if layer has solidcolor effect (needs UnifiedEffectMaterial)
     has_wavewarp2: bool,    // True if layer has wavewarp2 effect (needs UnifiedEffectMaterial)
     has_mirror: bool,       // True if layer has mirror effect (needs UnifiedEffectMaterial)
-    has_lift: bool,         // True if layer has lift (copy background) effect (needs UnifiedEffectMaterial)
-    has_rays: bool,         // True if layer has rays effect (needs UnifiedEffectMaterial)
+    has_lift: bool, // True if layer has lift (copy background) effect (needs UnifiedEffectMaterial)
+    has_rays: bool, // True if layer has rays effect (needs UnifiedEffectMaterial)
     pixelate_expansion: f32, // Max pixelate expansion in display units (half max grid cell size)
-    wavewarp2_max_m2: f32,  // Max wavewarp2 magnitude across keyframes (for mesh expansion)
+    wavewarp2_max_m2: f32, // Max wavewarp2 magnitude across keyframes (for mesh expansion)
     mirror_max_offset: f32, // Max mirror offset across keyframes (for mesh expansion)
-    global_time_ms: u64,    // Current playback time for mask initialization
+    global_time_ms: u64, // Current playback time for mask initialization
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
     max_animated_scale: f32, // Max scale from animation keyframes for SDF mesh sizing
 ) {

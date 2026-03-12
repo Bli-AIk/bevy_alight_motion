@@ -56,10 +56,7 @@ pub fn setup_lift_composite_system(
     mut state: ResMut<LiftCompositeState>,
     window_query: Query<&Window>,
     // Newly spawned layers with lift effect
-    new_layers_query: Query<
-        (Entity, &AmAnimated, &Transform),
-        Added<AmAnimated>,
-    >,
+    new_layers_query: Query<(Entity, &AmAnimated, &Transform), Added<AmAnimated>>,
     // All renderable layers (for finding layers below lift)
     unified_layers_query: Query<
         (Entity, &Transform),
@@ -160,11 +157,13 @@ pub fn setup_lift_composite_system(
 
         // Add RenderLayer 31 to all existing layers below the lift z
         // Must handle both UnifiedEffectMaterial and SdfMaterial entities
-        for (layer_entity, layer_transform) in unified_layers_query.iter().chain(sdf_layers_query.iter()) {
+        for (layer_entity, layer_transform) in
+            unified_layers_query.iter().chain(sdf_layers_query.iter())
+        {
             if layer_transform.translation.z < lift_z {
-                commands.entity(layer_entity).insert(
-                    RenderLayers::from_layers(&[0, LIFT_COMPOSITE_RENDER_LAYER]),
-                );
+                commands
+                    .entity(layer_entity)
+                    .insert(RenderLayers::from_layers(&[0, LIFT_COMPOSITE_RENDER_LAYER]));
                 bevy::log::trace!(
                     "[LiftComposite] Added layer 31 to entity {:?} at z={:.6}",
                     layer_entity,
@@ -218,13 +217,15 @@ pub fn propagate_lift_render_layers_system(
         return;
     }
 
-    for (entity, transform, current_layers) in new_unified_layers.iter().chain(new_sdf_layers.iter()) {
+    for (entity, transform, current_layers) in
+        new_unified_layers.iter().chain(new_sdf_layers.iter())
+    {
         let already_has = current_layers
             .is_some_and(|l| l.intersects(&RenderLayers::layer(LIFT_COMPOSITE_RENDER_LAYER)));
         if transform.translation.z < state.lift_layer_z && !already_has {
-            commands.entity(entity).insert(
-                RenderLayers::from_layers(&[0, LIFT_COMPOSITE_RENDER_LAYER]),
-            );
+            commands
+                .entity(entity)
+                .insert(RenderLayers::from_layers(&[0, LIFT_COMPOSITE_RENDER_LAYER]));
             bevy::log::trace!(
                 "[LiftComposite] Late-added layer 31 to entity {:?} at z={:.6}",
                 entity,

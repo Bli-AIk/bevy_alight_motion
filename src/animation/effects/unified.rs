@@ -321,10 +321,8 @@ pub fn animate_unified_effect_system(
 
         // Update mirror effect (镜子)
         if animated.mirror_has_effect {
-            let alpha =
-                interpolate_float(&animated.mirror_alpha, layer_time).unwrap_or(1.0);
-            let offset =
-                interpolate_float(&animated.mirror_offset, layer_time).unwrap_or(0.0);
+            let alpha = interpolate_float(&animated.mirror_alpha, layer_time).unwrap_or(1.0);
+            let offset = interpolate_float(&animated.mirror_offset, layer_time).unwrap_or(0.0);
             // Encode type+1: 0=disabled, 1=horizontal, 2=vertical
             let type_plus_1 = (animated.mirror_type + 1) as f32;
             material.uniform_data.mirror_params = Vec4::new(
@@ -339,8 +337,7 @@ pub fn animate_unified_effect_system(
 
         // Update lift (copy background) effect
         if animated.lift_has_effect {
-            let fill =
-                interpolate_float(&animated.lift_fill, layer_time).unwrap_or(0.0);
+            let fill = interpolate_float(&animated.lift_fill, layer_time).unwrap_or(0.0);
             material.uniform_data.lift_params = Vec4::new(
                 fill,
                 animated.canvas_width,
@@ -353,27 +350,19 @@ pub fn animate_unified_effect_system(
 
         // Update rays (volumetric light rays) effect / 更新射线效果
         if animated.rays_has_effect {
-            let strength =
-                interpolate_float(&animated.rays_strength, layer_time).unwrap_or(0.15);
-            let intensity =
-                interpolate_float(&animated.rays_intensity, layer_time).unwrap_or(1.0);
-            let threshold =
-                interpolate_float(&animated.rays_threshold, layer_time).unwrap_or(0.6);
-            let quality =
-                interpolate_float(&animated.rays_quality, layer_time).unwrap_or(150.0);
-            let blend =
-                interpolate_float(&animated.rays_blend, layer_time).unwrap_or(0.0);
-            let center_x =
-                interpolate_float(&animated.rays_center_x, layer_time).unwrap_or(0.0);
-            let center_y =
-                interpolate_float(&animated.rays_center_y, layer_time).unwrap_or(0.0);
+            let strength = interpolate_float(&animated.rays_strength, layer_time).unwrap_or(0.15);
+            let intensity = interpolate_float(&animated.rays_intensity, layer_time).unwrap_or(1.0);
+            let threshold = interpolate_float(&animated.rays_threshold, layer_time).unwrap_or(0.6);
+            let quality = interpolate_float(&animated.rays_quality, layer_time).unwrap_or(150.0);
+            let blend = interpolate_float(&animated.rays_blend, layer_time).unwrap_or(0.0);
+            let center_x = interpolate_float(&animated.rays_center_x, layer_time).unwrap_or(0.0);
+            let center_y = interpolate_float(&animated.rays_center_y, layer_time).unwrap_or(0.0);
 
             // Convert AM center coords to normalized (AM uses ±500 range)
             let center_x_norm = 0.5 + center_x / 500.0;
             let center_y_norm = 0.5 - center_y / 500.0;
 
-            material.uniform_data.rays_params1 =
-                Vec4::new(strength, intensity, threshold, quality);
+            material.uniform_data.rays_params1 = Vec4::new(strength, intensity, threshold, quality);
             material.uniform_data.rays_params2 =
                 Vec4::new(blend, center_x_norm, center_y_norm, 1.0); // w=1.0 → enabled
             material.uniform_data.rays_threshold_color = animated.rays_threshold_color;

@@ -11,6 +11,7 @@
 mod collect;
 mod collect_camera;
 mod collect_embed;
+mod collect_image;
 mod collect_shape;
 mod collect_types;
 mod components;
@@ -81,6 +82,11 @@ mod tests {
             retime: None,
             echo_time_shift_ms: 0.0,
             echo_alpha_config: None,
+            render_fps: 30.0,
+            repeat_alpha_factor: 1.0,
+            repeat_offset: bevy::math::Vec2::ZERO,
+            repeat_rotation_deg: 0.0,
+            repeat_scale_factor: 1.0,
         };
 
         // Center of AM canvas should be at Bevy origin
