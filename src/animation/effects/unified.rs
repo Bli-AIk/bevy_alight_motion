@@ -390,16 +390,6 @@ pub fn animate_unified_effect_system(
             let adj_strength = strength / 8.0;
             let offset_x = angle_rad.cos() * adj_strength;
             let offset_y = angle_rad.sin() * adj_strength;
-            bevy::log::warn!(
-                "[RGB_SPLIT_PARAMS] layer_time={:.4} strength={:.4} angle={:.2}° offset=({:.6},{:.6}) orig=({:.1},{:.1})",
-                layer_time,
-                strength,
-                angle_deg,
-                offset_x,
-                offset_y,
-                orig_width,
-                orig_height
-            );
             material.uniform_data.rgb_split_params = Vec4::new(
                 offset_x,
                 offset_y,
@@ -798,16 +788,6 @@ pub fn animate_unified_effect_system(
             };
             let total_expansion =
                 pix_expansion + warp_expansion + mirror_expansion + rgb_split_expansion;
-            if rgb_split_expansion > 0.1 {
-                bevy::log::warn!(
-                    "[RGB_SPLIT_MESH] layer_id={} rgb_split_expansion={:.1} total={:.1} orig=({:.1},{:.1})",
-                    animated.layer_id,
-                    rgb_split_expansion,
-                    total_expansion,
-                    orig_width,
-                    orig_height
-                );
-            }
 
             let (lx, rx) = (
                 offset_x - half_w - total_expansion,
@@ -822,22 +802,6 @@ pub fn animate_unified_effect_system(
             // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
             let uv_exp_x = total_expansion / orig_width;
             let uv_exp_y = total_expansion / orig_height;
-            if rgb_split_expansion > 0.1 {
-                bevy::log::warn!(
-                    "[RGB_SPLIT_VERTS] half=({:.2},{:.2}) offset=({:.2},{:.2}) exp={:.2} verts=({:.1},{:.1})-({:.1},{:.1}) uv_exp=({:.4},{:.4})",
-                    half_w,
-                    half_h,
-                    offset_x,
-                    offset_y,
-                    total_expansion,
-                    lx,
-                    by,
-                    rx,
-                    ty,
-                    uv_exp_x,
-                    uv_exp_y
-                );
-            }
             let uvs = vec![
                 [s2_uv_min_x - uv_exp_x, (1.0 - s2_uv_min_y) + uv_exp_y],
                 [

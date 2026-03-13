@@ -116,11 +116,12 @@ pub(crate) fn process_pending_layers(
     for (idx, layer) in pending.layers.iter().enumerate() {
         // Use calc_local_time for visibility (applies accumulated parent speed).
         // start_time/end_time are in parent-scene time, so we need speed scaling.
-        // Note: calc_local_time now handles embed_inner_total_time clamping internally.
         let local_time = layer.animated.calc_local_time(global_time);
 
         // Check if layer should be active (considering both own time range and parent's time range)
         // Note: AM uses half-open interval [start, end) for layer visibility
+        // Note: PendingLayer.end_time is already extended by echo_time_shift_ms
+        // via extend_children_lifecycle() for echo/repeat copies.
         let own_time_active =
             local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 

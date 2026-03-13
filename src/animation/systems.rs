@@ -194,9 +194,9 @@ fn apply_pivot_offset(
         // Bevy rotates/scales around Transform.translation
         // We calculate where the visual center ends up after rotation/scale around pivot
 
-        // Get current rotation
+        // Get current rotation (including repeat offset for correct pivot compensation)
         let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
-        let rotation_rad = (-rotation_deg).to_radians(); // Bevy uses opposite rotation direction
+        let rotation_rad = (-rotation_deg + animated.repeat_rotation_offset_deg).to_radians();
 
         // Convert pivot to Bevy Y direction
         let pivot_bevy_y = -pivot_y;

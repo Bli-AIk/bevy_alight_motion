@@ -660,18 +660,16 @@ impl AmAnimated {
     }
 
     /// Calculate local time considering speed_multiplier (for animation interpolation).
+    ///
+    /// Note: The embed_inner_total_time clamp was intentionally removed.
+    /// For retime=freeze, apply_retime() already clamps via `embed_elapsed.min(total)`.
+    /// For retime=off, elements should naturally expire (is_active returns false),
+    /// not freeze at the last frame.
     pub fn calc_local_time(&self, global_time: f32) -> f32 {
         if let Some(nested_time) = self.apply_retime(global_time) {
             return nested_time;
         }
-        let t = (global_time - self.time_offset) * self.speed_multiplier;
-        // When embed plays longer than its inner scene, clamp to freeze at last frame.
-        if let Some(inner_total) = self.embed_inner_total_time
-            && t >= inner_total
-        {
-            return inner_total - 1.0;
-        }
-        t
+        (global_time - self.time_offset) * self.speed_multiplier
     }
 
     /// Calculate lifecycle time (for visibility/spawn decisions, not affected by speed).
@@ -679,13 +677,7 @@ impl AmAnimated {
         if let Some(nested_time) = self.apply_retime(global_time) {
             return nested_time;
         }
-        let t = global_time - self.lifecycle_offset as f32;
-        if let Some(inner_total) = self.embed_inner_total_time
-            && t >= inner_total
-        {
-            return inner_total - 1.0;
-        }
-        t
+        global_time - self.lifecycle_offset as f32
     }
 
     /// Check if layer is active at the given local time.
