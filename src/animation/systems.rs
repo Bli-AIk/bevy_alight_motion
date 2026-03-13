@@ -185,8 +185,11 @@ fn apply_pivot_offset(
         // Simply add pivot offset (Y flip for Bevy coordinates)
         *bx += pivot_x;
         *by -= pivot_y;
-    } else if matches!(layer_spec, crate::scene::AmLayerSpec::EmbedScene) {
-        // Embed scenes: need rotation-aware pivot compensation
+    } else if matches!(
+        layer_spec,
+        crate::scene::AmLayerSpec::EmbedScene | crate::scene::AmLayerSpec::Null
+    ) {
+        // Embed scenes & null objects: need rotation-aware pivot compensation
         // In AM, objects rotate/scale around (location + pivot)
         // Bevy rotates/scales around Transform.translation
         // We calculate where the visual center ends up after rotation/scale around pivot
