@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-13T13:00:22.671023+08:00",
+  "timestamp": "2026-03-13T14:24:29.157583+08:00",
   "summary": {
-    "passed": 150,
+    "passed": 151,
     "warnings": 0,
     "skipped": 2,
     "failed": 59
@@ -332,6 +332,9 @@
       "avg_similarity": 0.8823
     },
     "effects/repeat/group_bug": {
+      "status": "pass"
+    },
+    "effects/repeat/group_pivot": {
       "status": "pass"
     },
     "effects/replace-color/basic": {
