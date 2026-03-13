@@ -187,6 +187,14 @@ pub(super) fn spawn_layer_entity(
         bx += animated.repeat_position_offset.x;
         by += animated.repeat_position_offset.y;
 
+        // TEMP debug: trace spawn position
+        eprintln!(
+            "[SPAWN_POS] '{}' id={} has_parent={} canvas={}x{} loc=({:.1},{:.1},{:.1}) -> ({:.1},{:.1}) z={:.6}",
+            layer.label, layer.id, animated.has_parent,
+            animated.canvas_width, animated.canvas_height,
+            loc[0], loc[1], loc[2], bx, by, layer.transform.translation.z
+        );
+
         Vec3::new(bx, by, layer.transform.translation.z)
     } else {
         layer.transform.translation

@@ -12,7 +12,7 @@ use crate::animation::{AmAnimated, AmRetimeInfo, RetimeMode};
 use crate::loader::FontMetrics;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 
-use super::collect::{apply_mask_to_children, collect_pending_layers};
+use super::collect::collect_pending_layers;
 use super::components::*;
 use super::effects::*;
 use super::helpers::*;
@@ -196,8 +196,8 @@ pub(crate) fn collect_embed_scene(
         child.animated.embed_inner_total_time = Some(inner_total);
     }
 
-    // Process mask relationships within this embed scene
-    apply_mask_to_children(&mut children);
+    // NOTE: Mask relationships are already processed inside collect_pending_layers().
+    // Do NOT call apply_mask_to_children() again here — it would duplicate mask entries.
 
     // Propagate embed's replaceColor effect to children that don't have their own.
     // In AM, group effects apply after compositing children into an FBO.

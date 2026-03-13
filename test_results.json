@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-13T17:59:57.724882+08:00",
+  "timestamp": "2026-03-13T20:51:33.643081+08:00",
   "summary": {
     "passed": 152,
     "warnings": 0,
     "skipped": 2,
-    "failed": 64
+    "failed": 65
   },
   "results": {
     "basic/bezier/bezier": {
@@ -664,6 +664,10 @@
     },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
+    },
+    "private/USER_hong_jiao/test/detail_subdiv_circle": {
+      "status": "fail",
+      "avg_similarity": 0.9132
     },
     "private/USER_hong_jiao/test/rect_subdiv_1": {
       "status": "fail",

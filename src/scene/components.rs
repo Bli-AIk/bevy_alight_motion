@@ -495,6 +495,10 @@ pub struct AmMaskEntry {
     pub mask_layer_id: u64,
     /// Whether this is an exclude mask (inverted - hide inside, show outside)
     pub is_exclude: bool,
+    /// The AM parent layer ID of the mask layer (0 = root / no parent).
+    /// Used at runtime to look up the parent's animated scale, since SDF parents
+    /// use Transform.scale=(1,1) and don't propagate scale through Bevy hierarchy.
+    pub mask_parent_layer_id: u64,
 }
 
 /// Information about active masks that can clip this layer.

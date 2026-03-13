@@ -74,6 +74,9 @@ fn apply_id_remap(pl: &mut PendingLayer, id_map: &HashMap<u64, u64>, is_root: bo
             if let Some(&new_mask) = id_map.get(&entry.mask_layer_id) {
                 entry.mask_layer_id = new_mask;
             }
+            if let Some(&new_parent) = id_map.get(&entry.mask_parent_layer_id) {
+                entry.mask_parent_layer_id = new_parent;
+            }
         }
     }
     for child in &mut pl.children {
@@ -172,9 +175,9 @@ fn remap_flattened_child(
     // Also update the layer_id in animated component
     child.animated.layer_id = child.id;
 
-    // **CRITICAL**: Remap mask_layer_id in mask_info to new IDs
+    // **CRITICAL**: Remap mask_layer_id and mask_parent_layer_id in mask_info to new IDs
     // This is essential for nested masks to work correctly, since the
-    // mask layer's ID gets remapped during flattening.
+    // mask layer's ID and its parent's ID get remapped during flattening.
     if let Some(ref mut info) = child.mask_info {
         for mask in info.masks.iter_mut() {
             // Look up the new ID for this mask layer
@@ -191,6 +194,16 @@ fn remap_flattened_child(
                     new_mask_id
                 );
                 mask.mask_layer_id = new_mask_id;
+            }
+
+            // Also remap the mask's parent layer ID
+            let new_mask_parent = id_mappings
+                .iter()
+                .find(|(old, _new)| *old == mask.mask_parent_layer_id)
+                .map(|(_, new)| *new);
+
+            if let Some(new_parent_id) = new_mask_parent {
+                mask.mask_parent_layer_id = new_parent_id;
             }
         }
     }
@@ -1005,5 +1018,6 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
         end_time: global_end,
         mask_layer_id: layer.id,
         is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
+        mask_parent_layer_id: layer.parent,
     })
 }
