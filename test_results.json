@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-13T20:51:33.643081+08:00",
+  "timestamp": "2026-03-13T21:57:56.194350+08:00",
   "summary": {
-    "passed": 152,
+    "passed": 148,
     "warnings": 0,
     "skipped": 2,
-    "failed": 65
+    "failed": 70
   },
   "results": {
     "basic/bezier/bezier": {
@@ -145,26 +145,26 @@
     },
     "effects/copy-bg/exposure-gamma/test": {
       "status": "fail",
-      "avg_similarity": 0.9214
+      "avg_similarity": 0.9586
     },
     "effects/copy-bg/rgb-split/test": {
       "status": "fail",
-      "avg_similarity": 0.9609
+      "avg_similarity": 0.9749
     },
     "effects/count/basic/test": {
       "status": "fail",
-      "avg_similarity": 0.5406
+      "avg_similarity": 0.5385
     },
     "effects/echo-keyframes/basic": {
       "status": "pass"
     },
     "effects/enlarge-bg/exposure-gamma-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8572
+      "avg_similarity": 0.8955
     },
     "effects/enlarge-bg/exposure-gamma/test": {
       "status": "fail",
-      "avg_similarity": 0.8848
+      "avg_similarity": 0.93
     },
     "effects/enlarge-bg/replace-color-layer/test": {
       "status": "fail",
@@ -176,11 +176,11 @@
     },
     "effects/enlarge-bg/rgb-split-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8755
+      "avg_similarity": 0.8857
     },
     "effects/enlarge-bg/rgb-split/test": {
       "status": "fail",
-      "avg_similarity": 0.8735
+      "avg_similarity": 0.8871
     },
     "effects/enlarge-bg/wave-warp-layer/test": {
       "status": "fail",
@@ -313,23 +313,28 @@
       "status": "pass"
     },
     "effects/rays/center/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.934
     },
     "effects/rays/intensity/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9163
     },
     "effects/rays/length/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9665
     },
     "effects/rays/threshold/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9198
     },
     "effects/repeat/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9688
     },
     "effects/repeat/group": {
       "status": "fail",
-      "avg_similarity": 0.8823
+      "avg_similarity": 0.9301
     },
     "effects/repeat/group_bug": {
       "status": "pass"
@@ -350,8 +355,7 @@
       "status": "pass"
     },
     "effects/rgb-split/light-black/test": {
-      "status": "fail",
-      "avg_similarity": 0.9455
+      "status": "pass"
     },
     "effects/rgb-split/light-gray/test": {
       "status": "pass"
@@ -376,6 +380,10 @@
     },
     "effects/rgb-split/mask-white/test": {
       "status": "pass"
+    },
+    "effects/rgb-split/sprite/test": {
+      "status": "fail",
+      "avg_similarity": 0.948
     },
     "effects/scale-assist/basic": {
       "status": "pass"
