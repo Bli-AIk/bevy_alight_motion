@@ -365,8 +365,18 @@ pub(crate) fn flatten_pending_layers_inner(
                 })
                 .collect();
 
+            // Build z_map from OLD IDs to absolute z values (before remapping).
+            // AM uses absolute z-ordering within a scene, but Bevy's Transform hierarchy
+            // accumulates z from parent to child. We must make child z values relative
+            // to their parent so that global z matches the intended absolute z-order.
+            let z_map: std::collections::HashMap<u64, f32> = flattened_children
+                .iter()
+                .map(|c| (c.id, c.transform.translation.z))
+                .collect();
+
             // Pass 2: Apply the mapping with correct parent lookup
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
+                let original_parent = child.parent;
                 child.id = id_mappings[idx].1;
                 remap_flattened_child(
                     &mut child,
@@ -376,6 +386,16 @@ pub(crate) fn flatten_pending_layers_inner(
                     embed_bevy_pos,
                     child_embed_id,
                 );
+
+                // Fix z-accumulation: make child z relative to parent's z.
+                // Without this, a child at absolute z=0.001 parented to a layer at z=0.005
+                // would get global z=0.006 (parent + child), breaking AM's absolute z-order.
+                if original_parent != 0 {
+                    if let Some(&parent_z) = z_map.get(&original_parent) {
+                        child.transform.translation.z -= parent_z;
+                    }
+                }
+
                 result.push(child);
             }
         }
