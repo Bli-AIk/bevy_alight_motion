@@ -841,6 +841,8 @@ pub struct AmSdfParams {
     pub border2_packed_color: f32,
     /// Border 2 mode (0=centered, 1=inside, -1=outside)
     pub border2_mode: f32,
+    /// Frame half at spawn time, used to compute mesh scale ratio for parent-child scale inheritance
+    pub spawn_frame_half: f32,
 }
 
 // Keep legacy types for now to avoid breaking changes in case they're referenced elsewhere

@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-13T14:24:29.157583+08:00",
+  "timestamp": "2026-03-13T17:59:57.724882+08:00",
   "summary": {
-    "passed": 151,
+    "passed": 152,
     "warnings": 0,
     "skipped": 2,
-    "failed": 59
+    "failed": 64
   },
   "results": {
     "basic/bezier/bezier": {
@@ -661,6 +661,29 @@
     },
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "pass"
+    },
+    "private/USER_hong_jiao/test/detail_subdiv": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_1": {
+      "status": "fail",
+      "avg_similarity": 0.9533
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_2": {
+      "status": "fail",
+      "avg_similarity": 0.8494
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3": {
+      "status": "fail",
+      "avg_similarity": 0.8749
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_4": {
+      "status": "fail",
+      "avg_similarity": 0.8324
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_5": {
+      "status": "fail",
+      "avg_similarity": 0.8454
     },
     "private/USER_little_black/test0": {
       "status": "pass"

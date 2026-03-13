@@ -117,6 +117,7 @@ fn remap_flattened_child(
 
         if let Some(new_parent_id) = new_parent_id {
             child.parent = new_parent_id;
+            child.animated.parent_layer_id = new_parent_id;
         } else {
             // Parent is external to this flatten batch - keep original
             // (will be remapped by outer flatten call if needed)

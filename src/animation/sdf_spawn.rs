@@ -331,6 +331,7 @@ pub fn spawn_sdf_visual(
                 border2_width,
                 border2_packed_color: packed_border2,
                 border2_mode,
+                spawn_frame_half: frame_half,
             },
         ))
         .id();
