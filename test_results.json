@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-13T07:23:22.885501+08:00",
+  "timestamp": "2026-03-13T11:36:42.738581+08:00",
   "summary": {
-    "passed": 149,
+    "passed": 150,
     "warnings": 0,
     "skipped": 2,
-    "failed": 58
+    "failed": 61
   },
   "results": {
     "basic/bezier/bezier": {
@@ -496,6 +496,13 @@
     "private/USER_71/3_ex3": {
       "status": "fail",
       "avg_similarity": 0.9619
+    },
+    "private/USER_aik/0/split1": {
+      "status": "pass"
+    },
+    "private/USER_aik/0/split2": {
+      "status": "fail",
+      "avg_similarity": 0.4981
     },
     "private/USER_bot_205/demo/bullet": {
       "status": "fail"

@@ -1306,7 +1306,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Discard fragments in expansion area when no expansion-capable effect is active
     let wavewarp2_enabled = uniforms.wavewarp2_flags.y > 0.5;
     let mirror_enabled = uniforms.mirror_params.x > 0.5;
-    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled && !mirror_enabled
+    let rgb_split_active = uniforms.rgb_split_params.w >= -0.5;
+    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled && !mirror_enabled && !rgb_split_active
         && (mesh.uv.x < 0.0 || mesh.uv.x > 1.0 || mesh.uv.y < 0.0 || mesh.uv.y > 1.0) {
         discard;
     }
