@@ -40,6 +40,34 @@ PARALLEL_JOBS=${PARALLEL_JOBS:-4}  # Default 4 parallel jobs (for frame extracti
 FILTER_PATTERN=""
 RUN_ALL=false
 FRAME_TEST=false
+HEADLESS=false
+
+# Parse --headless flag (can appear anywhere)
+for arg in "$@"; do
+    if [ "$arg" == "--headless" ]; then
+        HEADLESS=true
+    fi
+done
+# Remove --headless from positional args
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" != "--headless" ]; then
+        ARGS+=("$arg")
+    fi
+done
+set -- "${ARGS[@]}"
+
+# Auto-detect headless: if no DISPLAY or WAYLAND_DISPLAY, enable headless
+if [ "$HEADLESS" = false ] && [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    echo "No display detected, enabling headless mode automatically."
+    HEADLESS=true
+fi
+
+# Verify xvfb-run is available for headless mode
+if [ "$HEADLESS" = true ] && ! command -v xvfb-run &> /dev/null; then
+    echo "Error: headless mode requires xvfb-run (install with: apt install xvfb)"
+    exit 1
+fi
 
 if [ "$1" == "--all" ]; then
     RUN_ALL=true
@@ -97,6 +125,9 @@ if [ "$RUN_ALL" = true ]; then
     echo "Mode: Running ALL tests (basic_*, fx_*, complex_*)"
 elif [ -n "$FILTER_PATTERN" ]; then
     echo "Mode: Running tests matching '$FILTER_PATTERN*'"
+fi
+if [ "$HEADLESS" = true ]; then
+    echo "Headless: enabled (software rendering via llvmpipe + Xvfb)"
 fi
 echo ""
 
@@ -278,10 +309,15 @@ run_single_test() {
     local result_file="$RESULTS_DIR/${flat_name}.result"
     local log_file="$RESULTS_DIR/${flat_name}.log"
     
-    # Run directly without virtual framebuffer for consistent results
-    # with manual testing. This requires a real display or proper GPU access.
+    # In headless mode, wrap with xvfb-run and pass --headless to player
+    local headless_flag=""
+    local xvfb_prefix=""
+    if [ "$HEADLESS" = true ]; then
+        headless_flag="--headless"
+        xvfb_prefix="xvfb-run -a"
+    fi
     CARGO_MANIFEST_DIR="$MANIFEST_DIR" \
-        "$PLAYER_BIN" "$test_id" > "$log_file" 2>&1
+        $xvfb_prefix "$PLAYER_BIN" "$test_id" $headless_flag > "$log_file" 2>&1
     
     local exit_code=$?
     

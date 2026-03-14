@@ -66,32 +66,44 @@ use bevy_alight_motion::prelude::*;
 #[cfg(feature = "debug")]
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
-/// Get the project file based on CLI argument.
-fn get_project_file() -> String {
-    let args: Vec<String> = std::env::args().collect();
-    let project_name = args
-        .get(1)
-        .map(|s| s.as_str())
-        .unwrap_or("complex/misc/simple_gb");
+/// Parsed CLI arguments for the player.
+struct CliArgs {
+    project_file: String,
+    headless: bool,
+}
 
-    // Shortcuts for common projects
-    let path = match project_name {
-        "simple_gb" => "projects/complex/misc/simple_gb.amproj",
-        "complex_1" => "projects/complex/examples/1.amproj",
-        "complex_2" => "projects/complex/examples/2.amproj",
-        "complex_3" => "projects/complex/examples/3.amproj",
-        other => {
-            // Use the argument directly as a path under projects/
-            // e.g., "basic/shape/shape" -> "projects/basic/shape/shape.amproj"
-            return format!("projects/{}.amproj", other);
+/// Parse CLI arguments: `[--headless] <project_name>`
+fn parse_cli_args() -> CliArgs {
+    let args: Vec<String> = std::env::args().collect();
+    let mut headless = false;
+    let mut project_name = None;
+
+    for arg in args.iter().skip(1) {
+        if arg == "--headless" {
+            headless = true;
+        } else if project_name.is_none() {
+            project_name = Some(arg.as_str());
         }
+    }
+
+    let name = project_name.unwrap_or("complex/misc/simple_gb");
+    let project_file = match name {
+        "simple_gb" => "projects/complex/misc/simple_gb.amproj".to_string(),
+        "complex_1" => "projects/complex/examples/1.amproj".to_string(),
+        "complex_2" => "projects/complex/examples/2.amproj".to_string(),
+        "complex_3" => "projects/complex/examples/3.amproj".to_string(),
+        other => format!("projects/{}.amproj", other),
     };
 
-    path.to_string()
+    CliArgs {
+        project_file,
+        headless,
+    }
 }
 
 fn main() {
-    let project_file = get_project_file();
+    let cli = parse_cli_args();
+    let project_file = cli.project_file;
     println!("Loading project: {}", project_file);
 
     #[allow(unused_mut)]
@@ -123,6 +135,7 @@ fn main() {
                 resolution.y as u32,
             ),
             resizable: false,
+            visible: !cli.headless,
             // Disable VSync in frame-test mode for accurate FPS measurement
             #[cfg(feature = "frame-test")]
             present_mode: bevy::window::PresentMode::AutoNoVsync,
