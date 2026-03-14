@@ -298,11 +298,6 @@ pub fn animate_transform_system(
             continue;
         }
 
-        // TEMP: Skip animate_transform entirely for embed content to test rendering
-        //if is_embed_content {
-        //    continue;
-        //}
-
         // Calculate normalized time within layer duration
         let layer_time = animated.calc_layer_time(local_time);
 
@@ -525,21 +520,6 @@ pub fn animate_transform_system(
             // Apply repeat group position offset (accumulated per-copy offset)
             bx += animated.repeat_position_offset.x;
             by += animated.repeat_position_offset.y;
-
-            // TEMP debug: trace final animated position for embed children
-            if animated.canvas_height > 1100.0 && !animated.has_parent {
-                eprintln!(
-                    "[ANIM_POS] id={} has_parent={} canvas={}x{} loc=({:.1},{:.1}) -> ({:.1},{:.1})",
-                    animated.layer_id,
-                    animated.has_parent,
-                    animated.canvas_width,
-                    animated.canvas_height,
-                    loc[0],
-                    loc[1],
-                    bx,
-                    by
-                );
-            }
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }

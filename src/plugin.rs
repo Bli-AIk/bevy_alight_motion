@@ -111,11 +111,6 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::propagate_render_layers_system,
                     // Flush so content entities have their RenderLayers before rendering
                     ApplyDeferred,
-                    // Debug system for RTT camera projection verification
-                    crate::effects::debug_rtt_camera_projection_system,
-                    // TEMP: Replace UnifiedEffectMaterial with ColorMaterial for testing
-                    // crate::effects::temp_replace_content_material_system,
-                    ApplyDeferred,
                     // Lift composite setup (must run after layer spawn and RTT setup)
                     crate::effects::setup_lift_composite_system,
                     crate::effects::propagate_lift_render_layers_system,

@@ -75,12 +75,6 @@ pub(super) fn spawn_layer_entity(
         || !layer.animated.stretch2_scale.keyframes.is_empty();
     let needs_effect = has_wipe || has_stretch || has_mask || has_blur || has_stretch2;
 
-    if layer.containing_embed_id != 0 {
-        eprintln!("[SPAWN_DBG] embed content '{}': needs_effect={}, has_wipe={}, has_stretch={}, has_mask={}, has_blur={}, has_stretch2={}, stretch_amount={:?}, stretch_angle={:?}",
-            layer.label, needs_effect, has_wipe, has_stretch, has_mask, has_blur, has_stretch2,
-            layer.animated.stretch_amount.value, layer.animated.stretch_angle.value);
-    }
-
     // Calculate correct initial position at spawn time (to prevent frame jump)
     // Use the same logic as animate_transform_system
     let animated = &layer.animated;
@@ -194,22 +188,6 @@ pub(super) fn spawn_layer_entity(
         bx += animated.repeat_position_offset.x;
         by += animated.repeat_position_offset.y;
 
-        // TEMP debug: trace spawn position
-        eprintln!(
-            "[SPAWN_POS] '{}' id={} has_parent={} canvas={}x{} loc=({:.1},{:.1},{:.1}) -> ({:.1},{:.1}) z={:.6}",
-            layer.label,
-            layer.id,
-            animated.has_parent,
-            animated.canvas_width,
-            animated.canvas_height,
-            loc[0],
-            loc[1],
-            loc[2],
-            bx,
-            by,
-            layer.transform.translation.z
-        );
-
         Vec3::new(bx, by, layer.transform.translation.z)
     } else {
         layer.transform.translation
@@ -234,11 +212,6 @@ pub(super) fn spawn_layer_entity(
         } else {
             Vec3::new(current_scale[0] * rsf, current_scale[1] * rsf, 1.0)
         };
-
-    if layer.containing_embed_id != 0 {
-        eprintln!("[SPAWN_SCALE] embed content '{}': initial_scale=({:.4},{:.4}), actual_scale=({:.4},{:.4}), current_scale=({:.4},{:.4}), rsf={:.4}",
-            layer.label, initial_scale.x, initial_scale.y, actual_scale[0], actual_scale[1], current_scale[0], current_scale[1], rsf);
-    }
 
     bevy::log::debug!(
         "[SpawnInit] '{}' layer_time={:.4}, pos=({:.1},{:.1},{:.4}), rot={:.2}°, scale=({:.3},{:.3})",

@@ -47,11 +47,10 @@ pub use rtt::{
     EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
     EmbedSceneRttCamera, NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
     apply_embed_bounds_clipping_system, cleanup_embed_content_system,
-    cleanup_embed_scene_rtt_system, debug_rtt_camera_projection_system,
-    evaluate_render_strategy_system, fix_nested_embed_render_layers_system,
-    propagate_render_layers_system, propagate_render_layers_to_children_system,
-    setup_embed_scene_rtt_system, sync_rtt_camera_position_system,
-    temp_replace_content_material_system,
+    cleanup_embed_scene_rtt_system, evaluate_render_strategy_system,
+    fix_nested_embed_render_layers_system, propagate_render_layers_system,
+    propagate_render_layers_to_children_system, setup_embed_scene_rtt_system,
+    sync_rtt_camera_position_system,
 };
 
 pub use lift_composite::{

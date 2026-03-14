@@ -106,7 +106,3 @@ path = "examples/generate_docs.rs"
 [[example]]
 name = "scan_impl"
 path = "examples/scan_impl.rs"
-
-[[example]]
-name = "test_rtt"
-path = "examples/test_rtt.rs"

@@ -51,7 +51,6 @@ impl Plugin for EffectRenderPlugin {
         // - fix_nested_embed_render_layers_system
         // - propagate_render_layers_system
         // - propagate_render_layers_to_children_system (disabled, causes transform issues)
-        // - debug_rtt_camera_projection_system (registered in plugin.rs chain)
     }
 }
 
@@ -208,13 +207,6 @@ pub fn evaluate_render_strategy_system(
     mut commands: Commands,
     query: Query<(Entity, &NeedsStrategyEvaluation, Option<&AmGroupFill>), Without<RenderStrategy>>,
 ) {
-    let count = query.iter().count();
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static EVAL_FRAME: AtomicU32 = AtomicU32::new(0);
-    let f = EVAL_FRAME.fetch_add(1, Ordering::Relaxed);
-    if count > 0 || f < 5 {
-        eprintln!("[EVAL_STRATEGY] frame={} found {} embeds needing strategy evaluation", f, count);
-    }
     for (entity, needs_eval, group_fill) in query.iter() {
         // Determine render strategy based on embed properties
         //
@@ -287,7 +279,7 @@ pub fn setup_embed_scene_rtt_system(
     mut fill_materials: ResMut<Assets<crate::group_fill::GroupFillMaterial>>,
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut color_materials: ResMut<Assets<ColorMaterial>>,
+    _color_materials: ResMut<Assets<ColorMaterial>>,
     query: Query<
         (
             Entity,
@@ -299,19 +291,10 @@ pub fn setup_embed_scene_rtt_system(
         ),
         Without<EmbedSceneRtt>,
     >,
-    pending_query: Query<&crate::scene::AmPendingLayers>,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
-    // Get the RTT cameras container from AmPendingLayers
-    let rtt_cameras_container = pending_query
-        .iter()
-        .next()
-        .and_then(|p| p.rtt_cameras_container);
-
     for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated) in query.iter() {
-        // TEMP DEBUG: Log RTT setup
-        eprintln!("[TEMP_RTT] Setting up RTT for entity {:?}, layer_id={}, scene={}x{}, global_pos=({:.1},{:.1}), global_scale=({:.3},{:.3}), has_fill={}", entity, animated.layer_id, needs_rtt.scene_width, needs_rtt.scene_height, embed_global.translation().x, embed_global.translation().y, embed_global.to_scale_rotation_translation().0.x, embed_global.to_scale_rotation_translation().0.y, group_fill.is_some());
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -380,31 +363,18 @@ pub fn setup_embed_scene_rtt_system(
             ))
             .id();
 
-        // TEMP DEBUG: Test entity disabled — testing content with transform skip
-        let embed_translation = embed_global.translation();
-
-        // TEMP: Skip parenting camera to container for debugging
-        // Add RTT camera to the container if available
-        // if let Some(container) = rtt_cameras_container {
-        //     commands.entity(container).add_child(camera_entity);
-        // }
-
         // Determine which RenderLayers to use for the embed's Sprite.
         // If this embed is a child of another embed (nested), it should render
         // to the parent embed's RTT layer so the parent embed can see it.
         // If it's a top-level embed, it renders to layer 0 (main camera).
         let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
-            // Check if parent has EmbedSceneRtt
             if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
-                eprintln!("[TEMP_RTT] Embed {:?} (layer_id={}) is child of embed {:?} with RTT layer {}, using that layer for sprite", entity, animated.layer_id, parent, parent_rtt.render_layer);
                 RenderLayers::layer(parent_rtt.render_layer as usize)
             } else {
-                eprintln!("[TEMP_RTT] Embed {:?} (layer_id={}) has parent {:?} but no RTT, using layer 0", entity, animated.layer_id, parent);
                 RenderLayers::layer(0)
             }
         } else {
-            eprintln!("[TEMP_RTT] Embed {:?} (layer_id={}) has no parent, using layer 0", entity, animated.layer_id);
             RenderLayers::layer(0)
         };
 
@@ -542,169 +512,6 @@ pub fn fix_nested_embed_render_layers_system(
     }
 }
 
-/// Debug system to verify RTT camera projection settings
-pub fn debug_rtt_camera_projection_system(
-    camera_query: Query<(
-        Entity,
-        &EmbedSceneRttCamera,
-        &Camera,
-        &Projection,
-        &Transform,
-        &RenderLayers,
-        &GlobalTransform,
-    )>,
-    embed_query: Query<(
-        &EmbedSceneRtt,
-        &Transform,
-        &GlobalTransform,
-        &RenderLayers,
-    )>,
-    content_query: Query<(
-        Entity,
-        &crate::scene::AmEmbedContentMarker,
-        &Transform,
-        &GlobalTransform,
-        Option<&RenderLayers>,
-        Option<&Visibility>,
-        Option<&InheritedVisibility>,
-        Option<&ViewVisibility>,
-        Option<&Mesh2d>,
-        Option<&MeshMaterial2d<ColorMaterial>>,
-        Option<&MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>,
-    )>,
-    images: Res<Assets<Image>>,
-) {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    if frame != 3 && frame != 5 && frame != 10 {
-        return;
-    }
-
-    eprintln!("=== [RTT DEBUG] Frame {} ===", frame);
-
-    for (entity, rtt_cam, camera, projection, cam_tf, cam_layers, cam_gtf) in camera_query.iter() {
-        // Check camera computed state
-        let viewport_size = camera.logical_viewport_size();
-        let has_target_info = camera.computed.target_info.is_some();
-        // Check if GlobalTransform == Transform (no parent transform interference)
-        let gt = cam_gtf.translation();
-        eprintln!(
-            "[RTT DEBUG] Camera {:?}: pos=({:.1},{:.1},{:.1}), global_pos=({:.1},{:.1},{:.1}), layers={:?}, is_active={}, order={}, viewport={:?}, has_target_info={}",
-            entity,
-            cam_tf.translation.x,
-            cam_tf.translation.y,
-            cam_tf.translation.z,
-            gt.x, gt.y, gt.z,
-            cam_layers,
-            camera.is_active,
-            camera.order,
-            viewport_size,
-            has_target_info,
-        );
-        if let Projection::Orthographic(ortho) = projection {
-            eprintln!(
-                "[RTT DEBUG]   projection: {:?}, area={}x{}",
-                ortho.scaling_mode,
-                ortho.area.width(),
-                ortho.area.height()
-            );
-        }
-
-        // Log embed entity's transform and layers
-        if let Ok((rtt, embed_tf, embed_gtf, embed_layers)) =
-            embed_query.get(rtt_cam.embed_entity)
-        {
-            let (gs, gr, gt) = embed_gtf.to_scale_rotation_translation();
-            eprintln!(
-                "[RTT DEBUG]   Embed {:?}: local_pos=({:.1},{:.1}), global_pos=({:.1},{:.1}), global_scale=({:.3},{:.3}), embed_layers={:?}, rtt_layer={}",
-                rtt_cam.embed_entity,
-                embed_tf.translation.x,
-                embed_tf.translation.y,
-                gt.x,
-                gt.y,
-                gs.x,
-                gs.y,
-                embed_layers,
-                rtt.render_layer,
-            );
-            // Check RTT texture content
-            if let Some(img) = images.get(&rtt.render_texture) {
-                let non_zero = img.data.as_ref().map_or(0, |d| d.iter().filter(|&&b| b != 0).count());
-                let data_len = img.data.as_ref().map_or(0, |d| d.len());
-                eprintln!(
-                    "[RTT DEBUG]   RTT texture: {}x{}, data_len={}, non_zero_bytes={}",
-                    img.width(), img.height(), data_len, non_zero,
-                );
-            } else {
-                eprintln!("[RTT DEBUG]   RTT texture: NOT FOUND in assets!");
-            }
-        }
-
-        // Log content entities with FULL component details
-        for (ce, marker, tf, gtf, layers, vis, inherited_vis, view_vis, mesh2d, color_mat, uem_mat) in
-            content_query.iter()
-        {
-            if marker.embed_entity != rtt_cam.embed_entity {
-                continue;
-            }
-            let (s, _r, t) = gtf.to_scale_rotation_translation();
-            eprintln!(
-                "[RTT DEBUG]   Content {:?}: local=({:.1},{:.1},{:.1}), global=({:.1},{:.1},{:.1}), local_scale=({:.3},{:.3}), global_scale=({:.3},{:.3}), layers={:?}, vis={:?}, inherited_vis={:?}, view_vis={:?}, has_mesh2d={}, has_color_mat={}, has_uem={}",
-                ce,
-                tf.translation.x,
-                tf.translation.y,
-                tf.translation.z,
-                t.x,
-                t.y,
-                t.z,
-                tf.scale.x,
-                tf.scale.y,
-                s.x,
-                s.y,
-                layers,
-                vis,
-                inherited_vis.map(|v| v.get()),
-                view_vis.map(|v| v.get()),
-                mesh2d.is_some(),
-                color_mat.is_some(),
-                uem_mat.is_some(),
-            );
-        }
-    }
-}
-
-// TEMP: Test system to replace UnifiedEffectMaterial with ColorMaterial on embed content
-pub fn temp_replace_content_material_system(
-    mut commands: Commands,
-    content_query: Query<
-        (Entity, &crate::scene::AmEmbedContentMarker),
-        (
-            With<Mesh2d>,
-            With<MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>,
-        ),
-    >,
-    mut color_materials: ResMut<Assets<ColorMaterial>>,
-) {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    if frame != 1 {
-        return; // Only run once on frame 1
-    }
-    for (entity, _marker) in content_query.iter() {
-        let red_material =
-            color_materials.add(ColorMaterial::from_color(Color::linear_rgba(1.0, 0.0, 0.0, 1.0)));
-        commands
-            .entity(entity)
-            .remove::<MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>()
-            .insert(MeshMaterial2d(red_material));
-        eprintln!(
-            "[TEMP_REPLACE] Replaced UnifiedEffectMaterial on {:?} with red ColorMaterial",
-            entity
-        );
-    }
-}
 ///
 /// **Hybrid Rendering Pipeline Logic:**
 ///
@@ -734,10 +541,6 @@ pub fn propagate_render_layers_system(
     children_query: Query<&Children>,
     render_layers_query: Query<&RenderLayers>,
 ) {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-
     // Build a map of embed entity -> render layer for Composite embeds
     let composite_layers: HashMap<Entity, u8> = composite_embed_query
         .iter()
@@ -751,18 +554,6 @@ pub fn propagate_render_layers_system(
         .map(|(entity, _)| entity)
         .collect();
 
-    // Debug logging
-    if frame <= 10 || frame.is_multiple_of(60) {
-        bevy::log::trace!(
-            "[RenderLayers] Frame {}: Composite={}, Direct={}, content={}",
-            frame,
-            composite_layers.len(),
-            direct_embeds.len(),
-            content_query.iter().count()
-        );
-    }
-
-    // Track how many updates we make
     let mut updates = 0;
 
     // Assign RenderLayers to all embed content and their Bevy children
@@ -800,12 +591,7 @@ pub fn propagate_render_layers_system(
         // to the RTT camera.
         let mut to_visit = Vec::new();
         if let Ok(children) = children_query.get(content_entity) {
-            if frame <= 5 {
-                eprintln!("[PROP_LAYERS] Content {:?} has {} children", content_entity, children.len());
-            }
             to_visit.extend(children.iter());
-        } else if frame <= 5 {
-            eprintln!("[PROP_LAYERS] Content {:?} has NO Children component", content_entity);
         }
         while let Some(child) = to_visit.pop() {
             let child_needs_update = match render_layers_query.get(child) {
@@ -813,9 +599,6 @@ pub fn propagate_render_layers_system(
                 Err(_) => true,
             };
             if child_needs_update {
-                if frame <= 5 {
-                    eprintln!("[PROP_LAYERS] Assigning {:?} to child {:?}", target_layer, child);
-                }
                 commands.entity(child).insert(target_layer.clone());
                 updates += 1;
             }
@@ -853,10 +636,6 @@ pub fn propagate_render_layers_to_children_system(
     // Query for entities that are NOT embeds
     non_embed_query: Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-    let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-
     let mut total_updates = 0;
 
     // Process Composite strategy embeds (propagate RTT layer)
@@ -906,10 +685,9 @@ pub fn propagate_render_layers_to_children_system(
         );
     }
 
-    if frame <= 10 || frame.is_multiple_of(60) || total_updates > 0 || direct_with_children > 0 {
+    if total_updates > 0 {
         bevy::log::trace!(
-            "[PropagateChildren] Frame {}: {} updates, Direct embeds with children: {} (total {} children)",
-            frame,
+            "[PropagateChildren] {} updates, Direct embeds with children: {} (total {} children)",
             total_updates,
             direct_with_children,
             direct_total_children
