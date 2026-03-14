@@ -60,6 +60,7 @@ pub(crate) fn collect_null(
     let lift_effect = extract_lift_effect(&null.effects);
     let rays_effect = extract_rays_effect(&null.effects);
     let exposure_gamma_effect = extract_exposure_gamma_effect(&null.effects);
+    let chromakey_effect = extract_chromakey_effect(&null.effects);
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
@@ -301,6 +302,12 @@ pub(crate) fn collect_null(
             exposure_gamma: exposure_gamma_effect.gamma,
             exposure_offset: exposure_gamma_effect.offset,
             exposure_has_effect: exposure_gamma_effect.has_effect,
+            chromakey_enabled: chromakey_effect.enabled,
+            chromakey_key_color: chromakey_effect.key_color,
+            chromakey_threshold: chromakey_effect.threshold,
+            chromakey_feather: chromakey_effect.feather,
+            chromakey_defringe: chromakey_effect.defringe,
+            chromakey_invert: chromakey_effect.invert,
             blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
@@ -634,6 +641,12 @@ pub(crate) fn collect_text(
             exposure_gamma: AmAnimatedFloat::default(),
             exposure_offset: AmAnimatedFloat::default(),
             exposure_has_effect: false,
+            chromakey_enabled: false,
+            chromakey_key_color: crate::schema::AmAnimatedColor::default(),
+            chromakey_threshold: AmAnimatedFloat::default(),
+            chromakey_feather: AmAnimatedFloat::default(),
+            chromakey_defringe: false,
+            chromakey_invert: false,
             blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,

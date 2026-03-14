@@ -429,6 +429,30 @@ pub fn animate_unified_effect_system(
         }
         material.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
 
+        // Update chromakey effect / 色度键效果
+        if animated.chromakey_enabled {
+            let key_color = interpolate_color(&animated.chromakey_key_color, layer_time)
+                .unwrap_or(Vec4::new(0.0, 1.0, 0.0, 1.0));
+            let threshold =
+                interpolate_float(&animated.chromakey_threshold, layer_time).unwrap_or(0.1);
+            let feather =
+                interpolate_float(&animated.chromakey_feather, layer_time).unwrap_or(0.05);
+            // key_color is in sRGB from AM; convert to linear for shader
+            let linear_key = Vec4::new(
+                srgb_to_linear(key_color.x),
+                srgb_to_linear(key_color.y),
+                srgb_to_linear(key_color.z),
+                key_color.w,
+            );
+            material.set_chromakey(
+                linear_key,
+                threshold,
+                feather,
+                animated.chromakey_defringe,
+                animated.chromakey_invert,
+            );
+        }
+
         // Update blend mode / 混合模式
         if animated.blend_mode.is_blend() {
             material.set_blend_mode(
@@ -777,8 +801,11 @@ pub fn animate_unified_effect_system(
             } else {
                 0.0
             };
-            // RGB split expansion: shifted channels extend beyond layer bounds
-            let rgb_split_expansion = if animated.rgb_split_enabled {
+            // RGB split expansion: shifted channels extend beyond layer bounds.
+            // When lift (copy-bg) is active, AM confines the effect to the layer's
+            // FBO — no mesh expansion needed because the composite texture already
+            // covers the full screen and the shader samples it at offset UVs.
+            let rgb_split_expansion = if animated.rgb_split_enabled && !animated.lift_has_effect {
                 let strength =
                     interpolate_float(&animated.rgb_split_strength, layer_time).unwrap_or(0.15);
                 let adj_strength = (strength / 8.0).abs();

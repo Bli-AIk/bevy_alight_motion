@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-13T21:57:56.194350+08:00",
+  "timestamp": "2026-03-14T04:54:33.822963+08:00",
   "summary": {
-    "passed": 148,
+    "passed": 154,
     "warnings": 0,
     "skipped": 2,
-    "failed": 70
+    "failed": 63
   },
   "results": {
     "basic/bezier/bezier": {
@@ -144,12 +144,20 @@
       "avg_similarity": 0.8959
     },
     "effects/copy-bg/exposure-gamma/test": {
+<<<<<<< HEAD
       "status": "fail",
       "avg_similarity": 0.9586
     },
     "effects/copy-bg/rgb-split/test": {
       "status": "fail",
       "avg_similarity": 0.9749
+=======
+      "status": "pass"
+    },
+    "effects/copy-bg/rgb-split/test": {
+      "status": "fail",
+      "avg_similarity": 0.975
+>>>>>>> 1d5aafb (feat: add ChromaKey effect support (色度键效果))
     },
     "effects/count/basic/test": {
       "status": "fail",
@@ -176,7 +184,11 @@
     },
     "effects/enlarge-bg/rgb-split-layer/test": {
       "status": "fail",
+<<<<<<< HEAD
       "avg_similarity": 0.8857
+=======
+      "avg_similarity": 0.8858
+>>>>>>> 1d5aafb (feat: add ChromaKey effect support (色度键效果))
     },
     "effects/enlarge-bg/rgb-split/test": {
       "status": "fail",
@@ -674,8 +686,7 @@
       "status": "pass"
     },
     "private/USER_hong_jiao/test/detail_subdiv_circle": {
-      "status": "fail",
-      "avg_similarity": 0.9132
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_1": {
       "status": "fail",

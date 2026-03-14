@@ -216,6 +216,11 @@ pub struct UnifiedEffectUniform {
     // Blend mode / 混合模式
     /// Blend mode params: (mode_id, canvas_w, canvas_h, enabled)
     pub blend_mode_params: Vec4,
+    // ChromaKey (chroma keying) effect / 色度键效果
+    /// ChromaKey params: (threshold, feather, defringe, invert)
+    pub chromakey_params: Vec4,
+    /// ChromaKey key color (linear RGBA)
+    pub chromakey_key_color: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -428,6 +433,24 @@ impl UnifiedEffectMaterial {
             if mode_id > 0.5 { 1.0 } else { 0.0 },
         );
     }
+
+    /// Set chromakey params: (threshold, feather, defringe, invert) + key_color
+    pub fn set_chromakey(
+        &mut self,
+        key_color: Vec4,
+        threshold: f32,
+        feather: f32,
+        defringe: bool,
+        invert: bool,
+    ) {
+        self.uniform_data.chromakey_params = Vec4::new(
+            threshold,
+            feather,
+            if defringe { 1.0 } else { 0.0 },
+            if invert { 1.0 } else { 0.0 },
+        );
+        self.uniform_data.chromakey_key_color = key_color;
+    }
 }
 
 impl Default for UnifiedEffectUniform {
@@ -505,6 +528,8 @@ impl Default for UnifiedEffectUniform {
             rgb_split_params: Vec4::new(0.0, 0.0, 0.0, -1.0),
             exposure_gamma_params: Vec4::ZERO,
             blend_mode_params: Vec4::ZERO,
+            chromakey_params: Vec4::ZERO,
+            chromakey_key_color: Vec4::ZERO,
         }
     }
 }

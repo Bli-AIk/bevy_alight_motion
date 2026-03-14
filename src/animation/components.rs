@@ -577,6 +577,19 @@ pub struct AmAnimated {
     pub exposure_offset: AmAnimatedFloat,
     /// Whether exposure/gamma effect is present
     pub exposure_has_effect: bool,
+    // ChromaKey effect (com.alightcreative.effects.chromakey)
+    /// Whether chromakey effect is enabled
+    pub chromakey_enabled: bool,
+    /// Key color to remove (animated RGBA)
+    pub chromakey_key_color: crate::schema::AmAnimatedColor,
+    /// Color matching tolerance (0.0-1.0, animated)
+    pub chromakey_threshold: AmAnimatedFloat,
+    /// Edge transition softness (0.0-1.0, animated)
+    pub chromakey_feather: AmAnimatedFloat,
+    /// Remove edge color spill
+    pub chromakey_defringe: bool,
+    /// Invert keying result (keep key color areas)
+    pub chromakey_invert: bool,
     /// Layer blend mode (Normal, Multiply, Screen, etc.)
     pub blend_mode: AmBlendingMode,
     /// Retime info for children of retimed embed scenes.

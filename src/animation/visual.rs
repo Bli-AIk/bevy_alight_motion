@@ -59,6 +59,7 @@ pub(crate) fn add_visual_components(
     has_rgb_split: bool, // True if layer has RGB split effect (needs UnifiedEffectMaterial)
     has_exposure: bool, // True if layer has exposure/gamma effect (needs UnifiedEffectMaterial)
     has_blend: bool, // True if layer has non-normal blend mode (needs UnifiedEffectMaterial)
+    has_chromakey: bool, // True if layer has chromakey effect (needs UnifiedEffectMaterial)
     rgb_split_max_offset: f32, // Max RGB split offset in UV space (max_strength / 8.0) for mesh expansion
     pixelate_expansion: f32,   // Max pixelate expansion in display units (half max grid cell size)
     wavewarp2_max_m2: f32,     // Max wavewarp2 magnitude across keyframes (for mesh expansion)
@@ -111,7 +112,8 @@ pub(crate) fn add_visual_components(
         || has_rays
         || has_rgb_split
         || has_exposure
-        || has_blend;
+        || has_blend
+        || has_chromakey;
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(

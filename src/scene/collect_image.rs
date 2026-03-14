@@ -53,6 +53,7 @@ pub(crate) fn collect_image(
     let lift_effect = extract_lift_effect(&image.effects);
     let rays_effect = extract_rays_effect(&image.effects);
     let exposure_gamma_effect = extract_exposure_gamma_effect(&image.effects);
+    let chromakey_effect = extract_chromakey_effect(&image.effects);
     let (width, height) = get_shape_size(&image.properties, &image.fill_type);
 
     // Calculate anchor and position compensation
@@ -300,6 +301,12 @@ pub(crate) fn collect_image(
             exposure_gamma: exposure_gamma_effect.gamma,
             exposure_offset: exposure_gamma_effect.offset,
             exposure_has_effect: exposure_gamma_effect.has_effect,
+            chromakey_enabled: chromakey_effect.enabled,
+            chromakey_key_color: chromakey_effect.key_color,
+            chromakey_threshold: chromakey_effect.threshold,
+            chromakey_feather: chromakey_effect.feather,
+            chromakey_defringe: chromakey_effect.defringe,
+            chromakey_invert: chromakey_effect.invert,
             blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,

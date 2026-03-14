@@ -5,6 +5,7 @@
 //! Entry point for all effect definitions.
 //! 所有效果定义的入口模块。
 
+pub mod chromakey;
 pub mod counter;
 pub mod echokf;
 pub mod exposure_gamma;
@@ -77,6 +78,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &simplex_displace::EFFECT,
         &rgb_split::EFFECT,
         &exposure_gamma::EFFECT,
+        &chromakey::EFFECT,
     ]
 }
 

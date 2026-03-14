@@ -106,6 +106,9 @@ struct UnifiedEffectUniform {
     exposure_gamma_params: vec4<f32>,  // (exposure, gamma, offset, enabled)
     // Blend mode / 混合模式
     blend_mode_params: vec4<f32>,      // (mode_id, canvas_w, canvas_h, enabled)
+    // ChromaKey (chroma keying) / 色度键
+    chromakey_params: vec4<f32>,       // (threshold, feather, defringe, invert)
+    chromakey_key_color: vec4<f32>,    // (r, g, b, a) linear
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -765,6 +768,85 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
 
     // Convert back to linear
     return vec4<f32>(srgb_to_linear(final_srgb.rgb), final_srgb.a);
+}
+
+// ChromaKey (chroma keying) effect / 色度键效果
+// chromakey_params: (threshold, feather, defringe, invert)
+// chromakey_key_color: linear RGBA key color
+fn apply_chromakey(input_color: vec4<f32>) -> vec4<f32> {
+    let threshold = uniforms.chromakey_params.x;
+    let feather = uniforms.chromakey_params.y;
+    let do_defringe = uniforms.chromakey_params.z > 0.5;
+    let do_invert = uniforms.chromakey_params.w > 0.5;
+
+    let key_color = uniforms.chromakey_key_color;
+
+    // Convert texture from linear to sRGB (AM works in sRGB/gamma space)
+    let tex_srgb = vec4<f32>(linear_to_srgb(input_color.rgb), input_color.a);
+
+    // Un-premultiply alpha
+    var src_color: vec3<f32>;
+    if tex_srgb.a > 0.0001 {
+        src_color = tex_srgb.rgb / tex_srgb.a;
+    } else {
+        if do_invert {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return input_color;
+    }
+
+    // Key color is in linear; convert to sRGB for comparison
+    let key_srgb = vec3<f32>(
+        linear_to_srgb_ch(key_color.r),
+        linear_to_srgb_ch(key_color.g),
+        linear_to_srgb_ch(key_color.b),
+    );
+
+    // RGB→YUV using AM's matrix (same as replace_color)
+    let key_yuv = vec3<f32>(
+        dot(key_srgb, vec3<f32>(0.299, 0.587, 0.114)),
+        dot(key_srgb, vec3<f32>(-0.14713, -0.28886, 0.436)),
+        dot(key_srgb, vec3<f32>(0.615, -0.51499, -0.10001))
+    );
+    let src_yuv = vec3<f32>(
+        dot(src_color, vec3<f32>(0.299, 0.587, 0.114)),
+        dot(src_color, vec3<f32>(-0.14713, -0.28886, 0.436)),
+        dot(src_color, vec3<f32>(0.615, -0.51499, -0.10001))
+    );
+
+    // Weighted YUV distance: de-emphasize luminance, emphasize chroma
+    var diff_yuv = abs(key_yuv - src_yuv);
+    diff_yuv.x *= 0.5;
+    diff_yuv.y *= 4.0;
+    diff_yuv.z *= 4.0;
+    let diff = length(diff_yuv);
+
+    // Smoothstep: p=1 when close match, p=0 when far
+    let eff_feather = max(feather, 0.0005);
+    let b = max(threshold - eff_feather, 0.0);
+    let a = min(threshold + eff_feather, 4.0);
+    let low_edge = min(b, a - 0.0005);
+    var p = 1.0 - smoothstep(low_edge, a, diff);
+
+    if do_invert {
+        p = 1.0 - p;
+    }
+
+    // p = mask value: 1.0 = fully keyed (transparent), 0.0 = fully opaque
+    let new_alpha = tex_srgb.a * (1.0 - p);
+
+    var result_rgb = src_color;
+    // Defringe: suppress key color spill at semi-transparent edges
+    if do_defringe && p > 0.01 && new_alpha > 0.001 {
+        let key_lum = dot(key_srgb, vec3<f32>(0.299, 0.587, 0.114));
+        let desat = vec3<f32>(key_lum, key_lum, key_lum);
+        // At edges (partial p), desaturate the key color contribution
+        result_rgb = mix(src_color, mix(src_color, desat, p), min(p * 2.0, 1.0));
+    }
+
+    // Re-premultiply and convert back to linear
+    let result_premul = result_rgb * new_alpha;
+    return vec4<f32>(srgb_to_linear(result_premul), new_alpha);
 }
 
 // AM-compatible 2D cubic bezier easing
@@ -1841,7 +1923,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
             let luminance_weighting = vec3<f32>(0.2126, 0.7152, 0.0722);
             if mode == 0 {
-                tex_color = out_color * color_mid.a;
+                tex_color = vec4<f32>(out_color.rgb, 1.0) * color_mid.a;
             } else if mode == 1 {
                 let r = vec4<f32>(out_color.r, 0.0, 0.0, out_color.r);
                 let g = vec4<f32>(0.0, out_color.g, 0.0, out_color.g);
@@ -1852,11 +1934,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 let l = vec4<f32>(lum, lum, lum, lum);
                 c = m + (c * (1.0 - m.a));
                 c = l + (c * (1.0 - l.a));
-                tex_color = c;
+                tex_color = vec4<f32>(c.rgb, c.a);
             } else if mode == 2 {
                 tex_color = vec4<f32>(out_color.rgb, color_mid.a);
             } else {
-                tex_color = out_color * ((color_low.a + color_mid.a + color_high.a) / 3.0);
+                let avg_a = (color_low.a + color_mid.a + color_high.a) / 3.0;
+                tex_color = vec4<f32>(out_color.rgb, 1.0) * avg_a;
             }
 
             // Apply fill blending: for fill > 0, mix with original layer content
@@ -2032,6 +2115,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply replace color effect if enabled (AFTER threshold)
     if replace_color_enabled {
         tex_color = apply_replace_color(tex_color);
+    }
+
+    // Apply chromakey effect if enabled / 色度键效果
+    let chromakey_enabled = uniforms.chromakey_key_color.a > 0.5;
+    if chromakey_enabled {
+        tex_color = apply_chromakey(tex_color);
     }
     
     // Apply palette map effect if enabled

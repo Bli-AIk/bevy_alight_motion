@@ -57,6 +57,7 @@ pub fn setup_lift_composite_system(
     mut images: ResMut<Assets<Image>>,
     mut state: ResMut<LiftCompositeState>,
     window_query: Query<&Window>,
+    clear_color: Res<ClearColor>,
     // Newly spawned layers with lift effect or blend mode
     new_layers_query: Query<(Entity, &AmAnimated, &Transform), Added<AmAnimated>>,
     // All renderable layers (for finding layers below lift)
@@ -162,7 +163,7 @@ pub fn setup_lift_composite_system(
             LiftCompositeCameraMarker,
             Camera2d,
             Camera {
-                clear_color: ClearColorConfig::Custom(Color::NONE),
+                clear_color: ClearColorConfig::Custom(clear_color.0),
                 order: -50,
                 ..default()
             },
@@ -186,10 +187,12 @@ pub fn setup_lift_composite_system(
     let mut added_count = 0u32;
     let unified_count = unified_layers_query.iter().count();
     let sdf_count = sdf_layers_query.iter().count();
+    let sprite_count = sprite_layers_query.iter().count();
     bevy::log::trace!(
-        "[LiftComposite] Searching for bg layers: {} unified, {} sdf, cutoff z={:.6}",
+        "[LiftComposite] Searching bg layers: {} unified, {} sdf, {} sprite, cutoff z={:.6}",
         unified_count,
         sdf_count,
+        sprite_count,
         min_z
     );
     for (layer_entity, layer_transform) in unified_layers_query

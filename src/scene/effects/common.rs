@@ -1,4 +1,4 @@
-//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist, Fade, Rays).
+//! Common effect parameter extraction (Wipe, Stretch, Stretch2, Blur, PaletteMap, ReplaceColor, ScaleAssist, Fade, Rays, ChromaKey).
 
 use bevy::prelude::*;
 
@@ -757,6 +757,74 @@ pub(crate) fn extract_rays_effect(effects: &[AmEffect]) -> RaysParams {
                 "quality" => apply_animated_float(&mut params.quality, prop),
                 _ => (),
             }
+        }
+    }
+
+    params
+}
+
+
+// ──────── ChromaKey 色度键 ────────
+
+/// Chroma key effect parameters (`com.alightcreative.effects.chromakey`).
+/// Removes pixels matching a specified key color (green/blue screen).
+/// 色度键效果参数 — 移除匹配指定键色的像素（绿幕/蓝幕抠像）
+#[derive(Debug, Clone)]
+pub struct ChromaKeyParams {
+    pub enabled: bool,
+    /// Key color to remove (animated RGBA)
+    pub key_color: AmAnimatedColor,
+    /// Color matching tolerance (0.0-1.0)
+    pub threshold: AmAnimatedFloat,
+    /// Edge transition softness (0.0-1.0)
+    pub feather: AmAnimatedFloat,
+    /// Remove edge color spill
+    pub defringe: bool,
+    /// Invert keying result (keep key color areas)
+    pub invert: bool,
+}
+
+impl Default for ChromaKeyParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            key_color: AmAnimatedColor::default(),
+            threshold: AmAnimatedFloat {
+                value: Some(0.1),
+                keyframes: Vec::new(),
+            },
+            feather: AmAnimatedFloat {
+                value: Some(0.05),
+                keyframes: Vec::new(),
+            },
+            defringe: false,
+            invert: false,
+        }
+    }
+}
+
+/// Extract chroma key effect parameters from effects.
+/// 从效果列表中提取色度键效果参数
+pub(crate) fn extract_chromakey_effect(effects: &[AmEffect]) -> ChromaKeyParams {
+    let mut params = ChromaKeyParams::default();
+
+    let Some(effect) = effects
+        .iter()
+        .find(|e| e.id == "com.alightcreative.effects.chromakey")
+    else {
+        return params;
+    };
+
+    params.enabled = true;
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "keyColor" => apply_animated_color(&mut params.key_color, prop),
+            "threshold" => apply_animated_float(&mut params.threshold, prop),
+            "feather" => apply_animated_float(&mut params.feather, prop),
+            "defringe" => params.defringe = prop.value == "true",
+            "invert" => params.invert = prop.value == "true",
+            _ => {}
         }
     }
 

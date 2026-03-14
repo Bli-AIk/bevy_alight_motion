@@ -598,6 +598,7 @@ pub(super) fn spawn_layer_entity(
             layer.animated.rgb_split_enabled,    // has_rgb_split - needs UnifiedEffectMaterial
             layer.animated.exposure_has_effect,  // has_exposure - needs UnifiedEffectMaterial
             layer.blending_mode.is_blend(),      // has_blend - needs UnifiedEffectMaterial
+            layer.animated.chromakey_enabled,     // has_chromakey - needs UnifiedEffectMaterial
             if layer.animated.rgb_split_enabled {
                 // Max RGB split offset in UV space = max_strength / 8.0
                 let max_strength = layer

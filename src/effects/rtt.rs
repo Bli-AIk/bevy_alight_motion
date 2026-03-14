@@ -481,7 +481,8 @@ pub fn setup_embed_scene_rtt_system(
                 || animated.mirror_has_effect
                 || animated.lift_has_effect
                 || animated.rays_has_effect
-                || animated.rgb_split_enabled;
+                || animated.rgb_split_enabled
+                || animated.chromakey_enabled;
 
             if needs_unified {
                 // Use UnifiedEffectMaterial so effects can be applied to RTT output
