@@ -96,7 +96,11 @@ impl Plugin for AlightMotionPlugin {
                     spawn_loaded_projects_system,
                     advance_playback_system,
                     manage_layer_lifecycle_system, // Spawn/despawn visuals based on time
-                    // Flush commands so newly spawned entities are available for animation systems
+                    // Flush commands so newly spawned entities are available
+                    ApplyDeferred,
+                    // Evaluate render strategy for newly spawned embeds
+                    crate::effects::evaluate_render_strategy_system,
+                    // Flush so NeedsEmbedSceneRtt is available for RTT setup
                     ApplyDeferred,
                     // RTT setup must happen before animation systems to ensure proper rendering
                     crate::effects::setup_embed_scene_rtt_system,
@@ -105,12 +109,17 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::fix_nested_embed_render_layers_system,
                     // Propagate RenderLayers immediately after RTT setup
                     crate::effects::propagate_render_layers_system,
+                    // Flush so content entities have their RenderLayers before rendering
+                    ApplyDeferred,
+                    // Debug system for RTT camera projection verification
+                    crate::effects::debug_rtt_camera_projection_system,
+                    // TEMP: Replace UnifiedEffectMaterial with ColorMaterial for testing
+                    // crate::effects::temp_replace_content_material_system,
+                    ApplyDeferred,
                     // Lift composite setup (must run after layer spawn and RTT setup)
                     crate::effects::setup_lift_composite_system,
                     crate::effects::propagate_lift_render_layers_system,
                     crate::effects::update_lift_comp_material_system,
-                    // TODO: propagate_render_layers_to_children_system disabled - causes transform issues
-                    // crate::effects::propagate_render_layers_to_children_system,
                 )
                     .chain(),
             )

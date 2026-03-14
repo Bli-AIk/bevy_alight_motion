@@ -51,6 +51,7 @@ pub use rtt::{
     evaluate_render_strategy_system, fix_nested_embed_render_layers_system,
     propagate_render_layers_system, propagate_render_layers_to_children_system,
     setup_embed_scene_rtt_system, sync_rtt_camera_position_system,
+    temp_replace_content_material_system,
 };
 
 pub use lift_composite::{

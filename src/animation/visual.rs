@@ -23,6 +23,7 @@ pub(crate) fn add_visual_components(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
+    color_materials: &mut Assets<ColorMaterial>,
     sdf_materials: &mut Assets<SdfMaterial>,
     entity: Entity,
     spec: &AmLayerSpec,
@@ -481,6 +482,31 @@ pub(crate) fn add_visual_components(
                 let color = extract_fill_color(fill_color, false);
                 let scaled_width = base_width * initial_scale.0.abs();
                 let scaled_height = base_height * initial_scale.1.abs();
+
+                if is_embed_content {
+                    // Embed content fill shapes use ColorMaterial for RTT alpha mask.
+                    // UnifiedEffectMaterial's complex shader doesn't render correctly
+                    // in RTT cameras; a simple white ColorMaterial provides the correct
+                    // opaque mask for GroupFillMaterial.
+                    // 嵌入内容填充形状使用 ColorMaterial 作为 RTT alpha 遮罩。
+                    let (sprite_w, sprite_h) = initial_stretch_mesh_bounds
+                        .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y))
+                        .unwrap_or((scaled_width, scaled_height));
+                    eprintln!("[EMBED_CM] Creating ColorMaterial for embed content '{}': size=({:.1},{:.1}), scaled=({:.1},{:.1}), stretch_bounds={:?}, anchor={:?}",
+                        label, sprite_w, sprite_h, scaled_width, scaled_height, initial_stretch_mesh_bounds, anchor);
+                    let mesh = create_anchored_rectangle(
+                        meshes, sprite_w, sprite_h, anchor,
+                    );
+                    let material = color_materials.add(
+                        ColorMaterial::from_color(Color::WHITE),
+                    );
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        AmVisualSpawned,
+                        bevy::camera::visibility::NoFrustumCulling,
+                    ));
+                } else {
                 let blur_expansion = pixelate_expansion
                     + if has_wavewarp2 {
                         let exp = wavewarp2_max_m2 / 100.0 * scaled_width.max(scaled_height);
@@ -543,6 +569,7 @@ pub(crate) fn add_visual_components(
                     UnifiedEffectMarker,
                     AmVisualSpawned,
                 ));
+                }
 
                 bevy::log::trace!(
                     "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
@@ -769,7 +796,7 @@ pub(crate) fn add_visual_components(
             // Add render strategy evaluation marker if scene size is available
             // The evaluate_render_strategy_system will determine the appropriate strategy
             if let Some((width, height)) = embed_scene_size {
-                bevy::log::trace!(
+                eprintln!(
                     "[SpawnVisuals] EmbedScene '{}' (id={}) gets NeedsStrategyEvaluation: {}x{}, has_scale_anim={}",
                     label,
                     id,

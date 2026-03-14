@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-14T09:21:45.509146+08:00",
+  "timestamp": "2026-03-14T12:02:04.904432+08:00",
   "summary": {
     "passed": 152,
     "warnings": 0,
     "skipped": 2,
-    "failed": 66
+    "failed": 68
   },
   "results": {
     "basic/bezier/bezier": {
@@ -36,6 +36,14 @@
     },
     "basic/cutoff/cutoff": {
       "status": "pass"
+    },
+    "basic/fill/nested_solid_color": {
+      "status": "fail",
+      "avg_similarity": 0.8566
+    },
+    "basic/fill/nested_solid_color_parent_child": {
+      "status": "fail",
+      "avg_similarity": 0.6291
     },
     "basic/frame/frame": {
       "status": "pass"

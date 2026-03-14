@@ -34,6 +34,7 @@ pub(super) fn spawn_layer_entity(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
+    color_materials: &mut Assets<ColorMaterial>,
     sdf_materials: &mut Assets<SdfMaterial>,
     layer: &PendingLayer,
     images: &HashMap<String, Handle<Image>>,
@@ -73,6 +74,12 @@ pub(super) fn spawn_layer_entity(
     let has_stretch2 = layer.animated.stretch2_scale.value.is_some()
         || !layer.animated.stretch2_scale.keyframes.is_empty();
     let needs_effect = has_wipe || has_stretch || has_mask || has_blur || has_stretch2;
+
+    if layer.containing_embed_id != 0 {
+        eprintln!("[SPAWN_DBG] embed content '{}': needs_effect={}, has_wipe={}, has_stretch={}, has_mask={}, has_blur={}, has_stretch2={}, stretch_amount={:?}, stretch_angle={:?}",
+            layer.label, needs_effect, has_wipe, has_stretch, has_mask, has_blur, has_stretch2,
+            layer.animated.stretch_amount.value, layer.animated.stretch_angle.value);
+    }
 
     // Calculate correct initial position at spawn time (to prevent frame jump)
     // Use the same logic as animate_transform_system
@@ -227,6 +234,11 @@ pub(super) fn spawn_layer_entity(
         } else {
             Vec3::new(current_scale[0] * rsf, current_scale[1] * rsf, 1.0)
         };
+
+    if layer.containing_embed_id != 0 {
+        eprintln!("[SPAWN_SCALE] embed content '{}': initial_scale=({:.4},{:.4}), actual_scale=({:.4},{:.4}), current_scale=({:.4},{:.4}), rsf={:.4}",
+            layer.label, initial_scale.x, initial_scale.y, actual_scale[0], actual_scale[1], current_scale[0], current_scale[1], rsf);
+    }
 
     bevy::log::debug!(
         "[SpawnInit] '{}' layer_time={:.4}, pos=({:.1},{:.1},{:.4}), rot={:.2}°, scale=({:.3},{:.3})",
@@ -552,6 +564,7 @@ pub(super) fn spawn_layer_entity(
             commands,
             meshes,
             unified_materials,
+            color_materials,
             sdf_materials,
             entity,
             &layer.spec,

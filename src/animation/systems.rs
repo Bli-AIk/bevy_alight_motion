@@ -298,6 +298,11 @@ pub fn animate_transform_system(
             continue;
         }
 
+        // TEMP: Skip animate_transform entirely for embed content to test rendering
+        //if is_embed_content {
+        //    continue;
+        //}
+
         // Calculate normalized time within layer duration
         let layer_time = animated.calc_layer_time(local_time);
 
@@ -387,7 +392,7 @@ pub fn animate_transform_system(
         actual_scale[0] *= combined_posz;
         actual_scale[1] *= combined_posz;
 
-        let current_scale = if sdf_parent.is_some() || effect_marker.is_some() {
+        let current_scale = if sdf_parent.is_some() || effect_marker.is_some() || is_embed_content {
             [1.0_f32, 1.0_f32]
         } else {
             actual_scale
@@ -615,14 +620,14 @@ pub fn animate_transform_system(
         // Skip for SDF shapes (handled by animate_sdf_scale)
         // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
         // However, transform2 posz/angle/position must also be applied via Transform
-        if sdf_parent.is_none() && effect_marker.is_none() {
+        if sdf_parent.is_none() && effect_marker.is_none() && !is_embed_content {
             transform.scale = Vec3::new(
                 current_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
                 current_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
                 1.0,
             );
-        } else if effect_marker.is_some() {
-            // Effect sprites: base scale magnitude is baked into mesh by unified effect system.
+        } else if effect_marker.is_some() || is_embed_content {
+            // Effect sprites and embed content: base scale magnitude is baked into mesh.
             // But transform2 effects (posz) still need to be applied via Transform.scale,
             // since the unified effect system doesn't know about transform2.
             let sign_x = actual_scale[0].signum();
