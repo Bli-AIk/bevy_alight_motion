@@ -304,12 +304,13 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        // Create RTT texture using Bevy's proper render target constructor
+        // Create RTT texture with sRGB format for correct color space handling.
+        // Using Rgba8UnormSrgb ensures linear→sRGB conversion on write and sRGB→linear on read.
         let render_texture = Image::new_target_texture(
             needs_rtt.scene_width.max(1.0) as u32,
             needs_rtt.scene_height.max(1.0) as u32,
-            TextureFormat::Rgba8Unorm,
-            Some(TextureFormat::Rgba8UnormSrgb),
+            TextureFormat::Rgba8UnormSrgb,
+            None,
         );
         let render_texture_handle = images.add(render_texture);
         let render_layer_usize = render_layer as usize;
