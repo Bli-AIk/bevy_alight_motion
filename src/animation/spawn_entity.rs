@@ -190,9 +190,17 @@ pub(super) fn spawn_layer_entity(
         // TEMP debug: trace spawn position
         eprintln!(
             "[SPAWN_POS] '{}' id={} has_parent={} canvas={}x{} loc=({:.1},{:.1},{:.1}) -> ({:.1},{:.1}) z={:.6}",
-            layer.label, layer.id, animated.has_parent,
-            animated.canvas_width, animated.canvas_height,
-            loc[0], loc[1], loc[2], bx, by, layer.transform.translation.z
+            layer.label,
+            layer.id,
+            animated.has_parent,
+            animated.canvas_width,
+            animated.canvas_height,
+            loc[0],
+            loc[1],
+            loc[2],
+            bx,
+            by,
+            layer.transform.translation.z
         );
 
         Vec3::new(bx, by, layer.transform.translation.z)
@@ -598,7 +606,7 @@ pub(super) fn spawn_layer_entity(
             layer.animated.rgb_split_enabled,    // has_rgb_split - needs UnifiedEffectMaterial
             layer.animated.exposure_has_effect,  // has_exposure - needs UnifiedEffectMaterial
             layer.blending_mode.is_blend(),      // has_blend - needs UnifiedEffectMaterial
-            layer.animated.chromakey_enabled,     // has_chromakey - needs UnifiedEffectMaterial
+            layer.animated.chromakey_enabled,    // has_chromakey - needs UnifiedEffectMaterial
             if layer.animated.rgb_split_enabled {
                 // Max RGB split offset in UV space = max_strength / 8.0
                 let max_strength = layer

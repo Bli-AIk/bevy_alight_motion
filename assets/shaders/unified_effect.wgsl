@@ -802,24 +802,13 @@ fn apply_chromakey(input_color: vec4<f32>) -> vec4<f32> {
         linear_to_srgb_ch(key_color.b),
     );
 
-    // RGB→YUV using AM's matrix (same as replace_color)
-    let key_yuv = vec3<f32>(
-        dot(key_srgb, vec3<f32>(0.299, 0.587, 0.114)),
-        dot(key_srgb, vec3<f32>(-0.14713, -0.28886, 0.436)),
-        dot(key_srgb, vec3<f32>(0.615, -0.51499, -0.10001))
-    );
-    let src_yuv = vec3<f32>(
-        dot(src_color, vec3<f32>(0.299, 0.587, 0.114)),
-        dot(src_color, vec3<f32>(-0.14713, -0.28886, 0.436)),
-        dot(src_color, vec3<f32>(0.615, -0.51499, -0.10001))
-    );
-
-    // Weighted YUV distance: de-emphasize luminance, emphasize chroma
-    var diff_yuv = abs(key_yuv - src_yuv);
-    diff_yuv.x *= 0.5;
-    diff_yuv.y *= 4.0;
-    diff_yuv.z *= 4.0;
-    let diff = length(diff_yuv);
+    // Chroma distance in YCbCr space (CbCr only, luminance-independent)
+    // AM's chromakey matches by hue/saturation, ignoring brightness differences
+    let key_cb = dot(key_srgb, vec3<f32>(-0.14713, -0.28886, 0.436));
+    let key_cr = dot(key_srgb, vec3<f32>(0.615, -0.51499, -0.10001));
+    let src_cb = dot(src_color, vec3<f32>(-0.14713, -0.28886, 0.436));
+    let src_cr = dot(src_color, vec3<f32>(0.615, -0.51499, -0.10001));
+    let diff = distance(vec2<f32>(key_cb, key_cr), vec2<f32>(src_cb, src_cr));
 
     // Smoothstep: p=1 when close match, p=0 when far
     let eff_feather = max(feather, 0.0005);

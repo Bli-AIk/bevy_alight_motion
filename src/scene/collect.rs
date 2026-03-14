@@ -390,11 +390,12 @@ pub(crate) fn flatten_pending_layers_inner(
                 // Fix z-accumulation: make child z relative to parent's z.
                 // Without this, a child at absolute z=0.001 parented to a layer at z=0.005
                 // would get global z=0.006 (parent + child), breaking AM's absolute z-order.
-                if original_parent != 0 {
-                    if let Some(&parent_z) = z_map.get(&original_parent) {
-                        child.transform.translation.z -= parent_z;
-                    }
-                }
+                let parent_z = z_map
+                    .get(&original_parent)
+                    .copied()
+                    .filter(|_| original_parent != 0)
+                    .unwrap_or(0.0);
+                child.transform.translation.z -= parent_z;
 
                 result.push(child);
             }

@@ -763,7 +763,6 @@ pub(crate) fn extract_rays_effect(effects: &[AmEffect]) -> RaysParams {
     params
 }
 
-
 // ──────── ChromaKey 色度键 ────────
 
 /// Chroma key effect parameters (`com.alightcreative.effects.chromakey`).

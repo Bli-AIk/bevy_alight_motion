@@ -525,9 +525,14 @@ pub fn animate_transform_system(
             if animated.canvas_height > 1100.0 && !animated.has_parent {
                 eprintln!(
                     "[ANIM_POS] id={} has_parent={} canvas={}x{} loc=({:.1},{:.1}) -> ({:.1},{:.1})",
-                    animated.layer_id, animated.has_parent,
-                    animated.canvas_width, animated.canvas_height,
-                    loc[0], loc[1], bx, by
+                    animated.layer_id,
+                    animated.has_parent,
+                    animated.canvas_width,
+                    animated.canvas_height,
+                    loc[0],
+                    loc[1],
+                    bx,
+                    by
                 );
             }
 

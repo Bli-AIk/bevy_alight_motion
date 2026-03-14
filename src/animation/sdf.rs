@@ -157,8 +157,7 @@ fn compute_sdf_mask_params(
             .map(|(_, pa, _)| {
                 let plt = pa.calc_local_time(playback_time);
                 let pltime = pa.calc_layer_time(plt);
-                let [psx, psy] =
-                    interpolate_vec2(&pa.scale, pltime).unwrap_or([1.0, 1.0]);
+                let [psx, psy] = interpolate_vec2(&pa.scale, pltime).unwrap_or([1.0, 1.0]);
                 Vec2::new(psx, psy)
             })
             .unwrap_or(Vec2::ONE)
@@ -190,17 +189,6 @@ fn compute_sdf_mask_params(
             scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
         let rotated_offset_y =
             scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-
-        // TEMP debug: trace child mask center computation
-        eprintln!(
-            "[MASK_CENTER] mask_pos=({:.1},{:.1}), parent_pos=({:.1},{:.1}), offset=({:.1},{:.1}), corrected=({:.1},{:.1}), pivot_off=({:.1},{:.1}), center=({:.1},{:.1})",
-            mask_pos.x, mask_pos.y,
-            parent_pos.x, parent_pos.y,
-            offset.x, offset.y,
-            corrected_pos.x, corrected_pos.y,
-            rotated_offset_x, rotated_offset_y,
-            corrected_pos.x + rotated_offset_x, corrected_pos.y + rotated_offset_y,
-        );
 
         (
             corrected_pos.x + rotated_offset_x,
@@ -234,19 +222,6 @@ fn compute_sdf_mask_params(
     let half_height =
         (anim_size_y / 2.0 * scale_y + current_stroke_ext) * mask_parent_scale.y * fit_scale;
     let sw_world = current_sw * fit_scale;
-
-    // TEMP debug: trace mask computation values
-    eprintln!(
-        "[MASK_TRACE] mask_id={}, parent_id={}, center=({:.1},{:.1}), half=({:.1},{:.1}), mask_parent_scale=({:.3},{:.3}), fit_scale={:.3}, pivot=({:.1},{:.1}), mask_scale=({:.3},{:.3})",
-        mask.mask_layer_id,
-        mask.mask_parent_layer_id,
-        center_x, center_y,
-        half_width, half_height,
-        mask_parent_scale.x, mask_parent_scale.y,
-        fit_scale,
-        pivot_x, pivot_y,
-        scale_x, scale_y,
-    );
 
     bevy::log::debug!(
         "[MaskDebug] mask_layer_id={}, center=({:.1},{:.1}), half=({:.1},{:.1}), fill_alpha={:.2}, opacity={:.2}, sw={:.1}",
@@ -356,26 +331,6 @@ pub fn update_sdf_mask_system(
             let _child_translation = child_global_transform.translation();
             let _child_scale = child_global_transform.to_scale_rotation_translation().0;
             let _frame_half = material.uniform_data.frame_half;
-
-            // TEMP debug: show which shapes are being masked
-            if global_time < 5.0 {
-                eprintln!(
-                    "[MASK_APPLY] shape='{}' world=({:.1},{:.1}), active_masks={}, time={}, total_masks={}",
-                    marker.label,
-                    _child_translation.x, _child_translation.y,
-                    active_masks.len(),
-                    global_time,
-                    mask_info.masks.len(),
-                );
-                for (mi, m) in mask_info.masks.iter().enumerate() {
-                    eprintln!(
-                        "  mask[{}]: id={}, parent_id={}, is_circle={}, is_exclude={}, center=({:.1},{:.1}), half=({:.1},{:.1}), time={}..{}",
-                        mi, m.mask_layer_id, m.mask_parent_layer_id, m.is_circle, m.is_exclude,
-                        m.center.x, m.center.y, m.half_size.x, m.half_size.y,
-                        m.start_time, m.end_time
-                    );
-                }
-            }
 
             if active_masks.is_empty() {
                 material.uniform_data.mask_type = 0.0;
@@ -601,14 +556,6 @@ pub fn animate_sdf_scale_system(
         if animated.has_parent && animated.parent_layer_id != 0 {
             parent_map.insert(animated.layer_id, animated.parent_layer_id);
         }
-        // TEMP DEBUG
-        if global_time < 20.0 {
-            eprintln!(
-                "[SDF_1st] id={}, has_parent={}, parent_id={}, own=({:.3},{:.3})",
-                animated.layer_id, animated.has_parent, animated.parent_layer_id,
-                anim_scale[0], anim_scale[1]
-            );
-        }
     }
 
     // --- Second pass: update SDF children with combined (own × parent) scale ---
@@ -639,18 +586,6 @@ pub fn animate_sdf_scale_system(
             own_scale[0] * parent_scale[0],
             own_scale[1] * parent_scale[1],
         ];
-        // TEMP DEBUG
-        if global_time < 20.0 {
-            eprintln!(
-                "[SDF_2nd] id={}, own=({:.3},{:.3}), parent=({:.3},{:.3}), combined=({:.3},{:.3}), base_hw={:.1}, base_hh={:.1}",
-                animated.layer_id,
-                own_scale[0], own_scale[1],
-                parent_scale[0], parent_scale[1],
-                combined_scale[0], combined_scale[1],
-                children.iter().count(),
-                0.0
-            );
-        }
 
         // Get animated stroke width (or use base value from sdf_params if no animation)
         let stroke_width_animated = if !animated.stroke_width.keyframes.is_empty() {
