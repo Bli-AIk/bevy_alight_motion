@@ -404,9 +404,16 @@ fn collect_repeat_copies(
 
         let mut copy_config = config.clone();
 
-        // Time offset: shift animation state via echo_time_shift_ms
-        // AM shifts the render frame by accTime frames, converting to ms.
-        let time_shift_ms = acc_time * frame_duration_ms;
+        // Time offset: shift animation state via echo_time_shift_ms.
+        // AM uses roundToInt(accTime) for frame-based rounding, plus a sub-frame
+        // correction round(frac*fps) (SceneElementRenderingKt.java:1304-1307).
+        // For the sub-frame part, use scene_fps (not render_fps) because
+        // nested embed retiming inflates render_fps to 480+, which makes
+        // round(frac*render_fps) overwhelm the frame shift.
+        let rounded_frames = acc_time.round();
+        let frac = acc_time - acc_time.trunc();
+        let sub_frame_ms = (frac * config.scene_fps).round();
+        let time_shift_ms = rounded_frames * frame_duration_ms + sub_frame_ms;
         copy_config.echo_time_shift_ms += time_shift_ms;
 
         // Alpha

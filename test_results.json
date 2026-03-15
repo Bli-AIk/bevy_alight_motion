@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-15T21:35:35.949759+08:00",
+  "timestamp": "2026-03-16T04:52:22.166078+08:00",
   "summary": {
     "passed": 165,
     "warnings": 0,
     "skipped": 2,
-    "failed": 66
+    "failed": 67
   },
   "results": {
     "basic/bezier/bezier": {
@@ -352,29 +352,31 @@
       "avg_similarity": 0.9198
     },
     "effects/repeat/basic": {
-      "status": "pass"
+      "status": "fail"
     },
     "effects/repeat/basic_mask": {
-      "status": "pass"
+      "status": "fail"
     },
     "effects/repeat/group": {
-      "status": "fail",
-      "avg_similarity": 0.9301
+      "status": "pass"
     },
     "effects/repeat/group_bug": {
       "status": "pass"
     },
     "effects/repeat/group_bug_mask": {
-      "status": "fail",
-      "avg_similarity": 0.5762
+      "status": "pass"
     },
     "effects/repeat/group_mask": {
       "status": "fail",
-      "avg_similarity": 0.8485
+      "avg_similarity": 0.8879
     },
     "effects/repeat/group_pivot": {
       "status": "fail",
-      "avg_similarity": 0.6754
+      "avg_similarity": 0.6802
+    },
+    "effects/repeat/group_pivot_mask": {
+      "status": "fail",
+      "avg_similarity": 0.6967
     },
     "effects/replace-color/basic": {
       "status": "pass"
