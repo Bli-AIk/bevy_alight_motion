@@ -499,6 +499,12 @@ pub struct AmMaskEntry {
     /// Used at runtime to look up the parent's animated scale, since SDF parents
     /// use Transform.scale=(1,1) and don't propagate scale through Bevy hierarchy.
     pub mask_parent_layer_id: u64,
+    /// Whether this mask is an embedScene (group) that uses RTT texture for masking.
+    /// When true, the mask is evaluated by sampling the RTT texture instead of SDF.
+    pub is_embed_mask: bool,
+    /// For embed masks: the internal scene dimensions (width, height).
+    /// Used for UV mapping when sampling the mask RTT texture.
+    pub embed_scene_size: Option<(f32, f32)>,
 }
 
 /// Information about active masks that can clip this layer.

@@ -130,6 +130,8 @@ struct UnifiedEffectUniform {
 @group(2) @binding(2) var base_sampler: sampler;
 @group(2) @binding(3) var lift_comp_texture: texture_2d<f32>;
 @group(2) @binding(4) var lift_comp_sampler: sampler;
+@group(2) @binding(5) var mask_rtt_texture: texture_2d<f32>;
+@group(2) @binding(6) var mask_rtt_sampler: sampler;
 
 // Helper: rotate 2D vector by angle
 fn rotate_vec(v: vec2<f32>, angle: f32) -> vec2<f32> {
@@ -781,6 +783,178 @@ fn compute_mask_with_linear_repeat(
     }
 }
 
+// Compute mask blend factor by sampling an RTT (render-to-texture) mask.
+// The mask layer's content was rendered to a texture; we sample its alpha
+// to determine inside/outside.
+// mask_rtt_bounds: vec4(center_x, center_y, half_w, half_h) in world coords
+// mask_rotation: rotation angle in radians
+// mask_type: 5.0=include, 6.0=exclude
+fn compute_texture_mask_blend(
+    world_pos: vec2<f32>,
+    mask_rtt_bounds: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+) -> f32 {
+    let center = mask_rtt_bounds.xy;
+    let half_size = mask_rtt_bounds.zw;
+
+    // Transform to mask-local coordinates (undo rotation)
+    let rel = world_pos - center;
+    let cos_r = cos(-mask_rotation);
+    let sin_r = sin(-mask_rotation);
+    let local = vec2<f32>(
+        rel.x * cos_r - rel.y * sin_r,
+        rel.x * sin_r + rel.y * cos_r,
+    );
+
+    // Map to UV space [0,1]
+    let uv = local / (half_size * 2.0) + 0.5;
+
+    // Out-of-bounds → transparent (no mask)
+    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 {
+        if mask_type > 5.5 {
+            return 1.0; // exclude: outside mask bounds = visible
+        }
+        return 0.0; // include: outside mask bounds = hidden
+    }
+
+    // Flip Y for RTT (render target has flipped Y)
+    let sample_uv = vec2<f32>(uv.x, 1.0 - uv.y);
+    let mask_sample = textureSample(mask_rtt_texture, mask_rtt_sampler, sample_uv);
+    let mask_alpha = mask_sample.a;
+
+    if mask_type > 5.5 {
+        return 1.0 - mask_alpha; // exclude: invert mask
+    }
+    return mask_alpha;
+}
+
+// Helper: sample RTT mask texture at a given world position with bounds/rotation.
+// Returns the mask alpha at that position (0.0 = hidden, 1.0 = visible).
+fn sample_texture_mask_at(
+    world_pos: vec2<f32>,
+    center: vec2<f32>,
+    half_size: vec2<f32>,
+    mask_rotation: f32,
+) -> f32 {
+    let rel = world_pos - center;
+    let cos_r = cos(-mask_rotation);
+    let sin_r = sin(-mask_rotation);
+    let local = vec2<f32>(
+        rel.x * cos_r - rel.y * sin_r,
+        rel.x * sin_r + rel.y * cos_r,
+    );
+    let uv = local / (half_size * 2.0) + 0.5;
+    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 {
+        return 0.0;
+    }
+    let sample_uv = vec2<f32>(uv.x, 1.0 - uv.y);
+    let mask_sample = textureSample(mask_rtt_texture, mask_rtt_sampler, sample_uv);
+    return mask_sample.a;
+}
+
+// Texture mask with basic repeat: sample RTT at multiple offset positions.
+fn compute_texture_mask_with_basic_repeat(
+    world_pos: vec2<f32>,
+    mask_rtt_bounds: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    rp1: vec4<f32>,       // (count, offset_x_world, offset_y_world, angle_deg)
+    rp2: vec4<f32>,       // (scale, alpha, 0, 0)
+) -> f32 {
+    let center = mask_rtt_bounds.xy;
+    let half_size = mask_rtt_bounds.zw;
+    let is_exclude = mask_type > 5.5;
+
+    let rp_count = i32(rp1.x);
+    let rp_offset = rp1.yz;
+    let rp_angle_rad = rp1.w * 3.14159265 / 180.0;
+    let rp_scale = rp2.x;
+    let rp_alpha = rp2.y;
+
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < rp_count; i = i + 1) {
+        let fi = f32(i);
+        let cum_alpha = 1.0 - fi * (1.0 - rp_alpha);
+        if cum_alpha <= 0.0 {
+            continue;
+        }
+        let cum_offset = rp_offset * fi;
+        let cum_angle = rp_angle_rad * fi;
+        let cum_scale = pow(rp_scale, fi);
+        if abs(cum_scale) < 0.001 {
+            continue;
+        }
+
+        // Apply repeat transform: offset the world position, then sample RTT
+        let copy_center = center + cum_offset;
+        let copy_half = half_size * cum_scale;
+        let copy_rotation = mask_rotation + cum_angle;
+
+        let alpha = sample_texture_mask_at(world_pos, copy_center, copy_half, copy_rotation);
+        max_mask_alpha = max(max_mask_alpha, alpha * cum_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - max_mask_alpha;
+    }
+    return max_mask_alpha;
+}
+
+// Texture mask with linear repeat: sample RTT at linearly displaced positions.
+fn compute_texture_mask_with_linear_repeat(
+    world_pos: vec2<f32>,
+    mask_rtt_bounds: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    lr1: vec4<f32>,  // (count, position.x, position.y, offset.x)
+    lr2: vec4<f32>,  // (offset.y, angle_deg, scale, alpha)
+    lr3: vec4<f32>,  // (start, end, phase, ease_in)
+    lr4: vec4<f32>,  // (ease_out, overlap, invert, shape)
+    lr5: vec4<f32>,  // (fill_alpha, blend, 0, 0)
+) -> f32 {
+    let center = mask_rtt_bounds.xy;
+    let half_size = mask_rtt_bounds.zw;
+    let is_exclude = mask_type > 5.5;
+
+    let lr_count = i32(lr1.x);
+    let lr_position = lr1.yz;
+    let lr_offset = vec2<f32>(lr1.w, lr2.x);
+    let lr_angle_rad = lr2.y * 3.14159265 / 180.0;
+    let lr_scale = lr2.z;
+    let lr_alpha = lr2.w;
+
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < lr_count; i = i + 1) {
+        let fi = f32(i);
+        let cum_alpha = 1.0 - fi * (1.0 - lr_alpha);
+        if cum_alpha <= 0.0 {
+            continue;
+        }
+
+        let cum_offset = (lr_position + lr_offset * fi);
+        let cum_angle = lr_angle_rad * fi;
+        let cum_scale = pow(lr_scale, fi);
+        if abs(cum_scale) < 0.001 {
+            continue;
+        }
+
+        let copy_center = center + cum_offset;
+        let copy_half = half_size * cum_scale;
+        let copy_rotation = mask_rotation + cum_angle;
+
+        let alpha = sample_texture_mask_at(world_pos, copy_center, copy_half, copy_rotation);
+        max_mask_alpha = max(max_mask_alpha, alpha * cum_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - max_mask_alpha;
+    }
+    return max_mask_alpha;
+}
+
 // Apply combined masks - returns blend factor (1.0=fully visible, 0.0=fully hidden)
 fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
     let mask1_type = uniforms.effect_flags.x;
@@ -797,6 +971,42 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
 
     var factor = 1.0;
     if mask1_enabled {
+        // Texture-based mask (embedScene/group mask with RTT)
+        let is_texture_mask = mask1_type > 4.5;
+        if is_texture_mask {
+            // Check if mask has repeat effects
+            let has_mask_basic_repeat = uniforms.mask1_repeat_params1.x > 0.5;
+            let has_mask_linear_repeat = uniforms.mask1_lr_params1.x > 0.5;
+            if has_mask_basic_repeat {
+                factor *= compute_texture_mask_with_basic_repeat(
+                    world_pos,
+                    uniforms.mask_params,
+                    mask1_rotation,
+                    mask1_type,
+                    uniforms.mask1_repeat_params1,
+                    uniforms.mask1_repeat_params2,
+                );
+            } else if has_mask_linear_repeat {
+                factor *= compute_texture_mask_with_linear_repeat(
+                    world_pos,
+                    uniforms.mask_params,
+                    mask1_rotation,
+                    mask1_type,
+                    uniforms.mask1_lr_params1,
+                    uniforms.mask1_lr_params2,
+                    uniforms.mask1_lr_params3,
+                    uniforms.mask1_lr_params4,
+                    uniforms.mask1_lr_params5,
+                );
+            } else {
+                factor *= compute_texture_mask_blend(
+                    world_pos,
+                    uniforms.mask_params,
+                    mask1_rotation,
+                    mask1_type,
+                );
+            }
+        } else {
         // Check if mask has repeat effects
         let has_mask_basic_repeat = uniforms.mask1_repeat_params1.x > 0.5;
         let has_mask_linear_repeat = uniforms.mask1_lr_params1.x > 0.5;
@@ -851,6 +1061,7 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
                 uniforms.mask_blend,
             );
         }
+        } // close is_texture_mask else
     }
     if mask2_enabled {
         factor *= compute_ue_mask_blend_factor(

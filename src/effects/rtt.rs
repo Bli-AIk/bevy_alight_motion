@@ -181,6 +181,12 @@ pub struct NeedsStrategyEvaluation {
     pub has_scale_animation: bool,
 }
 
+/// Marker component for embedScene layers used as masks (blending="mask"/"exclude").
+/// These need Composite strategy to render their content to a texture,
+/// which is then sampled by content layers as a mask.
+#[derive(Component, Debug, Clone)]
+pub struct AmEmbedMask;
+
 // ============================================================================
 // Render Strategy Evaluator
 // 渲染策略评估器
@@ -205,22 +211,21 @@ pub struct NeedsStrategyEvaluation {
 /// - Implement actual stencil-based clipping for Stencil strategy
 pub fn evaluate_render_strategy_system(
     mut commands: Commands,
-    query: Query<(Entity, &NeedsStrategyEvaluation, Option<&AmGroupFill>), Without<RenderStrategy>>,
+    query: Query<
+        (
+            Entity,
+            &NeedsStrategyEvaluation,
+            Option<&AmGroupFill>,
+            Option<&AmEmbedMask>,
+        ),
+        Without<RenderStrategy>,
+    >,
 ) {
-    for (entity, needs_eval, group_fill) in query.iter() {
-        // Determine render strategy based on embed properties
-        //
-        // - Direct: No RTT, content renders to parent's layer (most embeds)
-        // - Stencil: For embeds that need bounds clipping (e.g., scale animation)
-        // - Composite: For embeds with group fill (children texture used as alpha mask)
-        //
-        // Note: Shader effects on embeds are handled by propagating to children
-        // (see apply_embed_effects_to_children_system) rather than using Composite,
-        // because the Composite RTT pipeline has rendering issues.
-
+    for (entity, needs_eval, group_fill, embed_mask) in query.iter() {
         let needs_fill = group_fill.is_some();
+        let is_mask = embed_mask.is_some();
 
-        let strategy = if needs_fill {
+        let strategy = if needs_fill || is_mask {
             RenderStrategy::Composite
         } else if needs_eval.has_scale_animation {
             RenderStrategy::Stencil
@@ -228,11 +233,12 @@ pub fn evaluate_render_strategy_system(
             RenderStrategy::Direct
         };
 
-        bevy::log::trace!(
-            "[Strategy] Embed {:?} → {:?} (fill={})",
+        bevy::log::warn!(
+            "[Strategy-DBG] Embed {:?} → {:?} (fill={}, mask={})",
             entity,
             strategy,
-            needs_fill
+            needs_fill,
+            is_mask,
         );
 
         // Remove evaluation marker and assign strategy
@@ -288,13 +294,15 @@ pub fn setup_embed_scene_rtt_system(
             &GlobalTransform,
             Option<&AmGroupFill>,
             &crate::animation::AmAnimated,
+            Option<&AmEmbedMask>,
         ),
         Without<EmbedSceneRtt>,
     >,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
-    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated) in query.iter() {
+    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated, embed_mask) in query.iter() {
+        bevy::log::warn!("[RTT-SETUP-DBG] Setting up RTT for {:?}, is_mask={}", entity, embed_mask.is_some());
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -410,7 +418,15 @@ pub fn setup_embed_scene_rtt_system(
                 sprite_render_layer,
             ));
 
-        if let Some(fill) = group_fill {
+        // For mask embeds, don't add any visual sprite - the RTT texture is only
+        // used as a mask by content layers. The embed must still be "visible" for
+        // its children to render to RTT, but it won't display anything itself.
+        if embed_mask.is_some() {
+            bevy::log::debug!(
+                "[RTT] Mask embed {:?}: RTT setup without sprite (layer={})",
+                entity, render_layer
+            );
+        } else if let Some(fill) = group_fill {
             if fill.fill_type != GroupFillType::None {
                 // Create GroupFillMaterial for color/gradient fill
                 use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
@@ -468,6 +484,7 @@ pub fn setup_embed_scene_rtt_system(
                     },
                     texture: Some(render_texture_handle),
                     lift_comp_texture: None,
+                    mask_texture: None,
                 });
                 let mesh = meshes.add(Rectangle::new(width, height));
                 commands.entity(entity).insert((

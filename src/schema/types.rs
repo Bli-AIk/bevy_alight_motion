@@ -663,6 +663,10 @@ pub struct AmEmbedScene {
     #[serde(default)]
     pub gradient: Option<AmGradient>,
 
+    /// Blending mode (e.g., "mask" for masking layer, "exclude" for inverted mask).
+    #[serde(rename = "@blending", default)]
+    pub blending: String,
+
     /// Nested scene.
     pub scene: Box<AmScene>,
 }

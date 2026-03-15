@@ -445,12 +445,20 @@ fn collect_repeat_copies(
     // so frame duration is much shorter. Use render_fps (not scene_fps) to match AM.
     let frame_duration_ms = 1000.0 / config.render_fps;
 
+    // For mask embeds with repeat: merge all copies' children into a single PendingLayer.
+    // Each copy renders at a different time offset, producing the circle at different
+    // positions. Merging ensures a single RTT captures all circles, which the shader
+    // can sample once to get the complete mask.
+    let is_mask_embed = embed.blending == "mask" || embed.blending == "exclude";
+
     // AM accumulates transforms per-copy: offset/angle/time linear, scale exponential, alpha linear decrease
     let mut acc_offset = Vec2::ZERO;
     let mut acc_angle: f32 = 0.0;
     let mut acc_scale: f32 = 1.0;
     let mut acc_alpha: f32 = 1.0;
     let mut acc_time: f32 = 0.0; // in frames
+
+    let mut base_pl: Option<PendingLayer> = None;
 
     for i in 0..count {
         // Skip rendering if alpha has gone to zero or below (matches AM behavior)
@@ -487,12 +495,49 @@ fn collect_repeat_copies(
             extend_children_lifecycle(&mut pl, time_shift_ms);
         }
 
-        // Remap IDs for copies > 0 to avoid conflicts
-        if i > 0 {
-            remap_echo_pl_ids(&mut pl);
+        if is_mask_embed {
+            // Merge copies into a single embed: all children render into one RTT.
+            if i == 0 {
+                base_pl = Some(pl);
+            } else {
+                remap_echo_pl_ids(&mut pl);
+                // Apply per-copy spatial transform to children so they appear
+                // at the correct position/scale/rotation within copy 0's RTT.
+                // Copy 0 has identity spatial transforms; copy i has accumulated
+                // scale/offset/rotation that was originally on the embed entity.
+                if (acc_scale - 1.0).abs() > 0.001
+                    || acc_offset.length() > 0.001
+                    || acc_angle.abs() > 0.001
+                {
+                    let angle_rad = (-acc_angle).to_radians();
+                    let cos_a = angle_rad.cos();
+                    let sin_a = angle_rad.sin();
+                    for child in &mut pl.children {
+                        let x = child.transform.translation.x;
+                        let y = child.transform.translation.y;
+                        // Rotate around inner scene center (0,0 in Bevy coords),
+                        // then scale, then offset
+                        child.transform.translation.x =
+                            (x * cos_a - y * sin_a) * acc_scale + acc_offset.x;
+                        child.transform.translation.y =
+                            (x * sin_a + y * cos_a) * acc_scale + acc_offset.y;
+                        child.transform.scale.x *= acc_scale;
+                        child.transform.scale.y *= acc_scale;
+                        child.transform.rotation *=
+                            Quat::from_rotation_z(angle_rad);
+                    }
+                }
+                if let Some(ref mut base) = base_pl {
+                    base.children.extend(pl.children);
+                }
+            }
+        } else {
+            // Remap IDs for copies > 0 to avoid conflicts
+            if i > 0 {
+                remap_echo_pl_ids(&mut pl);
+            }
+            pending.push(pl);
         }
-
-        pending.push(pl);
 
         // Accumulate transforms for next copy (AM-style: linear for offset/angle/time,
         // multiplicative for scale, linear decrease for alpha)
@@ -501,6 +546,10 @@ fn collect_repeat_copies(
         acc_scale *= scale_val;
         acc_alpha -= 1.0 - alpha_val;
         acc_time += time_val;
+    }
+
+    if let Some(pl) = base_pl {
+        pending.push(pl);
     }
 }
 
@@ -948,6 +997,38 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
 /// Extract mask geometry info from a layer's transform and spec.
 /// For animated scales (like SDF shapes), we need to get the scale at t=0 from the animation data.
 pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskEntry> {
+    // Handle EmbedScene (group) masks - these use RTT texture instead of SDF
+    if matches!(layer.spec, AmLayerSpec::EmbedScene) {
+        let (scene_w, scene_h) = layer.embed_scene_size.unwrap_or((1280.0, 960.0));
+
+        // Convert local time to global time using lifecycle_offset
+        let global_start = layer.start_time + layer.animated.lifecycle_offset;
+        let global_end = layer.end_time + layer.animated.lifecycle_offset;
+
+        let center_x = layer.transform.translation.x;
+        let center_y = layer.transform.translation.y;
+
+        bevy::log::debug!(
+            "[MASK] Extracting EMBED mask info: id={}, label='{}', scene_size=({},{}), center=({:.1},{:.1}), time={}..{}ms",
+            layer.id, layer.label, scene_w, scene_h, center_x, center_y, global_start, global_end
+        );
+
+        return Some(AmMaskEntry {
+            center: Vec2::new(center_x, center_y),
+            half_size: Vec2::new(scene_w / 2.0, scene_h / 2.0),
+            rotation: layer.transform.rotation.to_euler(bevy::math::EulerRot::ZYX).0,
+            scale: Vec2::ONE,
+            is_circle: false,
+            start_time: global_start,
+            end_time: global_end,
+            mask_layer_id: layer.id,
+            is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
+            mask_parent_layer_id: layer.parent,
+            is_embed_mask: true,
+            embed_scene_size: Some((scene_w, scene_h)),
+        });
+    }
+
     let (width, height, pivot_x, pivot_y, is_circle, stroke_extension) = match &layer.spec {
         AmLayerSpec::SdfShape {
             width,
@@ -1040,5 +1121,7 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
         mask_layer_id: layer.id,
         is_exclude: layer.blending_mode == AmBlendingMode::Exclude,
         mask_parent_layer_id: layer.parent,
+        is_embed_mask: false,
+        embed_scene_size: None,
     })
 }

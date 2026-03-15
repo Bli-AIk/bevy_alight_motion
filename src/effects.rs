@@ -44,7 +44,7 @@ pub use types::{
 };
 
 pub use rtt::{
-    EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
+    AmEmbedMask, EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
     EmbedSceneRttCamera, NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
     apply_embed_bounds_clipping_system, cleanup_embed_content_system,
     cleanup_embed_scene_rtt_system, evaluate_render_strategy_system,

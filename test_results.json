@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-15T15:52:01.918602+08:00",
+  "timestamp": "2026-03-15T18:32:03.246913+08:00",
   "summary": {
     "passed": 165,
     "warnings": 0,
@@ -370,7 +370,7 @@
     },
     "effects/repeat/group_mask": {
       "status": "fail",
-      "avg_similarity": 0.5186
+      "avg_similarity": 0.8485
     },
     "effects/repeat/group_pivot": {
       "status": "fail",
@@ -721,8 +721,7 @@
       "avg_similarity": 0.782
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
-      "status": "fail",
-      "avg_similarity": 0.9683
+      "status": "fail"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2": {
       "status": "pass"

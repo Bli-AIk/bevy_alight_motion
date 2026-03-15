@@ -306,12 +306,14 @@ fn set_mask_repeat_uniforms(
 ) {
     // Find the mask layer entity
     let Some(&mask_entity) = pending.spawned_entities.get(&mask_entry.mask_layer_id) else {
+        bevy::log::warn!("[MASK-RPT] mask entity NOT in spawned_entities for layer_id={}", mask_entry.mask_layer_id);
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
         return;
     };
     let Ok((_gt, animated, _spec)) = mask_layer_query.get(mask_entity) else {
+        bevy::log::warn!("[MASK-RPT] mask entity {:?} missing query components (GT/Animated/Spec)", mask_entity);
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
@@ -323,6 +325,7 @@ fn set_mask_repeat_uniforms(
 
     // --- Basic repeat (com.alightcreative.effects.repeat) ---
     let rp_count = interpolate_float(&animated.repeat_count, layer_time).unwrap_or(0.0);
+    bevy::log::warn!("[MASK-RPT] mask layer_id={} rp_count={:.1} lr_count={:.1}", mask_entry.mask_layer_id, rp_count, interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0));
     if rp_count > 0.0 {
         let rp_offset = interpolate_vec2(&animated.repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
         let rp_angle = interpolate_float(&animated.repeat_angle, layer_time).unwrap_or(0.0);
@@ -453,6 +456,7 @@ pub fn update_unified_mask_system(
     )>,
     pending_query: Query<&crate::scene::AmPendingLayers>,
     mask_layer_query: Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
+    embed_rtt_marker_query: Query<(Entity, &AmLayerMarker, &crate::effects::EmbedSceneRtt)>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
 ) {
     if playback.force_stopped {
@@ -484,8 +488,64 @@ pub fn update_unified_mask_system(
             continue;
         }
 
+        bevy::log::warn!("[MASK-DBG] entity has {} active masks, first is_embed={}", active_masks.len(), active_masks[0].is_embed_mask);
+
         // First mask
         let mask1 = active_masks[0];
+
+        if mask1.is_embed_mask {
+            // Texture-based mask (embedScene/group): set type 5.0/6.0 and find RTT texture
+            let mask_type = if mask1.is_exclude { 6.0 } else { 5.0 };
+            material.uniform_data.effect_flags.x = mask_type;
+
+            // Find the mask embed container entity by layer_id - it must have EmbedSceneRtt
+            let rtt_match = embed_rtt_marker_query
+                .iter()
+                .find(|(_, m, _)| m.id == mask1.mask_layer_id);
+
+            bevy::log::warn!("[MASK-DBG] embed mask: layer_id={}, rtt_match={}", mask1.mask_layer_id, rtt_match.is_some());
+
+            if let Some((mask_entity, _, rtt)) = rtt_match {
+                    material.mask_texture = Some(rtt.render_texture.clone());
+                    bevy::log::warn!("[MASK-DBG] RTT found for mask entity {:?}", mask_entity);
+
+                    // Get mask transform for UV mapping
+                    if let Ok((mask_gt, _, _)) = mask_layer_query.get(mask_entity) {
+                        let (mask_scale, mask_rot, mask_pos) =
+                            mask_gt.to_scale_rotation_translation();
+                        let mask_rotation =
+                            mask_rot.to_euler(bevy::math::EulerRot::ZYX).0;
+                        let (scene_w, scene_h) =
+                            mask1.embed_scene_size.unwrap_or((1280.0, 960.0));
+                        // Half-size in world space = (scene_size / 2) * fit_scale * mask_scale
+                        let half_w = scene_w / 2.0 * fit_scale * mask_scale.x;
+                        let half_h = scene_h / 2.0 * fit_scale * mask_scale.y;
+
+                        bevy::log::warn!("[MASK-DBG] mask pos=({:.1},{:.1}), half=({:.1},{:.1}), rot={:.3}", mask_pos.x, mask_pos.y, half_w, half_h, mask_rotation);
+
+                        material.uniform_data.mask_params = Vec4::new(
+                            mask_pos.x, mask_pos.y, half_w, half_h,
+                        );
+                        material.uniform_data.mask2_flags.y = mask_rotation;
+                    }
+            } else {
+                    // RTT not ready yet - disable mask
+                    bevy::log::warn!("[MASK-DBG] RTT NOT found for mask layer_id={}", mask1.mask_layer_id);
+                    material.uniform_data.effect_flags.x = 0.0;
+                    material.mask_texture = None;
+            }
+            // Apply repeat effects to texture mask (basic repeat + linear repeat)
+            // The shader will sample the RTT texture at multiple offset positions.
+            set_mask_repeat_uniforms(
+                mask1,
+                pending,
+                &mask_layer_query,
+                playback.current_time_ms,
+                fit_scale,
+                material,
+            );
+        } else {
+        // SDF-based mask (shape)
         let m1 = compute_mask_params(
             mask1,
             pending,
@@ -514,6 +574,7 @@ pub fn update_unified_mask_system(
             fit_scale,
             material,
         );
+        } // close SDF mask else block
 
         // Second mask (if present)
         if active_masks.len() >= 2 {

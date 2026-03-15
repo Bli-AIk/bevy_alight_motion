@@ -264,6 +264,11 @@ pub struct UnifiedEffectMaterial {
     #[texture(3)]
     #[sampler(4)]
     pub lift_comp_texture: Option<Handle<Image>>,
+
+    /// Mask RTT texture - embedScene (group) mask rendered to texture
+    #[texture(5)]
+    #[sampler(6)]
+    pub mask_texture: Option<Handle<Image>>,
 }
 
 // Proxy accessors for backward compatibility

@@ -525,7 +525,7 @@ pub(crate) fn collect_embed_scene(
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
         children,
-        blending_mode: AmBlendingMode::Normal,
+        blending_mode: AmBlendingMode::parse_am(embed.blending.as_str()),
         mask_info: None,
         palette_params: None,
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),

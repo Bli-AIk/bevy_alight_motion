@@ -333,14 +333,43 @@ pub(super) fn spawn_layer_entity(
         );
     }
 
-    // Add visual components based on spec (skip for mask and camera layers)
+    // Add EmbedScene strategy evaluation marker
+    if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
+        let (scene_w, scene_h) = layer.embed_scene_size.unwrap_or((1280.0, 960.0));
+        commands.entity(entity).insert(
+            crate::effects::NeedsStrategyEvaluation {
+                scene_width: scene_w,
+                scene_height: scene_h,
+                has_scale_animation: !layer.animated.scale.keyframes.is_empty(),
+            },
+        );
+        // Mark as mask embed if blending is mask/exclude
+        if layer.blending_mode == AmBlendingMode::Mask
+            || layer.blending_mode == AmBlendingMode::Exclude
+        {
+            commands
+                .entity(entity)
+                .insert(crate::effects::AmEmbedMask);
+            bevy::log::warn!(
+                "[Lifecycle] Embed '{}' (id={}) marked as mask embed",
+                layer.label,
+                layer.id
+            );
+        }
+    }
+
+    // Add visual components based on spec (skip for mask and camera layers,
+    // but allow EmbedScene masks - they need RTT for texture-based masking)
+    let is_mask = layer.blending_mode == AmBlendingMode::Mask
+        || layer.blending_mode == AmBlendingMode::Exclude;
+    let is_embed_mask = is_mask && matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene);
     bevy::log::debug!(
-        "[spawn_layer_entity] '{}' blending_mode={:?}, checking visual spawn",
+        "[spawn_layer_entity] '{}' blending_mode={:?}, is_embed_mask={}, checking visual spawn",
         layer.label,
-        layer.blending_mode
+        layer.blending_mode,
+        is_embed_mask
     );
-    if layer.blending_mode != AmBlendingMode::Mask
-        && layer.blending_mode != AmBlendingMode::Exclude
+    if (!is_mask || is_embed_mask)
         && !matches!(layer.spec, crate::scene::AmLayerSpec::Camera { .. })
     {
         // Extract initial scale from animated data for SDF shapes

@@ -264,6 +264,7 @@ pub(crate) fn add_visual_components(
             },
             texture: Some(texture),
             lift_comp_texture: None,
+            mask_texture: None,
         };
 
         // Enable wipe if present
