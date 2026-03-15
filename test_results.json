@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-15T18:32:03.246913+08:00",
+  "timestamp": "2026-03-15T21:35:35.949759+08:00",
   "summary": {
     "passed": 165,
     "warnings": 0,
@@ -718,10 +718,11 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.782
+      "avg_similarity": 0.9181
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.9683
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2": {
       "status": "pass"
@@ -731,11 +732,11 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.9108
+      "avg_similarity": 0.9217
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
       "status": "fail",
-      "avg_similarity": 0.9443
+      "avg_similarity": 0.953
     },
     "private/USER_little_black/test0": {
       "status": "pass"

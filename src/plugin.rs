@@ -56,6 +56,10 @@ pub enum AmProjectResolution {
     FixedWidth(f32),
     /// Scale the project to a fixed height, preserving aspect ratio.
     FixedHeight(f32),
+    /// Scale the project to fit within a fixed viewport size, preserving aspect ratio.
+    /// Useful for headless rendering where no window is available.
+    /// 将项目缩放到固定视口大小内，保持纵横比。适用于无窗口的无头渲染模式。
+    FixedSize(f32, f32),
 }
 
 /// Resource holding the white pixel texture used for solid color sprites.
@@ -279,6 +283,18 @@ fn spawn_loaded_projects_system(
                 transform.scale = Vec3::splat(fit_scale);
                 bevy::log::info!(
                     "Scaled project to fixed height {}: scale={:.4}",
+                    target_height,
+                    fit_scale
+                );
+            }
+            AmProjectResolution::FixedSize(target_width, target_height) => {
+                let s_x = target_width / (project.scene.width as f32);
+                let s_y = target_height / (project.scene.height as f32);
+                fit_scale = s_x.min(s_y);
+                transform.scale = Vec3::splat(fit_scale);
+                bevy::log::info!(
+                    "Scaled project to fixed size {}x{}: scale={:.4}",
+                    target_width,
                     target_height,
                     fit_scale
                 );

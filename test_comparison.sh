@@ -63,10 +63,11 @@ if [ "$HEADLESS" = false ] && [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; th
     HEADLESS=true
 fi
 
-# Verify xvfb-run is available for headless mode
-if [ "$HEADLESS" = true ] && ! command -v xvfb-run &> /dev/null; then
-    echo "Error: headless mode requires xvfb-run (install with: apt install xvfb)"
-    exit 1
+# Headless mode uses headless-render feature (no xvfb needed)
+# Fallback to xvfb-run if headless-render build fails
+HEADLESS_RENDER=false
+if [ "$HEADLESS" = true ]; then
+    HEADLESS_RENDER=true
 fi
 
 if [ "$1" == "--all" ]; then
@@ -127,17 +128,36 @@ elif [ -n "$FILTER_PATTERN" ]; then
     echo "Mode: Running tests matching '$FILTER_PATTERN*'"
 fi
 if [ "$HEADLESS" = true ]; then
-    echo "Headless: enabled (software rendering via llvmpipe + Xvfb)"
+    if [ "$HEADLESS_RENDER" = true ]; then
+        echo "Headless: enabled (headless-render feature, no display server needed)"
+    else
+        echo "Headless: enabled (software rendering via llvmpipe + Xvfb)"
+    fi
 fi
 echo ""
 
+# Set llvmpipe optimization environment variables for software rendering
+if [ "$HEADLESS" = true ]; then
+    export LP_NUM_THREADS=${LP_NUM_THREADS:-4}
+    export GALLIVM_PERF_LEVEL=${GALLIVM_PERF_LEVEL:-3}
+    export MESA_GLTHREAD=${MESA_GLTHREAD:-true}
+    export RAYON_NUM_THREADS=${RAYON_NUM_THREADS:-4}
+    export MESA_NO_ERROR=${MESA_NO_ERROR:-1}
+    export WGPU_BACKEND=${WGPU_BACKEND:-vulkan}
+fi
+
 # Build player example first
+HEADLESS_FEATURES=""
+if [ "$HEADLESS_RENDER" = true ]; then
+    HEADLESS_FEATURES=",headless-render"
+fi
+
 if [ "$FRAME_TEST" = true ]; then
-    echo "Building player example (frame-test)..."
-    cargo build -p bevy_alight_motion --example player --features frame-test --release
+    echo "Building player example (frame-test${HEADLESS_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "frame-test${HEADLESS_FEATURES}" --release
 else
-    echo "Building player example (video-comparison)..."
-    cargo build -p bevy_alight_motion --example player --features video-comparison --release
+    echo "Building player example (video-comparison${HEADLESS_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "video-comparison${HEADLESS_FEATURES}" --release
 fi
 if [ $? -ne 0 ]; then
     echo "Build failed!"
@@ -310,11 +330,14 @@ run_single_test() {
     local log_file="$RESULTS_DIR/${flat_name}.log"
     
     # In headless mode, wrap with xvfb-run and pass --headless to player
+    # With headless-render feature, no xvfb needed at all
     local headless_flag=""
     local xvfb_prefix=""
     if [ "$HEADLESS" = true ]; then
         headless_flag="--headless"
-        xvfb_prefix="xvfb-run -a"
+        if [ "$HEADLESS_RENDER" != true ]; then
+            xvfb_prefix="xvfb-run -a"
+        fi
     fi
     CARGO_MANIFEST_DIR="$MANIFEST_DIR" \
         $xvfb_prefix "$PLAYER_BIN" "$test_id" $headless_flag > "$log_file" 2>&1

@@ -66,6 +66,18 @@ use bevy_alight_motion::prelude::*;
 #[cfg(feature = "debug")]
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
+/// Resource storing the offscreen render target image handle for headless rendering.
+/// 无头渲染模式下的离屏渲染目标 Image handle。
+#[cfg(feature = "headless-render")]
+#[derive(Resource, Clone)]
+struct HeadlessRenderTarget(Handle<Image>);
+
+/// Resource storing the target resolution for headless rendering.
+/// 无头渲染模式下的目标分辨率。
+#[cfg(feature = "headless-render")]
+#[derive(Resource)]
+struct HeadlessResolution(Vec2);
+
 /// Parsed CLI arguments for the player.
 struct CliArgs {
     project_file: String,
@@ -127,31 +139,60 @@ fn main() {
 
     let mut app = App::new();
 
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: format!("Alight Motion Player - {}", project_file),
-            resolution: bevy::window::WindowResolution::new(
-                resolution.x as u32,
-                resolution.y as u32,
-            ),
-            resizable: false,
-            visible: !cli.headless,
-            // Disable VSync in frame-test mode for accurate FPS measurement
-            #[cfg(feature = "frame-test")]
-            present_mode: bevy::window::PresentMode::AutoNoVsync,
-            // In comparison mode, we might want to hide the window or keep it for debugging
+    // Headless mode: no window, offscreen render target, schedule runner loop
+    #[cfg(feature = "headless-render")]
+    {
+        app.add_plugins(
+            DefaultPlugins
+                .build()
+                .disable::<bevy::winit::WinitPlugin>()
+                .set(WindowPlugin {
+                    primary_window: None,
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    ..default()
+                }),
+        )
+        .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(
+            std::time::Duration::from_secs_f64(1.0 / 60.0),
+        ))
+        .insert_resource(HeadlessResolution(resolution));
+    }
+
+    // Normal mode: windowed rendering via WinitPlugin
+    #[cfg(not(feature = "headless-render"))]
+    {
+        app.add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: format!("Alight Motion Player - {}", project_file),
+                resolution: bevy::window::WindowResolution::new(
+                    resolution.x as u32,
+                    resolution.y as u32,
+                ),
+                resizable: false,
+                visible: !cli.headless,
+                // Disable VSync in frame-test mode for accurate FPS measurement
+                #[cfg(feature = "frame-test")]
+                present_mode: bevy::window::PresentMode::AutoNoVsync,
+                ..default()
+            }),
             ..default()
-        }),
-        ..default()
-    }))
+        }));
+    }
+
+    app
     // Black background matching AM project
     .insert_resource(ClearColor(Color::BLACK))
     .insert_resource(ProjectFile(project_file.clone()))
-    .insert_resource(AmProjectResolution::FitWindow)
     .init_resource::<DebugOverlaySettings>()
     .init_resource::<MaskDebugSettings>()
     .add_plugins(AlightMotionPlugin)
     .add_systems(Startup, setup);
+
+    // Headless: use FixedSize since there's no window to query
+    #[cfg(feature = "headless-render")]
+    app.insert_resource(AmProjectResolution::FixedSize(resolution.x, resolution.y));
+    #[cfg(not(feature = "headless-render"))]
+    app.insert_resource(AmProjectResolution::FitWindow);
 
     // Only add interactive UI systems when NOT in frame-test mode
     #[cfg(not(feature = "frame-test"))]
@@ -221,8 +262,41 @@ struct ProjectFile(String);
 #[derive(Component)]
 struct StatusText;
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, project_file: Res<ProjectFile>) {
-    // Spawn camera
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    project_file: Res<ProjectFile>,
+    #[cfg(feature = "headless-render")] mut images: ResMut<Assets<Image>>,
+    #[cfg(feature = "headless-render")] headless_res: Res<HeadlessResolution>,
+) {
+    // Headless mode: create offscreen render target and camera
+    #[cfg(feature = "headless-render")]
+    {
+        let render_image = Image::new_target_texture(
+            headless_res.0.x as u32,
+            headless_res.0.y as u32,
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            None,
+        );
+        let render_handle = images.add(render_image);
+        commands.insert_resource(HeadlessRenderTarget(render_handle.clone()));
+        commands.spawn((
+            Camera2d,
+            Camera {
+                clear_color: ClearColorConfig::Custom(Color::BLACK),
+                ..default()
+            },
+            bevy::camera::RenderTarget::Image(render_handle.into()),
+        ));
+        println!(
+            "Headless render target: {}x{}",
+            headless_res.0.x as u32,
+            headless_res.0.y as u32
+        );
+    }
+
+    // Normal mode: spawn default camera
+    #[cfg(not(feature = "headless-render"))]
     commands.spawn(Camera2d);
 
     // Load the AM project from assets folder

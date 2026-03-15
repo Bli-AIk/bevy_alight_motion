@@ -396,6 +396,7 @@ pub fn comparison_loop(
     mut exit: MessageWriter<AppExit>,
     // Query to check if project is loaded
     project_query: Query<&AmProjectRoot>,
+    #[cfg(feature = "headless-render")] headless_target: Option<Res<HeadlessRenderTarget>>,
 ) {
     // Use frame-based waiting instead of time-based for determinism
     // Wait at least 3 frames to ensure:
@@ -501,6 +502,15 @@ pub fn comparison_loop(
             // to guarantee it's set BEFORE lifecycle_system runs
 
             // Trigger screenshot
+            #[cfg(feature = "headless-render")]
+            {
+                if let Some(ref rt) = headless_target {
+                    commands
+                        .spawn(Screenshot::image(rt.0.clone()))
+                        .observe(save_to_disk(shot_path));
+                }
+            }
+            #[cfg(not(feature = "headless-render"))]
             commands
                 .spawn(Screenshot::primary_window())
                 .observe(save_to_disk(shot_path));

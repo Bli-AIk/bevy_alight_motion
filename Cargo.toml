@@ -78,6 +78,10 @@ debug = ["bevy-inspector-egui"]
 video-debug = []
 video-comparison = []
 frame-test = []
+# Headless rendering without a display server (no X11/Wayland/xvfb needed).
+# Uses offscreen render target + Vulkan software renderer (llvmpipe).
+# 无头渲染模式，无需显示服务器（不需要 X11/Wayland/xvfb）。
+headless-render = []
 
 # Tracy profiling with minimal overhead (no GUI)
 # Tracy 性能分析，最小开销（无 GUI）
