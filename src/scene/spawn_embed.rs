@@ -425,9 +425,7 @@ pub(crate) fn spawn_embed_scene(
 
     // Mark embed mask layers for Composite rendering strategy
     if embed.blending == "mask" || embed.blending == "exclude" {
-        commands
-            .entity(entity)
-            .insert(crate::effects::AmEmbedMask);
+        commands.entity(entity).insert(crate::effects::AmEmbedMask);
         bevy::log::debug!(
             "[spawn_embed] Marked embed '{}' (id={}) as mask (blending={})",
             embed.label,

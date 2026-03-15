@@ -7,82 +7,18 @@
 
 use bevy::prelude::*;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::loader::FontMetrics;
 use crate::schema::{AmEmbedScene, AmLayer, AmScene};
 
 use super::collect_camera::*;
+use super::collect_echo::*;
 use super::collect_embed::*;
 use super::collect_image::*;
 use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
 use super::helpers::*;
-
-/// Global counter for generating unique IDs during flatten
-static UNIQUE_ID_COUNTER: AtomicU64 = AtomicU64::new(1_000_000_000_000);
-
-/// Generate a unique ID that won't collide with original IDs
-/// Simply uses a monotonically increasing counter to guarantee uniqueness
-fn generate_unique_id(_base_id: u64) -> u64 {
-    // Just use the counter directly - this guarantees uniqueness
-    UNIQUE_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-/// Remap all IDs in an echo PendingLayer tree to unique IDs.
-/// This prevents echo copies from colliding with the original entity IDs.
-/// The root's `parent` is NOT remapped (it references an entity in the outer scope).
-fn remap_echo_pl_ids(pl: &mut PendingLayer) {
-    // Build old→new ID mapping for the entire tree
-    let mut id_map = HashMap::new();
-    collect_ids_for_remap(pl, &mut id_map);
-
-    // Apply mapping
-    apply_id_remap(pl, &id_map, true);
-}
-
-fn collect_ids_for_remap(pl: &PendingLayer, id_map: &mut HashMap<u64, u64>) {
-    id_map
-        .entry(pl.id)
-        .or_insert_with(|| generate_unique_id(pl.id));
-    for child in &pl.children {
-        collect_ids_for_remap(child, id_map);
-    }
-}
-
-fn apply_id_remap(pl: &mut PendingLayer, id_map: &HashMap<u64, u64>, is_root: bool) {
-    if let Some(&new_id) = id_map.get(&pl.id) {
-        pl.id = new_id;
-        pl.animated.layer_id = new_id;
-    }
-    // Don't remap root's parent (it's in the outer scope)
-    if !is_root {
-        if let Some(&new_parent) = id_map.get(&pl.parent) {
-            pl.parent = new_parent;
-        }
-        if let Some(&new_parent) = id_map.get(&pl.animated.parent_layer_id) {
-            pl.animated.parent_layer_id = new_parent;
-        }
-    }
-    if let Some(&new_embed) = id_map.get(&pl.containing_embed_id) {
-        pl.containing_embed_id = new_embed;
-    }
-    // Remap mask references
-    if let Some(ref mut mask_info) = pl.mask_info {
-        for entry in &mut mask_info.masks {
-            if let Some(&new_mask) = id_map.get(&entry.mask_layer_id) {
-                entry.mask_layer_id = new_mask;
-            }
-            if let Some(&new_parent) = id_map.get(&entry.mask_parent_layer_id) {
-                entry.mask_parent_layer_id = new_parent;
-            }
-        }
-    }
-    for child in &mut pl.children {
-        apply_id_remap(child, id_map, false);
-    }
-}
 
 /// Remap IDs and references for a single flattened child during the flatten pass.
 /// Handles parent, containing_embed_id, animated.layer_id, and mask_info remapping.
@@ -501,35 +437,10 @@ fn collect_repeat_copies(
                 base_pl = Some(pl);
             } else {
                 remap_echo_pl_ids(&mut pl);
-                // Apply per-copy spatial transform to children so they appear
-                // at the correct position/scale/rotation within copy 0's RTT.
-                // Copy 0 has identity spatial transforms; copy i has accumulated
-                // scale/offset/rotation that was originally on the embed entity.
-                if (acc_scale - 1.0).abs() > 0.001
-                    || acc_offset.length() > 0.001
-                    || acc_angle.abs() > 0.001
-                {
-                    let angle_rad = (-acc_angle).to_radians();
-                    let cos_a = angle_rad.cos();
-                    let sin_a = angle_rad.sin();
-                    for child in &mut pl.children {
-                        let x = child.transform.translation.x;
-                        let y = child.transform.translation.y;
-                        // Rotate around inner scene center (0,0 in Bevy coords),
-                        // then scale, then offset
-                        child.transform.translation.x =
-                            (x * cos_a - y * sin_a) * acc_scale + acc_offset.x;
-                        child.transform.translation.y =
-                            (x * sin_a + y * cos_a) * acc_scale + acc_offset.y;
-                        child.transform.scale.x *= acc_scale;
-                        child.transform.scale.y *= acc_scale;
-                        child.transform.rotation *=
-                            Quat::from_rotation_z(angle_rad);
-                    }
-                }
-                if let Some(ref mut base) = base_pl {
-                    base.children.extend(pl.children);
-                }
+                apply_echo_copy_transform(&mut pl, acc_scale, acc_offset, acc_angle);
+                // Extend base copy with this copy's children
+                let base = base_pl.as_mut().expect("copy 0 must set base_pl");
+                base.children.extend(pl.children);
             }
         } else {
             // Remap IDs for copies > 0 to avoid conflicts
@@ -1010,13 +921,24 @@ pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMas
 
         bevy::log::debug!(
             "[MASK] Extracting EMBED mask info: id={}, label='{}', scene_size=({},{}), center=({:.1},{:.1}), time={}..{}ms",
-            layer.id, layer.label, scene_w, scene_h, center_x, center_y, global_start, global_end
+            layer.id,
+            layer.label,
+            scene_w,
+            scene_h,
+            center_x,
+            center_y,
+            global_start,
+            global_end
         );
 
         return Some(AmMaskEntry {
             center: Vec2::new(center_x, center_y),
             half_size: Vec2::new(scene_w / 2.0, scene_h / 2.0),
-            rotation: layer.transform.rotation.to_euler(bevy::math::EulerRot::ZYX).0,
+            rotation: layer
+                .transform
+                .rotation
+                .to_euler(bevy::math::EulerRot::ZYX)
+                .0,
             scale: Vec2::ONE,
             is_circle: false,
             start_time: global_start,

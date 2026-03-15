@@ -163,7 +163,7 @@ fn try_ffprobe_fps(video_path: &PathBuf, field: &str) -> Option<f32> {
 
 /// Extract fps from the .amproj project file corresponding to the given video path.
 /// Looks for a file with the same base name but `.amproj` extension.
-fn extract_fps_from_amproj(video_path: &PathBuf) -> Option<f32> {
+fn extract_fps_from_amproj(video_path: &Path) -> Option<f32> {
     let amproj_path = video_path.with_extension("amproj");
     if !amproj_path.exists() {
         return None;
@@ -336,12 +336,12 @@ pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
                     .arg(&output_pattern)
                     .output();
 
-                if let Ok(fb_output) = fallback {
-                    if !fb_output.status.success() {
-                        let stderr = String::from_utf8_lossy(&fb_output.stderr);
-                        println!("[VIDEO UTILS] ffmpeg fallback error: {}", stderr);
-                        return None;
-                    }
+                if let Ok(fb_output) = fallback
+                    && !fb_output.status.success()
+                {
+                    let stderr = String::from_utf8_lossy(&fb_output.stderr);
+                    println!("[VIDEO UTILS] ffmpeg fallback error: {}", stderr);
+                    return None;
                 }
             }
 

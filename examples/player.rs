@@ -180,13 +180,13 @@ fn main() {
     }
 
     app
-    // Black background matching AM project
-    .insert_resource(ClearColor(Color::BLACK))
-    .insert_resource(ProjectFile(project_file.clone()))
-    .init_resource::<DebugOverlaySettings>()
-    .init_resource::<MaskDebugSettings>()
-    .add_plugins(AlightMotionPlugin)
-    .add_systems(Startup, setup);
+        // Black background matching AM project
+        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ProjectFile(project_file.clone()))
+        .init_resource::<DebugOverlaySettings>()
+        .init_resource::<MaskDebugSettings>()
+        .add_plugins(AlightMotionPlugin)
+        .add_systems(Startup, setup);
 
     // Headless: use FixedSize since there's no window to query
     #[cfg(feature = "headless-render")]
@@ -290,8 +290,7 @@ fn setup(
         ));
         println!(
             "Headless render target: {}x{}",
-            headless_res.0.x as u32,
-            headless_res.0.y as u32
+            headless_res.0.x as u32, headless_res.0.y as u32
         );
     }
 

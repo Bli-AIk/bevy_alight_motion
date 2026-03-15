@@ -301,8 +301,14 @@ pub fn setup_embed_scene_rtt_system(
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
-    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated, embed_mask) in query.iter() {
-        bevy::log::warn!("[RTT-SETUP-DBG] Setting up RTT for {:?}, is_mask={}", entity, embed_mask.is_some());
+    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated, embed_mask) in
+        query.iter()
+    {
+        bevy::log::warn!(
+            "[RTT-SETUP-DBG] Setting up RTT for {:?}, is_mask={}",
+            entity,
+            embed_mask.is_some()
+        );
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -380,7 +386,6 @@ pub fn setup_embed_scene_rtt_system(
                         translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
                         rotation: embed_rotation,
                         scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
-                        ..default()
                     }
                 },
             ))
@@ -424,7 +429,8 @@ pub fn setup_embed_scene_rtt_system(
         if embed_mask.is_some() {
             bevy::log::debug!(
                 "[RTT] Mask embed {:?}: RTT setup without sprite (layer={})",
-                entity, render_layer
+                entity,
+                render_layer
             );
         } else if let Some(fill) = group_fill {
             if fill.fill_type != GroupFillType::None {

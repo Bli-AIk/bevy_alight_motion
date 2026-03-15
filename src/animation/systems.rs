@@ -89,6 +89,33 @@ pub(super) fn compute_perspective_zoom(
     if denom > 0.0 { cam_dist / denom } else { 0.001 }
 }
 
+/// Apply linear repeat displacement for SDF shapes (CPU-side, since shaders don't support it).
+fn apply_sdf_linear_repeat(
+    sdf_parent: Option<&AmSdfShapeParent>,
+    animated: &AmAnimated,
+    layer_time: f32,
+    bx: &mut f32,
+    by: &mut f32,
+) {
+    if sdf_parent.is_none() {
+        return;
+    }
+    let Some(d) =
+        super::effects::repeat::compute_sdf_linear_repeat_displacement(animated, layer_time)
+    else {
+        return;
+    };
+    if d[0].is_nan() {
+        // count == 0: hide the shape (set position offscreen)
+        *bx = -99999.0;
+        *by = -99999.0;
+    } else {
+        // Apply displacement (AM coords → Bevy: negate Y)
+        *bx += d[0];
+        *by -= d[1];
+    }
+}
+
 /// Apply oscillate effect (position oscillation + z-depth perspective).
 /// Returns the z_zoom multiplier.
 fn apply_oscillate(animated: &AmAnimated, layer_time: f32, bx: &mut f32, by: &mut f32) -> f32 {
@@ -522,21 +549,7 @@ pub fn animate_transform_system(
 
             // Apply linear repeat (repeat.line) displacement for SDF shapes.
             // SDF shaders don't support repeat.line, so we compute it CPU-side.
-            if sdf_parent.is_some() {
-                if let Some(d) = super::effects::repeat::compute_sdf_linear_repeat_displacement(
-                    animated, layer_time,
-                ) {
-                    if d[0].is_nan() {
-                        // count == 0: hide the shape (set position offscreen)
-                        bx = -99999.0;
-                        by = -99999.0;
-                    } else {
-                        // Apply displacement (AM coords → Bevy: negate Y)
-                        bx += d[0];
-                        by -= d[1];
-                    }
-                }
-            }
+            apply_sdf_linear_repeat(sdf_parent, animated, layer_time, &mut bx, &mut by);
 
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }

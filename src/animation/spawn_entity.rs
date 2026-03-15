@@ -336,20 +336,18 @@ pub(super) fn spawn_layer_entity(
     // Add EmbedScene strategy evaluation marker
     if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
         let (scene_w, scene_h) = layer.embed_scene_size.unwrap_or((1280.0, 960.0));
-        commands.entity(entity).insert(
-            crate::effects::NeedsStrategyEvaluation {
+        commands
+            .entity(entity)
+            .insert(crate::effects::NeedsStrategyEvaluation {
                 scene_width: scene_w,
                 scene_height: scene_h,
                 has_scale_animation: !layer.animated.scale.keyframes.is_empty(),
-            },
-        );
+            });
         // Mark as mask embed if blending is mask/exclude
         if layer.blending_mode == AmBlendingMode::Mask
             || layer.blending_mode == AmBlendingMode::Exclude
         {
-            commands
-                .entity(entity)
-                .insert(crate::effects::AmEmbedMask);
+            commands.entity(entity).insert(crate::effects::AmEmbedMask);
             bevy::log::warn!(
                 "[Lifecycle] Embed '{}' (id={}) marked as mask embed",
                 layer.label,
