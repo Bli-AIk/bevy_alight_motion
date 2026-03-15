@@ -10,7 +10,7 @@
 
 mod mask;
 pub(crate) mod path_repeat;
-mod repeat;
+pub(crate) mod repeat;
 mod rtt_blur;
 pub(crate) mod text_effects;
 mod unified;

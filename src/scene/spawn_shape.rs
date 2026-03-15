@@ -238,7 +238,9 @@ pub(crate) fn spawn_shape(
             gradient_end_color,
             gradient_points,
         }
-    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
+    } else if !shape.fill_image.is_empty()
+        && (shape.fill_type == "media" || shape.fill_type == "color")
+    {
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,

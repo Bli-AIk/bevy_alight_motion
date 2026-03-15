@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::animation::components::{AmAnimated, AmPlayback};
+use crate::animation::effects::repeat::compute_java_random_state_packed;
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 use crate::scene::{AmLayerMarker, AmMaskInfo};
 
@@ -293,9 +294,132 @@ fn mask_type_flag(is_circle: bool, is_exclude: bool) -> f32 {
     1.0 + is_circle as u8 as f32 + 2.0 * is_exclude as u8 as f32
 }
 
-/// System to dynamically update mask state on entities with UnifiedEffectMaterial.
-/// This system enables/disables mask clipping based on whether the mask layer is currently active.
-/// Supports up to 2 simultaneous masks for dual-mask, dual-exclude, and mixed effects.
+/// Extract mask layer's linear-repeat parameters and write them into the material uniforms.
+///
+/// Converts repeat position/offset from AM element-local pixel coords to the mask-local
+/// world frame so the shader can compute per-copy displacement directly.
+fn set_mask_linear_repeat_uniforms(
+    mask_entry: &crate::scene::AmMaskEntry,
+    pending: &crate::scene::AmPendingLayers,
+    mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
+    playback_time: f32,
+    fit_scale: f32,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+) {
+    // Find the mask layer entity
+    let Some(&mask_entity) = pending.spawned_entities.get(&mask_entry.mask_layer_id) else {
+        material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        return;
+    };
+    let Ok((_gt, animated, _spec)) = mask_layer_query.get(mask_entity) else {
+        material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        return;
+    };
+
+    let local_time = animated.calc_local_time(playback_time);
+    let layer_time = animated.calc_layer_time(local_time);
+
+    // Process first linear repeat (flat fields on AmAnimated)
+    let count = interpolate_float(&animated.linear_repeat_count, layer_time)
+        .unwrap_or(0.0)
+        .round();
+    if count > 0.0 {
+        let pos =
+            interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
+        let off =
+            interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+        let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
+        let lr_scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
+        let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
+        let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
+        let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
+        let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
+        let overlap = interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
+        let ease_in = interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
+        let ease_out =
+            interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
+        let sia = animated.linear_repeat_shape * 100
+            + if animated.linear_repeat_invert { 10 } else { 0 }
+            + if animated.linear_repeat_color_alt_copies {
+                1
+            } else {
+                0
+            };
+
+        // Convert position/offset from pixel_coord space to world units.
+        // pixel_coord already accounts for element scale (orig_width = sprite_size * scale).
+        // pixel_coord to world: multiply by fit_scale only (no mask_scale multiplication).
+        // Y flip: AM Y-down → Bevy Y-up.
+        let pos_world_x = pos[0] * fit_scale;
+        let pos_world_y = -pos[1] * fit_scale;
+        let off_world_x = off[0] * fit_scale;
+        let off_world_y = -off[1] * fit_scale;
+
+        material.uniform_data.mask1_lr_params1 = Vec4::new(count, pos_world_x, pos_world_y, angle);
+        material.uniform_data.mask1_lr_params2 =
+            Vec4::new(off_world_x, off_world_y, lr_scale, alpha);
+        material.uniform_data.mask1_lr_params3 = Vec4::new(start, end, phase, overlap);
+        material.uniform_data.mask1_lr_params4 = Vec4::new(ease_in, ease_out, 0.0, sia as f32);
+        material.uniform_data.mask1_lr_params5 = if animated.linear_repeat_random_order {
+            let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
+            let (lo, hi) = compute_java_random_state_packed(seed);
+            Vec4::new(1.0, lo, hi, 0.0)
+        } else {
+            Vec4::ZERO
+        };
+    } else {
+        material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+    }
+
+    // Process second linear repeat
+    if let Some(ref lr2) = animated.linear_repeat2 {
+        let count2 = interpolate_float(&lr2.count, layer_time)
+            .unwrap_or(0.0)
+            .round();
+        if count2 > 0.0 {
+            let pos2 = interpolate_vec2(&lr2.position, layer_time).unwrap_or([0.0, 0.0]);
+            let off2 = interpolate_vec2(&lr2.offset, layer_time).unwrap_or([0.0, 0.0]);
+            let angle2 = interpolate_float(&lr2.angle, layer_time).unwrap_or(0.0);
+            let scale2 = interpolate_float(&lr2.scale, layer_time).unwrap_or(1.0);
+            let alpha2 = interpolate_float(&lr2.alpha, layer_time).unwrap_or(1.0);
+            let start2 = interpolate_float(&lr2.start, layer_time).unwrap_or(0.0);
+            let end2 = interpolate_float(&lr2.end, layer_time).unwrap_or(1.0);
+            let phase2 = interpolate_float(&lr2.phase, layer_time).unwrap_or(0.0);
+            let overlap2 = interpolate_float(&lr2.overlap, layer_time).unwrap_or(0.0);
+            let ease_in2 = interpolate_float(&lr2.ease_in, layer_time).unwrap_or(0.0);
+            let ease_out2 = interpolate_float(&lr2.ease_out, layer_time).unwrap_or(0.0);
+            let sia2 = lr2.shape * 100
+                + if lr2.invert { 10 } else { 0 }
+                + if lr2.color_alt_copies { 1 } else { 0 };
+
+            let pos2_world_x = pos2[0] * fit_scale;
+            let pos2_world_y = -pos2[1] * fit_scale;
+            let off2_world_x = off2[0] * fit_scale;
+            let off2_world_y = -off2[1] * fit_scale;
+
+            material.uniform_data.mask1_lr2_params1 =
+                Vec4::new(count2, pos2_world_x, pos2_world_y, angle2);
+            material.uniform_data.mask1_lr2_params2 =
+                Vec4::new(off2_world_x, off2_world_y, scale2, alpha2);
+            material.uniform_data.mask1_lr2_params3 = Vec4::new(start2, end2, phase2, overlap2);
+            material.uniform_data.mask1_lr2_params4 =
+                Vec4::new(ease_in2, ease_out2, 0.0, sia2 as f32);
+            material.uniform_data.mask1_lr2_params5 = if lr2.random_order {
+                let seed2 = interpolate_float(&lr2.seed, layer_time).unwrap_or(0.0);
+                let (lo2, hi2) = compute_java_random_state_packed(seed2);
+                Vec4::new(1.0, lo2, hi2, 0.0)
+            } else {
+                Vec4::ZERO
+            };
+        } else {
+            material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        }
+    } else {
+        material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+    }
+}
 ///
 /// **Dynamic Transform Support**: This system reads the mask layer's current animated transform
 /// to support animated masks (rotation, scale, position changes over time).
@@ -334,6 +458,8 @@ pub fn update_unified_mask_system(
             material.uniform_data.mask2_flags.x = 0.0;
             material.uniform_data.mask2_flags.y = 0.0;
             material.uniform_data.mask2_flags.z = 0.0;
+            material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
             continue;
         }
 
@@ -357,6 +483,16 @@ pub fn update_unified_mask_system(
         material.uniform_data.mask1_stretch1_params = m1.stretch1;
         material.uniform_data.mask1_stretch2_params = m1.stretch2;
         material.uniform_data.mask1_stretch_info = m1.stretch_info;
+
+        // Extract mask1's linear repeat data
+        set_mask_linear_repeat_uniforms(
+            mask1,
+            pending,
+            &mask_layer_query,
+            playback.current_time_ms,
+            fit_scale,
+            material,
+        );
 
         // Second mask (if present)
         if active_masks.len() >= 2 {

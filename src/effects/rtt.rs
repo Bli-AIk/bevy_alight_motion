@@ -371,11 +371,7 @@ pub fn setup_embed_scene_rtt_system(
                     Transform {
                         translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
                         rotation: embed_rotation,
-                        scale: Vec3::new(
-                            global_scale.x.signum(),
-                            global_scale.y.signum(),
-                            1.0,
-                        ),
+                        scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
                         ..default()
                     }
                 },
@@ -824,11 +820,8 @@ pub fn sync_rtt_camera_position_system(
             camera_transform.translation =
                 Vec3::new(embed_translation.x, embed_translation.y, 1000.0);
             camera_transform.rotation = embed_rotation;
-            camera_transform.scale = Vec3::new(
-                global_scale.x.signum(),
-                global_scale.y.signum(),
-                1.0,
-            );
+            camera_transform.scale =
+                Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0);
 
             // Sync projection scale to compensate for inherited global scale
             let effective_width = rtt.scene_width * global_scale.x.abs();

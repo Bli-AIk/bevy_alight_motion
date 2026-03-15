@@ -117,6 +117,10 @@ frame_threshold = 0.98
 avg_threshold = 0.98
 frame_threshold = 0.98
 
+[overrides."private/USER_hong_jiao/test/rect_subdiv_3/target1"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
 # =============================================================================
 # Effects tests - close to passing
 # 特效测试 - 接近通过

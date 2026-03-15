@@ -260,7 +260,19 @@ pub(crate) fn collect_shape(
             gradient_end_color,
             gradient_points,
         }
-    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
+    } else if !shape.fill_image.is_empty()
+        && (shape.fill_type == "media" || shape.fill_type == "color")
+    {
+        // AM uses fillImage as texture fill for both "media" and "color" fill types.
+        // For "color" + fillImage, the image provides the visual content (e.g. bone-loop
+        // patterns used with stretchsegment effects).
+        bevy::log::warn!(
+            "[collect_shape] '{}' (id={}): fillType='{}' with fillImage='{}' → SpriteShape(is_media=true)",
+            shape.label,
+            shape.id,
+            shape.fill_type,
+            shape.fill_image
+        );
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,

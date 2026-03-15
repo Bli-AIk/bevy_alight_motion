@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-15T09:41:37.475194+08:00",
+  "timestamp": "2026-03-15T15:28:00.009891+08:00",
   "summary": {
-    "passed": 160,
+    "passed": 164,
     "warnings": 0,
     "skipped": 2,
-    "failed": 63
+    "failed": 64
   },
   "results": {
     "basic/bezier/bezier": {
@@ -265,6 +265,12 @@
       "status": "pass"
     },
     "effects/linear-repeat/dual-16-9": {
+      "status": "pass"
+    },
+    "effects/linear-repeat/mask": {
+      "status": "pass"
+    },
+    "effects/linear-repeat/mask_dual": {
       "status": "pass"
     },
     "effects/linear-repeat/random": {
@@ -701,7 +707,17 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.9151
+      "avg_similarity": 0.782
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
+      "status": "fail",
+      "avg_similarity": 0.9683
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3/target2": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3/target3": {
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",

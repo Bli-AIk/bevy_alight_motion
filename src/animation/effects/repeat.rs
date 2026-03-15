@@ -10,7 +10,7 @@ use crate::animation::interpolation::{interpolate_color, interpolate_float, inte
 /// Uses f32 arithmetic to match Java's `(long)(15234322 + 35432882176L * seedValue)`
 /// where seedValue is a Java float. In Java, long*float promotes long to float first,
 /// so the entire computation happens in float32 space (matching AM's precision loss).
-fn compute_java_random_state_packed(seed: f32) -> (f32, f32) {
+pub(crate) fn compute_java_random_state_packed(seed: f32) -> (f32, f32) {
     let am_seed = (15234322.0_f32 + 35432882176.0_f32 * seed) as i64;
     let multiplier: i64 = 0x5DEECE66D;
     let init_state = ((am_seed ^ multiplier) as u64) & ((1u64 << 48) - 1);
@@ -631,4 +631,189 @@ pub(super) fn process_radial_repeat_effect(
         material.uniform_data.radial_repeat_params5 = Vec4::ZERO;
         material.uniform_data.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
+}
+
+/// CPU-side port of `calc_linear_repeat_progress` from unified_effect.wgsl.
+/// Returns (base_progress, interp_progress) for the given copy index.
+/// Used to compute repeat.line displacement for SDF shapes (which don't have shader support).
+fn calc_linear_repeat_progress(
+    index: i32,
+    count: i32,
+    start: f32,
+    end: f32,
+    phase: f32,
+    overlap: f32,
+    shape: i32,
+    invert: bool,
+    ease_in: f32,
+    ease_out: f32,
+) -> (f32, f32) {
+    let fi = index as f32;
+    let fcount = count as f32;
+
+    let overlap_value = overlap + 1.0;
+    let denominator = (2.0 * overlap_value) + fcount - 1.0;
+    let step_width = 1.0 / denominator;
+    let half_width = step_width * overlap_value;
+
+    let base_position = (fi + overlap_value) / denominator + phase;
+    let center_pos = base_position + half_width * 0.5;
+
+    let base_progress = if count > 1 { fi / (fcount - 1.0) } else { 0.0 };
+
+    // Shape constants: 0=RAMP, 1=SQUARE, 2=SMOOTH, 3=TRIANGLE
+    let mut interp_progress = match shape {
+        1 => {
+            // SQUARE
+            let in_fade = ((base_position - start) / half_width).clamp(0.0, 1.0);
+            let out_fade = ((end - base_position) / half_width).clamp(0.0, 1.0);
+            if start < end {
+                in_fade.min(out_fade)
+            } else {
+                1.0 - in_fade.max(out_fade)
+            }
+        }
+        2 => {
+            // SMOOTH (Gaussian)
+            if center_pos >= start && center_pos <= end {
+                let x = (center_pos - start) / (end - start);
+                let centered = (x - 0.5) * 2.0 * std::f32::consts::PI;
+                (-centered * centered * 0.5).exp()
+            } else {
+                0.0
+            }
+        }
+        3 => {
+            // TRIANGLE
+            if center_pos >= start && center_pos <= end {
+                let x = (center_pos - start) / (end - start);
+                if x < 0.5 { x * 2.0 } else { (1.0 - x) * 2.0 }
+            } else {
+                0.0
+            }
+        }
+        _ => {
+            // RAMP (default, shape == 0)
+            let range = (end - start).max(0.001);
+            (center_pos - start) / range
+        }
+    };
+
+    // Apply easing (AM's bezier-based easing)
+    if ease_in.abs() > 0.001 || ease_out.abs() > 0.001 {
+        interp_progress = apply_repeat_easing(interp_progress.clamp(0.0, 1.0), ease_in, ease_out);
+    }
+
+    if invert {
+        interp_progress = 1.0 - interp_progress;
+    }
+
+    interp_progress = interp_progress.clamp(0.0, 1.0);
+
+    (base_progress, interp_progress)
+}
+
+/// AM's bezier-based easing for repeat effects.
+/// Port of `apply_am_easing` from unified_effect.wgsl.
+fn apply_repeat_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {
+    if ease_in.abs() < 0.001 && ease_out.abs() < 0.001 {
+        return progress;
+    }
+    let p1x = (ease_in * 0.5).max(0.0);
+    let p1y = (-ease_in * 0.5).max(0.0);
+    let p2x = 1.0 - (ease_out * 0.5).max(0.0);
+    let p2y = 1.0 - (-ease_out * 0.5).max(0.0);
+    cubic_bezier_2d(progress, p1x, p1y, p2x, p2y)
+}
+
+/// Evaluate a 2D cubic bezier curve at parameter t.
+/// Port of `cubic_bezier_2d` from unified_effect.wgsl.
+fn cubic_bezier_2d(t: f32, p1x: f32, p1y: f32, p2x: f32, p2y: f32) -> f32 {
+    // Newton-Raphson to solve for bezier parameter from x coordinate
+    let mut guess = t;
+    for _ in 0..8 {
+        let x = cubic_bezier_1d(guess, p1x, p2x) - t;
+        if x.abs() < 0.001 {
+            break;
+        }
+        let dx = cubic_bezier_1d_derivative(guess, p1x, p2x);
+        if dx.abs() < 0.0001 {
+            break;
+        }
+        guess -= x / dx;
+        guess = guess.clamp(0.0, 1.0);
+    }
+    cubic_bezier_1d(guess, p1y, p2y)
+}
+
+fn cubic_bezier_1d(t: f32, p1: f32, p2: f32) -> f32 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let mt = 1.0 - t;
+    let mt2 = mt * mt;
+    3.0 * mt2 * t * p1 + 3.0 * mt * t2 * p2 + t3
+}
+
+fn cubic_bezier_1d_derivative(t: f32, p1: f32, p2: f32) -> f32 {
+    let mt = 1.0 - t;
+    3.0 * mt * mt * p1 + 6.0 * mt * t * (p2 - p1) + 3.0 * t * t * (1.0 - p2)
+}
+
+/// Compute linear repeat displacement for SDF shapes (CPU-side).
+/// SDF shapes don't support repeat.line in their shader, so the displacement
+/// must be applied at the Transform level.
+///
+/// Returns the displacement in AM coordinate space (x-right, y-down).
+/// The caller must convert to Bevy coordinates (negate Y).
+///
+/// For count=0, returns None (shape should be hidden).
+/// For count>=1, returns the displacement for copy index 0.
+/// Note: count>1 would require spawning additional entities (not yet implemented).
+pub(crate) fn compute_sdf_linear_repeat_displacement(
+    animated: &AmAnimated,
+    layer_time: f32,
+) -> Option<[f32; 2]> {
+    let count = interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(-1.0);
+    let count_rounded = count.round() as i32;
+
+    if count_rounded < 0 {
+        // Effect not activated — render normally
+        return None;
+    }
+    if count_rounded == 0 {
+        // Effect activated but count=0 — shape should be hidden
+        return Some([f32::NAN, f32::NAN]);
+    }
+
+    let position =
+        interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
+    let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+
+    let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
+    let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
+    let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
+    let overlap = interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
+    let ease_in = interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
+    let ease_out = interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
+    let shape = animated.linear_repeat_shape;
+    let invert = animated.linear_repeat_invert;
+
+    // Compute progress for copy index 0 (the primary/only copy for count=1)
+    let (base_progress, interp_progress) = calc_linear_repeat_progress(
+        0,
+        count_rounded,
+        start,
+        end,
+        phase,
+        overlap,
+        shape,
+        invert,
+        ease_in,
+        ease_out,
+    );
+
+    let dx = position[0] * base_progress + offset[0] * interp_progress;
+    let dy = position[1] * base_progress + offset[1] * interp_progress;
+
+    Some([dx, dy])
 }

@@ -221,6 +221,28 @@ pub struct UnifiedEffectUniform {
     pub chromakey_params: Vec4,
     /// ChromaKey key color (linear RGBA)
     pub chromakey_key_color: Vec4,
+    // Mask 1 linear repeat effect / 蒙版1线性重复效果
+    /// Mask1 linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub mask1_lr_params1: Vec4,
+    /// Mask1 linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub mask1_lr_params2: Vec4,
+    /// Mask1 linear repeat params3: (start, end, phase, overlap)
+    pub mask1_lr_params3: Vec4,
+    /// Mask1 linear repeat params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub mask1_lr_params4: Vec4,
+    /// Mask1 linear repeat params5: (random_order, seed_lo, seed_hi, 0)
+    pub mask1_lr_params5: Vec4,
+    // Mask 1 second linear repeat effect (dual repeat) / 蒙版1第二线性重复效果
+    /// Mask1 linear repeat2 params1: (count, position_x, position_y, angle_deg)
+    pub mask1_lr2_params1: Vec4,
+    /// Mask1 linear repeat2 params2: (offset_x, offset_y, scale, alpha)
+    pub mask1_lr2_params2: Vec4,
+    /// Mask1 linear repeat2 params3: (start, end, phase, overlap)
+    pub mask1_lr2_params3: Vec4,
+    /// Mask1 linear repeat2 params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub mask1_lr2_params4: Vec4,
+    /// Mask1 linear repeat2 params5: (random_order, seed_lo, seed_hi, 0)
+    pub mask1_lr2_params5: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -530,6 +552,16 @@ impl Default for UnifiedEffectUniform {
             blend_mode_params: Vec4::ZERO,
             chromakey_params: Vec4::ZERO,
             chromakey_key_color: Vec4::ZERO,
+            mask1_lr_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            mask1_lr_params2: Vec4::ZERO,
+            mask1_lr_params3: Vec4::ZERO,
+            mask1_lr_params4: Vec4::ZERO,
+            mask1_lr_params5: Vec4::ZERO,
+            mask1_lr2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            mask1_lr2_params2: Vec4::ZERO,
+            mask1_lr2_params3: Vec4::ZERO,
+            mask1_lr2_params4: Vec4::ZERO,
+            mask1_lr2_params5: Vec4::ZERO,
         }
     }
 }
