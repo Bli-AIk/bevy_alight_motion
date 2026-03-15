@@ -272,13 +272,16 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
     }
     frame_paths.sort();
 
-    // Skip the first frame of reference video
+    // Skip the first frame of reference video (when we have enough frames).
     // AM video export's frame 1 is actually at t≈29ms, not t=0ms
     // Our shot_000000 at t=0ms doesn't match ref frame_000001
-    // So we skip frame_000001 and start from frame_000002
-    if !frame_paths.is_empty() {
+    // So we skip frame_000001 and start from frame_000002.
+    // For ultra-short videos with only 1 frame, keep it to have something to compare.
+    if frame_paths.len() > 1 {
         frame_paths.remove(0);
         println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
+    } else if frame_paths.len() == 1 {
+        println!("[COMPARISON] Only 1 reference frame available, keeping it (ultra-short video)");
     }
 
     state.frame_paths = frame_paths;

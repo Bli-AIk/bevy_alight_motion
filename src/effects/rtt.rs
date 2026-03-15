@@ -355,12 +355,30 @@ pub fn setup_embed_scene_rtt_system(
                 }),
                 // Camera only renders this specific layer
                 RenderLayers::layer(render_layer_usize),
-                // Camera positioned at embed's world position for correct RTT capture
-                Transform::from_xyz(
-                    embed_global.translation().x,
-                    embed_global.translation().y,
-                    1000.0,
-                ),
+                // Camera must match embed's world position, rotation, AND scale sign.
+                // Content entities are Bevy children of the embed, so they inherit
+                // the embed's GlobalTransform (including rotation and scale sign).
+                // The camera must share rotation and scale sign to cancel them out
+                // in RTT space:
+                // - Rotation: prevents double-rotation (RTT + mesh display)
+                // - Scale sign: prevents double-flip when embed has negative scale
+                //   (e.g., scale=(-1,1) for horizontal mirroring). Without this,
+                //   content is flipped in RTT texture AND on the mesh, canceling
+                //   the intended mirror effect.
+                {
+                    let (_, embed_rotation, embed_translation) =
+                        embed_global.to_scale_rotation_translation();
+                    Transform {
+                        translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
+                        rotation: embed_rotation,
+                        scale: Vec3::new(
+                            global_scale.x.signum(),
+                            global_scale.y.signum(),
+                            1.0,
+                        ),
+                        ..default()
+                    }
+                },
             ))
             .id();
 
@@ -796,13 +814,23 @@ pub fn sync_rtt_camera_position_system(
 ) {
     for (camera_marker, mut camera_transform, mut projection) in camera_query.iter_mut() {
         if let Ok((rtt, embed_global)) = embed_query.get(camera_marker.embed_entity) {
-            // Sync position
-            let embed_translation = embed_global.translation();
+            // Sync position, rotation, and scale sign to match embed's world transform.
+            // Rotation must match so content (which inherits embed's rotation via
+            // Bevy hierarchy) appears unrotated in RTT space.
+            // Scale sign must match so content (which inherits embed's scale sign
+            // via Bevy hierarchy) appears unflipped in RTT space.
+            let (global_scale, embed_rotation, embed_translation) =
+                embed_global.to_scale_rotation_translation();
             camera_transform.translation =
                 Vec3::new(embed_translation.x, embed_translation.y, 1000.0);
+            camera_transform.rotation = embed_rotation;
+            camera_transform.scale = Vec3::new(
+                global_scale.x.signum(),
+                global_scale.y.signum(),
+                1.0,
+            );
 
             // Sync projection scale to compensate for inherited global scale
-            let global_scale = embed_global.to_scale_rotation_translation().0;
             let effective_width = rtt.scene_width * global_scale.x.abs();
             let effective_height = rtt.scene_height * global_scale.y.abs();
             if let Projection::Orthographic(ref mut ortho) = *projection {

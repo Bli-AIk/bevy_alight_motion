@@ -92,26 +92,14 @@ pub fn find_debug_video(project_path: Option<&str>) -> Option<PathBuf> {
     latest_file.map(|(path, _)| path)
 }
 
-/// Get video info using ffprobe
+/// Get video info using ffprobe.
+/// Returns `(fps, duration)`. When `r_frame_rate` is invalid (e.g. `1/0`),
+/// tries `avg_frame_rate`, then falls back to `project_fps` if supplied,
+/// and finally to 30.0.
 pub fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
-    // Get frame rate
-    let fps_output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=r_frame_rate",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-        ])
-        .arg(video_path)
-        .output()
-        .ok()?;
-
-    let fps_str = String::from_utf8_lossy(&fps_output.stdout);
-    let fps = parse_fps(fps_str.trim()).unwrap_or(12.0);
+    // Try r_frame_rate first, then avg_frame_rate
+    let fps = try_ffprobe_fps(video_path, "r_frame_rate")
+        .or_else(|| try_ffprobe_fps(video_path, "avg_frame_rate"));
 
     // Get duration
     let duration_output = Command::new("ffprobe")
@@ -130,7 +118,86 @@ pub fn get_video_info(video_path: &PathBuf) -> Option<(f32, f32)> {
     let duration_str = String::from_utf8_lossy(&duration_output.stdout);
     let duration: f32 = duration_str.trim().parse().unwrap_or(0.0);
 
+    // If we couldn't get fps from ffprobe, try extracting from the matching .amproj
+    let fps = fps.unwrap_or_else(|| {
+        let project_fps = extract_fps_from_amproj(video_path);
+        if let Some(pf) = project_fps {
+            println!(
+                "[VIDEO UTILS] Using project fps ({}) for {:?} (video fps unavailable)",
+                pf, video_path
+            );
+            pf
+        } else {
+            println!(
+                "[VIDEO UTILS] WARNING: Could not determine fps for {:?}, falling back to 30.0",
+                video_path
+            );
+            30.0
+        }
+    });
+
     Some((fps, duration))
+}
+
+/// Try to get fps from ffprobe using a specific stream field.
+fn try_ffprobe_fps(video_path: &PathBuf, field: &str) -> Option<f32> {
+    let entry = format!("stream={}", field);
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            &entry,
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(video_path)
+        .output()
+        .ok()?;
+
+    let fps_str = String::from_utf8_lossy(&output.stdout);
+    parse_fps(fps_str.trim())
+}
+
+/// Extract fps from the .amproj project file corresponding to the given video path.
+/// Looks for a file with the same base name but `.amproj` extension.
+fn extract_fps_from_amproj(video_path: &PathBuf) -> Option<f32> {
+    let amproj_path = video_path.with_extension("amproj");
+    if !amproj_path.exists() {
+        return None;
+    }
+
+    let file = std::fs::File::open(&amproj_path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+
+    // Find the XML file in the archive
+    let xml_name = (0..archive.len()).find_map(|i| {
+        let entry = archive.by_index(i).ok()?;
+        let name = entry.name().to_string();
+        if name.ends_with(".xml") {
+            Some(name)
+        } else {
+            None
+        }
+    })?;
+
+    let mut xml_file = archive.by_name(&xml_name).ok()?;
+    let mut xml_content = String::new();
+    std::io::Read::read_to_string(&mut xml_file, &mut xml_content).ok()?;
+
+    // Extract fps from the first scene element: fps="60"
+    for line in xml_content.lines() {
+        if let Some(pos) = line.find("fps=\"") {
+            let rest = &line[pos + 5..];
+            if let Some(end) = rest.find('"') {
+                return rest[..end].parse().ok();
+            }
+        }
+    }
+
+    None
 }
 
 /// Get video resolution (width, height) from video file using ffprobe
@@ -239,6 +306,45 @@ pub fn extract_frames(video_path: &PathBuf, fps: f32) -> Option<PathBuf> {
                 println!("[VIDEO UTILS] ffmpeg error: {}", stderr);
                 return None;
             }
+
+            // Check if any frames were extracted
+            let frame_count = fs::read_dir(&frames_dir)
+                .ok()
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| {
+                            e.path()
+                                .extension()
+                                .map(|ext| ext == "png")
+                                .unwrap_or(false)
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+
+            // For ultra-short videos (0 duration), fps-based extraction may yield 0 frames.
+            // Fall back to extracting all frames without fps filter.
+            if frame_count == 0 {
+                println!(
+                    "[VIDEO UTILS] fps-based extraction yielded 0 frames, trying raw extraction..."
+                );
+                let fallback = Command::new("ffmpeg")
+                    .args(["-i"])
+                    .arg(video_path)
+                    .args(["-y"])
+                    .arg(&output_pattern)
+                    .output();
+
+                if let Ok(fb_output) = fallback {
+                    if !fb_output.status.success() {
+                        let stderr = String::from_utf8_lossy(&fb_output.stderr);
+                        println!("[VIDEO UTILS] ffmpeg fallback error: {}", stderr);
+                        return None;
+                    }
+                }
+            }
+
             Some(frames_dir)
         }
         Err(e) => {
