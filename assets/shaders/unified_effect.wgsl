@@ -121,6 +121,8 @@ struct UnifiedEffectUniform {
     mask1_lr2_params3: vec4<f32>,      // (start, end, phase, overlap)
     mask1_lr2_params4: vec4<f32>,      // (ease_in, ease_out, 0, shape_invert_alt)
     mask1_lr2_params5: vec4<f32>,      // (random_order, seed_lo, seed_hi, 0)
+    mask1_repeat_params1: vec4<f32>,   // (count, offset_x_world, offset_y_world, angle_deg)
+    mask1_repeat_params2: vec4<f32>,   // (scale, alpha, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -515,6 +517,100 @@ fn compute_ue_mask_blend_factor_stretched(
     }
 }
 
+// Compute mask blend factor with basic repeat effect.
+// Basic repeat: each copy i has offset*i, angle*i, scale^i, alpha decay.
+// Offset is pre-converted to mask-local world units on the CPU side.
+fn compute_mask_with_basic_repeat(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    rp1: vec4<f32>,       // (count, offset_x_world, offset_y_world, angle_deg)
+    rp2: vec4<f32>,       // (scale, alpha, 0, 0)
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
+    let is_exclude = mask_type > 2.5;
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    // rel in mask-local frame
+    var rel_base = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
+    }
+
+    let rp_count = i32(rp1.x);
+    let rp_offset = rp1.yz;           // world units
+    let rp_angle_rad = rp1.w * 3.14159265 / 180.0;
+    let rp_scale = rp2.x;
+    let rp_alpha = rp2.y;
+
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < rp_count; i = i + 1) {
+        let fi = f32(i);
+
+        // AM: cumulative_alpha = 1.0 - i * (1.0 - alpha)
+        let cum_alpha = 1.0 - fi * (1.0 - rp_alpha);
+        if cum_alpha <= 0.0 {
+            continue;
+        }
+
+        let cum_offset = rp_offset * fi;
+        let cum_angle = rp_angle_rad * fi;
+        let cum_scale = pow(rp_scale, fi);
+
+        if abs(cum_scale) < 0.001 {
+            continue;
+        }
+
+        // Shift and transform in mask-local frame
+        var rel_copy = rel_base - cum_offset;
+
+        if abs(cum_angle) > 0.001 {
+            let ca = cos(-cum_angle);
+            let sa = sin(-cum_angle);
+            rel_copy = vec2<f32>(rel_copy.x * ca - rel_copy.y * sa,
+                                 rel_copy.x * sa + rel_copy.y * ca);
+        }
+
+        let copy_half = shape_half * cum_scale;
+
+        var mask_sdf: f32;
+        if is_ellipse {
+            let norm = rel_copy / copy_half;
+            let r = length(norm);
+            mask_sdf = (r - 1.0) * min(copy_half.x, copy_half.y);
+        } else {
+            mask_sdf = max(abs(rel_copy.x) - copy_half.x, abs(rel_copy.y) - copy_half.y);
+        }
+
+        let copy_fill = select(0.0, fill_alpha, mask_sdf < 0.0);
+        let aa = min(1.0, sw * 0.5);
+        let copy_stroke = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+        let copy_mask_alpha = min(max(copy_fill, copy_stroke), 1.0) * cum_alpha;
+
+        max_mask_alpha = max(max_mask_alpha, copy_mask_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - opacity * max_mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - max_mask_alpha);
+    }
+}
+
 // Compute mask blend factor with linear repeat effect(s).
 // Loops over repeat copies, shifting the mask center for each copy,
 // and unions (max) their mask contributions.
@@ -701,12 +797,23 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
 
     var factor = 1.0;
     if mask1_enabled {
-        // Check if mask has linear repeat effect(s)
-        let has_mask_repeat = uniforms.mask1_lr_params1.x > 0.5;
+        // Check if mask has repeat effects
+        let has_mask_basic_repeat = uniforms.mask1_repeat_params1.x > 0.5;
+        let has_mask_linear_repeat = uniforms.mask1_lr_params1.x > 0.5;
         // Use stretch-aware evaluation if mask has stretch-segment effects
         let has_mask_stretch = uniforms.mask1_stretch1_params.y > 0.0001
                             || uniforms.mask1_stretch2_params.y > 0.0001;
-        if has_mask_repeat {
+        if has_mask_basic_repeat {
+            factor *= compute_mask_with_basic_repeat(
+                world_pos,
+                uniforms.mask_params,
+                mask1_rotation,
+                mask1_type,
+                uniforms.mask_blend,
+                uniforms.mask1_repeat_params1,
+                uniforms.mask1_repeat_params2,
+            );
+        } else if has_mask_linear_repeat {
             factor *= compute_mask_with_linear_repeat(
                 world_pos,
                 uniforms.mask_params,

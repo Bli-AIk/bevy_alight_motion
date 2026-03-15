@@ -294,11 +294,9 @@ fn mask_type_flag(is_circle: bool, is_exclude: bool) -> f32 {
     1.0 + is_circle as u8 as f32 + 2.0 * is_exclude as u8 as f32
 }
 
-/// Extract mask layer's linear-repeat parameters and write them into the material uniforms.
-///
-/// Converts repeat position/offset from AM element-local pixel coords to the mask-local
-/// world frame so the shader can compute per-copy displacement directly.
-fn set_mask_linear_repeat_uniforms(
+/// Extract mask layer's repeat parameters (basic repeat + linear repeat) and write them
+/// into the material uniforms so the shader can compute per-copy mask displacement.
+fn set_mask_repeat_uniforms(
     mask_entry: &crate::scene::AmMaskEntry,
     pending: &crate::scene::AmPendingLayers,
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
@@ -310,16 +308,38 @@ fn set_mask_linear_repeat_uniforms(
     let Some(&mask_entity) = pending.spawned_entities.get(&mask_entry.mask_layer_id) else {
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
         return;
     };
     let Ok((_gt, animated, _spec)) = mask_layer_query.get(mask_entity) else {
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
         return;
     };
 
     let local_time = animated.calc_local_time(playback_time);
     let layer_time = animated.calc_layer_time(local_time);
+
+    // --- Basic repeat (com.alightcreative.effects.repeat) ---
+    let rp_count = interpolate_float(&animated.repeat_count, layer_time).unwrap_or(0.0);
+    if rp_count > 0.0 {
+        let rp_offset = interpolate_vec2(&animated.repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+        let rp_angle = interpolate_float(&animated.repeat_angle, layer_time).unwrap_or(0.0);
+        let rp_scale = interpolate_float(&animated.repeat_scale, layer_time).unwrap_or(1.0);
+        let rp_alpha = interpolate_float(&animated.repeat_alpha, layer_time).unwrap_or(1.0);
+
+        // Convert offset from pixel_coord space to world units (fit_scale only, no mask_scale)
+        let off_world_x = rp_offset[0] * fit_scale;
+        let off_world_y = -rp_offset[1] * fit_scale;
+
+        material.uniform_data.mask1_repeat_params1 =
+            Vec4::new(rp_count.floor(), off_world_x, off_world_y, rp_angle);
+        material.uniform_data.mask1_repeat_params2 = Vec4::new(rp_scale, rp_alpha, 0.0, 0.0);
+    } else {
+        material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+        material.uniform_data.mask1_repeat_params2 = Vec4::new(1.0, 1.0, 0.0, 0.0);
+    }
 
     // Process first linear repeat (flat fields on AmAnimated)
     let count = interpolate_float(&animated.linear_repeat_count, layer_time)
@@ -460,6 +480,7 @@ pub fn update_unified_mask_system(
             material.uniform_data.mask2_flags.z = 0.0;
             material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
             material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
             continue;
         }
 
@@ -484,8 +505,8 @@ pub fn update_unified_mask_system(
         material.uniform_data.mask1_stretch2_params = m1.stretch2;
         material.uniform_data.mask1_stretch_info = m1.stretch_info;
 
-        // Extract mask1's linear repeat data
-        set_mask_linear_repeat_uniforms(
+        // Extract mask1's repeat data (basic repeat + linear repeat)
+        set_mask_repeat_uniforms(
             mask1,
             pending,
             &mask_layer_query,
