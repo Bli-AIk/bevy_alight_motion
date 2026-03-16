@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-17T03:24:22.042220+08:00",
+  "timestamp": "2026-03-17T06:53:15.954694+08:00",
   "summary": {
-    "passed": 168,
+    "passed": 173,
     "warnings": 0,
     "skipped": 2,
-    "failed": 69
+    "failed": 64
   },
   "results": {
     "basic/bezier/bezier": {
@@ -76,19 +76,19 @@
       "status": "pass"
     },
     "basic/group/loop/basic": {
-      "status": "fail"
+      "status": "pass"
     },
     "basic/group/mask": {
       "status": "pass"
     },
     "basic/group/multi-level/basic": {
-      "status": "fail"
+      "status": "pass"
     },
     "basic/group/multi-level/ex": {
-      "status": "fail"
+      "status": "pass"
     },
     "basic/group/multi-level/ex2": {
-      "status": "fail"
+      "status": "pass"
     },
     "basic/group/resolution/basic": {
       "status": "pass"
@@ -365,7 +365,8 @@
       "status": "pass"
     },
     "effects/repeat/group": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9336
     },
     "effects/repeat/group_bug": {
       "status": "pass"
@@ -375,15 +376,15 @@
     },
     "effects/repeat/group_mask": {
       "status": "fail",
-      "avg_similarity": 0.8879
+      "avg_similarity": 0.877
     },
     "effects/repeat/group_pivot": {
       "status": "fail",
-      "avg_similarity": 0.6802
+      "avg_similarity": 0.9531
     },
     "effects/repeat/group_pivot_mask": {
       "status": "fail",
-      "avg_similarity": 0.5774
+      "avg_similarity": 0.759
     },
     "effects/replace-color/basic": {
       "status": "pass"
@@ -489,12 +490,10 @@
       "status": "pass"
     },
     "effects/transform/complex1": {
-      "status": "fail",
-      "avg_similarity": 0.9517
+      "status": "pass"
     },
     "effects/transform/complex2": {
-      "status": "fail",
-      "avg_similarity": 0.9609
+      "status": "pass"
     },
     "effects/wavewarp/basic": {
       "status": "pass"
