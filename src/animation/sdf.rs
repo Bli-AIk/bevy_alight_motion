@@ -258,6 +258,84 @@ fn srgb_alpha_to_linear(a: f32) -> f32 {
     }
 }
 
+/// Apply radial repeat effect params from a mask layer to an SDF material.
+fn apply_sdf_mask_radial_repeat(
+    mask: &crate::scene::AmMaskEntry,
+    pending: &crate::scene::AmPendingLayers,
+    mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
+    playback_time: f32,
+    fit_scale: f32,
+    material: &mut SdfMaterial,
+) {
+    let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) else {
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+        return;
+    };
+    let Ok((_, animated, _)) = mask_layer_query.get(mask_entity) else {
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+        return;
+    };
+
+    let local_time = animated.calc_local_time(playback_time);
+    let layer_time = animated.calc_layer_time(local_time);
+
+    let rr_count = interpolate_float(&animated.radial_repeat_count, layer_time)
+        .unwrap_or(0.0)
+        .round();
+    if rr_count > 0.0 {
+        let radius = interpolate_float(&animated.radial_repeat_radius, layer_time).unwrap_or(0.0);
+        let orientation =
+            interpolate_float(&animated.radial_repeat_orientation, layer_time).unwrap_or(0.0);
+        let start_angle =
+            interpolate_float(&animated.radial_repeat_start_angle, layer_time).unwrap_or(0.0);
+        let sweep = interpolate_float(&animated.radial_repeat_sweep, layer_time).unwrap_or(360.0);
+        let base_scale =
+            interpolate_float(&animated.radial_repeat_base_scale, layer_time).unwrap_or(1.0);
+        let offset =
+            interpolate_vec2(&animated.radial_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+        let angle = interpolate_float(&animated.radial_repeat_angle, layer_time).unwrap_or(0.0);
+        let rr_scale = interpolate_float(&animated.radial_repeat_scale, layer_time).unwrap_or(1.0);
+        let alpha = interpolate_float(&animated.radial_repeat_alpha, layer_time).unwrap_or(1.0);
+        let start = interpolate_float(&animated.radial_repeat_start, layer_time).unwrap_or(0.0);
+        let end = interpolate_float(&animated.radial_repeat_end, layer_time).unwrap_or(1.0);
+        let phase = interpolate_float(&animated.radial_repeat_phase, layer_time).unwrap_or(0.0);
+        let overlap = interpolate_float(&animated.radial_repeat_overlap, layer_time).unwrap_or(0.0);
+        let ease_in = interpolate_float(&animated.radial_repeat_ease_in, layer_time).unwrap_or(0.0);
+        let ease_out =
+            interpolate_float(&animated.radial_repeat_ease_out, layer_time).unwrap_or(0.0);
+
+        let sia = animated.radial_repeat_shape * 100
+            + if animated.radial_repeat_invert { 10 } else { 0 }
+            + if animated.radial_repeat_color_alt_copies {
+                1
+            } else {
+                0
+            };
+
+        let off_world_x = offset[0] * fit_scale;
+        let off_world_y = -offset[1] * fit_scale;
+        let radius_world = radius * fit_scale;
+
+        material.uniform_data.mask1_rr_params1 =
+            Vec4::new(rr_count, radius_world, orientation, start_angle);
+        material.uniform_data.mask1_rr_params2 = Vec4::new(sweep, base_scale, angle, rr_scale);
+        material.uniform_data.mask1_rr_params3 = Vec4::new(alpha, off_world_x, off_world_y, 0.0);
+        material.uniform_data.mask1_rr_params4 = Vec4::new(start, end, phase, overlap);
+        material.uniform_data.mask1_rr_params5 = Vec4::new(
+            ease_in,
+            ease_out,
+            sia as f32,
+            if animated.radial_repeat_random_order {
+                animated.radial_repeat_seed + 0.5
+            } else {
+                animated.radial_repeat_seed
+            },
+        );
+    } else {
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+    }
+}
+
 /// System to dynamically update mask state on SDF shapes based on mask layer timing.
 /// This system enables/disables mask clipping based on whether the mask layer is currently active.
 /// Now supports animated masks by reading GlobalTransform and AmAnimated from mask layer entities.
@@ -335,6 +413,7 @@ pub fn update_sdf_mask_system(
             if active_masks.is_empty() {
                 material.uniform_data.mask_type = 0.0;
                 material.uniform_data.mask2_type = 0.0;
+                material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
                 continue;
             }
 
@@ -365,6 +444,16 @@ pub fn update_sdf_mask_system(
                 base_type1
             };
             material.uniform_data.mask_rotation = mask1_rotation;
+
+            // Process radial repeat effect on mask1
+            apply_sdf_mask_radial_repeat(
+                mask1,
+                pending,
+                &mask_layer_query,
+                playback.current_time_ms,
+                fit_scale,
+                material,
+            );
 
             if active_masks.len() >= 2 {
                 let mask2 = active_masks[1];

@@ -161,6 +161,16 @@ pub struct SdfMaterialUniform {
     pub mask_blend: Vec4,
     /// Mask 2 blend parameters: (fill_alpha, opacity, stroke_width, 0)
     pub mask2_blend: Vec4,
+    /// Mask1 radial repeat params1: (count, radius, orientation_deg, start_angle_deg)
+    pub mask1_rr_params1: Vec4,
+    /// Mask1 radial repeat params2: (sweep_deg, base_scale, angle_deg, scale)
+    pub mask1_rr_params2: Vec4,
+    /// Mask1 radial repeat params3: (alpha, offset_x, offset_y, 0)
+    pub mask1_rr_params3: Vec4,
+    /// Mask1 radial repeat params4: (start, end, phase, overlap)
+    pub mask1_rr_params4: Vec4,
+    /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
+    pub mask1_rr_params5: Vec4,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -271,6 +281,11 @@ impl Default for SdfMaterial {
                 gradient_config: Vec4::ZERO,
                 mask_blend: Vec4::ZERO,
                 mask2_blend: Vec4::ZERO,
+                mask1_rr_params1: Vec4::ZERO,
+                mask1_rr_params2: Vec4::ZERO,
+                mask1_rr_params3: Vec4::ZERO,
+                mask1_rr_params4: Vec4::ZERO,
+                mask1_rr_params5: Vec4::ZERO,
             },
         }
     }
@@ -341,6 +356,11 @@ impl SdfMaterial {
                 gradient_config: Vec4::ZERO,
                 mask_blend: Vec4::ZERO,
                 mask2_blend: Vec4::ZERO,
+                mask1_rr_params1: Vec4::ZERO,
+                mask1_rr_params2: Vec4::ZERO,
+                mask1_rr_params3: Vec4::ZERO,
+                mask1_rr_params4: Vec4::ZERO,
+                mask1_rr_params5: Vec4::ZERO,
             },
         }
     }
@@ -432,6 +452,11 @@ impl SdfMaterial {
                 gradient_config: Vec4::ZERO,
                 mask_blend: Vec4::ZERO,
                 mask2_blend: Vec4::ZERO,
+                mask1_rr_params1: Vec4::ZERO,
+                mask1_rr_params2: Vec4::ZERO,
+                mask1_rr_params3: Vec4::ZERO,
+                mask1_rr_params4: Vec4::ZERO,
+                mask1_rr_params5: Vec4::ZERO,
             },
         }
     }
@@ -469,6 +494,11 @@ impl SdfMaterial {
                 gradient_config: Vec4::ZERO,
                 mask_blend: Vec4::ZERO,
                 mask2_blend: Vec4::ZERO,
+                mask1_rr_params1: Vec4::ZERO,
+                mask1_rr_params2: Vec4::ZERO,
+                mask1_rr_params3: Vec4::ZERO,
+                mask1_rr_params4: Vec4::ZERO,
+                mask1_rr_params5: Vec4::ZERO,
             },
         }
     }

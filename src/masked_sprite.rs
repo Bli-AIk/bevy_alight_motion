@@ -247,6 +247,16 @@ pub struct UnifiedEffectUniform {
     pub mask1_repeat_params1: Vec4,
     /// Mask1 basic repeat params2: (scale, alpha, 0, 0)
     pub mask1_repeat_params2: Vec4,
+    /// Mask1 radial repeat params1: (count, radius, orientation_deg, start_angle_deg)
+    pub mask1_rr_params1: Vec4,
+    /// Mask1 radial repeat params2: (sweep_deg, base_scale, angle_deg, scale)
+    pub mask1_rr_params2: Vec4,
+    /// Mask1 radial repeat params3: (alpha, offset_x, offset_y, 0)
+    pub mask1_rr_params3: Vec4,
+    /// Mask1 radial repeat params4: (start, end, phase, overlap)
+    pub mask1_rr_params4: Vec4,
+    /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
+    pub mask1_rr_params5: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -573,6 +583,11 @@ impl Default for UnifiedEffectUniform {
             mask1_lr2_params5: Vec4::ZERO,
             mask1_repeat_params1: Vec4::ZERO,
             mask1_repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
+            mask1_rr_params1: Vec4::ZERO,
+            mask1_rr_params2: Vec4::ZERO,
+            mask1_rr_params3: Vec4::ZERO,
+            mask1_rr_params4: Vec4::ZERO,
+            mask1_rr_params5: Vec4::ZERO,
         }
     }
 }

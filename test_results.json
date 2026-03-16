@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-16T13:14:32.620294+08:00",
+  "timestamp": "2026-03-16T14:48:35.791248+08:00",
   "summary": {
-    "passed": 144,
+    "passed": 147,
     "warnings": 0,
-    "skipped": 2,
-    "failed": 89
+    "skipped": 3,
+    "failed": 85
   },
   "results": {
     "basic/bezier/bezier": {
@@ -264,8 +264,7 @@
       "avg_similarity": 0.8462
     },
     "effects/linear-repeat/basic": {
-      "status": "fail",
-      "avg_similarity": 0.6361
+      "status": "cancelled"
     },
     "effects/linear-repeat/dual": {
       "status": "fail",
@@ -346,8 +345,7 @@
       "avg_similarity": 0.5402
     },
     "effects/radial-repeat/mask/test": {
-      "status": "fail",
-      "avg_similarity": 0.64
+      "status": "pass"
     },
     "effects/rays/basic/test": {
       "status": "pass"
@@ -450,8 +448,7 @@
       "status": "pass"
     },
     "effects/solid-color/basic": {
-      "status": "fail",
-      "avg_similarity": 0.8692
+      "status": "pass"
     },
     "effects/spin/basic": {
       "status": "pass"
@@ -486,8 +483,7 @@
       "avg_similarity": 0.8964
     },
     "effects/swing/animation": {
-      "status": "fail",
-      "avg_similarity": 0.9801
+      "status": "pass"
     },
     "effects/swing/basic": {
       "status": "pass"

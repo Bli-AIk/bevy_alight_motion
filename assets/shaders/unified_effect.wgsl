@@ -123,6 +123,12 @@ struct UnifiedEffectUniform {
     mask1_lr2_params5: vec4<f32>,      // (random_order, seed_lo, seed_hi, 0)
     mask1_repeat_params1: vec4<f32>,   // (count, offset_x_world, offset_y_world, angle_deg)
     mask1_repeat_params2: vec4<f32>,   // (scale, alpha, 0, 0)
+    // Mask1 radial repeat params
+    mask1_rr_params1: vec4<f32>,       // (count, radius, orientation_deg, start_angle_deg)
+    mask1_rr_params2: vec4<f32>,       // (sweep_deg, base_scale, angle_deg, scale)
+    mask1_rr_params3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
+    mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
+    mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -783,6 +789,135 @@ fn compute_mask_with_linear_repeat(
     }
 }
 
+// Compute mask blend factor for SDF mask with radial repeat effect.
+// Uses the same radial distribution as the main radial repeat rendering,
+// but evaluates an SDF mask shape at each radially-placed copy position.
+fn compute_mask_with_radial_repeat(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    rr1: vec4<f32>,       // (count, radius, orientation_deg, start_angle_deg)
+    rr2: vec4<f32>,       // (sweep_deg, base_scale, angle_deg, scale)
+    rr3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
+    rr4: vec4<f32>,       // (start, end, phase, overlap)
+    rr5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
+    let is_exclude = mask_type > 2.5;
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    // Compute rel in mask-local frame
+    var rel_base = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
+    }
+
+    // Parse radial repeat params
+    let rr_count = max(i32(round(rr1.x)), 0);
+    let rr_radius = rr1.y;
+    let rr_orientation_deg = rr1.z;
+    let rr_start_angle_deg = rr1.w;
+    let rr_sweep_deg = rr2.x;
+    let rr_base_scale = rr2.y;
+    let rr_angle_deg = rr2.z;
+    let rr_scale = rr2.w;
+    let rr_alpha = rr3.x;
+    let rr_offset = vec2<f32>(rr3.y, rr3.z);
+    let rr_start = rr4.x;
+    let rr_end = rr4.y;
+    let rr_phase = rr4.z;
+    let rr_overlap = rr4.w;
+    let rr_ease_in = rr5.x;
+    let rr_ease_out = rr5.y;
+    let rr_sia = i32(rr5.z);
+    let rr_shape = rr_sia / 100;
+    let rr_invert = (rr_sia / 10) % 10 == 1;
+    let rr_seed_raw = rr5.w;
+    let rr_random_order = fract(rr_seed_raw) > 0.3;
+    let rr_seed = floor(rr_seed_raw);
+    let rr_am_seed = u32(15234322.0 + 35432882176.0 * rr_seed);
+    let rr_init = rr_am_seed ^ 0xDEECE66Du;
+    let rr_init_hi = (((rr_am_seed >> 16u) ^ 5u) & 0xFFFFu);
+    let rr_rng_lo = rr_init;
+    let rr_rng_hi = rr_init_hi;
+
+    let deg2rad = 3.14159265 / 180.0;
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < rr_count; i = i + 1) {
+        let progress = calc_linear_repeat_progress(
+            i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
+            rr_shape, rr_invert, rr_ease_in, rr_ease_out,
+            rr_random_order, rr_rng_lo, rr_rng_hi
+        );
+        let base_progress = progress.x;
+        let interp_progress = progress.y;
+
+        let spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
+            + (rr_sweep_deg - rr_sweep_deg / f32(max(rr_count, 1))) * base_progress) * deg2rad;
+        let orbit = (rr_orientation_deg + rr_angle_deg * interp_progress) * deg2rad;
+
+        let mix_scale = 1.0 + (rr_scale - 1.0) * interp_progress;
+        let copy_alpha = 1.0 + (rr_alpha - 1.0) * interp_progress;
+
+        if copy_alpha < 0.001 || abs(mix_scale) < 0.001 || abs(rr_base_scale) < 0.001 {
+            continue;
+        }
+
+        // Inverse transform: undo radial placement to get mask-local coords for this copy
+        // World coords are Y-up (vs AM pixel coords Y-down), so:
+        // - rotation angles are NOT negated (forward uses R(-θ) in world, inverse uses R(θ))
+        // - radius vector is (0, +r) not (0, -r) since forward displaced by (0, -r) in world
+        var tc = rel_base - rr_offset * interp_progress;
+        let cos_s = cos(spread);
+        let sin_s = sin(spread);
+        tc = vec2<f32>(tc.x * cos_s - tc.y * sin_s, tc.x * sin_s + tc.y * cos_s);
+        tc = tc / mix_scale;
+        tc = tc + vec2<f32>(0.0, rr_radius);
+        let cos_o = cos(orbit);
+        let sin_o = sin(orbit);
+        tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
+        tc = tc / rr_base_scale;
+
+        let copy_half = shape_half;
+
+        var mask_sdf: f32;
+        if is_ellipse {
+            let norm = tc / copy_half;
+            let r = length(norm);
+            mask_sdf = (r - 1.0) * min(copy_half.x, copy_half.y);
+        } else {
+            mask_sdf = max(abs(tc.x) - copy_half.x, abs(tc.y) - copy_half.y);
+        }
+
+        let copy_fill = select(0.0, fill_alpha, mask_sdf < 0.0);
+        let aa = min(1.0, sw * 0.5);
+        let copy_stroke = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+        let copy_mask_alpha = min(max(copy_fill, copy_stroke), 1.0) * copy_alpha;
+
+        max_mask_alpha = max(max_mask_alpha, copy_mask_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - opacity * max_mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - max_mask_alpha);
+    }
+}
+
 // Compute mask blend factor by sampling an RTT (render-to-texture) mask.
 // The mask layer's content was rendered to a texture; we sample its alpha
 // to determine inside/outside.
@@ -955,6 +1090,97 @@ fn compute_texture_mask_with_linear_repeat(
     return max_mask_alpha;
 }
 
+// Compute texture mask blend factor with radial repeat effect.
+// Like compute_texture_mask_with_linear_repeat but places copies radially.
+fn compute_texture_mask_with_radial_repeat(
+    world_pos: vec2<f32>,
+    mask_rtt_bounds: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    rr1: vec4<f32>,       // (count, radius, orientation_deg, start_angle_deg)
+    rr2: vec4<f32>,       // (sweep_deg, base_scale, angle_deg, scale)
+    rr3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
+    rr4: vec4<f32>,       // (start, end, phase, overlap)
+    rr5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+) -> f32 {
+    let center = mask_rtt_bounds.xy;
+    let half_size = mask_rtt_bounds.zw;
+    let is_exclude = mask_type > 5.5;
+
+    let rr_count = max(i32(round(rr1.x)), 0);
+    let rr_radius = rr1.y;
+    let rr_orientation_deg = rr1.z;
+    let rr_start_angle_deg = rr1.w;
+    let rr_sweep_deg = rr2.x;
+    let rr_base_scale = rr2.y;
+    let rr_angle_deg = rr2.z;
+    let rr_scale = rr2.w;
+    let rr_alpha = rr3.x;
+    let rr_offset = vec2<f32>(rr3.y, rr3.z);
+    let rr_start = rr4.x;
+    let rr_end = rr4.y;
+    let rr_phase = rr4.z;
+    let rr_overlap = rr4.w;
+    let rr_ease_in = rr5.x;
+    let rr_ease_out = rr5.y;
+    let rr_sia = i32(rr5.z);
+    let rr_shape = rr_sia / 100;
+    let rr_invert = (rr_sia / 10) % 10 == 1;
+    let rr_seed_raw = rr5.w;
+    let rr_random_order = fract(rr_seed_raw) > 0.3;
+    let rr_seed = floor(rr_seed_raw);
+    let rr_am_seed = u32(15234322.0 + 35432882176.0 * rr_seed);
+    let rr_init = rr_am_seed ^ 0xDEECE66Du;
+    let rr_init_hi = (((rr_am_seed >> 16u) ^ 5u) & 0xFFFFu);
+    let rr_rng_lo = rr_init;
+    let rr_rng_hi = rr_init_hi;
+
+    let deg2rad = 3.14159265 / 180.0;
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < rr_count; i = i + 1) {
+        let progress = calc_linear_repeat_progress(
+            i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
+            rr_shape, rr_invert, rr_ease_in, rr_ease_out,
+            rr_random_order, rr_rng_lo, rr_rng_hi
+        );
+        let base_progress = progress.x;
+        let interp_progress = progress.y;
+
+        let spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
+            + (rr_sweep_deg - rr_sweep_deg / f32(max(rr_count, 1))) * base_progress) * deg2rad;
+        let orbit = (rr_orientation_deg + rr_angle_deg * interp_progress) * deg2rad;
+
+        let mix_scale = 1.0 + (rr_scale - 1.0) * interp_progress;
+        let copy_alpha = 1.0 + (rr_alpha - 1.0) * interp_progress;
+
+        if copy_alpha < 0.001 || abs(mix_scale) < 0.001 || abs(rr_base_scale) < 0.001 {
+            continue;
+        }
+
+        // Forward transform: compute copy center and half_size in world coords (Y-up)
+        // AM's forward rotation is CW, which in world coords (Y-up) is R(-θ)
+        let copy_scale = mix_scale * rr_base_scale;
+        let copy_half = half_size * copy_scale;
+        let copy_rotation = mask_rotation - spread - orbit;
+        // Copy center: translate by (0, -radius) in world then rotate by -spread, then offset
+        let cos_s = cos(-spread);
+        let sin_s = sin(-spread);
+        let r_vec = vec2<f32>(0.0, -rr_radius);
+        let rotated_r = vec2<f32>(r_vec.x * cos_s - r_vec.y * sin_s,
+                                   r_vec.x * sin_s + r_vec.y * cos_s);
+        let copy_center = center + rotated_r * mix_scale + rr_offset * interp_progress;
+
+        let alpha = sample_texture_mask_at(world_pos, copy_center, copy_half, copy_rotation);
+        max_mask_alpha = max(max_mask_alpha, alpha * copy_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - max_mask_alpha;
+    }
+    return max_mask_alpha;
+}
+
 // Apply combined masks - returns blend factor (1.0=fully visible, 0.0=fully hidden)
 fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
     let mask1_type = uniforms.effect_flags.x;
@@ -977,6 +1203,7 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
             // Check if mask has repeat effects
             let has_mask_basic_repeat = uniforms.mask1_repeat_params1.x > 0.5;
             let has_mask_linear_repeat = uniforms.mask1_lr_params1.x > 0.5;
+            let has_mask_radial_repeat = uniforms.mask1_rr_params1.x > 0.5;
             if has_mask_basic_repeat {
                 factor *= compute_texture_mask_with_basic_repeat(
                     world_pos,
@@ -985,6 +1212,18 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
                     mask1_type,
                     uniforms.mask1_repeat_params1,
                     uniforms.mask1_repeat_params2,
+                );
+            } else if has_mask_radial_repeat {
+                factor *= compute_texture_mask_with_radial_repeat(
+                    world_pos,
+                    uniforms.mask_params,
+                    mask1_rotation,
+                    mask1_type,
+                    uniforms.mask1_rr_params1,
+                    uniforms.mask1_rr_params2,
+                    uniforms.mask1_rr_params3,
+                    uniforms.mask1_rr_params4,
+                    uniforms.mask1_rr_params5,
                 );
             } else if has_mask_linear_repeat {
                 factor *= compute_texture_mask_with_linear_repeat(
@@ -1010,6 +1249,7 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
         // Check if mask has repeat effects
         let has_mask_basic_repeat = uniforms.mask1_repeat_params1.x > 0.5;
         let has_mask_linear_repeat = uniforms.mask1_lr_params1.x > 0.5;
+        let has_mask_radial_repeat = uniforms.mask1_rr_params1.x > 0.5;
         // Use stretch-aware evaluation if mask has stretch-segment effects
         let has_mask_stretch = uniforms.mask1_stretch1_params.y > 0.0001
                             || uniforms.mask1_stretch2_params.y > 0.0001;
@@ -1022,6 +1262,19 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
                 uniforms.mask_blend,
                 uniforms.mask1_repeat_params1,
                 uniforms.mask1_repeat_params2,
+            );
+        } else if has_mask_radial_repeat {
+            factor *= compute_mask_with_radial_repeat(
+                world_pos,
+                uniforms.mask_params,
+                mask1_rotation,
+                mask1_type,
+                uniforms.mask_blend,
+                uniforms.mask1_rr_params1,
+                uniforms.mask1_rr_params2,
+                uniforms.mask1_rr_params3,
+                uniforms.mask1_rr_params4,
+                uniforms.mask1_rr_params5,
             );
         } else if has_mask_linear_repeat {
             factor *= compute_mask_with_linear_repeat(

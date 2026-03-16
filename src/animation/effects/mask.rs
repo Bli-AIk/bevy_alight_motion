@@ -313,6 +313,7 @@ fn set_mask_repeat_uniforms(
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
         return;
     };
     let Ok((_gt, animated, _spec)) = mask_layer_query.get(mask_entity) else {
@@ -323,6 +324,7 @@ fn set_mask_repeat_uniforms(
         material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
         return;
     };
 
@@ -453,6 +455,64 @@ fn set_mask_repeat_uniforms(
     } else {
         material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
     }
+
+    // --- Radial repeat (com.alightcreative.effects.radialrepeat) on mask ---
+    let rr_count = interpolate_float(&animated.radial_repeat_count, layer_time)
+        .unwrap_or(0.0)
+        .round();
+    if rr_count > 0.0 {
+        let radius = interpolate_float(&animated.radial_repeat_radius, layer_time).unwrap_or(0.0);
+        let orientation =
+            interpolate_float(&animated.radial_repeat_orientation, layer_time).unwrap_or(0.0);
+        let start_angle =
+            interpolate_float(&animated.radial_repeat_start_angle, layer_time).unwrap_or(0.0);
+        let sweep = interpolate_float(&animated.radial_repeat_sweep, layer_time).unwrap_or(360.0);
+        let base_scale =
+            interpolate_float(&animated.radial_repeat_base_scale, layer_time).unwrap_or(1.0);
+        let offset =
+            interpolate_vec2(&animated.radial_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+        let angle = interpolate_float(&animated.radial_repeat_angle, layer_time).unwrap_or(0.0);
+        let rr_scale = interpolate_float(&animated.radial_repeat_scale, layer_time).unwrap_or(1.0);
+        let alpha = interpolate_float(&animated.radial_repeat_alpha, layer_time).unwrap_or(1.0);
+        let start = interpolate_float(&animated.radial_repeat_start, layer_time).unwrap_or(0.0);
+        let end = interpolate_float(&animated.radial_repeat_end, layer_time).unwrap_or(1.0);
+        let phase = interpolate_float(&animated.radial_repeat_phase, layer_time).unwrap_or(0.0);
+        let overlap = interpolate_float(&animated.radial_repeat_overlap, layer_time).unwrap_or(0.0);
+        let ease_in = interpolate_float(&animated.radial_repeat_ease_in, layer_time).unwrap_or(0.0);
+        let ease_out =
+            interpolate_float(&animated.radial_repeat_ease_out, layer_time).unwrap_or(0.0);
+
+        let sia = animated.radial_repeat_shape * 100
+            + if animated.radial_repeat_invert { 10 } else { 0 }
+            + if animated.radial_repeat_color_alt_copies {
+                1
+            } else {
+                0
+            };
+
+        // Convert offset & radius from pixel_coord space to world units
+        let off_world_x = offset[0] * fit_scale;
+        let off_world_y = -offset[1] * fit_scale;
+        let radius_world = radius * fit_scale;
+
+        material.uniform_data.mask1_rr_params1 =
+            Vec4::new(rr_count, radius_world, orientation, start_angle);
+        material.uniform_data.mask1_rr_params2 = Vec4::new(sweep, base_scale, angle, rr_scale);
+        material.uniform_data.mask1_rr_params3 = Vec4::new(alpha, off_world_x, off_world_y, 0.0);
+        material.uniform_data.mask1_rr_params4 = Vec4::new(start, end, phase, overlap);
+        material.uniform_data.mask1_rr_params5 = Vec4::new(
+            ease_in,
+            ease_out,
+            sia as f32,
+            if animated.radial_repeat_random_order {
+                animated.radial_repeat_seed + 0.5
+            } else {
+                animated.radial_repeat_seed
+            },
+        );
+    } else {
+        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+    }
 }
 
 /// Apply embed mask UV mapping from the mask entity's transform.
@@ -531,6 +591,7 @@ pub fn update_unified_mask_system(
             material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
             material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
             material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+            material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
             continue;
         }
 
