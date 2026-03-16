@@ -300,22 +300,11 @@ pub fn animate_transform_system(
     ) in query.iter_mut()
     {
         // Calculate local time for animation interpolation (accounting for speed)
-        let mut local_time = animated.calc_local_time(global_time);
-
-        // For embed content, add 0.5 frame offset to match AM's internal timing
-        // This compensates for the difference between video frame edges and centers
-        // Note: only apply offset when animation is not frozen (speed_multiplier != 0)
+        // Note: half-frame centering for embed content is already baked into time_offset
+        // by collect_embed/spawn_embed using render_fps at each nesting level.
+        // See collect_embed.rs: time_offset includes -half_frame_ms/speed per level.
+        let local_time = animated.calc_local_time(global_time);
         let is_embed_content = embed_content_marker.is_some();
-        if is_embed_content && animated.speed_multiplier != 0.0 {
-            let fps = if animated.scene_fps > 0.0 {
-                animated.scene_fps
-            } else {
-                30.0
-            };
-            let frame_duration_ms = 1000.0 / fps;
-            let offset = frame_duration_ms * 0.50;
-            local_time += offset;
-        }
 
         // Use local time for visibility check (affected by speed)
         // This ensures child layers respect parent's speed for start/end time
@@ -467,7 +456,6 @@ pub fn animate_transform_system(
                 );
             }
 
-            // Apply pivot offset and compensation
             apply_pivot_offset(
                 animated,
                 layer_time,

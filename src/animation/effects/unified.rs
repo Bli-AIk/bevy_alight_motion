@@ -664,13 +664,11 @@ pub fn animate_unified_effect_system(
             let new_width = orig_width + 2.0 * total_dx;
             let new_height = orig_height + 2.0 * total_dy;
 
-            // Mesh vertex bounds (centered, expanded)
-            let half_nw = new_width / 2.0;
-            let half_nh = new_height / 2.0;
-            let min_x = -half_nw;
-            let max_x = half_nw;
-            let min_y = -half_nh;
-            let max_y = half_nh;
+            // Mesh vertex bounds: expanded by AA padding so the shader can
+            // render smooth edge gradients via smoothstep outside the shape boundary.
+            let aa_pad: f32 = 4.0;
+            let half_nw = new_width / 2.0 + aa_pad;
+            let half_nh = new_height / 2.0 + aa_pad;
 
             // Debug: log stretch calculation details
             if stretch_raw > 0.1 {
@@ -704,18 +702,21 @@ pub fn animate_unified_effect_system(
 
             // Create new mesh with expanded bounds
             let vertices = vec![
-                [min_x, min_y, 0.0],
-                [max_x, min_y, 0.0],
-                [max_x, max_y, 0.0],
-                [min_x, max_y, 0.0],
+                [-half_nw, -half_nh, 0.0],
+                [half_nw, -half_nh, 0.0],
+                [half_nw, half_nh, 0.0],
+                [-half_nw, half_nh, 0.0],
             ];
-            let normals = vec![
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
-                [0.0, 0.0, 1.0],
+            let normals = vec![[0.0, 0.0, 1.0]; 4];
+            // UV extends beyond [0,1] into AA padding for smoothstep gradients.
+            let u_pad = aa_pad / new_width;
+            let v_pad = aa_pad / new_height;
+            let uvs = vec![
+                [-u_pad, 1.0 + v_pad],
+                [1.0 + u_pad, 1.0 + v_pad],
+                [1.0 + u_pad, -v_pad],
+                [-u_pad, -v_pad],
             ];
-            let uvs = vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
             let indices = vec![0u32, 1, 2, 0, 2, 3];
 
             let mut new_mesh = Mesh::new(

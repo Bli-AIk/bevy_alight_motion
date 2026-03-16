@@ -2146,12 +2146,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let pixelate_saturation = uniforms.pixelate_params2.z;
     
     var sample_uv = mesh.uv;
+    var stretch_edge_alpha: f32 = 1.0;
     
     // Discard fragments in expansion area when no expansion-capable effect is active
     let wavewarp2_enabled = uniforms.wavewarp2_flags.y > 0.5;
     let mirror_enabled = uniforms.mirror_params.x > 0.5;
     let rgb_split_active = uniforms.rgb_split_params.w >= -0.5;
-    if !pixelate_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled && !mirror_enabled && !rgb_split_active
+    if !pixelate_enabled && !stretch_enabled && !repeat_enabled && !linear_repeat_enabled && !lr2_enabled && !rr_enabled && !wavewarp2_enabled && !mirror_enabled && !rgb_split_active
         && (mesh.uv.x < 0.0 || mesh.uv.x > 1.0 || mesh.uv.y < 0.0 || mesh.uv.y > 1.0) {
         discard;
     }
@@ -2242,9 +2243,17 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             sample_uv = apply_stretch_segment(sample_uv);
         }
         
-        // Add small tolerance to prevent edge clipping due to floating point precision
-        let eps = 0.002;
-        if sample_uv.x < -eps || sample_uv.x > 1.0 + eps || sample_uv.y < -eps || sample_uv.y > 1.0 + eps {
+        // Soft edge AA at stretch boundaries using screen-space derivatives.
+        // AM renders shapes via NanoVG SDF with feather-based smoothstep centered on the edge.
+        // We approximate by fading alpha symmetrically around UV boundary [0,1]:
+        // smoothstep(-aa, +aa, uv) = 0.5 at uv=0 (shape edge), fading both inward and outward.
+        let fw = fwidth(sample_uv);
+        let aa_half = fw * 2.0;
+        stretch_edge_alpha = smoothstep(-aa_half.x, aa_half.x, sample_uv.x)
+                           * smoothstep(-aa_half.x, aa_half.x, 1.0 - sample_uv.x)
+                           * smoothstep(-aa_half.y, aa_half.y, sample_uv.y)
+                           * smoothstep(-aa_half.y, aa_half.y, 1.0 - sample_uv.y);
+        if stretch_edge_alpha < 0.001 {
             discard;
         }
         // Clamp to valid range for texture sampling
@@ -3027,6 +3036,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             select(pow((masked.z + 0.055) / 1.055, 2.4), masked.z / 12.92, masked.z <= 0.04045),
             final_color.a,
         );
+    }
+
+    // Apply stretch edge AA alpha (soft boundary fade)
+    if stretch_edge_alpha < 0.999 {
+        final_color = vec4<f32>(final_color.rgb, final_color.a * stretch_edge_alpha);
     }
 
     // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
