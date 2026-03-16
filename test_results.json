@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-16T16:39:49.993917+08:00",
+  "timestamp": "2026-03-16T18:34:12.663602+08:00",
   "summary": {
-    "passed": 148,
+    "passed": 166,
     "warnings": 0,
     "skipped": 2,
-    "failed": 88
+    "failed": 70
   },
   "results": {
     "basic/bezier/bezier": {
@@ -39,23 +39,23 @@
     },
     "basic/fill/nested_solid_color": {
       "status": "fail",
-      "avg_similarity": 0.9117
+      "avg_similarity": 0.8926
     },
     "basic/fill/nested_solid_color_parent_child": {
       "status": "fail",
-      "avg_similarity": 0.7423
+      "avg_similarity": 0.8704
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
       "status": "fail",
-      "avg_similarity": 0.8459
+      "avg_similarity": 0.8453
     },
     "basic/fill/nested_solid_color_parent_child_simp_plus": {
       "status": "fail",
-      "avg_similarity": 0.8463
+      "avg_similarity": 0.8457
     },
     "basic/fill/nested_solid_color_split": {
       "status": "fail",
-      "avg_similarity": 0.9254
+      "avg_similarity": 0.864
     },
     "basic/frame/frame": {
       "status": "pass"
@@ -68,7 +68,7 @@
     },
     "basic/group/fill/basic": {
       "status": "fail",
-      "avg_similarity": 0.9549
+      "avg_similarity": 0.9467
     },
     "basic/group/fill/gradient": {
       "status": "pass"
@@ -122,15 +122,13 @@
       "status": "pass"
     },
     "basic/muti-parent/muti-parent": {
-      "status": "fail",
-      "avg_similarity": 0.7726
+      "status": "pass"
     },
     "basic/muti-parent/rotation": {
       "status": "pass"
     },
     "basic/muti-parent/scale": {
-      "status": "fail",
-      "avg_similarity": 0.82
+      "status": "pass"
     },
     "basic/muti-shape/muti-shape": {
       "status": "pass"
@@ -168,42 +166,42 @@
     },
     "effects/count/basic/test": {
       "status": "fail",
-      "avg_similarity": 0.5282
+      "avg_similarity": 0.5385
     },
     "effects/echo-keyframes/basic": {
       "status": "pass"
     },
     "effects/enlarge-bg/exposure-gamma-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8566
+      "avg_similarity": 0.8955
     },
     "effects/enlarge-bg/exposure-gamma/test": {
       "status": "fail",
-      "avg_similarity": 0.8842
+      "avg_similarity": 0.93
     },
     "effects/enlarge-bg/replace-color-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8554
+      "avg_similarity": 0.8555
     },
     "effects/enlarge-bg/replace-color/test": {
       "status": "fail",
-      "avg_similarity": 0.8531
+      "avg_similarity": 0.8528
     },
     "effects/enlarge-bg/rgb-split-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8637
+      "avg_similarity": 0.8857
     },
     "effects/enlarge-bg/rgb-split/test": {
       "status": "fail",
-      "avg_similarity": 0.8531
+      "avg_similarity": 0.8871
     },
     "effects/enlarge-bg/wave-warp-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8468
+      "avg_similarity": 0.8483
     },
     "effects/enlarge-bg/wave-warp/test": {
       "status": "fail",
-      "avg_similarity": 0.8432
+      "avg_similarity": 0.8453
     },
     "effects/exposure-gamma/complex/test": {
       "status": "pass"
@@ -267,51 +265,44 @@
       "avg_similarity": 0.8462
     },
     "effects/linear-repeat/basic": {
-      "status": "fail"
+      "status": "pass"
     },
     "effects/linear-repeat/dual": {
-      "status": "fail",
-      "avg_similarity": 0.5984
+      "status": "pass"
     },
     "effects/linear-repeat/dual-16-9": {
-      "status": "fail",
-      "avg_similarity": 0.5992
+      "status": "pass"
     },
     "effects/linear-repeat/mask": {
-      "status": "fail",
-      "avg_similarity": 0.5632
+      "status": "pass"
     },
     "effects/linear-repeat/mask_dual": {
-      "status": "fail",
-      "avg_similarity": 0.4907
+      "status": "pass"
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.6637
+      "avg_similarity": 0.965
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
-      "avg_similarity": 0.7877
+      "avg_similarity": 0.958
     },
     "effects/linear-repeat/random_generated1/2": {
       "status": "fail",
-      "avg_similarity": 0.7416
+      "avg_similarity": 0.9219
     },
     "effects/linear-repeat/random_generated1/3": {
       "status": "fail",
-      "avg_similarity": 0.8042
+      "avg_similarity": 0.9382
     },
     "effects/linear-repeat/random_generated2/1": {
-      "status": "fail",
-      "avg_similarity": 0.7472
+      "status": "pass"
     },
     "effects/linear-repeat/random_generated2/2": {
-      "status": "fail",
-      "avg_similarity": 0.8126
+      "status": "pass"
     },
     "effects/linear-repeat/random_generated2/3": {
-      "status": "fail",
-      "avg_similarity": 0.764
+      "status": "pass"
     },
     "effects/mirror/alpha": {
       "status": "pass"
@@ -344,11 +335,10 @@
       "status": "pass"
     },
     "effects/radial-repeat/basic": {
-      "status": "fail",
-      "avg_similarity": 0.5402
+      "status": "pass"
     },
     "effects/radial-repeat/mask/test": {
-      "status": "fail"
+      "status": "pass"
     },
     "effects/rays/basic/test": {
       "status": "pass"
@@ -370,31 +360,27 @@
       "avg_similarity": 0.9248
     },
     "effects/repeat/basic": {
-      "status": "fail",
-      "avg_similarity": 0.6556
+      "status": "pass"
     },
     "effects/repeat/basic_mask": {
-      "status": "fail",
-      "avg_similarity": 0.7075
+      "status": "pass"
     },
     "effects/repeat/group": {
-      "status": "fail",
-      "avg_similarity": 0.944
+      "status": "pass"
     },
     "effects/repeat/group_bug": {
       "status": "pass"
     },
     "effects/repeat/group_bug_mask": {
-      "status": "fail",
-      "avg_similarity": 0.5877
+      "status": "pass"
     },
     "effects/repeat/group_mask": {
       "status": "fail",
-      "avg_similarity": 0.5238
+      "avg_similarity": 0.8879
     },
     "effects/repeat/group_pivot": {
       "status": "fail",
-      "avg_similarity": 0.6744
+      "avg_similarity": 0.6802
     },
     "effects/repeat/group_pivot_mask": {
       "status": "fail",
@@ -478,12 +464,10 @@
       "status": "pass"
     },
     "effects/stretch-segment/muti/mask_in": {
-      "status": "fail",
-      "avg_similarity": 0.7122
+      "status": "pass"
     },
     "effects/stretch-segment/muti/mask_out": {
-      "status": "fail",
-      "avg_similarity": 0.8964
+      "status": "pass"
     },
     "effects/swing/animation": {
       "status": "pass"
