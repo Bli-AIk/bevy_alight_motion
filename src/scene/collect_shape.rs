@@ -609,6 +609,7 @@ pub(crate) fn collect_shape(
         echo_runtime: None,
         group_fill: None,
         embed_inner_total_time: None,
+        hidden: shape.hidden,
     })
 }
 

@@ -337,5 +337,6 @@ pub(crate) fn collect_image(
         echo_runtime: None,
         group_fill: None,
         embed_inner_total_time: None,
+        hidden: false,
     })
 }

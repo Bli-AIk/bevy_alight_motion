@@ -306,6 +306,11 @@ pub(super) fn spawn_layer_entity(
         element_type,
     });
 
+    // If layer is hidden in AM, force it to stay hidden (no rendering of fill, stroke, or effects)
+    if layer.hidden {
+        commands.entity(entity).insert(crate::scene::AmForceHidden);
+    }
+
     // Add mask info component if this layer is affected by a mask
     if let Some(mask_info) = &layer.mask_info {
         commands.entity(entity).insert(mask_info.clone());

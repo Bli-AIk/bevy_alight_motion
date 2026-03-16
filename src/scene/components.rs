@@ -583,6 +583,9 @@ pub struct PendingLayer {
     /// For layers inside an embed: the inner scene's totalTime in ms.
     /// Used to freeze content when the embed plays longer than its inner timeline.
     pub embed_inner_total_time: Option<f32>,
+    /// Whether this layer is hidden (AM hidden attribute).
+    /// Hidden layers should not be rendered (fill, stroke, or otherwise).
+    pub hidden: bool,
 }
 
 /// Configuration for scene building.

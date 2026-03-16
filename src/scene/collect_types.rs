@@ -329,6 +329,7 @@ pub(crate) fn collect_null(
         echo_runtime: None,
         group_fill: None,
         embed_inner_total_time: None,
+        hidden: false,
     })
 }
 
@@ -679,5 +680,6 @@ pub(crate) fn collect_text(
         echo_runtime: None,
         group_fill: None,
         embed_inner_total_time: None,
+        hidden: false,
     })
 }
