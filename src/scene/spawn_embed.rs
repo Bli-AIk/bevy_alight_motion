@@ -465,16 +465,10 @@ pub(crate) fn spawn_embed_scene(
         config.time_offset + embed.start_time as f32
     };
     let time_offset_with_in_time = if effective_speed > 0.0 {
-        // AM's retimeNestedScene computes the parent time via
-        //   timeFromFrameNumber(parentFrame, parentFPHS)
-        // which includes a +50000/fphs half-frame offset (the frame CENTER time).
-        // See NestedSceneElementKt.java:103 and TimeKt.java timeFromFrameNumber.
-        let half_frame_ms = if config.render_fps > 0.0 {
-            500.0 / config.render_fps
-        } else {
-            0.0
-        };
-        global_start - in_time / effective_speed - half_frame_ms / effective_speed
+        // NOTE: The half-frame offset for embed children (frame CENTER vs START time)
+        // is already applied in the animation system (systems.rs: local_time += 0.50 * frame_duration).
+        // Do NOT add it here too — that would double-count it.
+        global_start - in_time / effective_speed
     } else {
         global_start
     };

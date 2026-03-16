@@ -90,20 +90,13 @@ pub(crate) fn collect_shape(
     let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
     let size_animation = get_shape_size_animation(&shape.properties);
 
-    let has_stroke_or_border = shape.stroke.as_ref().is_some_and(|s| {
-        s.size
-            .as_ref()
-            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-            || s.end_size > 0.0
-    }) || shape.borders.iter().any(|b| {
-        b.size
-            .as_ref()
-            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-            || b.end_size > 0.0
-    });
+    // Use SDF for all non-media fills (gradient, color, none).
+    // Only use sprite rendering for actual image-based fills (fillImage present).
+    // Color-filled rects previously used sprite path, but SDF handles positioning
+    // and scaling more correctly inside embeds/groups (RTT rendering).
     let needs_sdf = shape.fill_type == "gradient"
         || ((shape.fill_type == "color" || shape.fill_type == "none")
-            && (shape.shape_type != ".rect" || has_stroke_or_border));
+            && shape.fill_image.is_empty());
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);

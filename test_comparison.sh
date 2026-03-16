@@ -367,9 +367,78 @@ run_single_test() {
     fi
 }
 
+# Function to incrementally write a single test result to JSON
+write_result_to_json() {
+    local result_file=$1
+    local json_output="${BASE_DIR}/test_results.json"
+    local result_key
+    if [ "$FRAME_TEST" = "true" ]; then
+        result_key="frame_test_results"
+    else
+        result_key="results"
+    fi
+
+    if [ ! -f "$result_file" ]; then
+        return
+    fi
+
+    IFS='|' read -r status name avg_details frame_details < "$result_file"
+    local avg_val=""
+    if [ -n "$avg_details" ]; then
+        avg_val=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
+    fi
+    local status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
+
+    python3 << PYEOF
+import json, os
+from datetime import datetime
+
+json_output = "$json_output"
+result_key = "$result_key"
+name = "$name"
+status = "$status_lower"
+avg_val = "$avg_val"
+frame_test = "$FRAME_TEST" == "true"
+
+existing_data = {}
+if os.path.exists(json_output):
+    try:
+        with open(json_output, 'r') as f:
+            existing_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results = existing_data.get(result_key, {})
+entry = {"status": status}
+if avg_val:
+    if frame_test:
+        entry["avg_fps"] = float(avg_val)
+    else:
+        entry["avg_similarity"] = float(avg_val)
+results[name] = entry
+
+existing_data[result_key] = dict(sorted(results.items()))
+
+# Recalculate summary
+summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
+passed = sum(1 for r in results.values() if r.get('status') == 'pass')
+failed = sum(1 for r in results.values() if r.get('status') == 'fail')
+warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
+skipped = sum(1 for r in results.values() if r.get('status') in ('skip', 'cancelled'))
+existing_data[summary_key] = {"passed": passed, "warnings": warnings, "skipped": skipped, "failed": failed}
+existing_data["timestamp"] = datetime.now().astimezone().isoformat()
+
+with open(json_output, 'w') as f:
+    json.dump(existing_data, f, indent=2)
+PYEOF
+}
+
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
 for example in $EXAMPLES; do
     run_single_test "$example"
+    # Write result to JSON immediately after each test
+    local_flat=$(echo "$example" | tr '/' '_')
+    write_result_to_json "$RESULTS_DIR/${local_flat}.result"
     # Cooldown between tests to mitigate GPU thermal throttling (especially on iGPUs)
     if [ "$FRAME_TEST" = "true" ]; then
         sleep 3
