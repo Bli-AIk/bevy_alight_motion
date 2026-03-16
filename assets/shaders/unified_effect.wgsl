@@ -2787,17 +2787,24 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
 
-    // Premultiply alpha only for RGB split effect (which uses premultiplied blend state).
-    // RGB split outputs non-premultiplied RGB (especially mode 2/Light) creating additive
-    // color fringes at transparent regions. For all other shapes, output straight alpha —
-    // the standard blend state (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) handles alpha correctly.
+    // Convert to premultiplied alpha for AlphaMode2d::Premultiplied blending.
+    // AM uses premultiplied compositing (ONE, ONE_MINUS_SRC_ALPHA):
+    //   screen = src.rgb + dst.rgb * (1 - src.a)
+    // For RGB split, the effect outputs non-premultiplied RGB (especially mode 2/Light)
+    // which creates additive color fringes at transparent regions. We keep that
+    // output as-is but scale by layer opacity. For all other cases, we premultiply
+    // normally: rgb *= alpha.
     if rgb_split_mode_raw >= -0.5 {
         // RGB split: scale RGB by layer opacity (preserves additive fringe behavior)
         final_color = vec4<f32>(final_color.rgb * uniforms.color.a, final_color.a);
+    } else {
+        // Standard: premultiply rgb by alpha
+        final_color = vec4<f32>(final_color.rgb * final_color.a, final_color.a);
     }
 
-    // Discard fully invisible pixels
-    if final_color.a < 0.001 {
+    // Discard fully invisible pixels (both alpha and RGB are near zero)
+    let max_channel = max(max(final_color.r, final_color.g), final_color.b);
+    if final_color.a < 0.001 && max_channel < 0.001 {
         discard;
     }
 

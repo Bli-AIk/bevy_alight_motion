@@ -94,11 +94,20 @@ pub(crate) fn spawn_shape(
     // Check if this is a stroked shape that needs SDF rendering
     // Also use SDF for circles (better quality than sprite rect)
     // fillType="none" also needs SDF for stroke-only rendering (no fill)
-    // Use SDF for all non-media fills (gradient, color, none).
-    // Only use sprite rendering for actual image-based fills (fillImage present).
+    let has_stroke_or_border = shape.stroke.as_ref().is_some_and(|s| {
+        s.size
+            .as_ref()
+            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+            || s.end_size > 0.0
+    }) || shape.borders.iter().any(|b| {
+        b.size
+            .as_ref()
+            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
+            || b.end_size > 0.0
+    });
     let needs_sdf = shape.fill_type == "gradient"
         || ((shape.fill_type == "color" || shape.fill_type == "none")
-            && shape.fill_image.is_empty());
+            && (shape.shape_type != ".rect" || has_stroke_or_border));
 
     // Calculate anchor and position compensation for non-SDF shapes
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);

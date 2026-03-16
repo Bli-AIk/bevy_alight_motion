@@ -249,28 +249,8 @@ pub struct UnifiedEffectUniform {
     pub mask1_repeat_params2: Vec4,
 }
 
-/// Pipeline specialization key for UnifiedEffectMaterial.
-/// Controls whether premultiplied alpha blending is used (required for RGB split effect).
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct UnifiedEffectMaterialKey {
-    /// When true, the pipeline uses premultiplied alpha blend state (ONE, ONE_MINUS_SRC_ALPHA).
-    /// Only needed for RGB split (chromatic aberration) where non-premultiplied RGB output
-    /// creates additive color fringes.
-    pub premultiplied_blend: bool,
-}
-
-impl From<&UnifiedEffectMaterial> for UnifiedEffectMaterialKey {
-    fn from(material: &UnifiedEffectMaterial) -> Self {
-        // rgb_split_params.w >= -0.5 means RGB split is enabled (mode >= 0)
-        Self {
-            premultiplied_blend: material.uniform_data.rgb_split_params.w >= -0.5,
-        }
-    }
-}
-
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
-#[bind_group_data(UnifiedEffectMaterialKey)]
 pub struct UnifiedEffectMaterial {
     /// All uniform data packed into a single binding
     #[uniform(0)]
@@ -607,16 +587,15 @@ impl Material2d for UnifiedEffectMaterial {
     fn specialize(
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
         _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
-        key: Material2dKey<Self>,
+        _key: Material2dKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        // Only override to premultiplied alpha blend when RGB split is active.
-        // RGB split outputs non-premultiplied RGB with mode-specific alpha, creating
-        // additive color fringes that require ONE src factor. All other shapes use
-        // standard alpha blending (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) to correctly
-        // composite in both direct and RTT (render-to-texture) pipelines.
-        if key.bind_group_data.premultiplied_blend
-            && let Some(fragment) = &mut descriptor.fragment
-        {
+        // Override blend state to premultiplied alpha (ONE, ONE_MINUS_SRC_ALPHA).
+        // AM composites layers with premultiplied blending. This is required for
+        // RGB split (chromatic aberration) where the effect outputs non-premultiplied
+        // RGB with mode-specific alpha — producing additive color fringes at
+        // transparent regions. The fragment shader premultiplies all non-RGB-split
+        // outputs manually so other rendering is unchanged.
+        if let Some(fragment) = &mut descriptor.fragment {
             for target_state in fragment.targets.iter_mut().flatten() {
                 target_state.blend = Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING);
             }
