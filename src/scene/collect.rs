@@ -713,6 +713,11 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             continue;
         }
 
+        // Hidden mask layers should not clip anything
+        if layer.hidden {
+            continue;
+        }
+
         // Extract mask geometry from the layer's transform and spec
         let mask_entry = extract_mask_info_from_layer(layer);
         let Some(mut entry) = mask_entry else {
