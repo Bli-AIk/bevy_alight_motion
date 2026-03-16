@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-16T09:51:31.825131+08:00",
+  "timestamp": "2026-03-16T10:37:18.054305+08:00",
   "summary": {
-    "passed": 168,
-    "failed": 64,
+    "passed": 169,
     "warnings": 0,
-    "skipped": 2
+    "skipped": 2,
+    "failed": 63
   },
   "results": {
     "basic/bezier/bezier": {
@@ -161,13 +161,6 @@
       "status": "fail",
       "avg_similarity": 0.8959
     },
-    "effects/copy-bg/exposure-gamma/test": {
-      "status": "pass"
-    },
-    "effects/copy-bg/rgb-split/test": {
-      "status": "fail",
-      "avg_similarity": 0.975
-    },
     "effects/count/basic/test": {
       "status": "fail",
       "avg_similarity": 0.5385
@@ -252,8 +245,15 @@
     "effects/jetter/size/test": {
       "status": "pass"
     },
+    "effects/lift/exposure-gamma/test": {
+      "status": "pass"
+    },
     "effects/lift/replacecolor": {
       "status": "pass"
+    },
+    "effects/lift/rgb-split/test": {
+      "status": "fail",
+      "avg_similarity": 0.975
     },
     "effects/lift/wavewarp2": {
       "status": "pass"
@@ -720,7 +720,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.9181
+      "avg_similarity": 0.9192
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
@@ -734,11 +734,10 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.9217
+      "avg_similarity": 0.9225
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
-      "status": "fail",
-      "avg_similarity": 0.953
+      "status": "pass"
     },
     "private/USER_little_black/test0": {
       "status": "pass"
