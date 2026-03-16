@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-16T14:48:35.791248+08:00",
+  "timestamp": "2026-03-16T14:58:58.928386+08:00",
   "summary": {
-    "passed": 147,
+    "passed": 148,
     "warnings": 0,
-    "skipped": 3,
-    "failed": 85
+    "skipped": 2,
+    "failed": 86
   },
   "results": {
     "basic/bezier/bezier": {
@@ -71,6 +71,9 @@
       "avg_similarity": 0.9549
     },
     "basic/group/fill/gradient": {
+      "status": "pass"
+    },
+    "basic/group/fill/simple": {
       "status": "pass"
     },
     "basic/group/loop/basic": {
@@ -264,7 +267,7 @@
       "avg_similarity": 0.8462
     },
     "effects/linear-repeat/basic": {
-      "status": "cancelled"
+      "status": "fail"
     },
     "effects/linear-repeat/dual": {
       "status": "fail",
