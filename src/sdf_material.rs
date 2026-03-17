@@ -181,6 +181,10 @@ pub struct SdfMaterialUniform {
     pub mask1_lr_params4: Vec4,
     /// Mask1 linear repeat params5: (random_order, seed_lo, seed_hi, 0)
     pub mask1_lr_params5: Vec4,
+    /// Stretch segment params: (angle_rad, adj_stretch, offset_norm, smooth_raw)
+    pub stretch_params: Vec4,
+    /// Stretch meta: (transform_rotation_rad, 0, scene_width, scene_height)
+    pub stretch_meta: Vec4,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -301,6 +305,8 @@ impl Default for SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                stretch_params: Vec4::ZERO,
+                stretch_meta: Vec4::ZERO,
             },
         }
     }
@@ -381,6 +387,8 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                stretch_params: Vec4::ZERO,
+                stretch_meta: Vec4::ZERO,
             },
         }
     }
@@ -482,6 +490,8 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                stretch_params: Vec4::ZERO,
+                stretch_meta: Vec4::ZERO,
             },
         }
     }
@@ -529,6 +539,8 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                stretch_params: Vec4::ZERO,
+                stretch_meta: Vec4::ZERO,
             },
         }
     }
@@ -739,8 +751,8 @@ mod tests {
         println!("SdfMaterialUniform min_size = {}", size);
         assert_eq!(
             size.get(),
-            480,
-            "SdfMaterialUniform size mismatch! Expected 480 bytes"
+            512,
+            "SdfMaterialUniform size mismatch! Expected 512 bytes"
         );
     }
 

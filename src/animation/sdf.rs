@@ -345,6 +345,89 @@ pub fn animate_sdf_opacity_system(
     }
 }
 
+/// System to update stretch segment parameters on SDF shapes.
+/// Reads stretch animation properties and passes them to the SDF shader uniform.
+pub fn animate_sdf_stretch_system(
+    playback: Res<AmPlayback>,
+    parent_query: Query<(&AmAnimated, &Children, &GlobalTransform), With<AmSdfShapeParent>>,
+    sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, children, global_transform) in parent_query.iter() {
+        let local_time = animated.calc_local_time(global_time);
+        if !animated.is_active(local_time) {
+            continue;
+        }
+        let layer_time = animated.calc_layer_time(local_time);
+
+        // Check if this layer has stretch effect
+        let has_stretch = animated.stretch_amount.value.is_some()
+            || !animated.stretch_amount.keyframes.is_empty();
+        if !has_stretch {
+            continue;
+        }
+
+        let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
+        let angle_rad = angle_deg.to_radians();
+        let stretch_raw = interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
+        let offset_raw = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
+        let smooth_raw = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
+
+        let adj_stretch = stretch_raw / 500.0;
+        let offset_norm = offset_raw / 1000.0;
+
+        let scene_width = animated.canvas_width;
+        let scene_height = animated.canvas_height;
+
+        // Extract the entity's Z-rotation from its GlobalTransform
+        let (_, quat, _) = global_transform.to_scale_rotation_translation();
+        let transform_rot = quat.to_euler(bevy::math::EulerRot::ZYX).0;
+
+        let stretch_params = Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
+        let stretch_meta = Vec4::new(transform_rot, 0.0, scene_width, scene_height);
+
+        // Compute mesh expansion needed for stretch displacement
+        let cos_a = angle_rad.cos().abs();
+        let sin_a = angle_rad.sin().abs();
+        let dx_screen = cos_a * adj_stretch * scene_width;
+        let dy_screen = sin_a * adj_stretch * scene_height;
+        // Rotate screen-space displacement back to local space
+        let rot_cos = transform_rot.cos().abs();
+        let rot_sin = transform_rot.sin().abs();
+        let extra = (rot_cos * dx_screen + rot_sin * dy_screen)
+            .max(rot_sin * dx_screen + rot_cos * dy_screen);
+
+        for child in children.iter() {
+            let Ok(material_handle) = sdf_query.get(child) else {
+                continue;
+            };
+            let Some(material) = materials.get_mut(material_handle) else {
+                continue;
+            };
+            material.uniform_data.stretch_params = stretch_params;
+            material.uniform_data.stretch_meta = stretch_meta;
+
+            // Expand frame_half to accommodate stretch displacement
+            let base_half = material
+                .uniform_data
+                .params
+                .x
+                .max(material.uniform_data.params.y)
+                + material.uniform_data.params.z * 2.0;
+            let needed = base_half + extra;
+            if needed > material.uniform_data.frame_half {
+                material.uniform_data.frame_half = needed;
+            }
+        }
+    }
+}
+
 /// System to update SDF shape dimensions based on parent scale animation.
 ///
 /// ## New Approach (parametric SDF)
@@ -395,13 +478,6 @@ pub fn animate_sdf_scale_system(
     // --- Second pass: update SDF children with combined (own × parent) scale ---
     // 第二遍：用合并缩放（自身 × 父级）更新 SDF 子实体。
     for (animated, children) in parent_query.iter() {
-        // Debug: Log parent transform for SDF rendering issues
-        bevy::log::debug!(
-            "[SDF_PARENT] layer={}: children_count={}",
-            animated.layer_id,
-            children.len()
-        );
-
         let local_time = animated.calc_local_time(global_time);
         if !animated.is_active(local_time) {
             continue;
@@ -471,19 +547,6 @@ pub fn animate_sdf_scale_system(
                 &shape_extra_anim,
                 has_pts_anim,
                 &shape_pts_anim,
-            );
-
-            bevy::log::debug!(
-                "[SDF_SCALE] layer={}: scaled_half=({:.1},{:.1}), stroke={:.1}, frame_half={:.1}, own=({:.2},{:.2}), combined=({:.2},{:.2})",
-                animated.layer_id,
-                sdf_params.base_half_width * combined_scale[0],
-                sdf_params.base_half_height * combined_scale[1],
-                material.uniform_data.params.z,
-                material.uniform_data.frame_half,
-                own_scale[0],
-                own_scale[1],
-                combined_scale[0],
-                combined_scale[1]
             );
         }
     }
@@ -582,7 +645,7 @@ fn update_sdf_child_material(
 ///
 /// 计算单个 SDF 形状的自身动画缩放（不含父级继承），
 /// 包括缩放关键帧、scale_assist 效果和 transform2 posz。
-fn compute_sdf_own_scale(animated: &AmAnimated, layer_time: f32, global_time: f32) -> [f32; 2] {
+fn compute_sdf_own_scale(animated: &AmAnimated, layer_time: f32, _global_time: f32) -> [f32; 2] {
     let mut anim_scale = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
     // Apply scale_assist effect
@@ -594,8 +657,6 @@ fn compute_sdf_own_scale(animated: &AmAnimated, layer_time: f32, global_time: f3
         const SCALE_POWER: f32 = 1.71;
         const DAMP_COEFF: f32 = 2.75;
         const DAMP_POWER: f32 = 1.93;
-
-        let scale_before = anim_scale;
 
         match animated.scale_assist_axis {
             1 => {
@@ -612,22 +673,6 @@ fn compute_sdf_own_scale(animated: &AmAnimated, layer_time: f32, global_time: f3
                 anim_scale[1] /= scale_divisor;
             }
             _ => {}
-        }
-
-        static SDF_SCALE_DEBUG: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let cnt = SDF_SCALE_DEBUG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if cnt < 50 {
-            bevy::log::info!(
-                "[SDF_SCALE_ASSIST] layer={}, time={:.1}ms, scale_param={:.4}, damp={:.4}, scale: ({:.4},{:.4}) -> ({:.4},{:.4})",
-                animated.layer_id,
-                global_time,
-                scale_param,
-                damp_param,
-                scale_before[0],
-                scale_before[1],
-                anim_scale[0],
-                anim_scale[1]
-            );
         }
     }
 
@@ -653,6 +698,71 @@ fn compute_sdf_own_scale(animated: &AmAnimated, layer_time: f32, global_time: f3
     anim_scale[1] *= combined_posz;
 
     anim_scale
+}
+
+/// Compensate for SDF parent shapes having Transform.scale=(1,1,1).
+/// SDF shapes don't use Transform.scale for visual scaling (they use shader uniforms),
+/// so Bevy's hierarchy doesn't propagate the parent's visual scale to children's positions.
+/// This system multiplies each SDF child's local position by the accumulated parent scale.
+///
+/// SDF 父级形状的 Transform.scale 恒为 (1,1,1)，视觉缩放在着色器中处理。
+/// 因此 Bevy 层级不会将父级缩放传播到子级位置。本系统对此进行补偿。
+pub fn compensate_sdf_parent_scale_system(
+    playback: Res<AmPlayback>,
+    mut query: Query<
+        (Entity, &AmAnimated, &mut Transform, Option<&ChildOf>),
+        With<AmSdfShapeParent>,
+    >,
+) {
+    if playback.force_stopped {
+        return;
+    }
+    let global_time = playback.current_time_ms;
+
+    // First pass: collect visual scale and parent relationships for all active SDF shapes
+    let mut scale_map: std::collections::HashMap<u64, [f32; 2]> = std::collections::HashMap::new();
+    let mut parent_map: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+
+    for (_, animated, _, _) in query.iter() {
+        let local_time = animated.calc_local_time(global_time);
+        if !animated.is_active(local_time) {
+            continue;
+        }
+        let layer_time = animated.calc_layer_time(local_time);
+        scale_map.insert(
+            animated.layer_id,
+            compute_sdf_own_scale(animated, layer_time, global_time),
+        );
+        if animated.has_parent && animated.parent_layer_id != 0 {
+            parent_map.insert(animated.layer_id, animated.parent_layer_id);
+        }
+    }
+
+    // Second pass: apply accumulated parent scale to child positions
+    // Only scale the LOCATION component, not the pivot offset
+    for (_, animated, mut transform, parent) in query.iter_mut() {
+        if !animated.has_parent || animated.parent_layer_id == 0 {
+            continue;
+        }
+        if parent.is_none() {
+            continue;
+        }
+        let acc = accumulate_parent_scale(animated.layer_id, &parent_map, &scale_map);
+        if (acc[0] - 1.0).abs() > 1e-5 || (acc[1] - 1.0).abs() > 1e-5 {
+            let layer_time = {
+                let lt = animated.calc_local_time(global_time);
+                animated.calc_layer_time(lt)
+            };
+            let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
+            // Decompose position into location + pivot components
+            // SDF: bx = loc_x + pivot_x, by = -loc_y - pivot_y
+            let loc_x = transform.translation.x - pivot[0];
+            let loc_y = transform.translation.y + pivot[1];
+            // Only scale the location part by parent's visual scale
+            transform.translation.x = loc_x * acc[0] + pivot[0];
+            transform.translation.y = loc_y * acc[1] - pivot[1];
+        }
+    }
 }
 
 /// Walk up the parent chain to accumulate parent scale factors.

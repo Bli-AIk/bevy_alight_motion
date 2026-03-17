@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-17T11:23:28.069896+08:00",
+  "timestamp": "2026-03-17T17:45:54.740166+08:00",
   "summary": {
     "passed": 174,
     "warnings": 0,
     "skipped": 2,
-    "failed": 65
+    "failed": 71
   },
   "results": {
     "basic/bezier/bezier": {
@@ -283,7 +283,7 @@
     },
     "effects/linear-repeat/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.8501
+      "avg_similarity": 0.8474
     },
     "effects/linear-repeat/random": {
       "status": "fail",
@@ -346,6 +346,10 @@
     "effects/radial-repeat/mask/test": {
       "status": "pass"
     },
+    "effects/radial-repeat/mask_nested/mask_nested": {
+      "status": "fail",
+      "avg_similarity": 0.7748
+    },
     "effects/rays/basic/test": {
       "status": "pass"
     },
@@ -392,6 +396,10 @@
     "effects/repeat/group_pivot_mask": {
       "status": "fail",
       "avg_similarity": 0.759
+    },
+    "effects/repeat/mask_nested/mask_nested": {
+      "status": "fail",
+      "avg_similarity": 0.7663
     },
     "effects/replace-color/basic": {
       "status": "pass"
@@ -452,6 +460,10 @@
     "effects/stretch-segment/basic": {
       "status": "pass"
     },
+    "effects/stretch-segment/basic/stretch_basic": {
+      "status": "fail",
+      "avg_similarity": 0.8663
+    },
     "effects/stretch-segment/ex": {
       "status": "pass"
     },
@@ -467,6 +479,14 @@
     "effects/stretch-segment/ex5": {
       "status": "pass"
     },
+    "effects/stretch-segment/group/stretch_group": {
+      "status": "fail",
+      "avg_similarity": 0.8716
+    },
+    "effects/stretch-segment/group_restretch/stretch_group_restretch": {
+      "status": "fail",
+      "avg_similarity": 0.9087
+    },
     "effects/stretch-segment/muti/basic": {
       "status": "pass"
     },
@@ -475,6 +495,10 @@
     },
     "effects/stretch-segment/muti/mask_out": {
       "status": "pass"
+    },
+    "effects/stretch-segment/with_parent/stretch_parent": {
+      "status": "fail",
+      "avg_similarity": 0.87
     },
     "effects/swing/animation": {
       "status": "pass"
@@ -736,7 +760,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.9192
+      "avg_similarity": 0.924
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",

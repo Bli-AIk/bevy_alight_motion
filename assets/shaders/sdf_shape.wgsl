@@ -51,6 +51,9 @@ struct SdfMaterialUniform {
     mask1_lr_params3: vec4<f32>,       // (start, end, phase, overlap)
     mask1_lr_params4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
     mask1_lr_params5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
+    // Stretch segment params
+    stretch_params: vec4<f32>,         // (angle_rad, adj_stretch, offset_norm, smooth_raw)
+    stretch_meta: vec4<f32>,           // (transform_rotation_rad, 0, scene_width, scene_height)
 };
 
 @group(2) @binding(0) var<uniform> material: SdfMaterialUniform;
@@ -737,6 +740,68 @@ fn compute_mask_with_linear_repeat(
     }
 }
 
+// Smooth minimum for stretch segment feathering (same as unified_effect.wgsl)
+fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * h * k * (1.0 / 6.0);
+}
+
+// Apply stretch segment effect to SDF local position.
+// Transforms pos (local pixel coords, centered) through the same pipeline
+// as unified_effect.wgsl's apply_stretch_segment_gen.
+fn apply_sdf_stretch_segment(pos: vec2<f32>, frame_size: f32) -> vec2<f32> {
+    let angle = material.stretch_params.x;
+    let adj_stretch = material.stretch_params.y;
+    let offset_norm = material.stretch_params.z;
+    let smooth_raw = material.stretch_params.w;
+
+    if adj_stretch < 0.00001 {
+        return pos;
+    }
+
+    let transform_rot = material.stretch_meta.x;
+    let scene_width = material.stretch_meta.z;
+    let scene_height = material.stretch_meta.w;
+
+    // pos is already local pixel coords (centered).
+    // SDF UV: (0,0)=bottom-left, so pos.y positive = UP, which matches AM's Y-up.
+    let local_px_x = pos.x;
+    let local_px_y = pos.y;
+
+    // Rotate local coords to screen space using entity's transform rotation
+    let cos_r = cos(transform_rot);
+    let sin_r = sin(transform_rot);
+    let screen_px_x = local_px_x * cos_r - local_px_y * sin_r;
+    let screen_px_y = local_px_x * sin_r + local_px_y * cos_r;
+
+    // Convert to scene-normalized coords
+    let st = vec2<f32>(screen_px_x / scene_width, screen_px_y / scene_height);
+
+    // Direction vector
+    let v = vec2<f32>(cos(angle), sin(angle));
+
+    // Distance along direction + offset
+    let dist = dot(st, v) + offset_norm;
+
+    // Smooth cubic min
+    let smooth_k = max(0.00001, smooth_raw * adj_stretch);
+    let d = smin_cubic(adj_stretch, abs(dist), smooth_k);
+
+    // Displace in scene-norm space
+    let displaced_norm = st + v * d * -sign(dist);
+
+    // Convert back to screen pixel coords
+    let disp_screen_px_x = displaced_norm.x * scene_width;
+    let disp_screen_px_y = displaced_norm.y * scene_height;
+
+    // Rotate back to local space
+    let disp_local_px_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
+    let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
+
+    // Convert back — no Y flip needed since SDF pos.y is already Y-up
+    return vec2<f32>(disp_local_px_x, disp_local_px_y);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let _debug_st = i32(material.shape_type);
@@ -813,7 +878,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let frame_size = material.frame_half * 2.0;
     
     // Convert UV to local coordinates centered at origin
-    let pos = (in.uv - 0.5) * frame_size;
+    var pos = (in.uv - 0.5) * frame_size;
+
+    // Apply stretch segment effect if enabled
+    if material.stretch_params.y > 0.00001 {
+        pos = apply_sdf_stretch_segment(pos, frame_size);
+    }
     
     // Calculate SDF based on shape type
     var dist: f32;
