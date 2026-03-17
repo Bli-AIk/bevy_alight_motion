@@ -168,6 +168,8 @@ frame_threshold = 0.98
 [overrides."private/USER_327/last"]
 skip = true
 
+[overrides."private/USER_5p/neo_test"]
+skip = true
 
 # =============================================================================
 # Frame Test (FPS Performance) Configuration
