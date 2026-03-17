@@ -8,6 +8,8 @@ repository = "https://github.com/Bli-AIk/bevy_alight_motion"
 readme = "readme.md"
 # Disable auto-discovery to prevent video_utils.rs from being compiled as an example
 description = "Bevy plugin for loading and playing Alight Motion project files"
+keywords = ["bevy", "animation", "sdf", "alight-motion", "2d"]
+categories = ["game-development", "rendering", "multimedia"]
 exclude = [
     "target/*",
     ".github/*",

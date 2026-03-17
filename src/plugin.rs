@@ -71,6 +71,21 @@ pub struct AmWhitePixel(pub Handle<Image>);
 /// Plugin providing Alight Motion support for Bevy.
 ///
 /// 为 Bevy 提供 Alight Motion 支持的插件。
+/// System sets for the Alight Motion plugin.
+///
+/// Alight Motion 插件的系统集。
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AlightMotionSystemSet {
+    /// Entity spawning, lifecycle management, and RTT setup.
+    Lifecycle,
+    /// Keyframe animation and effect updates.
+    Animation,
+    /// Mask calculation (runs in PostUpdate after TransformPropagate).
+    Mask,
+}
+
+/// Plugin providing Alight Motion support for Bevy.
+/// 为 Bevy 提供 Alight Motion 支持的插件。
 pub struct AlightMotionPlugin;
 
 impl Plugin for AlightMotionPlugin {
@@ -94,6 +109,14 @@ impl Plugin for AlightMotionPlugin {
             // 用户可以通过 commands.add_observer() 或 app.add_observer() 来监听事件
             .add_systems(Startup, setup_white_pixel_system)
             .add_systems(Startup, load_system_fonts_for_fallback)
+            .configure_sets(
+                Update,
+                (
+                    AlightMotionSystemSet::Lifecycle,
+                    AlightMotionSystemSet::Animation,
+                )
+                    .chain(),
+            )
             .add_systems(
                 Update,
                 (
@@ -120,7 +143,8 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::propagate_lift_render_layers_system,
                     crate::effects::update_lift_comp_material_system,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(AlightMotionSystemSet::Lifecycle),
             )
             .add_systems(
                 Update,
@@ -146,7 +170,7 @@ impl Plugin for AlightMotionPlugin {
                     crate::effects::sync_rtt_camera_position_system,
                 )
                     .chain()
-                    .after(crate::effects::fix_nested_embed_render_layers_system),
+                    .in_set(AlightMotionSystemSet::Animation),
             )
             // Run mask systems in PostUpdate after TransformPropagate
             // This ensures GlobalTransform is correctly propagated before mask calculations
@@ -154,6 +178,7 @@ impl Plugin for AlightMotionPlugin {
                 PostUpdate,
                 (update_sdf_mask_system, update_unified_mask_system)
                     .chain()
+                    .in_set(AlightMotionSystemSet::Mask)
                     .after(bevy::transform::TransformSystems::Propagate),
             );
     }
