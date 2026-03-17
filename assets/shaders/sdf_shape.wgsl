@@ -45,6 +45,12 @@ struct SdfMaterialUniform {
     mask1_rr_params3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
     mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
     mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+    // Mask1 linear repeat params
+    mask1_lr_params1: vec4<f32>,       // (count, position_x, position_y, angle_deg)
+    mask1_lr_params2: vec4<f32>,       // (offset_x, offset_y, scale, alpha)
+    mask1_lr_params3: vec4<f32>,       // (start, end, phase, overlap)
+    mask1_lr_params4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
+    mask1_lr_params5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
 };
 
 @group(2) @binding(0) var<uniform> material: SdfMaterialUniform;
@@ -610,6 +616,127 @@ fn compute_mask_with_radial_repeat(
     }
 }
 
+// Compute mask blend factor for a mask with linear repeat effect.
+// Evaluates the SDF mask shape at the original position plus each linearly-placed copy.
+// Uses simplified progress (RAMP shape, no random order).
+fn compute_mask_with_linear_repeat(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    lr1: vec4<f32>,       // (count, position_x, position_y, angle_deg)
+    lr2: vec4<f32>,       // (offset_x, offset_y, scale, alpha)
+    lr3: vec4<f32>,       // (start, end, phase, overlap)
+    lr4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
+    lr5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
+    let is_exclude = mask_type > 2.5;
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    // Compute rel in mask-local frame (without repeat displacement)
+    var rel_base = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
+    }
+
+    let lr_count = max(i32(round(lr1.x)), 0);
+    let lr_position = lr1.yz;      // already in mask-local world units
+    let lr_angle_deg = lr1.w;
+    let lr_offset = lr2.xy;
+    let lr_scale = lr2.z;
+    let lr_alpha = lr2.w;
+    let lr_start = lr3.x;
+    let lr_end = lr3.y;
+    let lr_phase = lr3.z;
+    let lr_overlap = lr3.w;
+
+    // AM algorithm: count=N means N total items (including original).
+    // Loop runs N times (i = 0..count-1), matching AM's RepeatEasingKt.
+    let fcount = f32(lr_count);
+    let overlap_value = lr_overlap + 1.0;
+    let denominator = (2.0 * overlap_value) + fcount - 1.0;
+    let step_width = 1.0 / denominator;
+    let half_width_val = step_width * overlap_value;
+
+    var max_mask_alpha = 0.0;
+    let deg2rad = 3.14159265 / 180.0;
+
+    for (var i = 0; i < lr_count; i = i + 1) {
+        let fi = f32(i);
+
+        // base_progress: AM uses i / (count - 1), 0 when count <= 1
+        var base_progress: f32;
+        if lr_count > 1 {
+            base_progress = fi / (fcount - 1.0);
+        } else {
+            base_progress = 0.0;
+        }
+
+        // interp_progress: AM's center-based interpolation (RAMP shape, simplified)
+        let base_position = (fi + overlap_value) / denominator + lr_phase;
+        let center_pos = base_position + half_width_val * 0.5;
+        let range = max(lr_end - lr_start, 0.001);
+        let interp_progress = clamp((center_pos - lr_start) / range, 0.0, 1.0);
+
+        // Per-copy displacement, scale, rotation, alpha
+        let displacement = lr_position * base_progress + lr_offset * interp_progress;
+        let copy_scale = 1.0 + (lr_scale - 1.0) * interp_progress;
+        let copy_angle_rad = lr_angle_deg * deg2rad * interp_progress;
+        let copy_alpha = 1.0 + (lr_alpha - 1.0) * interp_progress;
+
+        if copy_alpha < 0.001 || abs(copy_scale) < 0.001 {
+            continue;
+        }
+
+        // Shift rel_base by displacement and apply per-copy rotation/scale
+        var rel_copy = rel_base - displacement;
+
+        if abs(copy_angle_rad) > 0.001 {
+            let ca = cos(-copy_angle_rad);
+            let sa = sin(-copy_angle_rad);
+            rel_copy = vec2<f32>(rel_copy.x * ca - rel_copy.y * sa,
+                                 rel_copy.x * sa + rel_copy.y * ca);
+        }
+
+        let copy_half = shape_half * copy_scale;
+
+        var mask_sdf: f32;
+        if is_ellipse {
+            let norm = rel_copy / copy_half;
+            let r = length(norm);
+            mask_sdf = (r - 1.0) * min(copy_half.x, copy_half.y);
+        } else {
+            mask_sdf = max(abs(rel_copy.x) - copy_half.x, abs(rel_copy.y) - copy_half.y);
+        }
+
+        let copy_fill = select(0.0, fill_alpha, mask_sdf < 0.0);
+        let aa = min(1.0, sw * 0.5);
+        let copy_stroke = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+        let copy_mask_alpha = min(max(copy_fill, copy_stroke), 1.0) * copy_alpha;
+
+        max_mask_alpha = max(max_mask_alpha, copy_mask_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - opacity * max_mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - max_mask_alpha);
+    }
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let _debug_st = i32(material.shape_type);
@@ -623,6 +750,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var mask_factor = 1.0;
     if mask1_enabled {
         let has_mask_radial_repeat = material.mask1_rr_params1.x > 0.5;
+        let has_mask_linear_repeat = material.mask1_lr_params1.x > 0.5;
         if has_mask_radial_repeat {
             mask_factor *= compute_mask_with_radial_repeat(
                 in.world_position.xy,
@@ -635,6 +763,19 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
                 material.mask1_rr_params3,
                 material.mask1_rr_params4,
                 material.mask1_rr_params5,
+            );
+        } else if has_mask_linear_repeat {
+            mask_factor *= compute_mask_with_linear_repeat(
+                in.world_position.xy,
+                material.mask_params,
+                material.mask_rotation,
+                mask1_type,
+                material.mask_blend,
+                material.mask1_lr_params1,
+                material.mask1_lr_params2,
+                material.mask1_lr_params3,
+                material.mask1_lr_params4,
+                material.mask1_lr_params5,
             );
         } else {
             mask_factor *= compute_mask_blend_factor(

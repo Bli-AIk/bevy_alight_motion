@@ -295,20 +295,24 @@ pub fn setup_embed_scene_rtt_system(
             Option<&AmGroupFill>,
             &crate::animation::AmAnimated,
             Option<&AmEmbedMask>,
+            Option<&crate::scene::AmMaskInfo>,
         ),
         Without<EmbedSceneRtt>,
     >,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
-    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated, embed_mask) in
-        query.iter()
+    for (
+        entity,
+        needs_rtt,
+        _embed_transform,
+        embed_global,
+        group_fill,
+        animated,
+        embed_mask,
+        mask_info,
+    ) in query.iter()
     {
-        bevy::log::warn!(
-            "[RTT-SETUP-DBG] Setting up RTT for {:?}, is_mask={}",
-            entity,
-            embed_mask.is_some()
-        );
         // Try to allocate a render layer
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(
@@ -470,7 +474,10 @@ pub fn setup_embed_scene_rtt_system(
             }
         } else {
             // Check if embed has any effects that need UnifiedEffectMaterial
-            let needs_unified = animated.exposure_has_effect
+            // Also use UnifiedEffectMaterial if embed has a mask, so the mask system can process it
+            let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
+            let needs_unified = has_mask
+                || animated.exposure_has_effect
                 || animated.wavewarp2_has_effect
                 || animated.mirror_has_effect
                 || animated.lift_has_effect

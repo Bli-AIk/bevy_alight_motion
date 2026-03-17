@@ -13,6 +13,7 @@ mod collect_camera;
 mod collect_echo;
 mod collect_embed;
 mod collect_image;
+mod collect_mask;
 mod collect_shape;
 mod collect_types;
 mod components;

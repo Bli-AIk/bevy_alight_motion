@@ -171,6 +171,16 @@ pub struct SdfMaterialUniform {
     pub mask1_rr_params4: Vec4,
     /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
     pub mask1_rr_params5: Vec4,
+    /// Mask1 linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub mask1_lr_params1: Vec4,
+    /// Mask1 linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub mask1_lr_params2: Vec4,
+    /// Mask1 linear repeat params3: (start, end, phase, overlap)
+    pub mask1_lr_params3: Vec4,
+    /// Mask1 linear repeat params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub mask1_lr_params4: Vec4,
+    /// Mask1 linear repeat params5: (random_order, seed_lo, seed_hi, 0)
+    pub mask1_lr_params5: Vec4,
 }
 
 /// Custom SDF Material for rendering shapes with optional strokes.
@@ -286,6 +296,11 @@ impl Default for SdfMaterial {
                 mask1_rr_params3: Vec4::ZERO,
                 mask1_rr_params4: Vec4::ZERO,
                 mask1_rr_params5: Vec4::ZERO,
+                mask1_lr_params1: Vec4::ZERO,
+                mask1_lr_params2: Vec4::ZERO,
+                mask1_lr_params3: Vec4::ZERO,
+                mask1_lr_params4: Vec4::ZERO,
+                mask1_lr_params5: Vec4::ZERO,
             },
         }
     }
@@ -361,6 +376,11 @@ impl SdfMaterial {
                 mask1_rr_params3: Vec4::ZERO,
                 mask1_rr_params4: Vec4::ZERO,
                 mask1_rr_params5: Vec4::ZERO,
+                mask1_lr_params1: Vec4::ZERO,
+                mask1_lr_params2: Vec4::ZERO,
+                mask1_lr_params3: Vec4::ZERO,
+                mask1_lr_params4: Vec4::ZERO,
+                mask1_lr_params5: Vec4::ZERO,
             },
         }
     }
@@ -457,6 +477,11 @@ impl SdfMaterial {
                 mask1_rr_params3: Vec4::ZERO,
                 mask1_rr_params4: Vec4::ZERO,
                 mask1_rr_params5: Vec4::ZERO,
+                mask1_lr_params1: Vec4::ZERO,
+                mask1_lr_params2: Vec4::ZERO,
+                mask1_lr_params3: Vec4::ZERO,
+                mask1_lr_params4: Vec4::ZERO,
+                mask1_lr_params5: Vec4::ZERO,
             },
         }
     }
@@ -499,6 +524,11 @@ impl SdfMaterial {
                 mask1_rr_params3: Vec4::ZERO,
                 mask1_rr_params4: Vec4::ZERO,
                 mask1_rr_params5: Vec4::ZERO,
+                mask1_lr_params1: Vec4::ZERO,
+                mask1_lr_params2: Vec4::ZERO,
+                mask1_lr_params3: Vec4::ZERO,
+                mask1_lr_params4: Vec4::ZERO,
+                mask1_lr_params5: Vec4::ZERO,
             },
         }
     }
@@ -709,8 +739,8 @@ mod tests {
         println!("SdfMaterialUniform min_size = {}", size);
         assert_eq!(
             size.get(),
-            400,
-            "SdfMaterialUniform size mismatch! Expected 400 bytes"
+            480,
+            "SdfMaterialUniform size mismatch! Expected 480 bytes"
         );
     }
 

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-17T11:54:20.203948+08:00",
+  "timestamp": "2026-03-17T11:23:28.069896+08:00",
   "summary": {
-    "passed": 178,
+    "passed": 174,
     "warnings": 0,
-    "skipped": 3,
+    "skipped": 2,
     "failed": 65
   },
   "results": {
@@ -106,6 +106,9 @@
       "status": "pass"
     },
     "basic/mask/circle": {
+      "status": "pass"
+    },
+    "basic/mask/group": {
       "status": "pass"
     },
     "basic/mask/shape_ex": {
@@ -277,6 +280,10 @@
     },
     "effects/linear-repeat/mask_dual": {
       "status": "pass"
+    },
+    "effects/linear-repeat/mask_nested": {
+      "status": "fail",
+      "avg_similarity": 0.8501
     },
     "effects/linear-repeat/random": {
       "status": "fail",
@@ -514,7 +521,8 @@
       "status": "skip"
     },
     "private/USER_5p/neo_test": {
-      "status": "skip"
+      "status": "fail",
+      "avg_similarity": 0.7547
     },
     "private/USER_71/2_ex": {
       "status": "pass"
@@ -524,7 +532,7 @@
     },
     "private/USER_71/2_ex2": {
       "status": "fail",
-      "avg_similarity": 0.8209
+      "avg_similarity": 0.5367
     },
     "private/USER_71/2_ex3": {
       "status": "pass"
@@ -534,51 +542,33 @@
     },
     "private/USER_71/3_ex": {
       "status": "fail",
-      "avg_similarity": 0.9213
+      "avg_similarity": 0.8625
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.9533
+      "avg_similarity": 0.8759
     },
     "private/USER_71/3_ex2": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9332
     },
     "private/USER_71/3_ex2_1": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9502
     },
     "private/USER_71/3_ex3": {
       "status": "fail",
       "avg_similarity": 0.9619
-    },
-    "private/USER_aik/0": {
-      "status": "fail",
-      "avg_similarity": 0.9279
     },
     "private/USER_aik/0/split1": {
       "status": "pass"
     },
     "private/USER_aik/0/split2": {
       "status": "fail",
-      "avg_similarity": 0.9119
-    },
-    "private/USER_aik/1": {
-      "status": "pass"
-    },
-    "private/USER_aik/2": {
-      "status": "pass"
-    },
-    "private/USER_aik/3": {
-      "status": "pass"
-    },
-    "private/USER_baby/sans": {
-      "status": "fail"
-    },
-    "private/USER_baby/yes": {
-      "status": "fail"
+      "avg_similarity": 0.9412
     },
     "private/USER_bot_205/demo/bullet": {
-      "status": "fail",
-      "avg_similarity": 0.7969
+      "status": "fail"
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
@@ -732,10 +722,6 @@
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "pass"
     },
-    "private/USER_hong_jiao/test": {
-      "status": "fail",
-      "avg_similarity": 0.9535
-    },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
     },
@@ -750,7 +736,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.9231
+      "avg_similarity": 0.9192
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
@@ -770,7 +756,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.9209
+      "avg_similarity": 0.9225
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
       "status": "pass"

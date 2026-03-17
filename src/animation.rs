@@ -17,6 +17,7 @@ mod interpolation;
 mod lifecycle;
 mod noise_effects;
 mod sdf;
+mod sdf_mask;
 mod sdf_spawn;
 pub(crate) mod simplex_noise;
 mod spawn;
