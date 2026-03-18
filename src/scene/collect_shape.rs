@@ -684,6 +684,22 @@ pub(crate) fn extract_shape_extras(
             let p2 = get_shape_vec2_property(properties, "p2", [100.0, 0.0]);
             (Vec4::new(p1[0], p1[1], p2[0], p2[1]), z, z, z, z, z, z)
         }
+        ".arrow" => {
+            let start = get_shape_vec2_property(properties, "start", [0.0, 0.0]);
+            let end = get_shape_vec2_property(properties, "end", [100.0, 0.0]);
+            let line_width = get_shape_float_property(properties, "lineWidth", 20.0);
+            let head_width = get_shape_float_property(properties, "headWidth", 40.0);
+            let head_length = get_shape_float_property(properties, "headLength", 30.0);
+            (
+                Vec4::new(start[0], start[1], end[0], end[1]),
+                Vec4::new(line_width, head_width, head_length, 0.0),
+                z,
+                z,
+                z,
+                z,
+                z,
+            )
+        }
         ".arc" => {
             let start_angle = get_shape_float_property(properties, "startAngle", 0.0);
             let end_angle = get_shape_float_property(properties, "endAngle", 90.0);

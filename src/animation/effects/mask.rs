@@ -578,7 +578,7 @@ pub fn update_unified_mask_system(
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
     let global_time = playback.current_time_ms as u64;
-    for (mask_info, material_handle, _marker, entity_global_transform) in query.iter() {
+    for (mask_info, material_handle, _marker, _entity_global_transform) in query.iter() {
         let active_masks = mask_info.get_active_masks(global_time);
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;

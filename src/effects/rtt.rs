@@ -473,10 +473,55 @@ pub fn setup_embed_scene_rtt_system(
                     .insert((Mesh2d(mesh), MeshMaterial2d(material)));
             }
         } else {
-            // Check if embed has any effects that need UnifiedEffectMaterial
-            // Also use UnifiedEffectMaterial if embed has a mask, so the mask system can process it
+            // Check if embed has any effects that need UnifiedEffectMaterial.
+            // Keep this in sync with animate_unified_effect_system so RTT outputs
+            // don't silently skip effects that are only available on the unified path.
             let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
+            let has_wipe = animated.wipe_end.value != Some(1.0)
+                || !animated.wipe_end.keyframes.is_empty()
+                || animated.wipe_start.value.is_some()
+                || !animated.wipe_start.keyframes.is_empty();
+            let has_stretch = animated.stretch_amount.value.is_some()
+                || !animated.stretch_amount.keyframes.is_empty()
+                || animated.stretch_angle.value.is_some()
+                || !animated.stretch_angle.keyframes.is_empty()
+                || animated.stretch_offset.value.is_some()
+                || !animated.stretch_offset.keyframes.is_empty()
+                || animated.stretch_smooth.value.is_some()
+                || !animated.stretch_smooth.keyframes.is_empty()
+                || animated.stretch_seg2_amount.value.is_some()
+                || !animated.stretch_seg2_amount.keyframes.is_empty()
+                || animated.stretch_seg2_angle.value.is_some()
+                || !animated.stretch_seg2_angle.keyframes.is_empty()
+                || animated.stretch_seg2_offset.value.is_some()
+                || !animated.stretch_seg2_offset.keyframes.is_empty()
+                || animated.stretch_seg2_smooth.value.is_some()
+                || !animated.stretch_seg2_smooth.keyframes.is_empty();
+            let has_blur = animated.blur_strength.value.is_some()
+                || !animated.blur_strength.keyframes.is_empty();
+            let has_stretch2 =
+                animated.stretch2_scale.value.is_some() || !animated.stretch2_scale.keyframes.is_empty();
+            let has_pixelate =
+                animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
+            let has_threshold = animated.threshold_value.value.is_some()
+                || !animated.threshold_value.keyframes.is_empty();
+            let has_grid =
+                animated.grid_spacing.value.is_some() || !animated.grid_spacing.keyframes.is_empty();
+            let has_solidcolor = animated.solid_color_alpha.value.is_some()
+                || !animated.solid_color_alpha.keyframes.is_empty();
+            let has_replace_color = animated.replace_old_color.w > 0.0
+                || animated.replace_new_color.value.is_some()
+                || !animated.replace_new_color.keyframes.is_empty();
             let needs_unified = has_mask
+                || has_wipe
+                || has_stretch
+                || has_blur
+                || has_stretch2
+                || has_pixelate
+                || has_threshold
+                || has_grid
+                || has_solidcolor
+                || has_replace_color
                 || animated.exposure_has_effect
                 || animated.wavewarp2_has_effect
                 || animated.mirror_has_effect

@@ -11,10 +11,11 @@
 use bevy::prelude::*;
 
 use crate::scene::{AmLayerMarker, AmMaskInfo};
-use crate::sdf_material::{SdfMaterial, repack_with_alpha};
+use crate::sdf_material::{SdfMaterial, SdfMaterialUniform, SdfShapeType, repack_with_alpha};
 
 use super::components::{AmAnimated, AmPlayback, AmSdfParams, AmSdfShapeParent};
 use super::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
+use super::sdf_geometry::compute_sdf_shape_half_extent;
 use super::sdf_mask::{
     apply_sdf_mask_linear_repeat, apply_sdf_mask_radial_repeat, compute_sdf_mask_params,
 };
@@ -68,6 +69,60 @@ fn srgb_alpha_to_linear(a: f32) -> f32 {
         }
     } else {
         a
+    }
+}
+
+fn apply_shape_animation_updates(
+    uniform: &mut SdfMaterialUniform,
+    has_shape_anim: bool,
+    shape_extra_anim: &[f32; 4],
+    has_pts_anim: bool,
+    shape_pts_anim: &[[f32; 2]; 5],
+) {
+    let is_arrow = (uniform.shape_type.round() as i32) == (SdfShapeType::Arrow.to_f32() as i32);
+
+    if is_arrow {
+        if has_pts_anim {
+            uniform.shape_extra = Vec4::new(
+                shape_pts_anim[0][0],
+                shape_pts_anim[0][1],
+                shape_pts_anim[1][0],
+                shape_pts_anim[1][1],
+            );
+        }
+        if has_shape_anim {
+            uniform.shape_extra2 = Vec4::new(
+                shape_extra_anim[0],
+                shape_extra_anim[1],
+                shape_extra_anim[2],
+                0.0,
+            );
+        }
+        return;
+    }
+
+    if has_shape_anim {
+        uniform.shape_extra = Vec4::new(
+            shape_extra_anim[0],
+            shape_extra_anim[1],
+            shape_extra_anim[2],
+            shape_extra_anim[3],
+        );
+    }
+    if has_pts_anim {
+        uniform.shape_extra = Vec4::new(
+            shape_pts_anim[0][0],
+            shape_pts_anim[0][1],
+            shape_pts_anim[1][0],
+            shape_pts_anim[1][1],
+        );
+        uniform.shape_extra2 = Vec4::new(
+            shape_pts_anim[2][0],
+            shape_pts_anim[2][1],
+            shape_pts_anim[3][0],
+            shape_pts_anim[3][1],
+        );
+        uniform.shape_extra3 = Vec4::new(shape_pts_anim[4][0], shape_pts_anim[4][1], 0.0, 0.0);
     }
 }
 
@@ -409,12 +464,8 @@ pub fn animate_sdf_stretch_system(
             material.uniform_data.stretch_meta = stretch_meta;
 
             // Expand frame_half to accommodate stretch displacement
-            let base_half = material
-                .uniform_data
-                .params
-                .x
-                .max(material.uniform_data.params.y)
-                + material.uniform_data.params.z * 2.0;
+            let base_half = compute_sdf_shape_half_extent(&material.uniform_data)
+                + material.uniform_data.params.z.abs() * 2.0;
             let needed = base_half + extra;
             if needed > material.uniform_data.frame_half {
                 material.uniform_data.frame_half = needed;
@@ -593,33 +644,16 @@ fn update_sdf_child_material(
         sdf_params.packed_stroke,
     );
 
-    // Update shape_extra from animated properties
-    if has_shape_anim {
-        uniform.shape_extra = Vec4::new(
-            shape_extra_anim[0],
-            shape_extra_anim[1],
-            shape_extra_anim[2],
-            shape_extra_anim[3],
-        );
-    }
-    if has_pts_anim {
-        uniform.shape_extra = Vec4::new(
-            shape_pts_anim[0][0],
-            shape_pts_anim[0][1],
-            shape_pts_anim[1][0],
-            shape_pts_anim[1][1],
-        );
-        uniform.shape_extra2 = Vec4::new(
-            shape_pts_anim[2][0],
-            shape_pts_anim[2][1],
-            shape_pts_anim[3][0],
-            shape_pts_anim[3][1],
-        );
-        uniform.shape_extra3 = Vec4::new(shape_pts_anim[4][0], shape_pts_anim[4][1], 0.0, 0.0);
-    }
+    apply_shape_animation_updates(
+        uniform,
+        has_shape_anim,
+        shape_extra_anim,
+        has_pts_anim,
+        shape_pts_anim,
+    );
 
     // Dynamically update frame_half to accommodate scaled dimensions
-    let new_frame_half = scaled_half_width.max(scaled_half_height) + final_stroke_width * 2.0;
+    let new_frame_half = compute_sdf_shape_half_extent(uniform) + final_stroke_width.abs() * 2.0;
     if new_frame_half > uniform.frame_half {
         uniform.frame_half = new_frame_half;
     }

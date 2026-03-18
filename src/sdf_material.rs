@@ -47,6 +47,8 @@ pub enum SdfShapeType {
     Penta,
     /// Freeform path (rendered as mesh, not SDF)
     Path,
+    /// Arrow built from start/end points plus head geometry
+    Arrow,
 }
 
 impl SdfShapeType {
@@ -68,6 +70,7 @@ impl SdfShapeType {
             Self::Quad => 13.0,
             Self::Penta => 14.0,
             Self::Path => 15.0,
+            Self::Arrow => 16.0,
         }
     }
 }
@@ -122,11 +125,13 @@ pub struct SdfMaterialUniform {
     /// Triangle: (p1.x, p1.y, p2.x, p2.y)
     /// Quad: (p1.x, p1.y, p2.x, p2.y)
     /// Penta: (p1.x, p1.y, p2.x, p2.y)
+    /// Arrow: (start.x, start.y, end.x, end.y)
     pub shape_extra: Vec4,
     /// Second shape-specific extra parameters
     /// Triangle: (p3.x, p3.y, 0, 0)
     /// Quad: (p3.x, p3.y, p4.x, p4.y)
     /// Penta: (p3.x, p3.y, p4.x, p4.y)
+    /// Arrow: (lineWidth, headWidth, headLength, 0)
     pub shape_extra2: Vec4,
     /// Third shape-specific extra parameters
     /// Penta: (p5.x, p5.y, 0, 0)

@@ -5,7 +5,7 @@
 // Shape types:
 // 0=BoxRound, 1=BoxMiter, 2=BoxBevel, 3=Circle/Ellipse,
 // 4=RoundRect, 5=Polygon, 6=Star, 7=Pie, 8=Plus, 9=Multifoil,
-// 10=Line, 11=Arc, 12=Triangle, 13=Quad, 14=Penta, 15=Path
+// 10=Line, 11=Arc, 12=Triangle, 13=Quad, 14=Penta, 15=Path, 16=Arrow
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -343,6 +343,51 @@ fn poly_edge(p: vec2<f32>, vi: vec2<f32>, vj: vec2<f32>, d_sq: f32, s: f32) -> v
         new_s = -new_s;
     }
     return vec2<f32>(new_d, new_s);
+}
+
+// SDF for arrow composed from a shaft and triangular head.
+fn sd_arrow(
+    p: vec2<f32>,
+    start: vec2<f32>,
+    end: vec2<f32>,
+    line_width: f32,
+    head_width: f32,
+    head_length: f32,
+) -> f32 {
+    let delta = end - start;
+    let len2 = dot(delta, delta);
+    let max_width = max(abs(line_width), abs(head_width));
+    if len2 < 0.0001 {
+        return sd_circle(p - end, max_width);
+    }
+
+    let len = sqrt(len2);
+    let dir = delta / len;
+    let cw = vec2<f32>(-dir.y, dir.x);
+    let ccw = vec2<f32>(dir.y, -dir.x);
+    let head_width_clamped = max(abs(head_width), 0.0);
+    let line_width_clamped = min(abs(line_width), head_width_clamped);
+    let clamped_head_length = clamp(max(abs(head_length), 0.0), 0.0, len);
+    let tail_length = len - clamped_head_length;
+
+    let a = start + cw * line_width_clamped;
+    let b = start + ccw * line_width_clamped;
+    let c = start + ccw * line_width_clamped + dir * tail_length;
+    let d = end;
+    let e = start + ccw * head_width_clamped + dir * tail_length;
+    let f = start + cw * head_width_clamped + dir * tail_length;
+    let g = start + cw * line_width_clamped + dir * tail_length;
+
+    let w0 = p - a;
+    var ds = vec2<f32>(dot(w0, w0), 1.0);
+    ds = poly_edge(p, a, b, ds.x, ds.y);
+    ds = poly_edge(p, b, c, ds.x, ds.y);
+    ds = poly_edge(p, c, e, ds.x, ds.y);
+    ds = poly_edge(p, e, d, ds.x, ds.y);
+    ds = poly_edge(p, d, f, ds.x, ds.y);
+    ds = poly_edge(p, f, g, ds.x, ds.y);
+    ds = poly_edge(p, g, a, ds.x, ds.y);
+    return ds.y * sqrt(ds.x);
 }
 
 // SDF for quadrilateral (4 points, convex or concave) - proper winding number
@@ -1019,6 +1064,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             ds = poly_edge(pos, pts[i], pts[next], ds.x, ds.y);
         }
         dist = ds.y * sqrt(ds.x);
+    } else if shape_type == 16 {
+        // Arrow
+        let point_scale = vertex_scale;
+        let width_scale = abs(vertex_scale);
+        let start = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * point_scale;
+        let end = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * point_scale;
+        let line_width = material.shape_extra2.x * width_scale;
+        let head_width = material.shape_extra2.y * width_scale;
+        let head_length = material.shape_extra2.z * width_scale;
+        dist = sd_arrow(pos, start, end, line_width, head_width, head_length);
     } else {
         // Fallback: circle
         dist = sd_circle(pos, half_width);

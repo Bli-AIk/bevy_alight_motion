@@ -671,6 +671,24 @@ pub(crate) fn extract_shape_animations(
                 ],
             );
         }
+        ".arrow" => {
+            let p = [
+                get_shape_float_animation(properties, "lineWidth", 20.0),
+                get_shape_float_animation(properties, "headWidth", 40.0),
+                get_shape_float_animation(properties, "headLength", 30.0),
+                df(),
+            ];
+            return (
+                p,
+                [
+                    get_shape_vec2_animation(properties, "start", [0.0, 0.0]),
+                    get_shape_vec2_animation(properties, "end", [100.0, 0.0]),
+                    dv(),
+                    dv(),
+                    dv(),
+                ],
+            );
+        }
         ".triangle" => {
             let p = [df(), df(), df(), df()];
             return (

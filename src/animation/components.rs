@@ -527,9 +527,10 @@ pub struct AmAnimated {
     /// Star/Multifoil: [pointCount, outerRadius, innerRadius, offsetAngle]
     /// Pie/Arc: [startAngle, endAngle, radius, _]
     /// Plus: [stemSize, _, _, _]
+    /// Arrow: [lineWidth, headWidth, headLength, _]
     pub shape_props: [AmAnimatedFloat; 4],
     /// Generic shape vec2 properties (up to 5 points).
-    /// Used by Line, Triangle, Quad, Penta for vertex animation.
+    /// Used by Line, Arrow, Triangle, Quad, Penta for vertex animation.
     pub shape_points: [AmAnimatedVec2; 5],
     // Jitter effect (com.alightcreative.effects.jitter)
     /// Jitter effect: whether it is enabled
