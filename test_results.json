@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-17T17:45:54.740166+08:00",
+  "timestamp": "2026-03-18T10:52:55.797681+08:00",
   "summary": {
-    "passed": 174,
+    "passed": 175,
     "warnings": 0,
     "skipped": 2,
-    "failed": 71
+    "failed": 72
   },
   "results": {
     "basic/bezier/bezier": {
@@ -462,7 +462,7 @@
     },
     "effects/stretch-segment/basic/stretch_basic": {
       "status": "fail",
-      "avg_similarity": 0.8663
+      "avg_similarity": 0.8691
     },
     "effects/stretch-segment/ex": {
       "status": "pass"
@@ -765,6 +765,13 @@
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
       "avg_similarity": 0.9683
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
+      "status": "fail",
+      "avg_similarity": 0.8903
+    },
+    "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_nomask": {
       "status": "pass"

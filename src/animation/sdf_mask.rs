@@ -24,13 +24,12 @@ pub(crate) fn compute_sdf_mask_params(
     pending: &crate::scene::AmPendingLayers,
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     playback_time: f32,
-    parent_global_scale: Vec3,
     fit_scale: f32,
 ) -> (Vec2, Vec2, f32, Vec3) {
     let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) else {
         return (
             mask.center * fit_scale,
-            mask.half_size * fit_scale * mask.scale,
+            Vec2::new(mask.half_size.x.abs(), mask.half_size.y.abs()) * fit_scale,
             mask.rotation,
             Vec3::new(1.0, 1.0, 0.0),
         );
@@ -38,7 +37,7 @@ pub(crate) fn compute_sdf_mask_params(
     let Ok((_global_transform, mask_animated, spec)) = mask_layer_query.get(mask_entity) else {
         return (
             mask.center * fit_scale,
-            mask.half_size * fit_scale * mask.scale,
+            Vec2::new(mask.half_size.x.abs(), mask.half_size.y.abs()) * fit_scale,
             mask.rotation,
             Vec3::new(1.0, 1.0, 0.0),
         );
@@ -148,8 +147,9 @@ pub(crate) fn compute_sdf_mask_params(
         )
     } else {
         let mask_translation = _global_transform.translation();
-        let scaled_offset_x = -pivot_x * scale_x * parent_global_scale.x;
-        let scaled_offset_y = pivot_y * scale_y * parent_global_scale.y;
+        let mask_global_scale = _global_transform.to_scale_rotation_translation().0;
+        let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
+        let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
         let rotated_offset_x =
             scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
         let rotated_offset_y =
@@ -168,9 +168,11 @@ pub(crate) fn compute_sdf_mask_params(
     };
     let current_stroke_ext = ext(current_sw);
     let half_width =
-        (anim_size_x / 2.0 * scale_x + current_stroke_ext) * mask_parent_scale.x * fit_scale;
+        ((anim_size_x / 2.0 * scale_x + current_stroke_ext) * mask_parent_scale.x * fit_scale)
+            .abs();
     let half_height =
-        (anim_size_y / 2.0 * scale_y + current_stroke_ext) * mask_parent_scale.y * fit_scale;
+        ((anim_size_y / 2.0 * scale_y + current_stroke_ext) * mask_parent_scale.y * fit_scale)
+            .abs();
     let sw_world = current_sw * fit_scale;
 
     bevy::log::debug!(

@@ -46,8 +46,8 @@ pub(super) fn compute_initial_mask_params(
     let mask1_params = Vec4::new(
         mask1.center.x * fit_scale,
         mask1.center.y * fit_scale,
-        mask1.half_size.x * fit_scale * mask1.scale.x,
-        mask1.half_size.y * fit_scale * mask1.scale.y,
+        mask1.half_size.x.abs() * fit_scale,
+        mask1.half_size.y.abs() * fit_scale,
     );
 
     let (mask2_type, mask2_params) = if active_masks.len() >= 2 {
@@ -61,8 +61,8 @@ pub(super) fn compute_initial_mask_params(
         let m2_params = Vec4::new(
             mask2.center.x * fit_scale,
             mask2.center.y * fit_scale,
-            mask2.half_size.x * fit_scale * mask2.scale.x,
-            mask2.half_size.y * fit_scale * mask2.scale.y,
+            mask2.half_size.x.abs() * fit_scale,
+            mask2.half_size.y.abs() * fit_scale,
         );
         bevy::log::trace!(
             "[MaterialInit] DUAL Mask init: mask1_type={}, mask2_type={}, fit_scale={:.4}",
@@ -77,8 +77,8 @@ pub(super) fn compute_initial_mask_params(
             mask1_type,
             mask1.center.x * fit_scale,
             mask1.center.y * fit_scale,
-            mask1.half_size.x * fit_scale * mask1.scale.x,
-            mask1.half_size.y * fit_scale * mask1.scale.y,
+            mask1.half_size.x.abs() * fit_scale,
+            mask1.half_size.y.abs() * fit_scale,
             fit_scale
         );
         (0.0, Vec4::new(0.0, 0.0, 10000.0, 10000.0))

@@ -67,8 +67,8 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                     );
                 // Transform half_size by parent scale
                 let global_half_size = bevy::math::Vec2::new(
-                    entry.half_size.x * parent_scale.x,
-                    entry.half_size.y * parent_scale.y,
+                    entry.half_size.x * parent_scale.x.abs(),
+                    entry.half_size.y * parent_scale.y.abs(),
                 );
 
                 bevy::log::trace!(

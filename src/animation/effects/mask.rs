@@ -92,12 +92,11 @@ fn compute_mask_params(
     pending: &crate::scene::AmPendingLayers,
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     playback_time: f32,
-    entity_global_scale: Vec3,
     fit_scale: f32,
 ) -> MaskResult {
     let fallback = MaskResult {
         center: mask.center * fit_scale,
-        half_size: mask.half_size * fit_scale * mask.scale,
+        half_size: Vec2::new(mask.half_size.x.abs(), mask.half_size.y.abs()) * fit_scale,
         rotation: mask.rotation,
         blend: Vec3::new(1.0, 1.0, 0.0),
         stretch1: Vec4::ZERO,
@@ -172,10 +171,14 @@ fn compute_mask_params(
 
     let [scale_x, scale_y] = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
-    let mask_translation = mask_global_transform.translation();
+    let (mask_global_scale, _, mask_translation) =
+        mask_global_transform.to_scale_rotation_translation();
 
-    let scaled_offset_x = -pivot_x * scale_x * entity_global_scale.x;
-    let scaled_offset_y = pivot_y * scale_y * entity_global_scale.y;
+    // The mask geometry must follow the mask layer's own world transform.
+    // Using the masked entity's global scale breaks mirrored branches:
+    // negative-scale content would shift the mask to the wrong side and get clipped away.
+    let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
+    let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
 
     let rotated_offset_x =
         scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
@@ -274,7 +277,7 @@ fn compute_mask_params(
 
     MaskResult {
         center: Vec2::new(center_x, center_y),
-        half_size: Vec2::new(half_width, half_height),
+        half_size: Vec2::new(half_width.abs(), half_height.abs()),
         rotation: rotation_rad,
         blend: Vec3::new(fill_alpha, mask_opacity, sw_world),
         stretch1,
@@ -577,8 +580,6 @@ pub fn update_unified_mask_system(
     let global_time = playback.current_time_ms as u64;
     for (mask_info, material_handle, _marker, entity_global_transform) in query.iter() {
         let active_masks = mask_info.get_active_masks(global_time);
-        let entity_global_scale = entity_global_transform.to_scale_rotation_translation().0;
-
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
@@ -652,7 +653,6 @@ pub fn update_unified_mask_system(
                 pending,
                 &mask_layer_query,
                 playback.current_time_ms,
-                entity_global_scale,
                 fit_scale,
             );
 
@@ -686,7 +686,6 @@ pub fn update_unified_mask_system(
                 pending,
                 &mask_layer_query,
                 playback.current_time_ms,
-                entity_global_scale,
                 fit_scale,
             );
 

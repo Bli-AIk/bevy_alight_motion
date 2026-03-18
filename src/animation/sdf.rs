@@ -131,9 +131,6 @@ pub fn update_sdf_mask_system(
         // Get all active masks for current time (supports up to 2)
         let active_masks = mask_info.get_active_masks(global_time as u64);
 
-        // Get parent's global scale - this is the coordinate system we need to match
-        let parent_global_scale = parent_global_transform.to_scale_rotation_translation().0;
-
         for child in children.iter() {
             let Ok((material_handle, child_global_transform)) = sdf_query.get_mut(child) else {
                 continue;
@@ -159,7 +156,6 @@ pub fn update_sdf_mask_system(
                     pending,
                     &mask_layer_query,
                     playback.current_time_ms,
-                    parent_global_scale,
                     fit_scale,
                 );
 
@@ -208,7 +204,6 @@ pub fn update_sdf_mask_system(
                         pending,
                         &mask_layer_query,
                         playback.current_time_ms,
-                        parent_global_scale,
                         fit_scale,
                     );
 
