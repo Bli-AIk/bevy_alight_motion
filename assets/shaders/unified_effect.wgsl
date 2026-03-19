@@ -22,7 +22,7 @@ struct UnifiedEffectUniform {
     wipe_params: vec4<f32>,        // (wipe_start, wipe_end, wipe_angle, wipe_feather)
     stretch_params: vec4<f32>,     // (angle_radians, stretch_px, offset_px, smooth_width)
     original_size: vec4<f32>,      // (orig_width, orig_height, mesh_width, mesh_height)
-    mesh_offset: vec4<f32>,        // (transform_rotation_rad, 0, scene_width, scene_height)
+    mesh_offset: vec4<f32>,        // (transform_rotation_rad, mirror_bits, scene_width, scene_height)
     blur_params: vec4<f32>,        // (radius_px, orig_width, orig_height, expansion_px)
     palette_flags: vec4<f32>,      // (enabled, count, shades, alpha)
     palette_color1: vec4<f32>,
@@ -74,8 +74,8 @@ struct UnifiedEffectUniform {
     pixelate_params1: vec4<f32>,       // (size, stretch_x, stretch_y, angle)
     pixelate_params2: vec4<f32>,       // (vignette, threshold, saturation, 0)
     // Mask blend parameters
-    mask_blend: vec4<f32>,             // mask1: (fill_alpha, opacity, stroke_width, 0)
-    mask2_blend: vec4<f32>,            // mask2: (fill_alpha, opacity, stroke_width, 0)
+    mask_blend: vec4<f32>,             // mask1: (fill_alpha, opacity, stroke_width, mirror_bits)
+    mask2_blend: vec4<f32>,            // mask2: (fill_alpha, opacity, stroke_width, mirror_bits)
     // Stretch2 effect (directional UV-space stretch)
     stretch2_params: vec4<f32>,        // (scale, angle_radians, content_only, 0)
     // Solidcolor effect
@@ -284,6 +284,19 @@ fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
     return min(a, b) - h * h * h * k * (1.0 / 6.0);
 }
 
+// Decode packed mask mirror flags from mask_blend.w / mask2_blend.w.
+// bit0 = X mirrored, bit1 = Y mirrored.
+fn decode_axis_sign(sign_code_f32: f32) -> vec2<f32> {
+    let sign_code = i32(round(sign_code_f32));
+    let sign_x = select(1.0, -1.0, (sign_code % 2) == 1);
+    let sign_y = select(1.0, -1.0, sign_code >= 2);
+    return vec2<f32>(sign_x, sign_y);
+}
+
+fn decode_mask_axis_sign(mask_blend: vec4<f32>) -> vec2<f32> {
+    return decode_axis_sign(mask_blend.w);
+}
+
 // Generic stretch segment: matches AM's stretchsegment.xml exactly.
 // Converts UV to scene-normalized space, applies AM's stretch formula, converts back.
 // Parameters:
@@ -308,11 +321,12 @@ fn apply_stretch_segment_gen(
     let scene_width = uniforms.mesh_offset.z;
     let scene_height = uniforms.mesh_offset.w;
     let transform_rot = uniforms.mesh_offset.x;
+    let axis_sign = decode_axis_sign(uniforms.mesh_offset.y);
 
     // Convert mesh UV to pixel coords (layer-local, relative to center).
     // Y is flipped: UV.y=0 is top (Bevy), but AM's scene-norm has +Y = up (OpenGL).
-    let local_px_x = (uv.x - 0.5) * in_width;
-    let local_px_y = (0.5 - uv.y) * in_height;
+    let local_px_x = (uv.x - 0.5) * in_width * axis_sign.x;
+    let local_px_y = (0.5 - uv.y) * in_height * axis_sign.y;
 
     // Rotate local coords to screen space using Bevy's transform rotation.
     // AM's stretch formula operates in screen-normalized space, which is anisotropic
@@ -347,9 +361,11 @@ fn apply_stretch_segment_gen(
     let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
 
     // Convert to original-image UV (Y flipped back: positive scene-norm → UV < 0.5)
+    let disp_uv_px_x = disp_local_px_x * axis_sign.x;
+    let disp_uv_px_y = disp_local_px_y * axis_sign.y;
     return vec2<f32>(
-        (disp_local_px_x / orig_width) + 0.5,
-        0.5 - (disp_local_px_y / orig_height)
+        (disp_uv_px_x / orig_width) + 0.5,
+        0.5 - (disp_uv_px_y / orig_height)
     );
 }
 
@@ -405,6 +421,7 @@ fn compute_ue_mask_blend_factor(
     let fill_alpha = mask_blend.x;
     let opacity = mask_blend.y;
     let sw = mask_blend.z;
+    let axis_sign = decode_mask_axis_sign(mask_blend);
 
     var rel = world_pos - center;
     if abs(mask_rotation) > 0.001 {
@@ -412,6 +429,7 @@ fn compute_ue_mask_blend_factor(
         let s = sin(-mask_rotation);
         rel = vec2<f32>(rel.x * c - rel.y * s, rel.x * s + rel.y * c);
     }
+    rel = rel * axis_sign;
 
     let is_exclude = mask_type > 2.5;
     let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
@@ -463,6 +481,7 @@ fn compute_ue_mask_blend_factor_stretched(
     let fill_alpha = mask_blend.x;
     let opacity = mask_blend.y;
     let is_exclude = mask_type > 2.5;
+    let axis_sign = decode_mask_axis_sign(mask_blend);
 
     // World-relative coords = screen-relative coords in 2D
     let rel = world_pos - center;
@@ -511,6 +530,7 @@ fn compute_ue_mask_blend_factor_stretched(
         let s = sin(-mask_rotation);
         disp_local = vec2<f32>(disp_world.x * c - disp_world.y * s, disp_world.x * s + disp_world.y * c);
     }
+    disp_local = disp_local * axis_sign;
 
     // Check if displaced position falls within the ORIGINAL (un-expanded) mask shape
     // Use SDF with smoothstep for anti-aliasing at the boundary (matches AM's rendered mask AA)
@@ -549,6 +569,7 @@ fn compute_mask_with_basic_repeat(
     let is_exclude = mask_type > 2.5;
     let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
     let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+    let axis_sign = decode_mask_axis_sign(mask_blend);
 
     // rel in mask-local frame
     var rel_base = world_pos - center;
@@ -557,6 +578,7 @@ fn compute_mask_with_basic_repeat(
         let s = sin(-mask_rotation);
         rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
     }
+    rel_base = rel_base * axis_sign;
 
     let rp_count = i32(rp1.x);
     let rp_offset = rp1.yz;           // world units
@@ -652,6 +674,7 @@ fn compute_mask_with_linear_repeat(
     let is_exclude = mask_type > 2.5;
     let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
     let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+    let axis_sign = decode_mask_axis_sign(mask_blend);
 
     // Compute rel in mask-local frame (without repeat displacement)
     var rel_base = world_pos - center;
@@ -660,6 +683,7 @@ fn compute_mask_with_linear_repeat(
         let s = sin(-mask_rotation);
         rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
     }
+    rel_base = rel_base * axis_sign;
 
     // Parse first repeat params
     let lr1_count = i32(lr1.x);
@@ -816,6 +840,7 @@ fn compute_mask_with_radial_repeat(
     let is_exclude = mask_type > 2.5;
     let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
     let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+    let axis_sign = decode_mask_axis_sign(mask_blend);
 
     // Compute rel in mask-local frame
     var rel_base = world_pos - center;
@@ -824,6 +849,7 @@ fn compute_mask_with_radial_repeat(
         let s = sin(-mask_rotation);
         rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
     }
+    rel_base = rel_base * axis_sign;
 
     // Parse radial repeat params
     let rr_count = max(i32(round(rr1.x)), 0);
@@ -2256,6 +2282,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         if stretch_edge_alpha < 0.001 {
             discard;
         }
+        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+            discard;
+        }
         // Clamp to valid range for texture sampling
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
@@ -2264,6 +2293,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let stretch2_scale = uniforms.stretch2_params.x;
     if stretch2_scale > 0.001 && abs(stretch2_scale - 1.0) > 0.0001 {
         sample_uv = apply_stretch2(sample_uv);
+        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+            discard;
+        }
         sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     

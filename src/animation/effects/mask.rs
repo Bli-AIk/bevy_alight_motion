@@ -1,5 +1,10 @@
 //! Mask-related effect systems: mesh blur helper and unified mask system.
 
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
+
 use bevy::prelude::*;
 
 use crate::animation::components::{AmAnimated, AmPlayback};
@@ -73,12 +78,34 @@ fn update_mesh_for_blur(
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 }
 
+fn trace_mask_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_MASK_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("mask trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
+    }
+}
+
 /// All computed mask parameters for one mask entry.
 struct MaskResult {
     center: Vec2,
     half_size: Vec2,
     rotation: f32,
     blend: Vec3,
+    /// Packed mirror flags from the mask's effective world transform.
+    /// bit0 = X mirrored, bit1 = Y mirrored.
+    sign_code: f32,
     /// Stretch-segment params for the mask layer (angle_rad, adj_stretch, offset, smooth).
     stretch1: Vec4,
     stretch2: Vec4,
@@ -99,6 +126,7 @@ fn compute_mask_params(
         half_size: Vec2::new(mask.half_size.x.abs(), mask.half_size.y.abs()) * fit_scale,
         rotation: mask.rotation,
         blend: Vec3::new(1.0, 1.0, 0.0),
+        sign_code: 0.0,
         stretch1: Vec4::ZERO,
         stretch2: Vec4::ZERO,
         stretch_info: Vec4::ZERO,
@@ -171,22 +199,68 @@ fn compute_mask_params(
 
     let [scale_x, scale_y] = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
 
+    // Child masks need their parent's animated scale at runtime because nested AM parents
+    // do not always propagate their effective scale through Transform.scale in a way that
+    // matches AM's mask geometry. Keep this aligned with sdf_mask.rs.
+    let mask_parent_scale = if mask.mask_parent_layer_id != 0 {
+        pending
+            .spawned_entities
+            .get(&mask.mask_parent_layer_id)
+            .and_then(|&parent_entity| mask_layer_query.get(parent_entity).ok())
+            .map(|(_, parent_animated, _)| {
+                let parent_local_time = parent_animated.calc_local_time(playback_time);
+                let parent_layer_time = parent_animated.calc_layer_time(parent_local_time);
+                let [psx, psy] = interpolate_vec2(&parent_animated.scale, parent_layer_time)
+                    .unwrap_or([1.0, 1.0]);
+                Vec2::new(psx, psy)
+            })
+            .unwrap_or(Vec2::ONE)
+    } else {
+        Vec2::ONE
+    };
+
     let (mask_global_scale, _, mask_translation) =
         mask_global_transform.to_scale_rotation_translation();
+    let mask_sign_code = (if mask_global_scale.x < 0.0 { 1.0 } else { 0.0 })
+        + (if mask_global_scale.y < 0.0 { 2.0 } else { 0.0 });
 
-    // The mask geometry must follow the mask layer's own world transform.
-    // Using the masked entity's global scale breaks mirrored branches:
-    // negative-scale content would shift the mask to the wrong side and get clipped away.
-    let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
-    let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
+    let (center_x, center_y) = if mask.mask_parent_layer_id != 0 {
+        let mask_pos = mask_global_transform.translation().truncate();
+        let parent_pos = pending
+            .spawned_entities
+            .get(&mask.mask_parent_layer_id)
+            .and_then(|&parent_entity| mask_layer_query.get(parent_entity).ok())
+            .map(|(parent_gt, _, _)| parent_gt.translation().truncate())
+            .unwrap_or(mask_pos);
 
-    let rotated_offset_x =
-        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-    let rotated_offset_y =
-        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+        let offset = mask_pos - parent_pos;
+        let corrected_pos = parent_pos + offset * mask_parent_scale;
 
-    let center_x = mask_translation.x + rotated_offset_x;
-    let center_y = mask_translation.y + rotated_offset_y;
+        let scaled_offset_x = -pivot_x * scale_x * mask_parent_scale.x * fit_scale;
+        let scaled_offset_y = pivot_y * scale_y * mask_parent_scale.y * fit_scale;
+        let rotated_offset_x =
+            scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+        let rotated_offset_y =
+            scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+        (
+            corrected_pos.x + rotated_offset_x,
+            corrected_pos.y + rotated_offset_y,
+        )
+    } else {
+        // Root masks follow their own world transform directly.
+        let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
+        let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
+        let rotated_offset_x =
+            scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+        let rotated_offset_y =
+            scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+        (
+            mask_translation.x + rotated_offset_x,
+            mask_translation.y + rotated_offset_y,
+        )
+    };
 
     let [anim_size_x, anim_size_y] =
         interpolate_vec2(&animated.size, layer_time).unwrap_or([base_width, base_height]);
@@ -199,10 +273,25 @@ fn compute_mask_params(
     let stroke_delta = ext(current_sw) - ext(initial_sw);
     let initial_stroke_ext_x = mask.half_size.x - base_width / 2.0 * mask.scale.x;
     let initial_stroke_ext_y = mask.half_size.y - base_height / 2.0 * mask.scale.y;
-    let mut half_width =
-        (anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta) * fit_scale;
-    let mut half_height =
-        (anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta) * fit_scale;
+    let parent_scale_x = if mask.mask_parent_layer_id != 0 {
+        mask_parent_scale.x
+    } else {
+        1.0
+    };
+    let parent_scale_y = if mask.mask_parent_layer_id != 0 {
+        mask_parent_scale.y
+    } else {
+        1.0
+    };
+
+    let mut half_width = ((anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta)
+        * parent_scale_x
+        * fit_scale)
+        .abs();
+    let mut half_height = ((anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta)
+        * parent_scale_y
+        * fit_scale)
+        .abs();
 
     // Expand mask bounds for stretch-segment effects on the mask layer.
     // Same formula as animate_unified_effect_system mesh expansion.
@@ -213,8 +302,8 @@ fn compute_mask_params(
         let adj = stretch_raw / 500.0;
         let scene_w = animated.canvas_width;
         let scene_h = animated.canvas_height;
-        let dx = angle_rad.cos().abs() * adj * scene_w * fit_scale;
-        let dy = angle_rad.sin().abs() * adj * scene_h * fit_scale;
+        let dx = angle_rad.cos().abs() * adj * scene_w * fit_scale * parent_scale_x.abs();
+        let dy = angle_rad.sin().abs() * adj * scene_h * fit_scale * parent_scale_y.abs();
         let rc = rotation_rad.cos().abs();
         let rs = rotation_rad.sin().abs();
         half_width += rc * dx + rs * dy;
@@ -227,8 +316,8 @@ fn compute_mask_params(
         let adj = stretch2_raw / 500.0;
         let scene_w = animated.canvas_width;
         let scene_h = animated.canvas_height;
-        let dx = angle_rad.cos().abs() * adj * scene_w * fit_scale;
-        let dy = angle_rad.sin().abs() * adj * scene_h * fit_scale;
+        let dx = angle_rad.cos().abs() * adj * scene_w * fit_scale * parent_scale_x.abs();
+        let dy = angle_rad.sin().abs() * adj * scene_h * fit_scale * parent_scale_y.abs();
         let rc = rotation_rad.cos().abs();
         let rs = rotation_rad.sin().abs();
         half_width += rc * dx + rs * dy;
@@ -238,10 +327,14 @@ fn compute_mask_params(
     let sw_world = current_sw * fit_scale;
 
     // Compute the original (un-expanded) half_size for the shader's UV mapping.
-    let orig_half_w =
-        (anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta) * fit_scale;
-    let orig_half_h =
-        (anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta) * fit_scale;
+    let orig_half_w = ((anim_size_x / 2.0 * scale_x + initial_stroke_ext_x + stroke_delta)
+        * parent_scale_x
+        * fit_scale)
+        .abs();
+    let orig_half_h = ((anim_size_y / 2.0 * scale_y + initial_stroke_ext_y + stroke_delta)
+        * parent_scale_y
+        * fit_scale)
+        .abs();
 
     // Build stretch-segment shader params (same as animate_unified_effect_system).
     let scene_w = animated.canvas_width;
@@ -275,16 +368,35 @@ fn compute_mask_params(
         }
     };
 
+    trace_mask_once(format!("params:{}", mask.mask_layer_id), || {
+        format!(
+            "[MASK-PARAM] layer_id={} parent_id={} center=({:.2},{:.2}) half=({:.2},{:.2}) rot={:.4} sign={} gscale=({:.3},{:.3}) pscale=({:.3},{:.3})",
+            mask.mask_layer_id,
+            mask.mask_parent_layer_id,
+            center_x,
+            center_y,
+            half_width.abs(),
+            half_height.abs(),
+            rotation_rad,
+            mask_sign_code,
+            mask_global_scale.x,
+            mask_global_scale.y,
+            mask_parent_scale.x,
+            mask_parent_scale.y,
+        )
+    });
+
     MaskResult {
         center: Vec2::new(center_x, center_y),
         half_size: Vec2::new(half_width.abs(), half_height.abs()),
         rotation: rotation_rad,
         blend: Vec3::new(fill_alpha, mask_opacity, sw_world),
+        sign_code: mask_sign_code,
         stretch1,
         stretch2,
         stretch_info: Vec4::new(
-            scene_w * fit_scale,
-            scene_h * fit_scale,
+            scene_w * fit_scale * parent_scale_x.abs(),
+            scene_h * fit_scale * parent_scale_y.abs(),
             orig_half_w,
             orig_half_h,
         ),
@@ -333,6 +445,22 @@ fn set_mask_repeat_uniforms(
 
     let local_time = animated.calc_local_time(playback_time);
     let layer_time = animated.calc_layer_time(local_time);
+    let parent_repeat_scale = if mask_entry.mask_parent_layer_id != 0 {
+        pending
+            .spawned_entities
+            .get(&mask_entry.mask_parent_layer_id)
+            .and_then(|&parent_entity| mask_layer_query.get(parent_entity).ok())
+            .map(|(_, parent_animated, _)| {
+                let parent_local_time = parent_animated.calc_local_time(playback_time);
+                let parent_layer_time = parent_animated.calc_layer_time(parent_local_time);
+                interpolate_vec2(&parent_animated.scale, parent_layer_time).unwrap_or([1.0, 1.0])
+            })
+            .unwrap_or([1.0, 1.0])
+    } else {
+        [1.0, 1.0]
+    };
+    let repeat_scale_x = parent_repeat_scale[0].abs();
+    let repeat_scale_y = parent_repeat_scale[1].abs();
 
     // --- Basic repeat (com.alightcreative.effects.repeat) ---
     let rp_count = interpolate_float(&animated.repeat_count, layer_time).unwrap_or(0.0);
@@ -387,14 +515,30 @@ fn set_mask_repeat_uniforms(
                 0
             };
 
-        // Convert position/offset from pixel_coord space to world units.
-        // pixel_coord already accounts for element scale (orig_width = sprite_size * scale).
-        // pixel_coord to world: multiply by fit_scale only (no mask_scale multiplication).
+        // Linear Repeat in AM is a CPU-side transform chain:
+        // translatedBy(...) happens before scaledBy(...) on the repeated element.
+        // So the translation vectors are expressed in parent/scene space and should
+        // inherit ancestor scale, but not the repeated mask layer's own scale.
         // Y flip: AM Y-down → Bevy Y-up.
-        let pos_world_x = pos[0] * fit_scale;
-        let pos_world_y = -pos[1] * fit_scale;
-        let off_world_x = off[0] * fit_scale;
-        let off_world_y = -off[1] * fit_scale;
+        let pos_world_x = pos[0] * fit_scale * repeat_scale_x;
+        let pos_world_y = -pos[1] * fit_scale * repeat_scale_y;
+        let off_world_x = off[0] * fit_scale * repeat_scale_x;
+        let off_world_y = -off[1] * fit_scale * repeat_scale_y;
+
+        trace_mask_once(format!("repeat:{}", mask_entry.mask_layer_id), || {
+            format!(
+                "[MASK-REPEAT] layer_id={} count={:.0} pos_world=({:.2},{:.2}) off_world=({:.2},{:.2}) repeat_scale=({:.3},{:.3}) angle={:.2}",
+                mask_entry.mask_layer_id,
+                count,
+                pos_world_x,
+                pos_world_y,
+                off_world_x,
+                off_world_y,
+                repeat_scale_x,
+                repeat_scale_y,
+                angle,
+            )
+        });
 
         material.uniform_data.mask1_lr_params1 = Vec4::new(count, pos_world_x, pos_world_y, angle);
         material.uniform_data.mask1_lr_params2 =
@@ -433,10 +577,10 @@ fn set_mask_repeat_uniforms(
                 + if lr2.invert { 10 } else { 0 }
                 + if lr2.color_alt_copies { 1 } else { 0 };
 
-            let pos2_world_x = pos2[0] * fit_scale;
-            let pos2_world_y = -pos2[1] * fit_scale;
-            let off2_world_x = off2[0] * fit_scale;
-            let off2_world_y = -off2[1] * fit_scale;
+            let pos2_world_x = pos2[0] * fit_scale * repeat_scale_x;
+            let pos2_world_y = -pos2[1] * fit_scale * repeat_scale_y;
+            let off2_world_x = off2[0] * fit_scale * repeat_scale_x;
+            let off2_world_y = -off2[1] * fit_scale * repeat_scale_y;
 
             material.uniform_data.mask1_lr2_params1 =
                 Vec4::new(count2, pos2_world_x, pos2_world_y, angle2);
@@ -661,7 +805,7 @@ pub fn update_unified_mask_system(
             material.uniform_data.mask_params =
                 bevy::math::Vec4::new(m1.center.x, m1.center.y, m1.half_size.x, m1.half_size.y);
             material.uniform_data.mask_blend =
-                bevy::math::Vec4::new(m1.blend.x, m1.blend.y, m1.blend.z, 0.0);
+                bevy::math::Vec4::new(m1.blend.x, m1.blend.y, m1.blend.z, m1.sign_code);
             material.uniform_data.mask2_flags.y = m1.rotation;
             material.uniform_data.mask1_stretch1_params = m1.stretch1;
             material.uniform_data.mask1_stretch2_params = m1.stretch2;
@@ -693,7 +837,7 @@ pub fn update_unified_mask_system(
             material.uniform_data.mask2_params =
                 bevy::math::Vec4::new(m2.center.x, m2.center.y, m2.half_size.x, m2.half_size.y);
             material.uniform_data.mask2_blend =
-                bevy::math::Vec4::new(m2.blend.x, m2.blend.y, m2.blend.z, 0.0);
+                bevy::math::Vec4::new(m2.blend.x, m2.blend.y, m2.blend.z, m2.sign_code);
             material.uniform_data.mask2_flags.z = m2.rotation;
         } else {
             material.uniform_data.mask2_flags.x = 0.0;

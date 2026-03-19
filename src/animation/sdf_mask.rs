@@ -293,6 +293,22 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
 
     let local_time = animated.calc_local_time(playback_time);
     let layer_time = animated.calc_layer_time(local_time);
+    let parent_repeat_scale = if mask.mask_parent_layer_id != 0 {
+        pending
+            .spawned_entities
+            .get(&mask.mask_parent_layer_id)
+            .and_then(|&parent_entity| mask_layer_query.get(parent_entity).ok())
+            .map(|(_, parent_animated, _)| {
+                let parent_local_time = parent_animated.calc_local_time(playback_time);
+                let parent_layer_time = parent_animated.calc_layer_time(parent_local_time);
+                interpolate_vec2(&parent_animated.scale, parent_layer_time).unwrap_or([1.0, 1.0])
+            })
+            .unwrap_or([1.0, 1.0])
+    } else {
+        [1.0, 1.0]
+    };
+    let repeat_scale_x = parent_repeat_scale[0].abs();
+    let repeat_scale_y = parent_repeat_scale[1].abs();
 
     let lr_count = interpolate_float(&animated.linear_repeat_count, layer_time)
         .unwrap_or(0.0)
@@ -320,10 +336,10 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
                 0
             };
 
-        let pos_world_x = pos[0] * fit_scale;
-        let pos_world_y = -pos[1] * fit_scale;
-        let off_world_x = off[0] * fit_scale;
-        let off_world_y = -off[1] * fit_scale;
+        let pos_world_x = pos[0] * fit_scale * repeat_scale_x;
+        let pos_world_y = -pos[1] * fit_scale * repeat_scale_y;
+        let off_world_x = off[0] * fit_scale * repeat_scale_x;
+        let off_world_y = -off[1] * fit_scale * repeat_scale_y;
 
         material.uniform_data.mask1_lr_params1 =
             Vec4::new(lr_count, pos_world_x, pos_world_y, angle);

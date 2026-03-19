@@ -794,6 +794,64 @@ pub fn compensate_sdf_parent_scale_system(
     }
 }
 
+/// Propagate SDF visual scale to non-SDF descendants.
+///
+/// SDF parents keep `Transform.scale = 1` and apply their visual scale in shader uniforms,
+/// so Bevy's hierarchy does not pass that scale to regular sprite/text/effect children.
+/// This system reapplies the accumulated SDF-ancestor scale to those descendants'
+/// local translation and scale after `animate_transform_system` has reset them.
+pub fn compensate_sdf_ancestor_scale_for_children_system(
+    playback: Res<AmPlayback>,
+    animated_query: Query<&AmAnimated>,
+    sdf_query: Query<&AmAnimated, With<AmSdfShapeParent>>,
+    mut child_query: Query<
+        (&AmAnimated, &mut Transform, Option<&ChildOf>),
+        Without<AmSdfShapeParent>,
+    >,
+) {
+    if playback.force_stopped {
+        return;
+    }
+    let global_time = playback.current_time_ms;
+
+    let mut scale_map: std::collections::HashMap<u64, [f32; 2]> = std::collections::HashMap::new();
+    let mut parent_map: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+
+    for animated in animated_query.iter() {
+        if animated.has_parent && animated.parent_layer_id != 0 {
+            parent_map.insert(animated.layer_id, animated.parent_layer_id);
+        }
+    }
+
+    for animated in sdf_query.iter() {
+        let local_time = animated.calc_local_time(global_time);
+        if !animated.is_active(local_time) {
+            continue;
+        }
+        let layer_time = animated.calc_layer_time(local_time);
+        scale_map.insert(
+            animated.layer_id,
+            compute_sdf_own_scale(animated, layer_time, global_time),
+        );
+    }
+
+    for (animated, mut transform, parent) in child_query.iter_mut() {
+        if !animated.has_parent || animated.parent_layer_id == 0 || parent.is_none() {
+            continue;
+        }
+
+        let acc = accumulate_parent_scale(animated.layer_id, &parent_map, &scale_map);
+        if (acc[0] - 1.0).abs() <= 1e-5 && (acc[1] - 1.0).abs() <= 1e-5 {
+            continue;
+        }
+
+        transform.translation.x *= acc[0];
+        transform.translation.y *= acc[1];
+        transform.scale.x *= acc[0];
+        transform.scale.y *= acc[1];
+    }
+}
+
 /// Walk up the parent chain to accumulate parent scale factors.
 /// Returns the product of all ancestor scales (not including self).
 ///

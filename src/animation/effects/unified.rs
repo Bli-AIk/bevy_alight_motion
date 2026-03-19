@@ -5,6 +5,10 @@
 //! delegated to the `repeat` submodule.
 
 use bevy::prelude::*;
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::animation::components::{AmAnimated, AmPlayback};
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
@@ -15,6 +19,23 @@ fn srgb_to_linear(c: f32) -> f32 {
         c / 12.92
     } else {
         ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn trace_stretch_once(layer_id: u64, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_STRETCH_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let should_log = {
+        let mut guard = seen.lock().expect("stretch trace mutex poisoned");
+        guard.insert(layer_id)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
     }
 }
 
@@ -664,6 +685,31 @@ pub fn animate_unified_effect_system(
             let new_width = orig_width + 2.0 * total_dx;
             let new_height = orig_height + 2.0 * total_dy;
 
+            let global_scale = global_transform.to_scale_rotation_translation().0;
+            trace_stretch_once(animated.layer_id, || {
+                format!(
+                    "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) mesh=({:.2},{:.2}) angle={:.2} stretch={:.2}",
+                    animated.layer_id,
+                    animated.parent_layer_id,
+                    scene_width,
+                    scene_height,
+                    sprite_size[0],
+                    sprite_size[1],
+                    scale[0],
+                    scale[1],
+                    ancestor_scale[0],
+                    ancestor_scale[1],
+                    global_scale.x,
+                    global_scale.y,
+                    orig_width,
+                    orig_height,
+                    new_width,
+                    new_height,
+                    angle_deg,
+                    stretch_raw,
+                )
+            });
+
             // Mesh vertex bounds: expanded by AA padding so the shader can
             // render smooth edge gradients via smoothstep outside the shape boundary.
             let aa_pad: f32 = 4.0;
@@ -689,8 +735,14 @@ pub fn animate_unified_effect_system(
                 Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
             material.uniform_data.original_size =
                 Vec4::new(orig_width, orig_height, new_width, new_height);
-            material.uniform_data.mesh_offset =
-                Vec4::new(transform_rotation_rad, 0.0, scene_width, scene_height);
+            let stretch_sign_code =
+                (if scale[0] < 0.0 { 1.0 } else { 0.0 }) + (if scale[1] < 0.0 { 2.0 } else { 0.0 });
+            material.uniform_data.mesh_offset = Vec4::new(
+                transform_rotation_rad,
+                stretch_sign_code,
+                scene_width,
+                scene_height,
+            );
 
             // Update second stretch-segment material parameters
             if has_stretch_seg2 {

@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-19T18:17:53.275344+08:00",
+  "timestamp": "2026-03-19T19:26:45.484538+08:00",
   "summary": {
-    "passed": 185,
+    "passed": 180,
     "warnings": 0,
-    "skipped": 2,
-    "failed": 65
+    "skipped": 4,
+    "failed": 68
   },
   "results": {
     "basic/bezier/bezier": {
@@ -41,7 +41,8 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9474
     },
     "basic/fill/nested_solid_color_parent_child": {
       "status": "pass"
@@ -53,7 +54,8 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color_split": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9553
     },
     "basic/frame/frame": {
       "status": "pass"
@@ -65,8 +67,7 @@
       "status": "pass"
     },
     "basic/group/fill/basic": {
-      "status": "fail",
-      "avg_similarity": 0.9547
+      "status": "pass"
     },
     "basic/group/fill/gradient": {
       "status": "pass"
@@ -148,7 +149,7 @@
     },
     "basic/text/basic": {
       "status": "fail",
-      "avg_similarity": 0.6929
+      "avg_similarity": 0.7811
     },
     "basic/text/template": {
       "status": "pass"
@@ -250,16 +251,20 @@
       "status": "pass"
     },
     "effects/lift/exposure-gamma/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8916
     },
     "effects/lift/replacecolor": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8579
     },
     "effects/lift/rgb-split/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8518
     },
     "effects/lift/wavewarp2": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8462
     },
     "effects/linear-repeat/basic": {
       "status": "pass"
@@ -278,11 +283,11 @@
     },
     "effects/linear-repeat/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.8879
+      "avg_similarity": 0.8474
     },
     "effects/linear-repeat/random": {
       "status": "fail",
-      "avg_similarity": 0.8126
+      "avg_similarity": 0.965
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
@@ -327,8 +332,7 @@
       "status": "pass"
     },
     "effects/pixelate/bone": {
-      "status": "fail",
-      "avg_similarity": 0.9271
+      "status": "pass"
     },
     "effects/pixelate/bone_single": {
       "status": "pass"
@@ -344,26 +348,26 @@
     },
     "effects/radial-repeat/mask_nested/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.7835
+      "avg_similarity": 0.7748
     },
     "effects/rays/basic/test": {
       "status": "pass"
     },
     "effects/rays/center/test": {
       "status": "fail",
-      "avg_similarity": 0.934
+      "avg_similarity": 0.9356
     },
     "effects/rays/intensity/test": {
       "status": "fail",
-      "avg_similarity": 0.9163
+      "avg_similarity": 0.9201
     },
     "effects/rays/length/test": {
       "status": "fail",
-      "avg_similarity": 0.9665
+      "avg_similarity": 0.9672
     },
     "effects/rays/threshold/test": {
       "status": "fail",
-      "avg_similarity": 0.9198
+      "avg_similarity": 0.9248
     },
     "effects/repeat/basic": {
       "status": "pass"
@@ -373,7 +377,7 @@
     },
     "effects/repeat/group": {
       "status": "fail",
-      "avg_similarity": 0.9458
+      "avg_similarity": 0.9336
     },
     "effects/repeat/group_bug": {
       "status": "pass"
@@ -395,7 +399,7 @@
     },
     "effects/repeat/mask_nested/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.7836
+      "avg_similarity": 0.7663
     },
     "effects/replace-color/basic": {
       "status": "pass"
@@ -410,7 +414,8 @@
       "status": "pass"
     },
     "effects/rgb-split/light-black/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9286
     },
     "effects/rgb-split/light-gray/test": {
       "status": "pass"
@@ -438,7 +443,7 @@
     },
     "effects/rgb-split/sprite/test": {
       "status": "fail",
-      "avg_similarity": 0.948
+      "avg_similarity": 0.9108
     },
     "effects/scale-assist/basic": {
       "status": "pass"
@@ -481,7 +486,7 @@
     },
     "effects/stretch-segment/group_restretch/stretch_group_restretch": {
       "status": "fail",
-      "avg_similarity": 0.9164
+      "avg_similarity": 0.9165
     },
     "effects/stretch-segment/muti/basic": {
       "status": "pass"
@@ -741,14 +746,13 @@
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "pass"
     },
-    "private/USER_hong_jiao/test": {
-      "status": "fail",
-      "avg_similarity": 0.9536
-    },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/detail_subdiv_circle": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/first10_frames": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/heart": {
@@ -762,18 +766,17 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.9301
+      "avg_similarity": 0.924
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
       "avg_similarity": 0.9683
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
-      "status": "fail",
-      "avg_similarity": 0.8903
+      "status": "cancelled"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
-      "status": "pass"
+      "status": "cancelled"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_nomask": {
       "status": "pass"
@@ -789,7 +792,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.9296
+      "avg_similarity": 0.9225
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
       "status": "pass"
