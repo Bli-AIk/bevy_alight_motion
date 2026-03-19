@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-19T19:26:45.484538+08:00",
+  "timestamp": "2026-03-19T21:34:44.559126+08:00",
   "summary": {
-    "passed": 180,
+    "passed": 175,
     "warnings": 0,
-    "skipped": 4,
-    "failed": 68
+    "skipped": 2,
+    "failed": 76
   },
   "results": {
     "basic/bezier/bezier": {
@@ -746,11 +746,16 @@
     "private/USER_chen_pi/misc/simple_gb": {
       "status": "pass"
     },
+    "private/USER_hong_jiao/test": {
+      "status": "fail",
+      "avg_similarity": 0.7081
+    },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/detail_subdiv_circle": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.8635
     },
     "private/USER_hong_jiao/test/first10_frames": {
       "status": "pass"
@@ -759,24 +764,27 @@
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_1": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.7638
     },
     "private/USER_hong_jiao/test/rect_subdiv_2": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.6248
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
       "status": "fail",
-      "avg_similarity": 0.924
+      "avg_similarity": 0.5424
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
-      "avg_similarity": 0.9683
+      "avg_similarity": 0.7285
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
-      "status": "cancelled"
+      "status": "fail",
+      "avg_similarity": 0.8972
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
-      "status": "cancelled"
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_nomask": {
       "status": "pass"
@@ -785,17 +793,20 @@
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.7515
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target3": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.677
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.9225
+      "avg_similarity": 0.6344
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.6606
     },
     "private/USER_little_black/test0": {
       "status": "pass"
