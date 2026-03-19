@@ -133,12 +133,66 @@ mod tests {
         }];
 
         // Size is always doubled (half-extent to full size)
-        let (w, h) = get_shape_size(&props, "media");
+        let (w, h) = get_shape_size(&props, "", "media");
         assert!((w - 400.0).abs() < 0.01);
         assert!((h - 600.0).abs() < 0.01);
 
-        let (w, h) = get_shape_size(&props, "color");
+        let (w, h) = get_shape_size(&props, "", "color");
         assert!((w - 400.0).abs() < 0.01);
         assert!((h - 600.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_shape_size_from_radius_when_size_missing() {
+        let props = vec![crate::schema::AmProperty {
+            name: "radius".to_string(),
+            prop_type: "float".to_string(),
+            value: "100.0".to_string(),
+            keyframes: vec![],
+        }];
+
+        let (w, h) = get_shape_size(&props, ".pie", "color");
+        assert!((w - 200.0).abs() < 0.01);
+        assert!((h - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_shape_size_from_arrow_geometry_when_size_missing() {
+        let props = vec![
+            crate::schema::AmProperty {
+                name: "start".to_string(),
+                prop_type: "vec2".to_string(),
+                value: "0.0,0.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "end".to_string(),
+                prop_type: "vec2".to_string(),
+                value: "100.0,0.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "lineWidth".to_string(),
+                prop_type: "float".to_string(),
+                value: "20.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "headWidth".to_string(),
+                prop_type: "float".to_string(),
+                value: "80.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "headLength".to_string(),
+                prop_type: "float".to_string(),
+                value: "30.0".to_string(),
+                keyframes: vec![],
+            },
+        ];
+
+        let (w, h) = get_shape_size(&props, ".arrow", "color");
+        assert!((w - 100.0).abs() < 0.01);
+        assert!((h - 160.0).abs() < 0.01);
     }
 }

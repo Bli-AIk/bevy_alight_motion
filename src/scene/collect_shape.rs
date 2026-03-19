@@ -87,8 +87,8 @@ pub(crate) fn collect_shape(
         );
     }
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
-    let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
-    let size_animation = get_shape_size_animation(&shape.properties);
+    let (width, height) = get_shape_size(&shape.properties, &shape.shape_type, &shape.fill_type);
+    let size_animation = get_shape_size_animation(&shape.properties, &shape.shape_type);
 
     let has_stroke_or_border = shape.stroke.as_ref().is_some_and(|s| {
         s.size

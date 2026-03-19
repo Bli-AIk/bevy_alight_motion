@@ -792,8 +792,10 @@ fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
 }
 
 // Apply stretch segment effect to SDF local position.
-// Transforms pos (local pixel coords, centered) through the same pipeline
-// as unified_effect.wgsl's apply_stretch_segment_gen.
+// `pos` uses the SDF shader's AM-local convention where +Y points downward
+// because it is reconstructed from Bevy Rectangle UVs (top-left = 0,0).
+// StretchSegment itself operates in AM screen-normalized space where +Y points up,
+// so we must flip Y on the way in and out of the screen-space transform.
 fn apply_sdf_stretch_segment(pos: vec2<f32>, frame_size: f32) -> vec2<f32> {
     let angle = material.stretch_params.x;
     let adj_stretch = material.stretch_params.y;
@@ -808,10 +810,10 @@ fn apply_sdf_stretch_segment(pos: vec2<f32>, frame_size: f32) -> vec2<f32> {
     let scene_width = material.stretch_meta.z;
     let scene_height = material.stretch_meta.w;
 
-    // pos is already local pixel coords (centered).
-    // SDF UV: (0,0)=bottom-left, so pos.y positive = UP, which matches AM's Y-up.
+    // `pos` is in the shader's local AM coordinate basis (+Y = down).
+    // Flip to Bevy/screen-space (+Y = up) before applying the AM formula.
     let local_px_x = pos.x;
-    let local_px_y = pos.y;
+    let local_px_y = -pos.y;
 
     // Rotate local coords to screen space using entity's transform rotation
     let cos_r = cos(transform_rot);
@@ -843,8 +845,8 @@ fn apply_sdf_stretch_segment(pos: vec2<f32>, frame_size: f32) -> vec2<f32> {
     let disp_local_px_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
     let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
 
-    // Convert back — no Y flip needed since SDF pos.y is already Y-up
-    return vec2<f32>(disp_local_px_x, disp_local_px_y);
+    // Convert back to the shader's local AM coordinate basis (+Y = down).
+    return vec2<f32>(disp_local_px_x, -disp_local_px_y);
 }
 
 @fragment

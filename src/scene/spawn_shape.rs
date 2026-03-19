@@ -65,7 +65,7 @@ pub(crate) fn spawn_shape(
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
-    let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
+    let (width, height) = get_shape_size(&shape.properties, &shape.shape_type, &shape.fill_type);
 
     // AM location points to object CENTER, not pivot. No position compensation needed.
     // Pivot only affects rotation/scale center, which is handled by Anchor.
@@ -315,7 +315,7 @@ pub(crate) fn spawn_shape(
                 effect_ainv: transform2.ainv,
                 extra_transform2,
                 font_y_offset: 0.0,
-                size: get_shape_size_animation(&shape.properties),
+                size: get_shape_size_animation(&shape.properties, &shape.shape_type),
                 anchor_offset,
                 wipe_start: wipe_effect.start,
                 wipe_end: wipe_effect.end,

@@ -54,7 +54,7 @@ pub(crate) fn collect_image(
     let rays_effect = extract_rays_effect(&image.effects);
     let exposure_gamma_effect = extract_exposure_gamma_effect(&image.effects);
     let chromakey_effect = extract_chromakey_effect(&image.effects);
-    let (width, height) = get_shape_size(&image.properties, &image.fill_type);
+    let (width, height) = get_shape_size(&image.properties, "", &image.fill_type);
 
     // Calculate anchor and position compensation
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);

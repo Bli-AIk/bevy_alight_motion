@@ -63,7 +63,7 @@ pub(crate) fn spawn_image(
     let rays_effect = extract_rays_effect(&image.effects);
 
     // Get size from properties
-    let (width, height) = get_shape_size(&image.properties, &image.fill_type);
+    let (width, height) = get_shape_size(&image.properties, "", &image.fill_type);
 
     // Calculate anchor and position compensation
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
