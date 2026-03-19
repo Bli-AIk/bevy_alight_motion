@@ -499,14 +499,14 @@ pub fn setup_embed_scene_rtt_system(
                 || !animated.stretch_seg2_smooth.keyframes.is_empty();
             let has_blur = animated.blur_strength.value.is_some()
                 || !animated.blur_strength.keyframes.is_empty();
-            let has_stretch2 =
-                animated.stretch2_scale.value.is_some() || !animated.stretch2_scale.keyframes.is_empty();
-            let has_pixelate =
-                animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
+            let has_stretch2 = animated.stretch2_scale.value.is_some()
+                || !animated.stretch2_scale.keyframes.is_empty();
+            let has_pixelate = animated.pixelate_size.value.is_some()
+                || !animated.pixelate_size.keyframes.is_empty();
             let has_threshold = animated.threshold_value.value.is_some()
                 || !animated.threshold_value.keyframes.is_empty();
-            let has_grid =
-                animated.grid_spacing.value.is_some() || !animated.grid_spacing.keyframes.is_empty();
+            let has_grid = animated.grid_spacing.value.is_some()
+                || !animated.grid_spacing.keyframes.is_empty();
             let has_solidcolor = animated.solid_color_alpha.value.is_some()
                 || !animated.solid_color_alpha.keyframes.is_empty();
             let has_replace_color = animated.replace_old_color.w > 0.0
