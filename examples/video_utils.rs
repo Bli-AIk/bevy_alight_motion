@@ -373,7 +373,8 @@ pub struct ComparisonResult {
 /// Check if a pixel is "empty" (transparent or black).
 #[cfg(feature = "video-comparison")]
 fn is_pixel_empty(p: &image::Rgba<u8>) -> bool {
-    p[3] == 0 || (p[0] == 0 && p[1] == 0 && p[2] == 0)
+    // Encoded black backgrounds often come back as (1,1,1) instead of exact zero.
+    p[3] == 0 || (p[0] <= 1 && p[1] <= 1 && p[2] <= 1)
 }
 
 /// Check if a pixel lies on the edge of content within a 3-pixel Manhattan radius.
