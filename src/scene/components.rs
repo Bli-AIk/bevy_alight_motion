@@ -530,9 +530,11 @@ impl AmMaskInfo {
     /// Multiple masks can be active simultaneously for composite effects.
     pub fn get_active_masks(&self, time_ms: u64) -> Vec<&AmMaskEntry> {
         let t = time_ms as i64;
+        let mut seen = std::collections::HashSet::new();
         self.masks
             .iter()
             .filter(|m| t >= m.start_time as i64 && t < m.end_time as i64)
+            .filter(|m| seen.insert(m.mask_layer_id))
             .collect()
     }
 }

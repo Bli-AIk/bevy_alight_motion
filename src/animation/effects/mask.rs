@@ -790,6 +790,8 @@ pub fn update_unified_mask_system(
                 apply_embed_mask_uv(mask_entity, mask1, &mask_layer_query, fit_scale, material);
             } else {
                 // RTT not ready yet - disable mask
+                #[expect(clippy::excessive_nesting)]
+                // reason: missing-RTT debug trace is intentionally kept inside the embed-mask branch
                 trace_mask_once(format!("embed-rtt-missing:{}", mask1.mask_layer_id), || {
                     format!(
                         "[MASK-DBG] RTT NOT found for mask layer_id={}",

@@ -354,14 +354,16 @@ pub(crate) fn flatten_pending_layers_inner(
                 // Fix z-accumulation: make child z relative to parent's z.
                 // Without this, a child at absolute z=0.001 parented to a layer at z=0.005
                 // would get global z=0.006 (parent + child), breaking AM's absolute z-order.
-                let parent_z = if original_parent != 0 && !embed_parent_ids.contains(&original_parent)
-                {
-                    z_map.get(&original_parent).copied().unwrap_or(0.0)
-                } else {
-                    0.0
+                let inherit_parent_z =
+                    original_parent != 0 && !embed_parent_ids.contains(&original_parent);
+                let parent_z = match (inherit_parent_z, z_map.get(&original_parent).copied()) {
+                    (true, Some(z)) => z,
+                    _ => 0.0,
                 };
                 child.transform.translation.z -= parent_z;
 
+                #[expect(clippy::excessive_nesting)]
+                // reason: targeted flatten debug logging stays inside the nested traversal
                 if child.label.starts_with("spr_s_boneloop_0.png Copy")
                     || child.label.starts_with("Rectangle 1 Copy")
                 {

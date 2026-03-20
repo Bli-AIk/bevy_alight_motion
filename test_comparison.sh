@@ -29,6 +29,7 @@
 #   ./test_comparison.sh --frame-test              # Run FPS benchmark on basic/* tests
 #   ./test_comparison.sh --frame-test --all        # Run FPS benchmark on all tests
 #   ./test_comparison.sh --frame-test effects/     # Run FPS benchmark on effects/* tests
+#   AM_PLAYER_EXTRA_FEATURES=player-brp ./test_comparison.sh private/.../target2 --single --headless
 #   PARALLEL_JOBS=8 ./test_comparison.sh  # More parallel frame extraction jobs
 #
 # Note: Rendering tests run sequentially to avoid GPU resource contention.
@@ -36,6 +37,7 @@
 
 # Configuration
 PARALLEL_JOBS=${PARALLEL_JOBS:-4}  # Default 4 parallel jobs (for frame extraction)
+PLAYER_EXTRA_FEATURES=${AM_PLAYER_EXTRA_FEATURES:-}
 
 # Parse command line arguments
 FILTER_PATTERN=""
@@ -171,12 +173,24 @@ if [ "$HEADLESS_RENDER" = true ]; then
     HEADLESS_FEATURES=",headless-render"
 fi
 
+BUILD_FEATURES=""
 if [ "$FRAME_TEST" = true ]; then
-    echo "Building player example (frame-test${HEADLESS_FEATURES})..."
-    cargo build -p bevy_alight_motion --example player --features "frame-test${HEADLESS_FEATURES}" --release
+    BUILD_FEATURES="frame-test${HEADLESS_FEATURES}"
 else
-    echo "Building player example (video-comparison${HEADLESS_FEATURES})..."
-    cargo build -p bevy_alight_motion --example player --features "video-comparison${HEADLESS_FEATURES}" --release
+    BUILD_FEATURES="video-comparison${HEADLESS_FEATURES}"
+fi
+
+if [ -n "$PLAYER_EXTRA_FEATURES" ]; then
+    BUILD_FEATURES="${BUILD_FEATURES},${PLAYER_EXTRA_FEATURES}"
+    echo "Extra player features: $PLAYER_EXTRA_FEATURES"
+fi
+
+if [ "$FRAME_TEST" = true ]; then
+    echo "Building player example (${BUILD_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
+else
+    echo "Building player example (${BUILD_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
 fi
 if [ $? -ne 0 ]; then
     echo "Build failed!"

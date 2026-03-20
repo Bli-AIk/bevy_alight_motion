@@ -471,10 +471,23 @@ pub fn animate_transform_system(
             actual_scale
         };
 
-        // Interpolate location and convert from AM to Bevy coordinates
-        // Use extrapolation for location to improve accuracy before first keyframe
+        // Interpolate location and convert from AM to Bevy coordinates.
+        // Child SDF layers such as mask/frame helpers often omit `location` and rely on a pivot-only
+        // local transform. Rebuild them from (0,0) every frame so later SDF ancestor-scale
+        // compensation does not keep multiplying the previous frame's already-compensated position.
         let mut oscillate_z_zoom = 1.0_f32;
-        if let Some(loc) = interpolate_vec3_reverse(&animated.location, layer_time, frame_delta) {
+        let loc =
+            interpolate_vec3_reverse(&animated.location, layer_time, frame_delta).or_else(|| {
+                if animated.has_parent
+                    && sdf_parent.is_none()
+                    && matches!(layer_spec, crate::scene::AmLayerSpec::SdfShape { .. })
+                {
+                    Some([0.0, 0.0, 0.0])
+                } else {
+                    None
+                }
+            });
+        if let Some(loc) = loc {
             let (mut bx, mut by) = if animated.has_parent {
                 // For layers with parents, use local coordinates
                 // Only flip Y axis (AM Y-down -> Bevy Y-up)

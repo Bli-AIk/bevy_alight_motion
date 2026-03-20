@@ -636,6 +636,7 @@ pub(super) fn process_radial_repeat_effect(
 /// CPU-side port of `calc_linear_repeat_progress` from unified_effect.wgsl.
 /// Returns (base_progress, interp_progress) for the given copy index.
 /// Used to compute repeat.line displacement for SDF shapes (which don't have shader support).
+#[expect(dead_code)] // reason: kept as a CPU parity helper while SDF linear-repeat copy displacement is still partial
 fn calc_linear_repeat_progress(
     index: i32,
     count: i32,

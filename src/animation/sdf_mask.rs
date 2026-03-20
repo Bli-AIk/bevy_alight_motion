@@ -103,8 +103,6 @@ pub(crate) fn compute_sdf_mask_params(
         interpolate_vec2(&mask_animated.scale, layer_time).unwrap_or([1.0, 1.0]);
     let [anim_size_x, anim_size_y] =
         interpolate_vec2(&mask_animated.size, layer_time).unwrap_or([base_width, base_height]);
-
-    // Look up the mask's AM parent's animated scale (for child masks).
     let mask_parent_scale = if mask.mask_parent_layer_id != 0 {
         pending
             .spawned_entities
@@ -121,15 +119,8 @@ pub(crate) fn compute_sdf_mask_params(
         Vec2::ONE
     };
 
-    // Compute mask center
     let (center_x, center_y) = if mask.mask_parent_layer_id != 0 {
         let mask_pos = _global_transform.translation().truncate();
-        let parent_pos = pending
-            .spawned_entities
-            .get(&mask.mask_parent_layer_id)
-            .and_then(|&pe| mask_layer_query.get(pe).ok())
-            .map(|(pgtf, _, _)| pgtf.translation().truncate())
-            .unwrap_or(mask_pos);
 
         // Child SDF mask entities already bake the AM parent scale into their animated
         // world-space pivot position. Re-scaling the parent-relative offset here shifts the

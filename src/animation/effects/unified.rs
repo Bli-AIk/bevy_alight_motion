@@ -5,99 +5,13 @@
 //! delegated to the `repeat` submodule.
 
 use bevy::prelude::*;
-use std::{
-    collections::HashSet,
-    sync::{Mutex, OnceLock},
-};
 
+use super::unified_support::{
+    compute_ancestor_scale, insert_quad_mesh, srgb_to_linear, trace_stretch_once,
+    trace_unified_once,
+};
 use crate::animation::components::{AmAnimated, AmPlayback};
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
-
-/// Convert sRGB component to linear for shader (colors from AM are sRGB).
-fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn trace_stretch_once(layer_id: u64, message: impl FnOnce() -> String) {
-    if std::env::var_os("AM_STRETCH_TRACE").is_none() {
-        return;
-    }
-
-    static SEEN: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
-    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
-    let should_log = {
-        let mut guard = seen.lock().expect("stretch trace mutex poisoned");
-        guard.insert(layer_id)
-    };
-
-    if should_log {
-        bevy::log::warn!("{}", message());
-    }
-}
-
-fn trace_unified_once(key: impl Into<String>, message: impl FnOnce() -> String) {
-    if std::env::var_os("AM_UNIFIED_TRACE").is_none() {
-        return;
-    }
-
-    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
-    let key = key.into();
-
-    let should_log = {
-        let mut guard = seen.lock().expect("unified trace mutex poisoned");
-        guard.insert(key)
-    };
-
-    if should_log {
-        bevy::log::warn!("{}", message());
-    }
-}
-
-/// Compute accumulated ancestor visual scale by walking up the entity hierarchy.
-/// Only accumulates scale from ancestors that have UnifiedEffectMarker,
-/// because those entities bake their animated scale into mesh size (not Transform.scale).
-/// Regular group/shape parents put scale into Transform.scale, which children
-/// already inherit through Bevy's transform hierarchy.
-fn compute_ancestor_scale(
-    entity: Entity,
-    parent_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
-    effect_check: &Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
-    global_time: f32,
-) -> [f32; 2] {
-    let mut acc_scale = [1.0f32, 1.0f32];
-
-    // Get entity's parent
-    let parent_entity = match parent_query.get(entity) {
-        Ok((_, Some(child_of))) => child_of.parent(),
-        _ => return acc_scale,
-    };
-
-    // Walk up from the parent, accumulating animated scales only from effect sprites
-    let mut current = parent_entity;
-    while let Ok((animated, child_of_ref)) = parent_query.get(current) {
-        // Only accumulate scale from effect sprites (scale baked into mesh, not Transform)
-        if effect_check.contains(current) {
-            let local_time = animated.calc_local_time(global_time);
-            let layer_time = animated.calc_layer_time(local_time);
-            let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
-            acc_scale[0] *= s[0];
-            acc_scale[1] *= s[1];
-        }
-
-        if let Some(child_of) = child_of_ref {
-            current = child_of.parent();
-        } else {
-            break;
-        }
-    }
-
-    acc_scale
-}
 
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
@@ -146,8 +60,7 @@ pub fn animate_unified_effect_system(
         visibility,
         render_layers,
         child_of,
-    ) in
-        query.iter()
+    ) in query.iter()
     {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
@@ -643,41 +556,19 @@ pub fn animate_unified_effect_system(
                 let uv_expand_x = blur_expansion / orig_width;
                 let uv_expand_y = blur_expansion / orig_height;
 
-                let vertices = vec![
-                    [min_x, min_y, 0.0],
-                    [max_x, min_y, 0.0],
-                    [max_x, max_y, 0.0],
-                    [min_x, max_y, 0.0],
-                ];
-                let normals = vec![
-                    [0.0, 0.0, 1.0],
-                    [0.0, 0.0, 1.0],
-                    [0.0, 0.0, 1.0],
-                    [0.0, 0.0, 1.0],
-                ];
                 // UV coords extend beyond [0,1] to sample the expanded blur area
-                let uvs = vec![
-                    [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
-                    [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
-                    [1.0 + uv_expand_x, -uv_expand_y],      // top-right
-                    [-uv_expand_x, -uv_expand_y],           // top-left
-                ];
-                let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-                let mut new_mesh = Mesh::new(
-                    bevy::mesh::PrimitiveTopology::TriangleList,
-                    bevy::asset::RenderAssetUsages::RENDER_WORLD
-                        | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+                insert_quad_mesh(
+                    &mut commands,
+                    &mut meshes,
+                    entity,
+                    [min_x, max_x, min_y, max_y],
+                    [
+                        -uv_expand_x,
+                        1.0 + uv_expand_x,
+                        -uv_expand_y,
+                        1.0 + uv_expand_y,
+                    ],
                 );
-                new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-                new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-                let new_mesh_handle = meshes.add(new_mesh);
-                commands
-                    .entity(entity)
-                    .insert(bevy::mesh::Mesh2d(new_mesh_handle));
             } else {
                 material.set_blur_enabled(false);
                 // Reset mesh to original bounds when blur is disabled
@@ -823,38 +714,16 @@ pub fn animate_unified_effect_system(
             }
 
             // Create new mesh with expanded bounds
-            let vertices = vec![
-                [-half_nw, -half_nh, 0.0],
-                [half_nw, -half_nh, 0.0],
-                [half_nw, half_nh, 0.0],
-                [-half_nw, half_nh, 0.0],
-            ];
-            let normals = vec![[0.0, 0.0, 1.0]; 4];
             // UV extends beyond [0,1] into AA padding for smoothstep gradients.
             let u_pad = aa_pad / new_width;
             let v_pad = aa_pad / new_height;
-            let uvs = vec![
-                [-u_pad, 1.0 + v_pad],
-                [1.0 + u_pad, 1.0 + v_pad],
-                [1.0 + u_pad, -v_pad],
-                [-u_pad, -v_pad],
-            ];
-            let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-            let mut new_mesh = Mesh::new(
-                bevy::mesh::PrimitiveTopology::TriangleList,
-                bevy::asset::RenderAssetUsages::RENDER_WORLD
-                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
+            insert_quad_mesh(
+                &mut commands,
+                &mut meshes,
+                entity,
+                [-half_nw, half_nw, -half_nh, half_nh],
+                [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
             );
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-            let new_mesh_handle = meshes.add(new_mesh);
-            commands
-                .entity(entity)
-                .insert(bevy::mesh::Mesh2d(new_mesh_handle));
         } else {
             material.set_stretch_enabled(false);
         }
@@ -947,42 +816,21 @@ pub fn animate_unified_effect_system(
                 offset_y - half_h - total_expansion,
                 offset_y + half_h + total_expansion,
             );
-            let vertices = vec![[lx, by, 0.0], [rx, by, 0.0], [rx, ty, 0.0], [lx, ty, 0.0]];
-            let normals = vec![[0.0, 0.0, 1.0]; 4];
             // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
             let uv_exp_x = total_expansion / orig_width;
             let uv_exp_y = total_expansion / orig_height;
-            let uvs = vec![
-                [s2_uv_min_x - uv_exp_x, (1.0 - s2_uv_min_y) + uv_exp_y],
-                [
-                    (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-                    (1.0 - s2_uv_min_y) + uv_exp_y,
-                ],
-                [
-                    (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-                    (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
-                ],
+            insert_quad_mesh(
+                &mut commands,
+                &mut meshes,
+                entity,
+                [lx, rx, by, ty],
                 [
                     s2_uv_min_x - uv_exp_x,
+                    (s2_uv_min_x + s2_expand_x) + uv_exp_x,
                     (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
+                    (1.0 - s2_uv_min_y) + uv_exp_y,
                 ],
-            ];
-            let indices = vec![0u32, 1, 2, 0, 2, 3];
-
-            let mut new_mesh = Mesh::new(
-                bevy::mesh::PrimitiveTopology::TriangleList,
-                bevy::asset::RenderAssetUsages::RENDER_WORLD
-                    | bevy::asset::RenderAssetUsages::MAIN_WORLD,
             );
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-            new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-            new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-            let new_mesh_handle = meshes.add(new_mesh);
-            commands
-                .entity(entity)
-                .insert(bevy::mesh::Mesh2d(new_mesh_handle));
         }
 
         // Update palette map alpha if present

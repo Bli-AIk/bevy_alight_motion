@@ -14,6 +14,7 @@ pub(crate) mod repeat;
 mod rtt_blur;
 pub(crate) mod text_effects;
 mod unified;
+mod unified_support;
 
 pub use mask::update_unified_mask_system;
 pub use path_repeat::animate_path_repeat_system;

@@ -197,7 +197,7 @@ pub fn spawn_sdf_visual(
     let material = if let Some(mask) = active_mask {
         // Scale mask center and half_size by fit_scale for world coordinate space
         let scaled_center = mask.center * fit_scale;
-        let scaled_half_size = mask.half_size * fit_scale * mask.scale;
+        let scaled_half_size = mask.half_size * fit_scale;
         bevy::log::info!(
             "[SDF_SPAWN] '{}': Creating material with mask center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.2}, original_center=({:.1},{:.1})",
             marker.label,

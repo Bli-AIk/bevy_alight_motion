@@ -18,6 +18,7 @@ mod lifecycle;
 mod noise_effects;
 mod sdf;
 mod sdf_geometry;
+mod sdf_helpers;
 mod sdf_mask;
 mod sdf_spawn;
 pub(crate) mod simplex_noise;
@@ -43,9 +44,9 @@ pub use effects::{
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use sdf::{
     animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
-    animate_sdf_stretch_system,
-    apply_mask_clipping_system, compensate_sdf_ancestor_scale_for_children_system,
-    compensate_sdf_parent_scale_system, update_sdf_mask_system,
+    animate_sdf_stretch_system, apply_mask_clipping_system,
+    compensate_sdf_ancestor_scale_for_children_system, compensate_sdf_parent_scale_system,
+    update_sdf_mask_system,
 };
 pub use systems::{
     advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,

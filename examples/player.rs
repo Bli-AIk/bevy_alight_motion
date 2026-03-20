@@ -37,6 +37,15 @@
 //!
 //! （此命令会播放工程并测量 FPS 性能。）
 //!
+//! ### Enable BRP/MCP Control For Player / 为 player 启用 BRP/MCP 控制
+//! ```bash
+//! BRP_EXTRAS_PORT=15702 cargo run -p bevy_alight_motion --example player --features player-brp -- <project_name>
+//! ```
+//! This enables `bevy_brp_extras` for the example player only, so MCP tools can inspect
+//! and control the running app without changing library defaults.
+//!
+//! （只为示例 player 启用 `bevy_brp_extras`，便于 MCP 连接，不改变库默认行为。）
+//!
 //! # Available projects / 可用工程
 //!   - `simple_gb` (default)
 //!   - `basic_shape`
@@ -62,6 +71,8 @@ mod video_utils;
 use bevy::prelude::MeshMaterial2d;
 use bevy::prelude::*;
 use bevy_alight_motion::prelude::*;
+#[cfg(feature = "player-brp")]
+use bevy_brp_extras::BrpExtrasPlugin;
 
 #[cfg(feature = "debug")]
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
@@ -178,6 +189,9 @@ fn main() {
             ..default()
         }));
     }
+
+    #[cfg(feature = "player-brp")]
+    app.add_plugins(BrpExtrasPlugin::default());
 
     app
         // Black background matching AM project
