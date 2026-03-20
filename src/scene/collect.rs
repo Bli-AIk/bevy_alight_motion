@@ -101,7 +101,7 @@ fn remap_flattened_child(
     // Case 3: containing_embed_id points to current layer (this layer IS the embed)
     //         -> This shouldn't happen (is_embed check in should_decouple)
     if child.containing_embed_id != 0 {
-        if child.containing_embed_id == child_embed_id && is_embed {
+        if original_parent == 0 && child.containing_embed_id == child_embed_id && is_embed {
             // Direct content of this embed - use the embed's own ID (layer_id)
             // Since this embed layer's ID hasn't been remapped yet (it's the current layer),
             // we need to use `layer_id` which will become part of parent's flattening
@@ -730,5 +730,92 @@ pub(crate) fn collect_layer(
         }
         // Ignore unsupported layer types
         AmLayer::Bookmark(_) | AmLayer::Audio(_) | AmLayer::Video(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::remap_flattened_child;
+    use crate::animation::AmAnimated;
+    use crate::scene::{AmBlendingMode, AmLayerSpec, PendingLayer};
+    use bevy::prelude::*;
+
+    fn make_pending_layer(
+        id: u64,
+        parent: u64,
+        containing_embed_id: u64,
+        label: &str,
+    ) -> PendingLayer {
+        PendingLayer {
+            id,
+            label: label.to_string(),
+            parent,
+            start_time: 0,
+            end_time: 0,
+            transform: Transform::default(),
+            animated: AmAnimated::default(),
+            spec: AmLayerSpec::Null,
+            z_index: 0.0,
+            children: Vec::new(),
+            blending_mode: AmBlendingMode::Normal,
+            mask_info: None,
+            palette_params: None,
+            embed_scene_size: None,
+            containing_embed_id,
+            from_deeply_nested_scene: false,
+            echo_runtime: None,
+            group_fill: None,
+            embed_inner_total_time: None,
+            hidden: false,
+        }
+    }
+
+    #[test]
+    fn remap_preserves_nested_embed_owner_for_nested_children() {
+        let current_embed_layer_id = 102_373_407;
+        let nested_embed_old_id = 12_372_971;
+        let nested_embed_new_id = 1_000_000_000_021;
+        let mut child = make_pending_layer(
+            12_368_973,
+            nested_embed_old_id,
+            nested_embed_old_id,
+            "spr_s_boneloop_0.png Copy 5",
+        );
+
+        remap_flattened_child(
+            &mut child,
+            &[(nested_embed_old_id, nested_embed_new_id)],
+            current_embed_layer_id,
+            true,
+            Vec3::ZERO,
+            nested_embed_old_id,
+        );
+
+        assert_eq!(child.parent, nested_embed_new_id);
+        assert_eq!(child.animated.parent_layer_id, nested_embed_new_id);
+        assert_eq!(child.containing_embed_id, nested_embed_new_id);
+    }
+
+    #[test]
+    fn remap_assigns_current_embed_owner_for_direct_children() {
+        let current_embed_layer_id = 102_373_407;
+        let mut child = make_pending_layer(
+            12_372_970,
+            0,
+            current_embed_layer_id,
+            "spr_s_boneloop_0.png Copy",
+        );
+
+        remap_flattened_child(
+            &mut child,
+            &[],
+            current_embed_layer_id,
+            true,
+            Vec3::ZERO,
+            current_embed_layer_id,
+        );
+
+        assert_eq!(child.parent, current_embed_layer_id);
+        assert_eq!(child.containing_embed_id, current_embed_layer_id);
     }
 }

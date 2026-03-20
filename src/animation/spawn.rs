@@ -302,6 +302,24 @@ pub(crate) fn process_pending_layers(
             parent_entity
         };
 
+        // Prefer the direct parent embed as the render-layer owner for content
+        // nested immediately under an embed. This keeps nested group fill content
+        // attached to the inner composite layer even if flatten remapping widened
+        // containing_embed_id to an outer ancestor.
+        let resolved_embed_owner_id = if layer.containing_embed_id == 0 {
+            0
+        } else {
+            pending
+                .layers
+                .iter()
+                .find(|candidate| candidate.id == layer.parent)
+                .filter(|parent_layer| {
+                    matches!(parent_layer.spec, crate::scene::AmLayerSpec::EmbedScene)
+                })
+                .map(|parent_layer| parent_layer.id)
+                .unwrap_or(layer.containing_embed_id)
+        };
+
         let entity = spawn_layer_entity(
             commands,
             meshes,
@@ -315,6 +333,7 @@ pub(crate) fn process_pending_layers(
             actual_parent,
             pending.embed_contents_container,
             pending.inv_fit_scale,
+            resolved_embed_owner_id,
             &pending.spawned_entities,
             global_time,
         );
@@ -324,7 +343,7 @@ pub(crate) fn process_pending_layers(
             layer.label,
             layer.id,
             layer.parent,
-            layer.containing_embed_id,
+            resolved_embed_owner_id,
             layer.transform.translation.z,
             layer.start_time,
             layer.end_time,

@@ -43,6 +43,7 @@ pub(super) fn spawn_layer_entity(
     parent_entity: Entity,
     _embed_contents_container: Option<Entity>,
     inv_fit_scale: f32,
+    embed_owner_id: u64,
     spawned_entities: &HashMap<u64, Entity>,
     global_time: f32,
 ) -> Entity {
@@ -248,7 +249,7 @@ pub(super) fn spawn_layer_entity(
             animated.scale_assist.keyframes.len()
         );
     }
-    if layer.containing_embed_id != 0 {
+    if embed_owner_id != 0 {
         animated.inv_fit_scale = inv_fit_scale;
     }
 
@@ -791,24 +792,24 @@ pub(super) fn spawn_layer_entity(
     //
     // Note: We still add AmEmbedContentMarker for lifecycle management,
     // but the content is parented to its actual parent (not the container).
-    if layer.containing_embed_id != 0 {
+    if embed_owner_id != 0 {
         // This is embed content - make it a child of its parent entity
         // This ensures proper Transform inheritance through the Bevy hierarchy
         commands.entity(parent_entity).add_child(entity);
 
         // Look up the embed entity and add marker for lifecycle management
-        if let Some(&embed_entity) = spawned_entities.get(&layer.containing_embed_id) {
+        if let Some(&embed_entity) = spawned_entities.get(&embed_owner_id) {
             commands
                 .entity(entity)
                 .insert(crate::scene::AmEmbedContentMarker {
                     embed_entity,
-                    embed_id: layer.containing_embed_id,
+                    embed_id: embed_owner_id,
                 });
             bevy::log::debug!(
                 "[Lifecycle] Embed content '{}' parented to {:?}, belongs to embed {} ({:?})",
                 layer.label,
                 parent_entity,
-                layer.containing_embed_id,
+                embed_owner_id,
                 embed_entity
             );
         } else {
@@ -817,7 +818,7 @@ pub(super) fn spawn_layer_entity(
                 "[Lifecycle] Embed content '{}' parented to {:?} (embed {} not in spawned_entities)",
                 layer.label,
                 parent_entity,
-                layer.containing_embed_id
+                embed_owner_id
             );
         }
     } else {
