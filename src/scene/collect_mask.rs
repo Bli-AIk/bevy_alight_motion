@@ -35,7 +35,10 @@ fn compose_world_transform(
     let rotated_local = rotate_vec2(scaled_local, parent.rotation);
     LayerWorldTransform2d {
         translation: parent.translation + rotated_local,
-        scale: Vec2::new(parent.scale.x * local_scale.x, parent.scale.y * local_scale.y),
+        scale: Vec2::new(
+            parent.scale.x * local_scale.x,
+            parent.scale.y * local_scale.y,
+        ),
         rotation: parent.rotation + local_rotation,
     }
 }
@@ -123,10 +126,12 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                 &local_transform_info,
                 &mut world_transform_cache,
             ) {
-                let scaled_center =
-                    Vec2::new(entry.center.x * parent_world.scale.x, entry.center.y * parent_world.scale.y);
-                let global_center = parent_world.translation
-                    + rotate_vec2(scaled_center, parent_world.rotation);
+                let scaled_center = Vec2::new(
+                    entry.center.x * parent_world.scale.x,
+                    entry.center.y * parent_world.scale.y,
+                );
+                let global_center =
+                    parent_world.translation + rotate_vec2(scaled_center, parent_world.rotation);
                 let global_half_size = bevy::math::Vec2::new(
                     entry.half_size.x * parent_world.scale.x.abs(),
                     entry.half_size.y * parent_world.scale.y.abs(),
