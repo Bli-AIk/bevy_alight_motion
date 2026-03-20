@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-20T21:49:22.335555+08:00",
+  "timestamp": "2026-03-20T21:57:25.659991+08:00",
   "summary": {
-    "passed": 186,
+    "passed": 184,
     "warnings": 0,
     "skipped": 2,
-    "failed": 72
+    "failed": 74
   },
   "results": {
     "basic/bezier/bezier": {
@@ -167,42 +167,43 @@
     },
     "effects/count/basic/test": {
       "status": "fail",
-      "avg_similarity": 0.5385
+      "avg_similarity": 0.4081
     },
     "effects/echo-keyframes/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.962
     },
     "effects/enlarge-bg/exposure-gamma-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8955
+      "avg_similarity": 0.8954
     },
     "effects/enlarge-bg/exposure-gamma/test": {
       "status": "fail",
-      "avg_similarity": 0.93
+      "avg_similarity": 0.9299
     },
     "effects/enlarge-bg/replace-color-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8555
+      "avg_similarity": 0.8551
     },
     "effects/enlarge-bg/replace-color/test": {
       "status": "fail",
-      "avg_similarity": 0.8528
+      "avg_similarity": 0.8524
     },
     "effects/enlarge-bg/rgb-split-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8857
+      "avg_similarity": 0.8855
     },
     "effects/enlarge-bg/rgb-split/test": {
       "status": "fail",
-      "avg_similarity": 0.8871
+      "avg_similarity": 0.8868
     },
     "effects/enlarge-bg/wave-warp-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8483
+      "avg_similarity": 0.8479
     },
     "effects/enlarge-bg/wave-warp/test": {
       "status": "fail",
-      "avg_similarity": 0.8453
+      "avg_similarity": 0.8448
     },
     "effects/exposure-gamma/complex/test": {
       "status": "pass"
