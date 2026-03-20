@@ -766,9 +766,8 @@ fn cubic_bezier_1d_derivative(t: f32, p1: f32, p2: f32) -> f32 {
 /// Returns the displacement in AM coordinate space (x-right, y-down).
 /// The caller must convert to Bevy coordinates (negate Y).
 ///
-/// For count=0, returns None (shape should be hidden).
-/// For count>=1, returns the displacement for copy index 0.
-/// Note: count>1 would require spawning additional entities (not yet implemented).
+/// For count=0, returns Some(NaN) so the caller can hide the shape.
+/// For count>=1, returns None and lets the SDF shader handle copy rendering.
 pub(crate) fn compute_sdf_linear_repeat_displacement(
     animated: &AmAnimated,
     layer_time: f32,
@@ -784,36 +783,5 @@ pub(crate) fn compute_sdf_linear_repeat_displacement(
         // Effect activated but count=0 — shape should be hidden
         return Some([f32::NAN, f32::NAN]);
     }
-
-    let position =
-        interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
-    let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
-
-    let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
-    let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
-    let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
-    let overlap = interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
-    let ease_in = interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
-    let ease_out = interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
-    let shape = animated.linear_repeat_shape;
-    let invert = animated.linear_repeat_invert;
-
-    // Compute progress for copy index 0 (the primary/only copy for count=1)
-    let (base_progress, interp_progress) = calc_linear_repeat_progress(
-        0,
-        count_rounded,
-        start,
-        end,
-        phase,
-        overlap,
-        shape,
-        invert,
-        ease_in,
-        ease_out,
-    );
-
-    let dx = position[0] * base_progress + offset[0] * interp_progress;
-    let dy = position[1] * base_progress + offset[1] * interp_progress;
-
-    Some([dx, dy])
+    None
 }

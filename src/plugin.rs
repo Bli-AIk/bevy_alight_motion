@@ -27,11 +27,12 @@ use bevy::sprite_render::Material2dPlugin;
 use crate::animation::{
     AmPlayback, advance_playback_system, animate_am_camera_system, animate_counter_system,
     animate_opacity_system, animate_path_repeat_system, animate_rtt_blur_system,
-    animate_sdf_opacity_system, animate_sdf_scale_system, animate_sdf_stretch_system,
+    animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
+    animate_sdf_stretch_system,
     animate_size_system, animate_text_opacity_system, animate_text_progress_system,
     animate_text_spacing_system, animate_transform_system, animate_unified_effect_system,
     apply_mask_clipping_system, compensate_sdf_ancestor_scale_for_children_system,
-    compensate_sdf_parent_scale_system, fix_rtl_line_alignment_system,
+    compensate_sdf_parent_scale_system, debug_layer_global_z_system, fix_rtl_line_alignment_system,
     manage_layer_lifecycle_system, update_echo_runtime_system, update_sdf_mask_system,
     update_unified_mask_system,
 };
@@ -178,6 +179,13 @@ impl Plugin for AlightMotionPlugin {
             )
             .add_systems(
                 Update,
+                animate_sdf_repeat_system
+                    .in_set(AlightMotionSystemSet::Animation)
+                    .after(animate_sdf_stretch_system)
+                    .before(animate_sdf_scale_system),
+            )
+            .add_systems(
+                Update,
                 compensate_sdf_ancestor_scale_for_children_system
                     .in_set(AlightMotionSystemSet::Animation)
                     .after(compensate_sdf_parent_scale_system),
@@ -190,6 +198,10 @@ impl Plugin for AlightMotionPlugin {
                     .chain()
                     .in_set(AlightMotionSystemSet::Mask)
                     .after(bevy::transform::TransformSystems::Propagate),
+            )
+            .add_systems(
+                PostUpdate,
+                debug_layer_global_z_system.after(bevy::transform::TransformSystems::Propagate),
             );
     }
 }

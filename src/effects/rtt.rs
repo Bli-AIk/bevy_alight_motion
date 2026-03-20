@@ -217,11 +217,12 @@ pub fn evaluate_render_strategy_system(
             &NeedsStrategyEvaluation,
             Option<&AmGroupFill>,
             Option<&AmEmbedMask>,
+            Option<&crate::scene::AmForceHidden>,
         ),
         Without<RenderStrategy>,
     >,
 ) {
-    for (entity, needs_eval, group_fill, embed_mask) in query.iter() {
+    for (entity, needs_eval, group_fill, embed_mask, force_hidden) in query.iter() {
         let needs_fill = group_fill.is_some();
         let is_mask = embed_mask.is_some();
 
@@ -251,8 +252,11 @@ pub fn evaluate_render_strategy_system(
                 RenderHierarchyInfo::default(),
                 // Direct strategy: render to Layer 0 (main camera)
                 RenderLayers::layer(0),
-                // Make embed visible (it starts as Hidden)
-                Visibility::Inherited,
+                if force_hidden.is_some() {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                },
                 // Store embed bounds for content clipping
                 EmbedSceneBounds {
                     width: needs_eval.scene_width,
@@ -723,6 +727,7 @@ pub fn propagate_render_layers_to_children_system(
     children_query: Query<&Children>,
     render_layers_query: Query<&RenderLayers>,
     visibility_query: Query<&Visibility>,
+    force_hidden_query: Query<(), With<crate::scene::AmForceHidden>>,
     // Query for entities that are NOT embeds
     non_embed_query: Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) {
@@ -743,6 +748,7 @@ pub fn propagate_render_layers_to_children_system(
             &children_query,
             &render_layers_query,
             &visibility_query,
+            &force_hidden_query,
             &non_embed_query,
         );
     }
@@ -771,6 +777,7 @@ pub fn propagate_render_layers_to_children_system(
             &children_query,
             &render_layers_query,
             &visibility_query,
+            &force_hidden_query,
             &non_embed_query,
         );
     }
@@ -794,6 +801,7 @@ fn propagate_to_descendants(
     children_query: &Query<&Children>,
     render_layers_query: &Query<&RenderLayers>,
     visibility_query: &Query<&Visibility>,
+    force_hidden_query: &Query<(), With<crate::scene::AmForceHidden>>,
     non_embed_query: &Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) -> u32 {
     let mut updates = 0;
@@ -811,7 +819,7 @@ fn propagate_to_descendants(
             Ok(Visibility::Hidden) => true,
             Err(_) => false, // No Visibility component, don't add one
             _ => false,      // Already Inherited or Visible
-        };
+        } && force_hidden_query.get(child_entity).is_err();
 
         if layer_needs_update || vis_needs_update {
             let mut entity_commands = commands.entity(child_entity);
@@ -852,7 +860,7 @@ fn propagate_to_descendants(
                 Ok(Visibility::Hidden) => true,
                 Err(_) => false,
                 _ => false,
-            };
+            } && force_hidden_query.get(entity).is_err();
 
             if layer_needs_update {
                 commands.entity(entity).insert(target_layer.clone());

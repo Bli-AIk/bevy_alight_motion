@@ -9,8 +9,12 @@
 //! 包含 animate_transform_system、animate_opacity_system、advance_playback_system 等。
 
 use bevy::prelude::*;
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
 
-use crate::scene::AmLayerMarker;
+use crate::scene::{AmForceHidden, AmLayerMarker};
 
 use super::components::{AmAnimated, AmCameraLayer, AmPlayback, AmSdfShapeParent};
 use super::interpolation::{
@@ -87,6 +91,65 @@ pub(super) fn compute_perspective_zoom(
     let cam_dist = canvas_width.max(canvas_height) / (2.0 * (30.0_f32).to_radians().tan());
     let denom = cam_dist + z_offset;
     if denom > 0.0 { cam_dist / denom } else { 0.001 }
+}
+
+fn trace_layer_z_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_LAYER_Z_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("layer z trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
+    }
+}
+
+pub fn debug_layer_global_z_system(
+    query: Query<(
+        Entity,
+        &AmLayerMarker,
+        &Transform,
+        &GlobalTransform,
+        Option<&ChildOf>,
+    )>,
+) {
+    for (entity, marker, transform, global_transform, child_of) in query.iter() {
+        let interesting = marker.label == "编组 2"
+            || marker.label == "编组 2 Copy"
+            || marker.label == "Rectangle 1 Copy"
+            || marker.label == "Rectangle 1 Copy 3"
+            || marker.label == "Rectangle 1 Copy 2"
+            || marker.label == "spr_s_boneloop_0.png Copy";
+        if !interesting {
+            continue;
+        }
+
+        let parent = child_of.map(|c| c.parent());
+        let global = global_transform.translation();
+        trace_layer_z_once(format!("{}:{}", marker.id, marker.label), || {
+            format!(
+                "[LAYER-Z] entity={:?} layer_id={} label='{}' parent={:?} local_z={:.6} global_z={:.6} local_xy=({:.2},{:.2}) global_xy=({:.2},{:.2})",
+                entity,
+                marker.id,
+                marker.label,
+                parent,
+                transform.translation.z,
+                global.z,
+                transform.translation.x,
+                transform.translation.y,
+                global.x,
+                global.y,
+            )
+        });
+    }
 }
 
 /// Apply linear repeat displacement for SDF shapes (CPU-side, since shaders don't support it).
@@ -702,6 +765,7 @@ pub fn animate_text_opacity_system(
             &mut bevy::text::TextColor,
             &mut Visibility,
             &AmLayerMarker,
+            Option<&AmForceHidden>,
         ),
         With<Text2d>,
     >,
@@ -727,14 +791,14 @@ pub fn animate_text_opacity_system(
         }
     }
 
-    for (animated, mut text_color, mut visibility, marker) in query.iter_mut() {
+    for (animated, mut text_color, mut visibility, marker, force_hidden) in query.iter_mut() {
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
 
         // Check if layer is active
-        if !animated.is_active(local_time) {
+        if !animated.is_active(local_time) || force_hidden.is_some() {
             // Hide text when outside its time range
-            if *visibility != Visibility::Hidden {
+            if force_hidden.is_none() && *visibility != Visibility::Hidden {
                 bevy::log::trace!(
                     "[TEXT] Hiding '{}' (id={}): time={:.0}, range=[{}, {}]",
                     marker.label,
@@ -957,11 +1021,17 @@ pub fn update_echo_runtime_system(
         &super::components::AmEchoRuntime,
         &mut AmAnimated,
         &mut Visibility,
+        Option<&AmForceHidden>,
     )>,
     children_query: Query<&Children>,
     mut child_animated_query: Query<&mut AmAnimated, Without<super::components::AmEchoRuntime>>,
 ) {
-    for (entity, echo_rt, mut animated, mut visibility) in echo_query.iter_mut() {
+    for (entity, echo_rt, mut animated, mut visibility, force_hidden) in echo_query.iter_mut() {
+        if force_hidden.is_some() {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+
         // Compute parent element's fractional time (0-1)
         let global_time = playback.current_time_ms;
         let parent_local = (global_time - echo_rt.embed_time_offset) * echo_rt.embed_speed;

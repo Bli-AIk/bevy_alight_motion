@@ -131,8 +131,10 @@ pub(crate) fn compute_sdf_mask_params(
             .map(|(pgtf, _, _)| pgtf.translation().truncate())
             .unwrap_or(mask_pos);
 
-        let offset = mask_pos - parent_pos;
-        let corrected_pos = parent_pos + offset * mask_parent_scale;
+        // Child SDF mask entities already bake the AM parent scale into their animated
+        // world-space pivot position. Re-scaling the parent-relative offset here shifts the
+        // mask a second time and can move the clip window away from the intended content.
+        let corrected_pos = mask_pos;
 
         let scaled_offset_x = -pivot_x * scale_x * mask_parent_scale.x * fit_scale;
         let scaled_offset_y = pivot_y * scale_y * mask_parent_scale.y * fit_scale;
@@ -167,12 +169,19 @@ pub(crate) fn compute_sdf_mask_params(
         _ => sw * 0.5,
     };
     let current_stroke_ext = ext(current_sw);
-    let half_width =
-        ((anim_size_x / 2.0 * scale_x + current_stroke_ext) * mask_parent_scale.x * fit_scale)
-            .abs();
-    let half_height =
-        ((anim_size_y / 2.0 * scale_y + current_stroke_ext) * mask_parent_scale.y * fit_scale)
-            .abs();
+    let parent_abs_scale = Vec2::new(mask_parent_scale.x.abs(), mask_parent_scale.y.abs());
+    let geom_half_w = if mask.mask_parent_layer_id != 0 {
+        anim_size_x / 2.0 * scale_x * parent_abs_scale.x
+    } else {
+        anim_size_x / 2.0 * scale_x
+    };
+    let geom_half_h = if mask.mask_parent_layer_id != 0 {
+        anim_size_y / 2.0 * scale_y * parent_abs_scale.y
+    } else {
+        anim_size_y / 2.0 * scale_y
+    };
+    let half_width = ((geom_half_w + current_stroke_ext) * fit_scale).abs();
+    let half_height = ((geom_half_h + current_stroke_ext) * fit_scale).abs();
     let sw_world = current_sw * fit_scale;
 
     bevy::log::debug!(
@@ -309,7 +318,6 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
     };
     let repeat_scale_x = parent_repeat_scale[0].abs();
     let repeat_scale_y = parent_repeat_scale[1].abs();
-
     let lr_count = interpolate_float(&animated.linear_repeat_count, layer_time)
         .unwrap_or(0.0)
         .round();

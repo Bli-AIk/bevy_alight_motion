@@ -581,7 +581,7 @@ fn compute_mask_with_basic_repeat(
     rel_base = rel_base * axis_sign;
 
     let rp_count = i32(rp1.x);
-    let rp_offset = rp1.yz;           // world units
+    let rp_offset = rp1.yz * axis_sign;           // mask-local world units
     let rp_angle_rad = rp1.w * 3.14159265 / 180.0;
     let rp_scale = rp2.x;
     let rp_alpha = rp2.y;
@@ -687,9 +687,9 @@ fn compute_mask_with_linear_repeat(
 
     // Parse first repeat params
     let lr1_count = i32(lr1.x);
-    let lr1_position = lr1.yz;      // already in mask-local world units
+    let lr1_position = lr1.yz * axis_sign;      // already in mask-local world units
     let lr1_angle_deg = lr1.w;
-    let lr1_offset = lr2.xy;
+    let lr1_offset = lr2.xy * axis_sign;
     let lr1_scale = lr2.z;
     let lr1_alpha = lr2.w;
     let lr1_start = lr3.x;
@@ -708,9 +708,9 @@ fn compute_mask_with_linear_repeat(
     // Parse second repeat params
     let lr2_count = i32(lr2_1.x);
     let lr2_enabled = lr2_count > 0;
-    let lr2_position = lr2_1.yz;
+    let lr2_position = lr2_1.yz * axis_sign;
     let lr2_angle_deg = lr2_1.w;
-    let lr2_offset_val = lr2_2.xy;
+    let lr2_offset_val = lr2_2.xy * axis_sign;
     let lr2_scale_val = lr2_2.z;
     let lr2_alpha_val = lr2_2.w;
     let lr2_start = lr2_3.x;
@@ -861,7 +861,7 @@ fn compute_mask_with_radial_repeat(
     let rr_angle_deg = rr2.z;
     let rr_scale = rr2.w;
     let rr_alpha = rr3.x;
-    let rr_offset = vec2<f32>(rr3.y, rr3.z);
+    let rr_offset = vec2<f32>(rr3.y, rr3.z) * axis_sign;
     let rr_start = rr4.x;
     let rr_end = rr4.y;
     let rr_phase = rr4.z;
@@ -1860,6 +1860,10 @@ fn calc_linear_repeat_progress(
     var base_progress: f32;
     if count > 1 {
         base_progress = fi_original / (fcount - 1.0);
+    } else if count == 1 {
+        // Keep count=1 aligned with the CPU repeat implementation:
+        // there is a single base copy, not an extra displaced clone.
+        base_progress = 0.0;
     } else {
         base_progress = 0.0;
     }

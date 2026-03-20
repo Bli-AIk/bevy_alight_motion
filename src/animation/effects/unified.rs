@@ -39,6 +39,25 @@ fn trace_stretch_once(layer_id: u64, message: impl FnOnce() -> String) {
     }
 }
 
+fn trace_unified_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_UNIFIED_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("unified trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
+    }
+}
+
 /// Compute accumulated ancestor visual scale by walking up the entity hierarchy.
 /// Only accumulates scale from ancestors that have UnifiedEffectMarker,
 /// because those entities bake their animated scale into mesh size (not Transform.scale).
@@ -89,11 +108,15 @@ pub fn animate_unified_effect_system(
     query: Query<(
         Entity,
         &AmAnimated,
+        &crate::scene::AmLayerMarker,
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &Transform,
         &GlobalTransform,
         &bevy::mesh::Mesh2d,
         Option<&crate::scene::AmEmbedContentMarker>,
+        Option<&Visibility>,
+        Option<&bevy::camera::visibility::RenderLayers>,
+        Option<&ChildOf>,
     )>,
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
@@ -111,7 +134,19 @@ pub fn animate_unified_effect_system(
         .unwrap_or(1.0)
         .max(0.001);
 
-    for (entity, animated, material_handle, transform, global_transform, _mesh2d, _embed_marker) in
+    for (
+        entity,
+        animated,
+        marker,
+        material_handle,
+        transform,
+        global_transform,
+        _mesh2d,
+        _embed_marker,
+        visibility,
+        render_layers,
+        child_of,
+    ) in
         query.iter()
     {
         // Use local time for visibility check (affected by speed)
@@ -256,6 +291,41 @@ pub fn animate_unified_effect_system(
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
+
+        if marker.label.starts_with("spr_s_boneloop_0.png Copy")
+            && transform
+                .rotation
+                .to_euler(bevy::math::EulerRot::XYZ)
+                .2
+                .abs()
+                > 1.4
+        {
+            let global_pos = global_transform.translation();
+            let parent = child_of.map(|c| c.parent());
+            trace_unified_once(format!("{}:{}", marker.id, marker.label), || {
+                format!(
+                    "[UNIFIED] layer_id={} label='{}' parent={:?} alpha={:.3} vis={:?} layers={:?} local_z={:.4} global_z={:.4} effect_flags=({:.1},{:.1},{:.1},{:.1}) mask_type={:.1} mask=({:.1},{:.1},{:.1},{:.1})",
+                    marker.id,
+                    marker.label,
+                    parent,
+                    material.uniform_data.color.w,
+                    visibility,
+                    render_layers,
+                    transform.translation.z,
+                    global_pos.z,
+                    material.uniform_data.effect_flags.x,
+                    material.uniform_data.effect_flags.y,
+                    material.uniform_data.effect_flags.z,
+                    material.uniform_data.effect_flags.w,
+                    material.uniform_data.effect_flags.x,
+                    material.uniform_data.mask_params.x,
+                    material.uniform_data.mask_params.y,
+                    material.uniform_data.mask_params.z,
+                    material.uniform_data.mask_params.w,
+                )
+            });
+        }
+
         // Always set original_size so pixelate (and other effects) have correct display dimensions
         material.uniform_data.original_size =
             Vec4::new(orig_width, orig_height, orig_width, orig_height);

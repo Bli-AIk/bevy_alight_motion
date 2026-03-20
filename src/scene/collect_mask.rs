@@ -10,28 +10,89 @@ use bevy::prelude::*;
 use super::components::*;
 use super::helpers::*;
 
+#[derive(Clone, Copy, Debug, Default)]
+struct LayerWorldTransform2d {
+    translation: Vec2,
+    scale: Vec2,
+    rotation: f32,
+}
+
+fn rotate_vec2(v: Vec2, angle: f32) -> Vec2 {
+    let (sin, cos) = angle.sin_cos();
+    Vec2::new(v.x * cos - v.y * sin, v.x * sin + v.y * cos)
+}
+
+fn compose_world_transform(
+    parent: LayerWorldTransform2d,
+    local_translation: Vec2,
+    local_scale: Vec2,
+    local_rotation: f32,
+) -> LayerWorldTransform2d {
+    let scaled_local = Vec2::new(
+        local_translation.x * parent.scale.x,
+        local_translation.y * parent.scale.y,
+    );
+    let rotated_local = rotate_vec2(scaled_local, parent.rotation);
+    LayerWorldTransform2d {
+        translation: parent.translation + rotated_local,
+        scale: Vec2::new(parent.scale.x * local_scale.x, parent.scale.y * local_scale.y),
+        rotation: parent.rotation + local_rotation,
+    }
+}
+
 pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     // Find all mask layers and their info
     // Masks are layers with blending_mode=Mask or Exclude (regardless of parent)
     let mut mask_layers: Vec<(u64, u64, f32, AmMaskEntry)> = Vec::new(); // (mask_id, mask_parent_id, z_index, mask_entry)
 
-    // Build lookup table for parent transform info (needed to transform child mask coordinates to global)
-    let parent_transform_info: std::collections::HashMap<
-        u64,
-        (bevy::math::Vec2, bevy::math::Vec2),
-    > = layers
+    // Build lookup tables for world transform reconstruction at t=0.
+    let parent_map: std::collections::HashMap<u64, u64> =
+        layers.iter().map(|l| (l.id, l.parent)).collect();
+    let local_transform_info: std::collections::HashMap<u64, LayerWorldTransform2d> = layers
         .iter()
         .map(|l| {
             let scale = get_scale_at_normalized_time(&l.animated.scale, 0.0);
+            let rotation = l.transform.rotation.to_euler(bevy::math::EulerRot::ZYX).0;
             (
                 l.id,
-                (
-                    bevy::math::Vec2::new(l.transform.translation.x, l.transform.translation.y),
-                    bevy::math::Vec2::new(scale.0, scale.1),
-                ),
+                LayerWorldTransform2d {
+                    translation: Vec2::new(l.transform.translation.x, l.transform.translation.y),
+                    scale: Vec2::new(scale.0, scale.1),
+                    rotation,
+                },
             )
         })
         .collect();
+    let mut world_transform_cache: std::collections::HashMap<u64, LayerWorldTransform2d> =
+        std::collections::HashMap::new();
+
+    fn world_transform_for(
+        layer_id: u64,
+        parent_map: &std::collections::HashMap<u64, u64>,
+        local_transform_info: &std::collections::HashMap<u64, LayerWorldTransform2d>,
+        cache: &mut std::collections::HashMap<u64, LayerWorldTransform2d>,
+    ) -> Option<LayerWorldTransform2d> {
+        if let Some(cached) = cache.get(&layer_id).copied() {
+            return Some(cached);
+        }
+
+        let local = local_transform_info.get(&layer_id).copied()?;
+        let world = match parent_map.get(&layer_id).copied().unwrap_or(0) {
+            0 => local,
+            parent_id => {
+                let parent_world =
+                    world_transform_for(parent_id, parent_map, local_transform_info, cache)?;
+                compose_world_transform(
+                    parent_world,
+                    local.translation,
+                    local.scale,
+                    local.rotation,
+                )
+            }
+        };
+        cache.insert(layer_id, world);
+        Some(world)
+    }
 
     for layer in layers.iter() {
         let is_mask = layer.blending_mode == AmBlendingMode::Mask
@@ -56,23 +117,23 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
 
         // For child masks, transform coordinates to global space using parent's transform
         if layer.parent != 0 {
-            if let Some(&(parent_translation, parent_scale)) =
-                parent_transform_info.get(&layer.parent)
-            {
-                // Transform child mask center to global coordinates
-                let global_center = parent_translation
-                    + bevy::math::Vec2::new(
-                        entry.center.x * parent_scale.x,
-                        entry.center.y * parent_scale.y,
-                    );
-                // Transform half_size by parent scale
+            if let Some(parent_world) = world_transform_for(
+                layer.parent,
+                &parent_map,
+                &local_transform_info,
+                &mut world_transform_cache,
+            ) {
+                let scaled_center =
+                    Vec2::new(entry.center.x * parent_world.scale.x, entry.center.y * parent_world.scale.y);
+                let global_center = parent_world.translation
+                    + rotate_vec2(scaled_center, parent_world.rotation);
                 let global_half_size = bevy::math::Vec2::new(
-                    entry.half_size.x * parent_scale.x.abs(),
-                    entry.half_size.y * parent_scale.y.abs(),
+                    entry.half_size.x * parent_world.scale.x.abs(),
+                    entry.half_size.y * parent_world.scale.y.abs(),
                 );
 
                 bevy::log::trace!(
-                    "[MASK] Found child {} layer '{}' (id={}, parent={}) at z={:.4}, global_center=({:.1},{:.1}), global_half_size=({:.1},{:.1}), time={}..{}ms",
+                    "[MASK] Found child {} layer '{}' (id={}, parent={}) at z={:.4}, global_center=({:.1},{:.1}), global_half_size=({:.1},{:.1}), parent_rot={:.3}, time={}..{}ms",
                     if entry.is_exclude { "exclude" } else { "mask" },
                     layer.label,
                     layer.id,
@@ -82,12 +143,14 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
                     global_center.y,
                     global_half_size.x,
                     global_half_size.y,
+                    parent_world.rotation,
                     entry.start_time,
                     entry.end_time
                 );
 
                 entry.center = global_center;
                 entry.half_size = global_half_size;
+                entry.rotation += parent_world.rotation;
             }
         } else {
             bevy::log::trace!(
@@ -112,10 +175,6 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         return;
     }
 
-    // Build parent_id lookup for ancestor checking
-    let parent_map: std::collections::HashMap<u64, u64> =
-        layers.iter().map(|l| (l.id, l.parent)).collect();
-
     // Helper to check if `layer_id` is an ancestor of `mask_id`
     // An ancestor is in the parent chain: mask -> parent -> grandparent -> ...
     fn is_ancestor_of_mask(
@@ -138,8 +197,12 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         false
     }
 
-    // For each non-mask root layer, collect ALL masks that are above it (higher z-index)
-    // This allows the runtime system to choose the correct mask based on current time
+    // For each non-mask layer, collect all masks that are above it (higher z-index)
+    // within the same masking scope.
+    //
+    // Root masks affect root layers below them and then propagate to descendants.
+    // Child masks affect earlier siblings under the same parent and then propagate
+    // through that sibling subtree.
     for layer in layers.iter_mut() {
         if layer.blending_mode == AmBlendingMode::Mask
             || layer.blending_mode == AmBlendingMode::Exclude
@@ -147,17 +210,26 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             continue; // Don't apply mask to mask layer itself
         }
 
-        if layer.parent != 0 {
-            continue; // Only consider root-level layers for initial mask assignment
-        }
-
-        // Collect all masks that are above this layer (higher z-index)
-        // Skip masks where this layer is an ancestor of the mask
         let mut applicable_masks: Vec<AmMaskEntry> = Vec::new();
         for (mask_id, mask_parent_id, mask_z, mask_entry) in &mask_layers {
-            if *mask_z > layer.z_index
-                && *mask_id != layer.id
-                && !is_ancestor_of_mask(layer.id, *mask_parent_id, &parent_map)
+            if *mask_id == layer.id || *mask_z <= layer.z_index {
+                continue;
+            }
+
+            let applies = if layer.parent == 0 {
+                // Root-scope layers can be clipped by masks above them in the layer stack.
+                // Child masks are allowed here as well: AM uses these to crop lower root-level
+                // siblings into a framed region. Exclude only the ancestor chain that owns the mask.
+                !is_ancestor_of_mask(layer.id, *mask_parent_id, &parent_map)
+            } else {
+                // Child masks clip earlier siblings in the same parent scope.
+                *mask_parent_id == layer.parent
+            };
+
+            if applies
+                && !applicable_masks
+                    .iter()
+                    .any(|existing| existing.mask_layer_id == mask_entry.mask_layer_id)
             {
                 applicable_masks.push(mask_entry.clone());
             }
@@ -165,9 +237,10 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
 
         if !applicable_masks.is_empty() {
             bevy::log::trace!(
-                "[MASK] Root layer '{}' (id={}, z={:.4}) will be clipped by {} mask(s)",
+                "[MASK] Layer '{}' (id={}, parent={}, z={:.4}) will be clipped by {} mask(s)",
                 layer.label,
                 layer.id,
+                layer.parent,
                 layer.z_index,
                 applicable_masks.len()
             );

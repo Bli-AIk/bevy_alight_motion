@@ -89,6 +89,6 @@ pub(crate) fn collect_camera(
         echo_runtime: None,
         group_fill: None,
         embed_inner_total_time: None,
-        hidden: false,
+        hidden: camera.hidden,
     })
 }

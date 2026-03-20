@@ -42,13 +42,15 @@ pub use effects::{
 };
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use sdf::{
-    animate_sdf_opacity_system, animate_sdf_scale_system, animate_sdf_stretch_system,
+    animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
+    animate_sdf_stretch_system,
     apply_mask_clipping_system, compensate_sdf_ancestor_scale_for_children_system,
     compensate_sdf_parent_scale_system, update_sdf_mask_system,
 };
 pub use systems::{
     advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, update_echo_runtime_system,
+    animate_text_opacity_system, animate_transform_system, debug_layer_global_z_system,
+    update_echo_runtime_system,
 };
 
 // Re-export interpolation functions

@@ -186,6 +186,16 @@ pub struct SdfMaterialUniform {
     pub mask1_lr_params4: Vec4,
     /// Mask1 linear repeat params5: (random_order, seed_lo, seed_hi, 0)
     pub mask1_lr_params5: Vec4,
+    /// Shape linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub linear_repeat_params1: Vec4,
+    /// Shape linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub linear_repeat_params2: Vec4,
+    /// Shape linear repeat params3: (start, end, phase, overlap)
+    pub linear_repeat_params3: Vec4,
+    /// Shape linear repeat params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub linear_repeat_params4: Vec4,
+    /// Shape linear repeat params5: (random_order, seed_lo, seed_hi, 0)
+    pub linear_repeat_params5: Vec4,
     /// Stretch segment params: (angle_rad, adj_stretch, offset_norm, smooth_raw)
     pub stretch_params: Vec4,
     /// Stretch meta: (transform_rotation_rad, 0, scene_width, scene_height)
@@ -310,6 +320,11 @@ impl Default for SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                linear_repeat_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                linear_repeat_params4: Vec4::ZERO,
+                linear_repeat_params5: Vec4::ZERO,
                 stretch_params: Vec4::ZERO,
                 stretch_meta: Vec4::ZERO,
             },
@@ -392,6 +407,11 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                linear_repeat_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                linear_repeat_params4: Vec4::ZERO,
+                linear_repeat_params5: Vec4::ZERO,
                 stretch_params: Vec4::ZERO,
                 stretch_meta: Vec4::ZERO,
             },
@@ -495,6 +515,11 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                linear_repeat_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                linear_repeat_params4: Vec4::ZERO,
+                linear_repeat_params5: Vec4::ZERO,
                 stretch_params: Vec4::ZERO,
                 stretch_meta: Vec4::ZERO,
             },
@@ -544,6 +569,11 @@ impl SdfMaterial {
                 mask1_lr_params3: Vec4::ZERO,
                 mask1_lr_params4: Vec4::ZERO,
                 mask1_lr_params5: Vec4::ZERO,
+                linear_repeat_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                linear_repeat_params4: Vec4::ZERO,
+                linear_repeat_params5: Vec4::ZERO,
                 stretch_params: Vec4::ZERO,
                 stretch_meta: Vec4::ZERO,
             },

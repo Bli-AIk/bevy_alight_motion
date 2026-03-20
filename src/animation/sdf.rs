@@ -9,6 +9,10 @@
 //! 包含 animate_sdf_opacity_system、animate_sdf_scale_system、update_sdf_mask_system 等。
 
 use bevy::prelude::*;
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::scene::{AmLayerMarker, AmMaskInfo};
 use crate::sdf_material::{SdfMaterial, SdfMaterialUniform, SdfShapeType, repack_with_alpha};
@@ -123,6 +127,25 @@ fn apply_shape_animation_updates(
             shape_pts_anim[3][1],
         );
         uniform.shape_extra3 = Vec4::new(shape_pts_anim[4][0], shape_pts_anim[4][1], 0.0, 0.0);
+    }
+}
+
+fn trace_sdf_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_SDF_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("sdf trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
     }
 }
 
@@ -297,7 +320,13 @@ pub fn animate_sdf_opacity_system(
         ),
         With<AmSdfShapeParent>,
     >,
-    mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Visibility)>,
+    mut sdf_query: Query<(
+        &MeshMaterial2d<SdfMaterial>,
+        &AmSdfParams,
+        &mut Visibility,
+        &GlobalTransform,
+        Option<&ChildOf>,
+    )>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {
     // Skip animation only when force stopped (for inspector editing)
@@ -318,7 +347,9 @@ pub fn animate_sdf_opacity_system(
 
         // Update all SDF children
         for child in children.iter() {
-            let Ok((material_handle, sdf_params, mut visibility)) = sdf_query.get_mut(child) else {
+            let Ok((material_handle, sdf_params, mut visibility, child_gt, child_of)) =
+                sdf_query.get_mut(child)
+            else {
                 continue;
             };
             // Check if layer is active
@@ -371,6 +402,23 @@ pub fn animate_sdf_opacity_system(
                 (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
             material.uniform_data.params.w =
                 repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+
+            if _marker.label.starts_with("Rectangle 1 Copy") {
+                let parent = child_of.map(|c| c.parent());
+                trace_sdf_once(format!("{}:{}", _marker.id, _marker.label), || {
+                    format!(
+                        "[SDF] layer_id={} label='{}' parent={:?} vis={:?} fill_alpha={:.3} global_z={:.4} stroke_width={:.3} frame_half={:.3}",
+                        _marker.id,
+                        _marker.label,
+                        parent,
+                        *visibility,
+                        material.uniform_data.color.w,
+                        child_gt.translation().z,
+                        material.uniform_data.params.z,
+                        material.uniform_data.frame_half,
+                    )
+                });
+            }
 
             // Apply solidcolor effect: mix base fill color with solid color
             let sc_alpha =
@@ -470,6 +518,101 @@ pub fn animate_sdf_stretch_system(
             if needed > material.uniform_data.frame_half {
                 material.uniform_data.frame_half = needed;
             }
+        }
+    }
+}
+
+/// System to update linear repeat uniforms on SDF shapes.
+/// The SDF shader renders repeat.line copies in local shape space, so the CPU no longer
+/// offsets the parent transform for count>0. Count=0 is still treated as hidden.
+pub fn animate_sdf_repeat_system(
+    playback: Res<AmPlayback>,
+    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
+    sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
+    mut materials: ResMut<Assets<SdfMaterial>>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+
+    let global_time = playback.current_time_ms;
+
+    for (animated, children) in parent_query.iter() {
+        let local_time = animated.calc_local_time(global_time);
+        let default_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        let default_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        let default_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        let default_params4 = Vec4::ZERO;
+        let default_params5 = Vec4::ZERO;
+
+        let (params1, params2, params3, params4, params5) = if animated.is_active(local_time)
+            && (animated.linear_repeat_count.value.is_some()
+                || !animated.linear_repeat_count.keyframes.is_empty())
+        {
+            let layer_time = animated.calc_layer_time(local_time);
+            let count = interpolate_float(&animated.linear_repeat_count, layer_time)
+                .unwrap_or(0.0)
+                .round();
+            let position = interpolate_vec2(&animated.linear_repeat_position, layer_time)
+                .unwrap_or([0.0, 0.0]);
+            let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time)
+                .unwrap_or([0.0, 0.0]);
+            let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
+            let scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
+            let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
+            let start = interpolate_float(&animated.linear_repeat_start, layer_time).unwrap_or(0.0);
+            let end = interpolate_float(&animated.linear_repeat_end, layer_time).unwrap_or(1.0);
+            let phase = interpolate_float(&animated.linear_repeat_phase, layer_time).unwrap_or(0.0);
+            let overlap =
+                interpolate_float(&animated.linear_repeat_overlap, layer_time).unwrap_or(0.0);
+            let ease_in =
+                interpolate_float(&animated.linear_repeat_ease_in, layer_time).unwrap_or(0.0);
+            let ease_out =
+                interpolate_float(&animated.linear_repeat_ease_out, layer_time).unwrap_or(0.0);
+            let shape_invert_alt = animated.linear_repeat_shape * 100
+                + if animated.linear_repeat_invert { 10 } else { 0 }
+                + if animated.linear_repeat_color_alt_copies {
+                    1
+                } else {
+                    0
+                };
+            let params5 = if animated.linear_repeat_random_order {
+                let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
+                let (lo, hi) =
+                    crate::animation::effects::repeat::compute_java_random_state_packed(seed);
+                Vec4::new(1.0, lo, hi, 0.0)
+            } else {
+                Vec4::ZERO
+            };
+            (
+                Vec4::new(count, position[0], position[1], angle),
+                Vec4::new(offset[0], offset[1], scale, alpha),
+                Vec4::new(start, end, phase, overlap),
+                Vec4::new(ease_in, ease_out, 0.0, shape_invert_alt as f32),
+                params5,
+            )
+        } else {
+            (
+                default_params1,
+                default_params2,
+                default_params3,
+                default_params4,
+                default_params5,
+            )
+        };
+
+        for child in children.iter() {
+            let Ok(material_handle) = sdf_query.get(child) else {
+                continue;
+            };
+            let Some(material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            material.uniform_data.linear_repeat_params1 = params1;
+            material.uniform_data.linear_repeat_params2 = params2;
+            material.uniform_data.linear_repeat_params3 = params3;
+            material.uniform_data.linear_repeat_params4 = params4;
+            material.uniform_data.linear_repeat_params5 = params5;
         }
     }
 }
@@ -614,6 +757,9 @@ fn update_sdf_child_material(
     has_pts_anim: bool,
     shape_pts_anim: &[[f32; 2]; 5],
 ) {
+    let disable_ancestor_pivot_comp =
+        std::env::var_os("AM_DISABLE_SDF_ANCESTOR_PIVOT_COMP").is_some();
+
     // Use combined_scale for SDF material params (shape sizing)
     // 使用合并缩放来设置 SDF 材质参数（形状大小）
     let scaled_half_width = sdf_params.base_half_width * combined_scale[0];
@@ -631,10 +777,17 @@ fn update_sdf_child_material(
         final_stroke_width = 0.0;
     }
 
-    // Use OWN scale for pivot offset (NOT combined) — pivot is in local space
-    // 枢轴偏移使用自身缩放（非合并缩放），因为枢轴在本地空间
-    transform.translation.x = -sdf_params.base_pivot_x * own_scale[0];
-    transform.translation.y = sdf_params.base_pivot_y * own_scale[1];
+    // Apply the full visual scale to the pivot offset.
+    // SDF parents keep Transform.scale at identity and scale only in shader uniforms,
+    // so child visuals do not inherit ancestor scale through Bevy's hierarchy.
+    // Using combined_scale here preserves the world-space pivot offset AM expects.
+    let pivot_scale = if disable_ancestor_pivot_comp {
+        own_scale
+    } else {
+        combined_scale
+    };
+    transform.translation.x = -sdf_params.base_pivot_x * pivot_scale[0];
+    transform.translation.y = sdf_params.base_pivot_y * pivot_scale[1];
 
     // Update material params: (half_width, half_height, stroke_width, packed_stroke)
     uniform.params = Vec4::new(

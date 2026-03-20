@@ -181,6 +181,10 @@ pub struct AmText {
     #[serde(rename = "@parent", default)]
     pub parent: u64,
 
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
+
     /// Fill type.
     #[serde(rename = "@fillType", default)]
     pub fill_type: String,
@@ -285,6 +289,10 @@ pub struct AmCamera {
     #[serde(rename = "@parent", default)]
     pub parent: u64,
 
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
+
     /// Transform data.
     #[serde(default)]
     pub transform: AmTransform,
@@ -320,6 +328,10 @@ pub struct AmImage {
     /// Parent layer ID.
     #[serde(rename = "@parent", default)]
     pub parent: u64,
+
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
 
     /// Fill type.
     #[serde(rename = "@fillType", default)]
@@ -585,6 +597,10 @@ pub struct AmNullObj {
     #[serde(rename = "@parent", default)]
     pub parent: u64,
 
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
+
     /// Object type (e.g., "perspective").
     #[serde(rename = "@type", default)]
     pub obj_type: String,
@@ -620,6 +636,10 @@ pub struct AmEmbedScene {
     /// Parent layer ID.
     #[serde(rename = "@parent", default)]
     pub parent: u64,
+
+    /// Whether this layer is hidden in the editor (should not be rendered).
+    #[serde(rename = "@hidden", default)]
+    pub hidden: bool,
 
     /// Fill type.
     #[serde(rename = "@fillType", default)]

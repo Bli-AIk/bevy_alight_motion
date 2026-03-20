@@ -25,6 +25,7 @@
 #   ./test_comparison.sh effects/     # Run only effects/* tests
 #   ./test_comparison.sh complex/     # Run only complex/* tests
 #   ./test_comparison.sh effects/stretch  # Run tests matching effects/stretch*
+#   ./test_comparison.sh private/.../target2 --single  # Run only the exact example
 #   ./test_comparison.sh --frame-test              # Run FPS benchmark on basic/* tests
 #   ./test_comparison.sh --frame-test --all        # Run FPS benchmark on all tests
 #   ./test_comparison.sh --frame-test effects/     # Run FPS benchmark on effects/* tests
@@ -41,17 +42,21 @@ FILTER_PATTERN=""
 RUN_ALL=false
 FRAME_TEST=false
 HEADLESS=false
+EXACT_MATCH=false
+HAS_EXPLICIT_FILTER=false
 
-# Parse --headless flag (can appear anywhere)
+# Parse flags that can appear anywhere
 for arg in "$@"; do
     if [ "$arg" == "--headless" ]; then
         HEADLESS=true
+    elif [ "$arg" == "--single" ]; then
+        EXACT_MATCH=true
     fi
 done
-# Remove --headless from positional args
+# Remove flags that can appear anywhere from positional args
 ARGS=()
 for arg in "$@"; do
-    if [ "$arg" != "--headless" ]; then
+    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ]; then
         ARGS+=("$arg")
     fi
 done
@@ -85,6 +90,7 @@ elif [ "$1" == "--frame-test" ]; then
         FILTER_PATTERN="${FILTER_PATTERN#./}"
         FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
         FILTER_PATTERN="${FILTER_PATTERN#projects/}"
+        HAS_EXPLICIT_FILTER=true
     else
         FILTER_PATTERN="basic/"
     fi
@@ -95,9 +101,20 @@ elif [ -n "$1" ]; then
     FILTER_PATTERN="${FILTER_PATTERN#./}"
     FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
     FILTER_PATTERN="${FILTER_PATTERN#projects/}"
+    HAS_EXPLICIT_FILTER=true
 else
     # Default: only run basic/* tests
     FILTER_PATTERN="basic/"
+fi
+
+if [ "$EXACT_MATCH" = true ] && [ "$RUN_ALL" = true ]; then
+    echo "Error: --single cannot be combined with --all"
+    exit 1
+fi
+
+if [ "$EXACT_MATCH" = true ] && [ "$HAS_EXPLICIT_FILTER" = false ]; then
+    echo "Error: --single requires an explicit example path"
+    exit 1
 fi
 
 # Ensure we are in the correct directory
@@ -124,6 +141,8 @@ else
 fi
 if [ "$RUN_ALL" = true ]; then
     echo "Mode: Running ALL tests (basic_*, fx_*, complex_*)"
+elif [ "$EXACT_MATCH" = true ]; then
+    echo "Mode: Running exact test '$FILTER_PATTERN'"
 elif [ -n "$FILTER_PATTERN" ]; then
     echo "Mode: Running tests matching '$FILTER_PATTERN*'"
 fi
@@ -216,7 +235,11 @@ while IFS= read -r amproj; do
         if [ "$RUN_ALL" = true ]; then
             EXAMPLES="$EXAMPLES $test_id"
         elif [ -n "$FILTER_PATTERN" ]; then
-            if echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
+            if [ "$EXACT_MATCH" = true ]; then
+                if [ "$test_id" = "$FILTER_PATTERN" ]; then
+                    EXAMPLES="$EXAMPLES $test_id"
+                fi
+            elif echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
                 EXAMPLES="$EXAMPLES $test_id"
             fi
         else

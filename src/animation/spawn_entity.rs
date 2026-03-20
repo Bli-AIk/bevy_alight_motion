@@ -253,13 +253,17 @@ pub(super) fn spawn_layer_entity(
     }
 
     // **Hybrid Rendering Pipeline**:
-    // All content starts visible and renders to Layer 0 (main camera).
+    // Non-hidden content starts visible and renders to Layer 0 (main camera).
     // For Composite strategy embeds, content will later be reassigned to RTT layers.
     // This ensures content is always visible and eliminates the first-frame hidden issue.
     //
     // Note: embed content that WAS using containing_embed_id for spatial decoupling
     // now uses Bevy parent-child hierarchy for RenderLayers propagation.
-    let initial_visibility = Visibility::Inherited;
+    let initial_visibility = if layer.hidden {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
 
     // Determine element type based on layer spec
     // 根据图层规格确定元素类型

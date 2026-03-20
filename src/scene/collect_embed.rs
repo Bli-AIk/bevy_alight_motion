@@ -534,7 +534,7 @@ pub(crate) fn collect_embed_scene(
         echo_runtime: None,
         group_fill,
         embed_inner_total_time: None,
-        hidden: false, // Embeds use visibility from AM timeline, not hidden flag
+        hidden: embed.hidden,
     }
 }
 

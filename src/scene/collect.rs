@@ -7,6 +7,10 @@
 
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::loader::FontMetrics;
 use crate::schema::{AmEmbedScene, AmLayer, AmScene};
@@ -19,6 +23,25 @@ use super::collect_mask::apply_mask_to_children;
 use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
+
+fn trace_flatten_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_FLATTEN_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("flatten trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
+    }
+}
 
 /// Remap IDs and references for a single flattened child during the flatten pass.
 /// Handles parent, containing_embed_id, animated.layer_id, and mask_info remapping.
@@ -309,10 +332,15 @@ pub(crate) fn flatten_pending_layers_inner(
                 .iter()
                 .map(|c| (c.id, c.transform.translation.z))
                 .collect();
-
+            let embed_parent_ids: std::collections::HashSet<u64> = flattened_children
+                .iter()
+                .filter(|c| matches!(c.spec, AmLayerSpec::EmbedScene))
+                .map(|c| c.id)
+                .collect();
             // Pass 2: Apply the mapping with correct parent lookup
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
                 let original_parent = child.parent;
+                let old_z = child.transform.translation.z;
                 child.id = id_mappings[idx].1;
                 remap_flattened_child(
                     &mut child,
@@ -326,12 +354,31 @@ pub(crate) fn flatten_pending_layers_inner(
                 // Fix z-accumulation: make child z relative to parent's z.
                 // Without this, a child at absolute z=0.001 parented to a layer at z=0.005
                 // would get global z=0.006 (parent + child), breaking AM's absolute z-order.
-                let parent_z = z_map
-                    .get(&original_parent)
-                    .copied()
-                    .filter(|_| original_parent != 0)
-                    .unwrap_or(0.0);
+                let parent_z = if original_parent != 0 && !embed_parent_ids.contains(&original_parent)
+                {
+                    z_map.get(&original_parent).copied().unwrap_or(0.0)
+                } else {
+                    0.0
+                };
                 child.transform.translation.z -= parent_z;
+
+                if child.label.starts_with("spr_s_boneloop_0.png Copy")
+                    || child.label.starts_with("Rectangle 1 Copy")
+                {
+                    trace_flatten_once(format!("{}:{}", child.id, child.label), || {
+                        format!(
+                            "[FLATTEN] label='{}' old_parent={} new_parent={} old_z={:.4} parent_z={:.4} new_z={:.4} containing_embed={} is_embed_ctx={}",
+                            child.label,
+                            original_parent,
+                            child.parent,
+                            old_z,
+                            parent_z,
+                            child.transform.translation.z,
+                            child.containing_embed_id,
+                            is_embed,
+                        )
+                    });
+                }
 
                 result.push(child);
             }
