@@ -12,7 +12,7 @@ mod repeat;
 
 pub use common::*;
 pub use extended::*;
-pub use other::*;
+pub(crate) use other::*;
 pub use repeat::*;
 
 use crate::schema::{AmAnimatedFloat, AmProperty};
