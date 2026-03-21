@@ -11,7 +11,7 @@ use super::serde_helpers::{
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[expect(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)] // reason: XML schema is tag-driven and preserving concrete layer payloads keeps serde mapping straightforward
 pub enum AmLayer {
     Shape(AmShape),
     Nullobj(AmNullObj),

@@ -184,7 +184,7 @@ pub(super) fn write_field_line_with_impl(
             if is_implemented {
                 SupportLevel::Full
             } else {
-                SupportLevel::Full
+                SupportLevel::Unsupported
             }
         }
         SupportLevel::Partial => SupportLevel::Partial,
