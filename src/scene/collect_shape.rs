@@ -260,9 +260,12 @@ pub(crate) fn collect_shape(
             gradient_end_color,
             gradient_points,
         }
-    } else if !shape.fill_image.is_empty() && shape.fill_type == "media" {
-        // Only use fillImage when fillType is "media".
-        // fillType="color" always ignores fillImage and renders as solid color.
+    } else if !shape.fill_image.is_empty()
+        && (shape.fill_type == "media" || shape.fill_type == "color")
+    {
+        // AM exports can keep fillType="color" while still providing fillImage for
+        // texture-backed rect fills. Match spawn_shape() so flattened PendingLayers
+        // preserve the authored image content instead of silently degrading to solid fill.
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,
@@ -840,4 +843,65 @@ pub(crate) fn parse_path_extras(path_data: &str) -> (Vec4, Vec4, Vec4, Vec4, Vec
         Vec4::new(vertices[20], vertices[21], vertices[22], vertices[23]),
         Vec4::new(vertices[24], vertices[25], vertex_count, 0.0),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_shape;
+    use crate::scene::{AmLayerSpec, AmSceneConfig};
+    use crate::schema::{AmProperty, AmShape};
+
+    fn rect_shape(fill_type: &str, fill_image: &str) -> AmShape {
+        AmShape {
+            id: 42,
+            label: "rect".to_string(),
+            start_time: 0,
+            end_time: 1000,
+            parent: 0,
+            fill_type: fill_type.to_string(),
+            fill_image: fill_image.to_string(),
+            shape_type: ".rect".to_string(),
+            blending: String::new(),
+            hidden: false,
+            speed: 1.0,
+            transform: Default::default(),
+            properties: vec![AmProperty {
+                name: "size".to_string(),
+                prop_type: "vec2".to_string(),
+                value: "10,20".to_string(),
+                keyframes: Vec::new(),
+            }],
+            effects: Vec::new(),
+            fill_color: None,
+            stroke: None,
+            borders: Vec::new(),
+            gradient: None,
+            path_element: None,
+        }
+    }
+
+    #[test]
+    fn collect_shape_preserves_fill_image_for_color_fill() {
+        let shape = rect_shape("color", "amproj:spr_s_boneloop_0.png");
+
+        let pending = collect_shape(&shape, &AmSceneConfig::default(), 0.0)
+            .expect("shape should collect");
+
+        match pending.spec {
+            AmLayerSpec::SpriteShape {
+                image_uri,
+                is_media,
+                fill_color,
+                width,
+                height,
+                ..
+            } => {
+                assert!(is_media);
+                assert_eq!(image_uri, "amproj:spr_s_boneloop_0.png");
+                assert!(fill_color.is_none());
+                assert_eq!((width, height), (20.0, 40.0));
+            }
+            other => panic!("expected SpriteShape, got {other:?}"),
+        }
+    }
 }

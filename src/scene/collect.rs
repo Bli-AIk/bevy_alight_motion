@@ -163,6 +163,11 @@ fn remap_flattened_child(
 
             if let Some(new_parent_id) = new_mask_parent {
                 mask.mask_parent_layer_id = new_parent_id;
+            } else if mask.mask_parent_layer_id == 0 && is_embed {
+                // Root masks inside the flattened child scene become direct children of the
+                // current embed. Preserve that new scope so runtime mask math does not keep
+                // treating them as top-level masks after flattening.
+                mask.mask_parent_layer_id = layer_id;
             }
         }
     }
@@ -737,7 +742,7 @@ pub(crate) fn collect_layer(
 mod tests {
     use super::remap_flattened_child;
     use crate::animation::AmAnimated;
-    use crate::scene::{AmBlendingMode, AmLayerSpec, PendingLayer};
+    use crate::scene::{AmBlendingMode, AmLayerSpec, AmMaskEntry, AmMaskInfo, PendingLayer};
     use bevy::prelude::*;
 
     fn make_pending_layer(
@@ -817,5 +822,39 @@ mod tests {
 
         assert_eq!(child.parent, current_embed_layer_id);
         assert_eq!(child.containing_embed_id, current_embed_layer_id);
+    }
+
+    #[test]
+    fn remap_promotes_flattened_root_mask_parent_to_current_embed() {
+        let current_embed_layer_id = 102_373_489;
+        let original_mask_layer_id = 12_373_002;
+        let remapped_mask_layer_id = 1_000_000_000_062;
+        let mut child = make_pending_layer(
+            12_373_493,
+            0,
+            current_embed_layer_id,
+            "spr_s_boneloop_0.png Copy",
+        );
+        child.mask_info = Some(AmMaskInfo {
+            masks: vec![AmMaskEntry {
+                mask_layer_id: original_mask_layer_id,
+                mask_parent_layer_id: 0,
+                ..Default::default()
+            }],
+        });
+
+        remap_flattened_child(
+            &mut child,
+            &[(original_mask_layer_id, remapped_mask_layer_id)],
+            current_embed_layer_id,
+            true,
+            Vec3::ZERO,
+            current_embed_layer_id,
+        );
+
+        let masks = &child.mask_info.as_ref().expect("mask info").masks;
+        assert_eq!(masks.len(), 1);
+        assert_eq!(masks[0].mask_layer_id, remapped_mask_layer_id);
+        assert_eq!(masks[0].mask_parent_layer_id, current_embed_layer_id);
     }
 }

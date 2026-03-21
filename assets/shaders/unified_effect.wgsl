@@ -1839,7 +1839,7 @@ fn calc_linear_repeat_progress(
     let fi_shuffled = f32(shuffled_index);
     let fi_original = f32(index);
     let fcount = f32(count);
-    
+
     // AM algorithm: overlap_value = overlap + 1.0
     let overlap_value = overlap + 1.0;
     // denominator = (2 * overlap_value) + count - 1

@@ -713,7 +713,6 @@ fn calc_linear_repeat_progress(
 
     (base_progress, interp_progress)
 }
-
 /// AM's bezier-based easing for repeat effects.
 /// Port of `apply_am_easing` from unified_effect.wgsl.
 fn apply_repeat_easing(progress: f32, ease_in: f32, ease_out: f32) -> f32 {

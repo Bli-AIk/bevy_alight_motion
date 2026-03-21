@@ -171,6 +171,12 @@ skip = true
 [overrides."private/USER_5p/neo_test"]
 skip = true
 
+[overrides."private/USER_mortis/sans"]
+skip = true
+
+[overrides."private/USER_mortis/sunshine"]
+skip = true
+
 # =============================================================================
 # Frame Test (FPS Performance) Configuration
 # 帧测试（FPS 性能）配置

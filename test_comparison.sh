@@ -131,6 +131,165 @@ else
     exit 1
 fi
 
+COMPARISON_CONFIG_PATH="${BASE_DIR}/comparison_config.toml"
+FRAME_CACHE_DIR="${PROJECTS_DIR}/_video_frames"
+DEBUG_FRAME_CACHE_DIR="${BASE_DIR}/assets/debug/_video_frames"
+
+sort_examples() {
+    printf '%s\n' "$1" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' '
+}
+
+partition_examples_by_skip() {
+    local examples="$1"
+    local config_path="$2"
+
+    if [ -z "$examples" ] || [ ! -f "$config_path" ]; then
+        printf '%s\n' "$examples" | tr ' ' '\n' | sed '/^$/d' | while IFS= read -r test_id; do
+            [ -n "$test_id" ] && printf 'RUN\t%s\n' "$test_id"
+        done
+        return 0
+    fi
+
+    EXAMPLES_INPUT="$examples" python3 - "$config_path" <<'PY'
+import os
+import sys
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib
+
+config_path = sys.argv[1]
+examples = [line.strip() for line in os.environ.get("EXAMPLES_INPUT", "").split() if line.strip()]
+
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+
+default = config.get("default", {})
+default_skip = bool(default.get("skip", False))
+overrides = config.get("overrides", {})
+
+for test_id in examples:
+    skip = default_skip
+    override = overrides.get(test_id)
+    if isinstance(override, dict) and override.get("skip") is not None:
+        skip = bool(override["skip"])
+    kind = "SKIP" if skip else "RUN"
+    print(f"{kind}\t{test_id}")
+PY
+}
+
+discover_skip_only_examples() {
+    local config_path="$1"
+    local projects_dir="$2"
+    local filter_pattern="$3"
+    local exact_match="$4"
+    local run_all="$5"
+
+    if [ ! -f "$config_path" ]; then
+        return 0
+    fi
+
+    python3 - "$config_path" "$projects_dir" "$filter_pattern" "$exact_match" "$run_all" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib
+
+config_path, projects_dir, filter_pattern, exact_match, run_all = sys.argv[1:]
+projects_dir = Path(projects_dir)
+
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+
+overrides = config.get("overrides", {})
+
+def matches_filter(test_id: str) -> bool:
+    if run_all == "true":
+        return True
+    if filter_pattern:
+        if exact_match == "true":
+            return test_id == filter_pattern
+        return test_id.startswith(filter_pattern)
+    return test_id.startswith("basic/")
+
+for test_id, override in overrides.items():
+    if not isinstance(override, dict) or not override.get("skip"):
+        continue
+    if not matches_filter(test_id):
+        continue
+    if (projects_dir / f"{test_id}.amproj").exists():
+        print(test_id)
+PY
+}
+
+cleanup_stale_frame_cache() {
+    local cache_root="$1"
+    local interval_hours="${FRAME_CACHE_CLEANUP_INTERVAL_HOURS:-24}"
+    local max_age_days="${FRAME_CACHE_MAX_AGE_DAYS:-14}"
+
+    if [ "${FRAME_CACHE_DISABLE_CLEANUP:-0}" = "1" ]; then
+        return 0
+    fi
+
+    mkdir -p "$cache_root"
+    local marker_file="${cache_root}/.last_cleanup"
+    local now
+    now=$(date +%s)
+    local interval_secs=$((interval_hours * 3600))
+    local max_age_secs=$((max_age_days * 86400))
+
+    if [ -f "$marker_file" ]; then
+        local last_cleanup
+        last_cleanup=$(stat -c %Y "$marker_file" 2>/dev/null || echo 0)
+        if [ $((now - last_cleanup)) -lt "$interval_secs" ]; then
+            return 0
+        fi
+    fi
+
+    echo "Checking stale frame cache under $cache_root ..."
+    local pruned=0
+
+    while IFS= read -r cache_dir; do
+        [ -z "$cache_dir" ] && continue
+        local extracted_marker="${cache_dir}/.extracted"
+        local last_used_marker="${cache_dir}/.last_used"
+
+        if [ ! -f "$extracted_marker" ] || [ ! -f "$last_used_marker" ]; then
+            rm -rf "$cache_dir"
+            pruned=$((pruned + 1))
+            continue
+        fi
+
+        local last_used
+        last_used=$(stat -c %Y "$last_used_marker" 2>/dev/null || echo 0)
+        if [ $((now - last_used)) -ge "$max_age_secs" ]; then
+            rm -rf "$cache_dir"
+            pruned=$((pruned + 1))
+        fi
+    done < <(find "$cache_root" -mindepth 1 -maxdepth 1 -type d | sort)
+
+    touch "$marker_file"
+    echo "  [CACHE-CLEANUP] pruned ${pruned} stale cache director$( [ "$pruned" -eq 1 ] && echo 'y' || echo 'ies' )"
+}
+
+remove_example_caches() {
+    local test_id="$1"
+    local flat_name
+    flat_name=$(echo "$test_id" | tr '/' '_')
+    local dir_name
+    dir_name=$(dirname "$test_id")
+    local base_name
+    base_name=$(basename "$test_id")
+
+    rm -rf "${FRAME_CACHE_DIR}/${flat_name}"
+    rm -rf "${PROJECTS_DIR}/${dir_name}/_video_frames/${base_name}"
+    rm -rf "${DEBUG_FRAME_CACHE_DIR}/${base_name}"
+}
+
 if [ "$FRAME_TEST" = true ]; then
     echo "========================================"
     echo "Frame Test (FPS Benchmark) Suite"
@@ -263,14 +422,43 @@ while IFS= read -r amproj; do
         fi
     fi
 done < <(find "$PROJECTS_DIR" \( -name "*.amproj" -type d -print -prune \) -o \( -name "*.amproj" -type f -print \) | sort)
-EXAMPLES=$(echo $EXAMPLES | tr ' ' '\n' | sort | tr '\n' ' ')
 
-EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
+if [ "$FRAME_TEST" != true ]; then
+    EXTRA_SKIP_EXAMPLES=$(discover_skip_only_examples \
+        "$COMPARISON_CONFIG_PATH" \
+        "$PROJECTS_DIR" \
+        "$FILTER_PATTERN" \
+        "$EXACT_MATCH" \
+        "$RUN_ALL")
+    EXAMPLES=$(sort_examples "$EXAMPLES $EXTRA_SKIP_EXAMPLES")
+else
+    EXAMPLES=$(sort_examples "$EXAMPLES")
+fi
+
+RUN_EXAMPLES=""
+SKIP_EXAMPLES=""
+while IFS=$'\t' read -r kind test_id; do
+    [ -z "$test_id" ] && continue
+    if [ "$kind" = "SKIP" ]; then
+        SKIP_EXAMPLES="$SKIP_EXAMPLES $test_id"
+    else
+        RUN_EXAMPLES="$RUN_EXAMPLES $test_id"
+    fi
+done < <(partition_examples_by_skip "$EXAMPLES" "$COMPARISON_CONFIG_PATH")
+
+RUN_EXAMPLES=$(sort_examples "$RUN_EXAMPLES")
+SKIP_EXAMPLES=$(sort_examples "$SKIP_EXAMPLES")
+
+TOTAL_EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
+RUN_EXAMPLE_COUNT=$(echo "$RUN_EXAMPLES" | wc -w)
+SKIP_EXAMPLE_COUNT=$(echo "$SKIP_EXAMPLES" | wc -w)
 echo ""
-echo "Found $EXAMPLE_COUNT examples with videos to test"
+echo "Found $TOTAL_EXAMPLE_COUNT matching examples"
+echo "Runnable: $RUN_EXAMPLE_COUNT"
+echo "Skipped by config: $SKIP_EXAMPLE_COUNT"
 echo ""
 
-if [ "$EXAMPLE_COUNT" -eq 0 ]; then
+if [ "$TOTAL_EXAMPLE_COUNT" -eq 0 ]; then
     echo "No examples to test!"
     exit 0
 fi
@@ -279,6 +467,11 @@ fi
 RESULTS_DIR=$(mktemp -d)
 trap "rm -rf $RESULTS_DIR" EXIT
 
+# Drop any stale caches for config-skipped examples immediately.
+for example in $SKIP_EXAMPLES; do
+    remove_example_caches "$example"
+done
+
 # Phase 1: Pre-extract video frames in parallel (CPU-bound)
 # Skip this phase in frame-test mode (no video comparison needed)
 if [ "$FRAME_TEST" != true ]; then
@@ -286,8 +479,8 @@ echo "========================================"
 echo "Phase 1: Extracting video frames (parallel)"
 echo "========================================"
 
-FRAME_CACHE_DIR="${PROJECTS_DIR}/_video_frames"
 mkdir -p "$FRAME_CACHE_DIR"
+cleanup_stale_frame_cache "$FRAME_CACHE_DIR"
 
 extract_frames_for_video() {
     local test_id=$1
@@ -300,6 +493,7 @@ extract_frames_for_video() {
     
     # Skip if already extracted (cache hit)
     if [ -f "$marker_file" ]; then
+        touch "${frame_dir}/.last_used"
         echo "  [CACHE] $test_id"
         return 0
     fi
@@ -320,6 +514,7 @@ extract_frames_for_video() {
     
     # Write marker file
     echo "$fps" > "$marker_file"
+    touch "${frame_dir}/.last_used"
     
     local frame_count=$(ls "$frame_dir"/*.png 2>/dev/null | wc -l)
     echo "  [DONE] $test_id ($frame_count frames)"
@@ -330,7 +525,11 @@ export PROJECTS_DIR FRAME_CACHE_DIR
 
 # Run frame extraction in parallel
 echo "Extracting frames with $PARALLEL_JOBS parallel jobs..."
-echo "$EXAMPLES" | tr ' ' '\n' | xargs -P "$PARALLEL_JOBS" -I {} bash -c 'extract_frames_for_video "$@"' _ {}
+if [ "$RUN_EXAMPLE_COUNT" -gt 0 ]; then
+    echo "$RUN_EXAMPLES" | tr ' ' '\n' | xargs -P "$PARALLEL_JOBS" -I {} bash -c 'extract_frames_for_video "$@"' _ {}
+else
+    echo "No runnable examples require frame extraction."
+fi
 
 echo ""
 echo "Frame extraction complete!"
@@ -471,7 +670,15 @@ PYEOF
 }
 
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
-for example in $EXAMPLES; do
+for example in $SKIP_EXAMPLES; do
+    flat_name=$(echo "$example" | tr '/' '_')
+    result_file="$RESULTS_DIR/${flat_name}.result"
+    echo "SKIP|$example|" > "$result_file"
+    write_result_to_json "$result_file"
+    echo "⚠️  $example (SKIP by config)"
+done
+
+for example in $RUN_EXAMPLES; do
     run_single_test "$example"
     # Write result to JSON immediately after each test
     local_flat=$(echo "$example" | tr '/' '_')
