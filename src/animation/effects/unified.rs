@@ -6,12 +6,18 @@
 
 use bevy::prelude::*;
 
-use super::unified_support::{
-    compute_ancestor_scale, srgb_to_linear, trace_parenthelper_unified_state, trace_stretch_once,
-    update_quad_mesh,
+mod effects;
+mod mesh;
+
+use self::effects::{
+    update_blend, update_chromakey, update_exposure, update_grid, update_lift, update_mirror,
+    update_palette, update_pixelate, update_rays, update_replace_color, update_rgb_split,
+    update_solidcolor, update_stretch2_uniform, update_threshold, update_wavewarp2, update_wipe,
 };
+use self::mesh::{update_base_mesh, update_blur_mesh, update_stretch_mesh};
+use super::unified_support::{compute_ancestor_scale, trace_parenthelper_unified_state};
 use crate::animation::components::{AmAnimated, AmPlayback};
-use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
+use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
@@ -239,18 +245,7 @@ pub fn animate_unified_effect_system(
         material.uniform_data.original_size =
             Vec4::new(orig_width, orig_height, orig_width, orig_height);
 
-        // Update wipe parameters if needed
-        if has_wipe {
-            material.set_wipe_enabled(true);
-            let wipe_start = interpolate_float(&animated.wipe_start, layer_time).unwrap_or(0.0);
-            let wipe_end = interpolate_float(&animated.wipe_end, layer_time).unwrap_or(1.0);
-            let wipe_angle = interpolate_float(&animated.wipe_angle, layer_time).unwrap_or(0.0);
-            let wipe_feather = interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
-            material.uniform_data.wipe_params =
-                Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
-        } else {
-            material.set_wipe_enabled(false);
-        }
+        update_wipe(material, animated, layer_time, has_wipe);
 
         // Update stretch2 parameters (directional UV stretch)
         let has_stretch2 = animated.stretch2_scale.value.is_some()
@@ -259,711 +254,106 @@ pub fn animate_unified_effect_system(
         let s2_angle_rad = interpolate_float(&animated.stretch2_angle, layer_time)
             .unwrap_or(0.0)
             .to_radians();
-        if has_stretch2 {
-            let s2_content_only = if animated.stretch2_content_only {
-                1.0
-            } else {
-                0.0
-            };
-            bevy::log::trace!(
-                "[stretch2] layer_id={} scale={:.4} angle_rad={:.4} content_only={}",
-                animated.layer_id,
-                s2_scale,
-                s2_angle_rad,
-                animated.stretch2_content_only
-            );
-            material.uniform_data.stretch2_params =
-                Vec4::new(s2_scale, s2_angle_rad, s2_content_only, 0.0);
-        } else {
-            material.uniform_data.stretch2_params = Vec4::ZERO;
-        }
+        update_stretch2_uniform(material, animated, has_stretch2, s2_scale, s2_angle_rad);
 
-        // Update wavewarp2 parameters (波浪歪曲 / Wave Warp)
-        if animated.wavewarp2_has_effect {
-            let phase = interpolate_float(&animated.wavewarp2_phase, layer_time).unwrap_or(0.0);
-            let a1d_rad = interpolate_float(&animated.wavewarp2_a1d, layer_time)
-                .unwrap_or(0.0)
-                .to_radians();
-            let m1 = interpolate_float(&animated.wavewarp2_m1, layer_time).unwrap_or(20.0);
-            let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time).unwrap_or(4.0);
-            let a2d = interpolate_float(&animated.wavewarp2_a2d, layer_time).unwrap_or(90.0);
-            let a2_rad = (a1d_rad.to_degrees() + a2d).to_radians();
-            let damping_val =
-                interpolate_float(&animated.wavewarp2_damping, layer_time).unwrap_or(0.0);
-            let damping_space =
-                interpolate_float(&animated.wavewarp2_damping_space, layer_time).unwrap_or(0.0);
-            let damping_origin =
-                interpolate_float(&animated.wavewarp2_damping_origin, layer_time).unwrap_or(0.5);
+        update_wavewarp2(material, animated, layer_time, orig_width, orig_height);
 
-            material.uniform_data.wavewarp2_params1 = Vec4::new(phase, a1d_rad, m1, m2);
-            material.uniform_data.wavewarp2_params2 =
-                Vec4::new(a2_rad, damping_val, damping_space, damping_origin);
-            // AM computes offset in acLayerNorm but applies to acScreenNorm,
-            // causing magnification by (canvas_size / layer_display_size).
-            // Pass per-axis scale factors so the shader can replicate this.
-            let mag_x = animated.canvas_width / orig_width.max(1.0);
-            let mag_y = animated.canvas_height / orig_height.max(1.0);
-            material.uniform_data.wavewarp2_flags = Vec4::new(
-                if animated.wavewarp2_screen_space {
-                    1.0
-                } else {
-                    0.0
-                },
-                1.0, // enabled
-                mag_x,
-                mag_y,
-            );
-        } else {
-            material.uniform_data.wavewarp2_params1 = Vec4::ZERO;
-            material.uniform_data.wavewarp2_params2 = Vec4::ZERO;
-            material.uniform_data.wavewarp2_flags = Vec4::ZERO;
-        }
+        update_mirror(material, animated, layer_time);
 
-        // Update mirror effect (镜子)
-        if animated.mirror_has_effect {
-            let alpha = interpolate_float(&animated.mirror_alpha, layer_time).unwrap_or(1.0);
-            let offset = interpolate_float(&animated.mirror_offset, layer_time).unwrap_or(0.0);
-            // Encode type+1: 0=disabled, 1=horizontal, 2=vertical
-            let type_plus_1 = (animated.mirror_type + 1) as f32;
-            material.uniform_data.mirror_params = Vec4::new(
-                type_plus_1,
-                animated.mirror_blend_mode as f32,
-                alpha,
-                offset,
-            );
-        } else {
-            material.uniform_data.mirror_params = Vec4::ZERO;
-        }
+        update_lift(material, animated, layer_time);
 
-        // Update lift (copy background) effect
-        if animated.lift_has_effect {
-            let fill = interpolate_float(&animated.lift_fill, layer_time).unwrap_or(0.0);
-            material.uniform_data.lift_params = Vec4::new(
-                fill,
-                animated.canvas_width,
-                animated.canvas_height,
-                1.0, // enabled
-            );
-        } else {
-            material.uniform_data.lift_params = Vec4::ZERO;
-        }
+        update_rays(
+            material,
+            animated,
+            _embed_marker,
+            &parent_animated_query,
+            global_time,
+        );
 
-        // Update rays effect; propagate parent embed's rays to children
-        let mut has_rays = animated.rays_has_effect;
-        let rays_src = if has_rays {
-            animated
-        } else if let Some(marker) = _embed_marker
-            && let Ok((parent_anim, _)) = parent_animated_query.get(marker.embed_entity)
-            && parent_anim.rays_has_effect
-        {
-            has_rays = true;
-            parent_anim
-        } else {
-            animated // won't be used since has_rays=false
-        };
-        if has_rays {
-            let rt = rays_src.calc_layer_time(rays_src.calc_local_time(global_time));
-            let strength = interpolate_float(&rays_src.rays_strength, rt).unwrap_or(0.15);
-            let intensity = interpolate_float(&rays_src.rays_intensity, rt).unwrap_or(1.0);
-            let threshold = interpolate_float(&rays_src.rays_threshold, rt).unwrap_or(0.6);
-            let quality = interpolate_float(&rays_src.rays_quality, rt).unwrap_or(150.0);
-            let blend = interpolate_float(&rays_src.rays_blend, rt).unwrap_or(0.0);
-            let cx = 0.5 + interpolate_float(&rays_src.rays_center_x, rt).unwrap_or(0.0) / 500.0;
-            let cy = 0.5 - interpolate_float(&rays_src.rays_center_y, rt).unwrap_or(0.0) / 500.0;
-            material.uniform_data.rays_params1 = Vec4::new(strength, intensity, threshold, quality);
-            material.uniform_data.rays_params2 = Vec4::new(blend, cx, cy, 1.0);
-            material.uniform_data.rays_threshold_color = rays_src.rays_threshold_color;
-            material.uniform_data.rays_fill_color = rays_src.rays_fill_color;
-        } else {
-            material.uniform_data.rays_params1 = Vec4::ZERO;
-            material.uniform_data.rays_params2 = Vec4::ZERO;
-            material.uniform_data.rays_threshold_color = Vec4::ZERO;
-            material.uniform_data.rays_fill_color = Vec4::ZERO;
-        }
+        update_rgb_split(material, animated, layer_time);
 
-        // Update RGB split (chromatic aberration) effect / RGB 分离效果
-        if animated.rgb_split_enabled {
-            let strength =
-                interpolate_float(&animated.rgb_split_strength, layer_time).unwrap_or(0.15);
-            let angle_deg = interpolate_float(&animated.rgb_split_angle, layer_time).unwrap_or(0.0);
-            let angle_rad = angle_deg.to_radians();
-            let adj_strength = strength / 8.0;
-            let offset_x = angle_rad.cos() * adj_strength;
-            let offset_y = angle_rad.sin() * adj_strength;
-            material.uniform_data.rgb_split_params = Vec4::new(
-                offset_x,
-                offset_y,
-                animated.rgb_split_center as f32,
-                animated.rgb_split_mode as f32,
-            );
-        } else {
-            material.uniform_data.rgb_split_params = Vec4::new(0.0, 0.0, 0.0, -1.0);
-        }
+        update_exposure(
+            material,
+            animated,
+            _embed_marker,
+            &parent_animated_query,
+            global_time,
+            layer_time,
+        );
 
-        // Update exposure/gamma effect / 曝光/伽马效果
-        // Also propagate parent embed's exposure to children (for Direct strategy embeds)
-        let (mut exp_val, mut gam_val, mut off_val, mut has_exp) = if animated.exposure_has_effect {
-            (
-                interpolate_float(&animated.exposure_value, layer_time).unwrap_or(0.0),
-                interpolate_float(&animated.exposure_gamma, layer_time).unwrap_or(1.0),
-                interpolate_float(&animated.exposure_offset, layer_time).unwrap_or(0.0),
-                true,
-            )
-        } else {
-            (0.0, 1.0, 0.0, false)
-        };
-        // Inherit parent embed's exposure if this entity is embed content
-        if let Some(marker) = _embed_marker
-            && let Ok((parent_anim, _)) = parent_animated_query.get(marker.embed_entity)
-            && parent_anim.exposure_has_effect
-        {
-            let pt = parent_anim.calc_local_time(global_time);
-            let plt = parent_anim.calc_layer_time(pt);
-            let pe = interpolate_float(&parent_anim.exposure_value, plt).unwrap_or(0.0);
-            let pg = interpolate_float(&parent_anim.exposure_gamma, plt).unwrap_or(1.0);
-            let po = interpolate_float(&parent_anim.exposure_offset, plt).unwrap_or(0.0);
-            exp_val += pe;
-            gam_val *= pg;
-            off_val += po;
-            has_exp = true;
-        }
-        material.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
+        update_chromakey(material, animated, layer_time);
 
-        // Update chromakey effect / 色度键效果
-        if animated.chromakey_enabled {
-            let key_color = interpolate_color(&animated.chromakey_key_color, layer_time)
-                .unwrap_or(Vec4::new(0.0, 1.0, 0.0, 1.0));
-            let threshold =
-                interpolate_float(&animated.chromakey_threshold, layer_time).unwrap_or(0.1);
-            let feather =
-                interpolate_float(&animated.chromakey_feather, layer_time).unwrap_or(0.05);
-            // key_color is in sRGB from AM; convert to linear for shader
-            let linear_key = Vec4::new(
-                srgb_to_linear(key_color.x),
-                srgb_to_linear(key_color.y),
-                srgb_to_linear(key_color.z),
-                key_color.w,
-            );
-            material.set_chromakey(
-                linear_key,
-                threshold,
-                feather,
-                animated.chromakey_defringe,
-                animated.chromakey_invert,
-            );
-        }
+        update_blend(material, animated);
 
-        // Update blend mode / 混合模式
-        if animated.blend_mode.is_blend() {
-            material.set_blend_mode(
-                animated.blend_mode.as_f32(),
-                animated.canvas_width,
-                animated.canvas_height,
-            );
-        }
+        update_solidcolor(material, animated, layer_time);
 
-        // Update solidcolor effect
-        let sc_alpha_val =
-            interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
-        if sc_alpha_val > 0.0 {
-            let sc_color =
-                interpolate_color(&animated.solid_color, layer_time).unwrap_or(Vec4::ZERO);
-            material.uniform_data.solid_color_params = Vec4::new(
-                srgb_to_linear(sc_color.x),
-                srgb_to_linear(sc_color.y),
-                srgb_to_linear(sc_color.z),
-                animated.solid_color_blend_mode as f32,
-            );
-            material.uniform_data.solid_color_alpha = Vec4::new(sc_alpha_val, 0.0, 0.0, 0.0);
-        } else {
-            material.uniform_data.solid_color_alpha = Vec4::ZERO;
-        }
-
-        // For content_only=false, compute mesh expansion so content extends beyond
-        // original layer boundary (matching AM's screen-space stretch behavior).
-        // We compute the bounding box of the inverse stretch transform of [0,1]²
-        // to determine how much larger the mesh needs to be and what UV range to use.
-        let (s2_expand_x, s2_expand_y, s2_uv_min_x, s2_uv_min_y) =
-            if has_stretch2 && !animated.stretch2_content_only && (s2_scale - 1.0).abs() > 0.001 {
-                let cos_a = s2_angle_rad.cos();
-                let sin_a = s2_angle_rad.sin();
-                let corners = [(-0.5_f32, -0.5_f32), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)];
-                let (mut min_x, mut min_y, mut max_x, mut max_y) =
-                    (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-                for (cx, cy) in corners {
-                    // rotate into stretch-axis space
-                    let rx = cx * cos_a - cy * sin_a;
-                    let ry = cx * sin_a + cy * cos_a;
-                    // apply inverse of 1/scale → multiply by scale
-                    let ux = rx * s2_scale;
-                    let uy = ry;
-                    // rotate back
-                    let mx = ux * cos_a + uy * sin_a;
-                    let my = -ux * sin_a + uy * cos_a;
-                    min_x = min_x.min(mx + 0.5);
-                    min_y = min_y.min(my + 0.5);
-                    max_x = max_x.max(mx + 0.5);
-                    max_y = max_y.max(my + 0.5);
-                }
-                (max_x - min_x, max_y - min_y, min_x, min_y)
-            } else {
-                (1.0, 1.0, 0.0, 0.0)
-            };
-
-        // Update blur parameters if needed
         let has_blur =
             animated.blur_strength.value.is_some() || !animated.blur_strength.keyframes.is_empty();
-        if has_blur {
-            let blur_strength =
-                interpolate_float(&animated.blur_strength, layer_time).unwrap_or(0.0);
-            if blur_strength > 0.001 {
-                material.set_blur_enabled(true);
-                // AM strength 2.0 produces very strong blur
-                // Testing shows AM blur is much stronger than expected
-                // Use strength * 80 for closer match to AM's blur intensity
-                let blur_radius_px = blur_strength * 80.0;
+        update_blur_mesh(
+            material,
+            animated,
+            layer_time,
+            orig_width,
+            orig_height,
+            mesh2d,
+            &mut meshes,
+        );
 
-                // Expand mesh to allow blur overflow (circular glow effect)
-                // The blur samples beyond the texture boundary, so mesh needs to be larger
-                // AM's blur glow extends significantly - use 2x radius for full coverage
-                let blur_expansion = blur_radius_px * 2.0;
-
-                // Pass blur parameters to shader
-                // blur_params.x = blur radius in pixels
-                // blur_params.y = original width (for UV calculations)
-                // blur_params.z = original height (for UV calculations)
-                // blur_params.w = blur expansion in pixels
-                material.uniform_data.blur_params =
-                    Vec4::new(blur_radius_px, orig_width, orig_height, blur_expansion);
-
-                // Update mesh bounds for blur overflow
-                // Create new mesh with expanded bounds (similar to stretch segment approach)
-                let half_w = orig_width / 2.0;
-                let half_h = orig_height / 2.0;
-
-                // Vertices expand outward by blur_expansion
-                let min_x = -half_w - blur_expansion;
-                let max_x = half_w + blur_expansion;
-                let min_y = -half_h - blur_expansion;
-                let max_y = half_h + blur_expansion;
-
-                // Calculate UV coordinates that extend beyond 0-1 for blur sampling
-                // The shader will treat out-of-bounds samples as transparent
-                let uv_expand_x = blur_expansion / orig_width;
-                let uv_expand_y = blur_expansion / orig_height;
-
-                // UV coords extend beyond [0,1] to sample the expanded blur area
-                update_quad_mesh(
-                    &mut meshes,
-                    mesh2d,
-                    [min_x, max_x, min_y, max_y],
-                    [
-                        -uv_expand_x,
-                        1.0 + uv_expand_x,
-                        -uv_expand_y,
-                        1.0 + uv_expand_y,
-                    ],
-                );
-            } else {
-                material.set_blur_enabled(false);
-                // Reset mesh to original bounds when blur is disabled
-                // This ensures no leftover expansion from previous frames
-            }
-        } else {
-            material.set_blur_enabled(false);
-        }
-
-        // Update stretch segment parameters if needed
-        if has_stretch {
-            material.set_stretch_enabled(true);
-
-            let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
-            // Pass original AM angle to shader (NOT rotation-compensated).
-            // The shader rotates local coords to screen space using transform_rotation,
-            // applies the AM stretch formula, then rotates back. This correctly handles
-            // the anisotropic scene-norm space (scene_width != scene_height).
-            let angle_rad = angle_deg.to_radians();
-            let stretch_raw =
-                interpolate_float(&animated.stretch_amount, layer_time).unwrap_or(0.0);
-            let offset_raw = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
-            let smooth_raw = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
-
-            // AM stretch-segment formula (from stretchsegment.xml):
-            //   adjStretch = stretch / 500.0  (scene-normalized coords)
-            //   offset_norm = offset / 1000.0  (scene-normalized coords)
-            //   smooth is passed raw (0..1)
-            // The shader converts pixel coords to scene-norm, applies AM's formula, converts back.
-            let scene_width = animated.canvas_width;
-            let scene_height = animated.canvas_height;
-            let adj_stretch = stretch_raw / 500.0;
-            let offset_norm = offset_raw / 1000.0;
-
-            // Compute second stretch-segment params if present
-            let (adj_stretch2, angle_rad2, offset_norm2, smooth_raw2) = if has_stretch_seg2 {
-                let a2_deg =
-                    interpolate_float(&animated.stretch_seg2_angle, layer_time).unwrap_or(0.0);
-                let a2_rad = a2_deg.to_radians();
-                let s2_raw =
-                    interpolate_float(&animated.stretch_seg2_amount, layer_time).unwrap_or(0.0);
-                let o2_raw =
-                    interpolate_float(&animated.stretch_seg2_offset, layer_time).unwrap_or(0.0);
-                let sm2_raw =
-                    interpolate_float(&animated.stretch_seg2_smooth, layer_time).unwrap_or(0.0);
-                (s2_raw / 500.0, a2_rad, o2_raw / 1000.0, sm2_raw)
-            } else {
-                (0.0, 0.0, 0.0, 0.0)
-            };
-
-            // Mesh bounds: compute max displacement in SCREEN space using original AM angle,
-            // then rotate back to LOCAL space for mesh expansion.
-            // This correctly handles the anisotropic scene-norm space for rotated sprites.
-            let cos_a1 = angle_rad.cos().abs();
-            let sin_a1 = angle_rad.sin().abs();
-            let dx1_screen = cos_a1 * adj_stretch * scene_width;
-            let dy1_screen = sin_a1 * adj_stretch * scene_height;
-            let (dx2_screen, dy2_screen) = if has_stretch_seg2 {
-                (
-                    angle_rad2.cos().abs() * adj_stretch2 * scene_width,
-                    angle_rad2.sin().abs() * adj_stretch2 * scene_height,
-                )
-            } else {
-                (0.0, 0.0)
-            };
-            let total_dx_screen = dx1_screen + dx2_screen;
-            let total_dy_screen = dy1_screen + dy2_screen;
-
-            // Rotate screen-space displacement bounding box back to local space
-            let rot_cos = transform_rotation_rad.cos().abs();
-            let rot_sin = transform_rotation_rad.sin().abs();
-            let total_dx = rot_cos * total_dx_screen + rot_sin * total_dy_screen;
-            let total_dy = rot_sin * total_dx_screen + rot_cos * total_dy_screen;
-
-            let new_width = orig_width + 2.0 * total_dx;
-            let new_height = orig_height + 2.0 * total_dy;
-
-            let global_scale = global_transform.to_scale_rotation_translation().0;
-            trace_stretch_once(animated.layer_id, || {
-                format!(
-                    "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) mesh=({:.2},{:.2}) angle={:.2} stretch={:.2}",
-                    animated.layer_id,
-                    animated.parent_layer_id,
-                    scene_width,
-                    scene_height,
-                    sprite_size[0],
-                    sprite_size[1],
-                    scale[0],
-                    scale[1],
-                    ancestor_scale[0],
-                    ancestor_scale[1],
-                    global_scale.x,
-                    global_scale.y,
-                    orig_width,
-                    orig_height,
-                    new_width,
-                    new_height,
-                    angle_deg,
-                    stretch_raw,
-                )
-            });
-
-            // Mesh vertex bounds: expanded by AA padding so the shader can
-            // render smooth edge gradients via smoothstep outside the shape boundary.
-            let aa_pad: f32 = 4.0;
-            let half_nw = new_width / 2.0 + aa_pad;
-            let half_nh = new_height / 2.0 + aa_pad;
-
-            // Debug: log stretch calculation details
-            if stretch_raw > 0.1 {
-                trace!(
-                    "[Stretch] layer_id={} scene=({:.0},{:.0}) adj_stretch={:.4} new_sz=({:.1},{:.1})",
-                    animated.layer_id,
-                    scene_width,
-                    scene_height,
-                    adj_stretch,
-                    new_width,
-                    new_height,
-                );
-            }
-
-            // Pass raw AM params to shader: (angle, adjStretch, offset_norm, smooth)
-            // mesh_offset.x carries transform_rotation for screen-space conversion
-            material.uniform_data.stretch_params =
-                Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
-            material.uniform_data.original_size =
-                Vec4::new(orig_width, orig_height, new_width, new_height);
-            let stretch_sign_code =
-                (if scale[0] < 0.0 { 1.0 } else { 0.0 }) + (if scale[1] < 0.0 { 2.0 } else { 0.0 });
-            material.uniform_data.mesh_offset = Vec4::new(
-                transform_rotation_rad,
-                stretch_sign_code,
-                scene_width,
-                scene_height,
-            );
-
-            // Update second stretch-segment material parameters
-            if has_stretch_seg2 {
-                material.uniform_data.stretch_seg2_params =
-                    Vec4::new(angle_rad2, adj_stretch2, offset_norm2, smooth_raw2);
-            } else {
-                material.uniform_data.stretch_seg2_params = Vec4::ZERO;
-            }
-
-            // Create new mesh with expanded bounds
-            // UV extends beyond [0,1] into AA padding for smoothstep gradients.
-            let u_pad = aa_pad / new_width;
-            let v_pad = aa_pad / new_height;
-            update_quad_mesh(
-                &mut meshes,
-                mesh2d,
-                [-half_nw, half_nw, -half_nh, half_nh],
-                [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
-            );
-        } else {
-            material.set_stretch_enabled(false);
-        }
+        update_stretch_mesh(
+            material,
+            animated,
+            layer_time,
+            has_stretch,
+            has_stretch_seg2,
+            transform_rotation_rad,
+            sprite_size,
+            scale,
+            ancestor_scale,
+            orig_width,
+            orig_height,
+            global_transform,
+            mesh2d,
+            &mut meshes,
+        );
 
         // For effect sprites without blur/stretch, still need to update mesh size
         // when scale/size animation changes. This ensures content scales correctly.
         // This applies to BOTH regular content AND embed content.
         // Bounds clipping (if needed) is handled separately by apply_embed_bounds_clipping_system.
-        if !has_stretch && !has_blur {
-            // Apply stretch2 mesh expansion for content_only=false.
-            // The mesh grows so content extends beyond original layer boundary,
-            // matching AM's screen-space sampling. UV range is expanded so the
-            // shader's UV stretch maps the full content onto the larger mesh.
-            let half_w = orig_width / 2.0 * s2_expand_x;
-            let half_h = orig_height / 2.0 * s2_expand_y;
-
-            // Get original size (before scale_assist) from the animated size property
-            let orig_size = interpolate_vec2(&animated.size, 0.0).unwrap_or([100.0, 100.0]);
-            let orig_w = orig_size[0].abs().max(1.0);
-            let orig_h = orig_size[1].abs().max(1.0);
-
-            // anchor = anchor_offset / orig_size (approximately)
-            let anchor_x = if orig_w > 0.0 {
-                animated.anchor_offset.x / orig_w
-            } else {
-                0.0
-            };
-            let anchor_y = if orig_h > 0.0 {
-                animated.anchor_offset.y / orig_h
-            } else {
-                0.0
-            };
-
-            // mesh offset = -anchor * current_size (based on content dimensions, not expanded mesh)
-            let offset_x = -anchor_x * orig_width;
-            let offset_y = -anchor_y * orig_height;
-
-            // Pixelate expansion: edge blocks extend half a cell beyond content area
-            let pix_expansion = if has_pixelate {
-                let size = interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
-                let stretch =
-                    interpolate_vec2(&animated.pixelate_stretch, layer_time).unwrap_or([1.0, 1.0]);
-                size * stretch[0].abs().max(stretch[1].abs()) / 2.0
-            } else {
-                0.0
-            };
-
-            // Wavewarp2 expansion: wave displacement can push content beyond original bounds
-            let warp_expansion = if animated.wavewarp2_has_effect {
-                let m2 = interpolate_float(&animated.wavewarp2_m2, layer_time)
-                    .unwrap_or(0.0)
-                    .abs();
-                // AM applies displacement in acScreenNorm but computes in acLayerNorm,
-                // causing magnification by (canvas_size / layer_display_size).
-                // We replicate this: expansion = m2/100 * magnification * content_size
-                let mag = animated.canvas_height / orig_height.max(1.0);
-                m2 / 100.0 * mag * orig_width.max(orig_height)
-            } else {
-                0.0
-            };
-            // Mirror offset pushes reflected content beyond layer bounds
-            let mirror_expansion = if animated.mirror_has_effect {
-                let offset = interpolate_float(&animated.mirror_offset, layer_time)
-                    .unwrap_or(0.0)
-                    .abs();
-                offset * orig_width.max(orig_height)
-            } else {
-                0.0
-            };
-            // RGB split expansion: shifted channels extend beyond layer bounds.
-            // When lift (copy-bg) is active, AM confines the effect to the layer's
-            // FBO — no mesh expansion needed because the composite texture already
-            // covers the full screen and the shader samples it at offset UVs.
-            let rgb_split_expansion = if animated.rgb_split_enabled && !animated.lift_has_effect {
-                let strength =
-                    interpolate_float(&animated.rgb_split_strength, layer_time).unwrap_or(0.15);
-                let adj_strength = (strength / 8.0).abs();
-                adj_strength * orig_width.max(orig_height)
-            } else {
-                0.0
-            };
-            let total_expansion =
-                pix_expansion + warp_expansion + mirror_expansion + rgb_split_expansion;
-
-            let (lx, rx) = (
-                offset_x - half_w - total_expansion,
-                offset_x + half_w + total_expansion,
-            );
-            let (by, ty) = (
-                offset_y - half_h - total_expansion,
-                offset_y + half_h + total_expansion,
-            );
-            // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
-            let uv_exp_x = total_expansion / orig_width;
-            let uv_exp_y = total_expansion / orig_height;
-            update_quad_mesh(
-                &mut meshes,
-                mesh2d,
-                [lx, rx, by, ty],
-                [
-                    s2_uv_min_x - uv_exp_x,
-                    (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-                    (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
-                    (1.0 - s2_uv_min_y) + uv_exp_y,
-                ],
-            );
-        }
+        update_base_mesh(
+            animated,
+            layer_time,
+            has_stretch,
+            has_blur,
+            has_pixelate,
+            has_stretch2,
+            s2_scale,
+            s2_angle_rad,
+            orig_width,
+            orig_height,
+            mesh2d,
+            &mut meshes,
+        );
 
         // Update palette map alpha if present
         let has_palette =
             animated.palette_alpha.value.is_some() || !animated.palette_alpha.keyframes.is_empty();
-        let palette_enabled = material.is_palette_enabled();
-        if has_palette && palette_enabled {
-            let palette_alpha =
-                interpolate_float(&animated.palette_alpha, layer_time).unwrap_or(1.0);
-            material.set_palette_alpha(palette_alpha);
-        }
+        update_palette(material, animated, layer_time, has_palette);
 
-        // Update replace color effect if present
         let has_replace_color = animated.replace_old_color.w > 0.0;
-        bevy::log::debug!(
-            "[ReplaceColor Check] layer={} has_replace={} old_color={:?}",
-            animated.layer_id,
-            has_replace_color,
-            animated.replace_old_color
+        update_replace_color(material, animated, layer_time, has_replace_color);
+
+        update_threshold(material, animated, layer_time);
+
+        update_grid(material, animated, layer_time);
+        update_pixelate(
+            material,
+            animated,
+            layer_time,
+            global_transform,
+            root_scale,
+            has_pixelate,
         );
-        if has_replace_color {
-            let new_color = interpolate_color(&animated.replace_new_color, layer_time)
-                .unwrap_or(animated.replace_old_color);
-            let threshold =
-                interpolate_float(&animated.replace_threshold, layer_time).unwrap_or(0.25);
-            let feather = interpolate_float(&animated.replace_feather, layer_time).unwrap_or(0.25);
-            let alpha = interpolate_float(&animated.replace_alpha, layer_time).unwrap_or(1.0);
-
-            bevy::log::debug!(
-                "[ReplaceColor Apply] layer={} old={:?} new={:?} threshold={:.3} feather={:.3} alpha={:.3}",
-                animated.layer_id,
-                animated.replace_old_color,
-                new_color,
-                threshold,
-                feather,
-                alpha
-            );
-
-            // Pass colors directly - shader will handle color space
-            material.set_replace_color(
-                animated.replace_old_color,
-                new_color,
-                threshold,
-                feather,
-                alpha,
-                animated.replace_lock_luminance,
-            );
-        }
-
-        // Update threshold effect if present
-        let has_threshold = animated.threshold_value.value.is_some()
-            || !animated.threshold_value.keyframes.is_empty();
-        if has_threshold {
-            let threshold = interpolate_float(&animated.threshold_value, layer_time).unwrap_or(0.5);
-            let feather = interpolate_float(&animated.threshold_feather, layer_time).unwrap_or(0.0);
-
-            material.set_threshold(
-                true,
-                threshold,
-                feather,
-                animated.threshold_invert,
-                animated.threshold_blend_mode,
-            );
-        }
-
-        // Update grid effect if present
-        let has_grid =
-            animated.grid_spacing.value.is_some() || !animated.grid_spacing.keyframes.is_empty();
-        if has_grid {
-            let position =
-                interpolate_vec2(&animated.grid_position, layer_time).unwrap_or([0.0, 0.0]);
-            let spacing = interpolate_float(&animated.grid_spacing, layer_time).unwrap_or(0.1);
-            let width = interpolate_float(&animated.grid_width, layer_time).unwrap_or(0.02);
-            let smoothing = interpolate_float(&animated.grid_smoothing, layer_time).unwrap_or(0.0);
-            let color = interpolate_color(&animated.grid_color, layer_time)
-                .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
-
-            material.set_grid(
-                true,
-                animated.grid_punchout,
-                animated.grid_screen_space,
-                position[0],
-                position[1],
-                spacing,
-                width,
-                smoothing,
-                color,
-            );
-        }
-
-        // Update pixelate effect if present
-        if has_pixelate {
-            let size = interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
-            let stretch =
-                interpolate_vec2(&animated.pixelate_stretch, layer_time).unwrap_or([1.0, 1.0]);
-            let angle = interpolate_float(&animated.pixelate_angle, layer_time).unwrap_or(0.0);
-            let vignette =
-                interpolate_float(&animated.pixelate_vignette, layer_time).unwrap_or(0.0);
-            let threshold =
-                interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.5);
-            let saturation =
-                interpolate_float(&animated.pixelate_saturation, layer_time).unwrap_or(1.0);
-
-            bevy::log::debug!(
-                "[Pixelate] layer={} time={:.2} size={:.1} stretch=({:.2},{:.2}) angle={:.1}",
-                animated.layer_id,
-                layer_time,
-                size,
-                stretch[0],
-                stretch[1],
-                angle
-            );
-
-            material.set_pixelate(
-                true,
-                animated.pixelate_screen_space,
-                size,
-                stretch[0],
-                stretch[1],
-                angle,
-                vignette,
-                threshold,
-                saturation,
-            );
-
-            // Store scene_scale for potential future use; currently unused in shader
-            // as pixelation uses inner-scene-space coordinates.
-            let origin = global_transform.translation();
-            let local_x_world = global_transform.transform_point(Vec3::X) - origin;
-            let local_y_world = global_transform.transform_point(Vec3::Y) - origin;
-            let scene_scale_x = local_x_world.length() / root_scale;
-            let scene_scale_y = local_y_world.length() / root_scale;
-            material.uniform_data.pixelate_flags.z = scene_scale_x;
-            material.uniform_data.pixelate_flags.w = scene_scale_y;
-
-            // Compute parent rotation for grid angle compensation.
-            let local_x_world = global_transform.transform_point(Vec3::X) - origin;
-            let scene_rotation = local_x_world.y.atan2(local_x_world.x);
-            material.uniform_data.pixelate_params2.w = scene_rotation;
-        }
 
         // Process repeat and linear repeat effects (delegated to repeat module)
         super::repeat::process_repeat_effect(
