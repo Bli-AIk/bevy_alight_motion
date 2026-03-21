@@ -12,14 +12,18 @@ use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+mod material;
+mod mesh;
+
 use crate::scene::{AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 use crate::sdf_material::SdfMaterial;
 
+use self::material::create_unified_material;
+use self::mesh::{create_anchored_rectangle, create_anchored_rectangle_with_blur};
 use super::components::AmUnifiedUsesTransformScale;
 use super::sdf_spawn::spawn_sdf_visual;
 use super::visual_helpers::{
-    compute_initial_mask_params, create_stretch_bounds_mesh, extract_fill_color,
-    trace_visual_path_once,
+    create_stretch_bounds_mesh, extract_fill_color, trace_visual_path_once,
 };
 
 #[expect(clippy::too_many_arguments)] // reason: visual setup requires many GPU resource handles
@@ -75,7 +79,7 @@ pub(crate) fn add_visual_components(
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
     max_animated_scale: f32,   // Max scale from animation keyframes for SDF mesh sizing
 ) {
-    use crate::masked_sprite::{UnifiedEffectMarker, UnifiedEffectMaterial};
+    use crate::masked_sprite::UnifiedEffectMarker;
 
     bevy::log::debug!(
         "[add_visual_components] Called for '{}' (id={}), spec={:?}, is_embed_content={}, has_scale_assist={}, has_repeat={}, has_threshold={}, has_grid={}, has_pixelate={}",
@@ -178,203 +182,6 @@ pub(crate) fn add_visual_components(
     } else {
         size_scale
     };
-
-    // Helper function to create a rectangle mesh with anchor offset
-    fn create_anchored_rectangle(
-        meshes: &mut Assets<Mesh>,
-        width: f32,
-        height: f32,
-        anchor: &bevy::sprite::Anchor,
-    ) -> Handle<Mesh> {
-        let anchor_vec = anchor.as_vec();
-        let offset_x = -anchor_vec.x * width;
-        let offset_y = -anchor_vec.y * height;
-        bevy::log::debug!(
-            "[MESH] create_anchored_rectangle: size=({:.1}, {:.1}), anchor=({:.3}, {:.3}), vertex_offset=({:.1}, {:.1})",
-            width,
-            height,
-            anchor_vec.x,
-            anchor_vec.y,
-            offset_x,
-            offset_y
-        );
-        create_anchored_rectangle_with_blur(meshes, width, height, anchor, 0.0)
-    }
-
-    // Helper function to create a rectangle mesh with anchor offset and blur expansion
-    // blur_expansion: additional pixels to add on each side for blur overflow
-    fn create_anchored_rectangle_with_blur(
-        meshes: &mut Assets<Mesh>,
-        width: f32,
-        height: f32,
-        anchor: &bevy::sprite::Anchor,
-        blur_expansion: f32,
-    ) -> Handle<Mesh> {
-        if blur_expansion > 0.001 {
-            bevy::log::warn!(
-                "[MESH] create_anchored_rectangle_with_blur: size=({:.1},{:.1}) expansion={:.2}",
-                width,
-                height,
-                blur_expansion
-            );
-        }
-        let anchor_vec = anchor.as_vec();
-        // Anchor offset based on original size (this positions the image center)
-        let offset_x = -anchor_vec.x * width;
-        let offset_y = -anchor_vec.y * height;
-
-        // Original half-sizes
-        let half_w = width / 2.0;
-        let half_h = height / 2.0;
-
-        // Vertices expand outward from original rectangle by blur_expansion
-        // This keeps the image centered while expanding the mesh for blur overflow
-        let vertices = vec![
-            [
-                offset_x - half_w - blur_expansion,
-                offset_y - half_h - blur_expansion,
-                0.0,
-            ],
-            [
-                offset_x + half_w + blur_expansion,
-                offset_y - half_h - blur_expansion,
-                0.0,
-            ],
-            [
-                offset_x + half_w + blur_expansion,
-                offset_y + half_h + blur_expansion,
-                0.0,
-            ],
-            [
-                offset_x - half_w - blur_expansion,
-                offset_y + half_h + blur_expansion,
-                0.0,
-            ],
-        ];
-
-        let normals = vec![
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
-        ];
-
-        // UV coordinates that map the expanded mesh to extended texture sampling
-        // When blur_expansion > 0, UVs extend beyond 0-1 range
-        // The shader's blur function handles out-of-bounds by treating them as transparent
-        let uv_expand_x = blur_expansion / width;
-        let uv_expand_y = blur_expansion / height;
-        let uvs = vec![
-            [-uv_expand_x, 1.0 + uv_expand_y],      // bottom-left
-            [1.0 + uv_expand_x, 1.0 + uv_expand_y], // bottom-right
-            [1.0 + uv_expand_x, -uv_expand_y],      // top-right
-            [-uv_expand_x, -uv_expand_y],           // top-left
-        ];
-
-        let indices = vec![0, 1, 2, 0, 2, 3];
-
-        let mut mesh = Mesh::new(
-            bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD
-                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-        );
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-        mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-        meshes.add(mesh)
-    }
-
-    // Helper to create unified material with effects
-    fn create_unified_material(
-        unified_materials: &mut Assets<UnifiedEffectMaterial>,
-        texture: Handle<Image>,
-        color: LinearRgba,
-        width: f32,
-        height: f32,
-        mask_info: &Option<AmMaskInfo>,
-        wipe_params: Option<Vec4>,
-        stretch_params: Option<Vec4>,
-        blur_params: Option<Vec4>,
-        palette_params: Option<&AmPaletteMapParams>,
-        mesh_offset: Option<Vec4>,
-        mesh_size: Option<(f32, f32)>, // Optional mesh size for stretch bounds
-        fit_scale: f32,                // Scale factor for mask coordinates
-        global_time_ms: u64,           // Current playback time for mask initialization
-        replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>, // (flags, old_color, new_color, params)
-    ) -> Handle<UnifiedEffectMaterial> {
-        // Use mesh_size if provided (for stretch bounds), otherwise use original size
-        let (mesh_width, mesh_height) = mesh_size.unwrap_or((width, height));
-
-        // Pre-calculate mask params if mask is present, to ensure first frame renders correctly
-        let (
-            initial_effect_flags_x,
-            initial_mask_params,
-            initial_mask2_flags_x,
-            initial_mask2_params,
-        ) = compute_initial_mask_params(mask_info, fit_scale, global_time_ms);
-
-        let mut material = UnifiedEffectMaterial {
-            uniform_data: crate::masked_sprite::UnifiedEffectUniform {
-                color: Vec4::new(color.red, color.green, color.blue, color.alpha),
-                effect_flags: Vec4::new(initial_effect_flags_x, 0.0, 0.0, 0.0),
-                mask_params: initial_mask_params,
-                original_size: Vec4::new(width, height, mesh_width, mesh_height),
-                mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
-                mask2_params: initial_mask2_params,
-                mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
-                ..default()
-            },
-            texture: Some(texture),
-            lift_comp_texture: None,
-            mask_texture: None,
-        };
-
-        // Enable wipe if present
-        if let Some(wp) = wipe_params {
-            material.uniform_data.effect_flags.y = 1.0;
-            material.uniform_data.wipe_params = wp;
-        }
-
-        // Enable stretch if present
-        if let Some(sp) = stretch_params {
-            material.uniform_data.effect_flags.z = 1.0;
-            material.uniform_data.stretch_params = sp;
-        }
-
-        // Enable blur if present
-        if let Some(bp) = blur_params {
-            material.uniform_data.effect_flags.w = 1.0;
-            material.uniform_data.blur_params = bp;
-        }
-
-        // Enable palette map if present
-        if let Some(palette) = palette_params {
-            material.uniform_data.palette_flags.x = 1.0; // enabled
-            material.uniform_data.palette_flags.y = palette.count as f32;
-            material.uniform_data.palette_flags.z = 0.0; // shades already resolved into colors
-            material.uniform_data.palette_flags.w = palette.initial_alpha;
-            material.uniform_data.palette_color1 = palette.colors[0];
-            material.uniform_data.palette_color2 = palette.colors[1];
-            material.uniform_data.palette_color3 = palette.colors[2];
-            material.uniform_data.palette_color4 = palette.colors[3];
-            material.uniform_data.palette_color5 = palette.colors[4];
-            material.uniform_data.palette_color6 = palette.colors[5];
-            material.uniform_data.palette_color7 = palette.colors[6];
-            material.uniform_data.palette_color8 = palette.colors[7];
-        }
-
-        // Enable replace color if present
-        if let Some((flags, old_color, new_color, params)) = replace_color_params {
-            material.uniform_data.replace_color_flags = flags;
-            material.uniform_data.replace_old_color = old_color;
-            material.uniform_data.replace_new_color = new_color;
-            material.uniform_data.replace_color_params = params;
-        }
-
-        unified_materials.add(material)
-    }
 
     match spec {
         AmLayerSpec::SpriteShape {
