@@ -1,0 +1,120 @@
+use bevy::{prelude::*, render::render_resource::ShaderType};
+
+/// Uniform data for SDF shader - must match the struct in the shader exactly
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct SdfMaterialUniform {
+    pub color: Vec4,
+    pub params: Vec4,
+    pub mask_params: Vec4,
+    pub mask2_params: Vec4,
+    pub shape_type: f32,
+    pub mask_type: f32,
+    pub mask2_type: f32,
+    pub frame_half: f32,
+    pub mask_rotation: f32,
+    pub mask2_rotation: f32,
+    pub border_mode: f32,
+    pub border2_width: f32,
+    pub border2_packed_color: f32,
+    pub border2_mode: f32,
+    pub border_aa_width: f32,
+    pub base_half_width: f32,
+    pub shape_extra: Vec4,
+    pub shape_extra2: Vec4,
+    pub shape_extra3: Vec4,
+    pub shape_extra4: Vec4,
+    pub shape_extra5: Vec4,
+    pub shape_extra6: Vec4,
+    pub shape_extra7: Vec4,
+    pub gradient_start_color: Vec4,
+    pub gradient_end_color: Vec4,
+    pub gradient_points: Vec4,
+    pub gradient_config: Vec4,
+    pub mask_blend: Vec4,
+    pub mask2_blend: Vec4,
+    pub mask1_rr_params1: Vec4,
+    pub mask1_rr_params2: Vec4,
+    pub mask1_rr_params3: Vec4,
+    pub mask1_rr_params4: Vec4,
+    pub mask1_rr_params5: Vec4,
+    pub mask1_lr_params1: Vec4,
+    pub mask1_lr_params2: Vec4,
+    pub mask1_lr_params3: Vec4,
+    pub mask1_lr_params4: Vec4,
+    pub mask1_lr_params5: Vec4,
+    pub linear_repeat_params1: Vec4,
+    pub linear_repeat_params2: Vec4,
+    pub linear_repeat_params3: Vec4,
+    pub linear_repeat_params4: Vec4,
+    pub linear_repeat_params5: Vec4,
+    pub stretch_params: Vec4,
+    pub stretch_meta: Vec4,
+}
+
+impl Default for SdfMaterialUniform {
+    fn default() -> Self {
+        let default_frame_half = 50.0 * 10.0;
+        Self {
+            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            params: Vec4::new(50.0, 50.0, 0.0, 0.0),
+            mask_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            mask2_params: Vec4::new(0.0, 0.0, 10000.0, 10000.0),
+            shape_type: 0.0,
+            mask_type: 0.0,
+            mask2_type: 0.0,
+            frame_half: default_frame_half,
+            mask_rotation: 0.0,
+            mask2_rotation: 0.0,
+            border_mode: 0.0,
+            border2_width: 0.0,
+            border2_packed_color: 0.0,
+            border2_mode: 0.0,
+            border_aa_width: 0.0,
+            base_half_width: 0.0,
+            shape_extra: Vec4::ZERO,
+            shape_extra2: Vec4::ZERO,
+            shape_extra3: Vec4::ZERO,
+            shape_extra4: Vec4::ZERO,
+            shape_extra5: Vec4::ZERO,
+            shape_extra6: Vec4::ZERO,
+            shape_extra7: Vec4::ZERO,
+            gradient_start_color: Vec4::ZERO,
+            gradient_end_color: Vec4::ZERO,
+            gradient_points: Vec4::ZERO,
+            gradient_config: Vec4::ZERO,
+            mask_blend: Vec4::ZERO,
+            mask2_blend: Vec4::ZERO,
+            mask1_rr_params1: Vec4::ZERO,
+            mask1_rr_params2: Vec4::ZERO,
+            mask1_rr_params3: Vec4::ZERO,
+            mask1_rr_params4: Vec4::ZERO,
+            mask1_rr_params5: Vec4::ZERO,
+            mask1_lr_params1: Vec4::ZERO,
+            mask1_lr_params2: Vec4::ZERO,
+            mask1_lr_params3: Vec4::ZERO,
+            mask1_lr_params4: Vec4::ZERO,
+            mask1_lr_params5: Vec4::ZERO,
+            linear_repeat_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            linear_repeat_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            linear_repeat_params4: Vec4::ZERO,
+            linear_repeat_params5: Vec4::ZERO,
+            stretch_params: Vec4::ZERO,
+            stretch_meta: Vec4::ZERO,
+        }
+    }
+}
+
+pub(crate) fn build_base_uniform(
+    color: Vec4,
+    params: Vec4,
+    shape_type: f32,
+    frame_half: f32,
+) -> SdfMaterialUniform {
+    let mut uniform = SdfMaterialUniform::default();
+    uniform.color = color;
+    uniform.params = params;
+    uniform.shape_type = shape_type;
+    uniform.frame_half = frame_half;
+    uniform
+}
