@@ -15,6 +15,8 @@ mod collect_embed;
 mod collect_image;
 mod collect_mask;
 mod collect_shape;
+#[cfg(test)]
+mod collect_shape_tests;
 mod collect_types;
 mod components;
 pub(crate) mod effects;
