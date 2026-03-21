@@ -7,8 +7,8 @@
 use bevy::prelude::*;
 
 use super::unified_support::{
-    compute_ancestor_scale, insert_quad_mesh, srgb_to_linear, trace_stretch_once,
-    trace_unified_once,
+    compute_ancestor_scale, srgb_to_linear, trace_parenthelper_unified_state, trace_stretch_once,
+    update_quad_mesh,
 };
 use crate::animation::components::{AmAnimated, AmPlayback};
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
@@ -27,6 +27,7 @@ pub fn animate_unified_effect_system(
         &Transform,
         &GlobalTransform,
         &bevy::mesh::Mesh2d,
+        Option<&crate::animation::components::AmUnifiedUsesTransformScale>,
         Option<&crate::scene::AmEmbedContentMarker>,
         Option<&Visibility>,
         Option<&bevy::camera::visibility::RenderLayers>,
@@ -55,13 +56,18 @@ pub fn animate_unified_effect_system(
         material_handle,
         transform,
         global_transform,
-        _mesh2d,
+        mesh2d,
+        unified_transform_scale,
         _embed_marker,
         visibility,
         render_layers,
         child_of,
     ) in query.iter()
     {
+        if unified_transform_scale.is_some() {
+            continue;
+        }
+
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
 
@@ -144,12 +150,22 @@ pub fn animate_unified_effect_system(
         // Use abs() because negative size in AM behaves same as positive (no flip)
         // Ancestor scale accounts for parent hierarchy scale that effect sprites bake into
         // mesh size rather than Transform.scale, ensuring children match screen-space dimensions.
-        let ancestor_scale = compute_ancestor_scale(
+        let mut ancestor_scale = compute_ancestor_scale(
             entity,
             &parent_animated_query,
             &effect_marker_query,
             global_time,
         );
+        if animated.parenthelper_has_effect {
+            let parenthelper_scale_factor = match animated.parenthelper_scale_mode {
+                1 => 0.0,
+                2 => interpolate_float(&animated.parenthelper_scale_weight, layer_time)
+                    .unwrap_or(1.0),
+                _ => 1.0,
+            };
+            ancestor_scale[0] = 1.0 + (ancestor_scale[0] - 1.0) * parenthelper_scale_factor;
+            ancestor_scale[1] = 1.0 + (ancestor_scale[1] - 1.0) * parenthelper_scale_factor;
+        }
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0) * ancestor_scale[0].abs();
         let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0) * ancestor_scale[1].abs();
 
@@ -205,38 +221,18 @@ pub fn animate_unified_effect_system(
             continue;
         };
 
-        if marker.label.starts_with("spr_s_boneloop_0.png Copy")
-            && transform
-                .rotation
-                .to_euler(bevy::math::EulerRot::XYZ)
-                .2
-                .abs()
-                > 1.4
+        if std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
+            && (marker.label == "长方形 1" || marker.label == "长方形 2")
         {
-            let global_pos = global_transform.translation();
-            let parent = child_of.map(|c| c.parent());
-            trace_unified_once(format!("{}:{}", marker.id, marker.label), || {
-                format!(
-                    "[UNIFIED] layer_id={} label='{}' parent={:?} alpha={:.3} vis={:?} layers={:?} local_z={:.4} global_z={:.4} effect_flags=({:.1},{:.1},{:.1},{:.1}) mask_type={:.1} mask=({:.1},{:.1},{:.1},{:.1})",
-                    marker.id,
-                    marker.label,
-                    parent,
-                    material.uniform_data.color.w,
-                    visibility,
-                    render_layers,
-                    transform.translation.z,
-                    global_pos.z,
-                    material.uniform_data.effect_flags.x,
-                    material.uniform_data.effect_flags.y,
-                    material.uniform_data.effect_flags.z,
-                    material.uniform_data.effect_flags.w,
-                    material.uniform_data.effect_flags.x,
-                    material.uniform_data.mask_params.x,
-                    material.uniform_data.mask_params.y,
-                    material.uniform_data.mask_params.z,
-                    material.uniform_data.mask_params.w,
-                )
-            });
+            trace_parenthelper_unified_state(
+                marker,
+                material,
+                transform,
+                global_transform,
+                visibility,
+                render_layers,
+                child_of.map(|c| c.parent()),
+            );
         }
 
         // Always set original_size so pixelate (and other effects) have correct display dimensions
@@ -557,10 +553,9 @@ pub fn animate_unified_effect_system(
                 let uv_expand_y = blur_expansion / orig_height;
 
                 // UV coords extend beyond [0,1] to sample the expanded blur area
-                insert_quad_mesh(
-                    &mut commands,
+                update_quad_mesh(
                     &mut meshes,
-                    entity,
+                    mesh2d,
                     [min_x, max_x, min_y, max_y],
                     [
                         -uv_expand_x,
@@ -717,10 +712,9 @@ pub fn animate_unified_effect_system(
             // UV extends beyond [0,1] into AA padding for smoothstep gradients.
             let u_pad = aa_pad / new_width;
             let v_pad = aa_pad / new_height;
-            insert_quad_mesh(
-                &mut commands,
+            update_quad_mesh(
                 &mut meshes,
-                entity,
+                mesh2d,
                 [-half_nw, half_nw, -half_nh, half_nh],
                 [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
             );
@@ -819,10 +813,9 @@ pub fn animate_unified_effect_system(
             // UV range: expanded by stretch2 for content_only=false, plus pixelate/wavewarp margin
             let uv_exp_x = total_expansion / orig_width;
             let uv_exp_y = total_expansion / orig_height;
-            insert_quad_mesh(
-                &mut commands,
+            update_quad_mesh(
                 &mut meshes,
-                entity,
+                mesh2d,
                 [lx, rx, by, ty],
                 [
                     s2_uv_min_x - uv_exp_x,

@@ -319,6 +319,10 @@ pub(crate) fn process_pending_layers(
                 .map(|parent_layer| parent_layer.id)
                 .unwrap_or(layer.containing_embed_id)
         };
+        let has_child_layers = pending
+            .layers
+            .iter()
+            .any(|candidate| candidate.parent == layer.id);
 
         let entity = spawn_layer_entity(
             commands,
@@ -334,6 +338,7 @@ pub(crate) fn process_pending_layers(
             pending.embed_contents_container,
             pending.inv_fit_scale,
             resolved_embed_owner_id,
+            has_child_layers,
             &pending.spawned_entities,
             global_time,
         );

@@ -7,8 +7,31 @@
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
+use std::{
+    collections::HashSet,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::scene::AmMaskInfo;
+
+pub(super) fn trace_visual_path_once(key: impl Into<String>, message: impl FnOnce() -> String) {
+    if std::env::var_os("AM_VISUAL_PATH_TRACE").is_none() {
+        return;
+    }
+
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = key.into();
+
+    let should_log = {
+        let mut guard = seen.lock().expect("visual path trace mutex poisoned");
+        guard.insert(key)
+    };
+
+    if should_log {
+        bevy::log::warn!("{}", message());
+    }
+}
 
 /// Pre-calculate initial mask params from mask_info for first-frame correctness.
 /// Returns (effect_flags_x, mask_params, mask2_flags_x, mask2_params).
@@ -119,4 +142,38 @@ pub(super) fn create_stretch_bounds_mesh(
     new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
     meshes.add(new_mesh)
+}
+
+/// Extract fill color from AmFillColor.
+///
+/// - `no_fill`: When true (fillType="none"), always returns transparent regardless of fill_color.
+/// - When false and `fill_color` is None, returns white as default.
+/// - Otherwise extracts color from fill_color value or keyframes.
+pub(crate) fn extract_fill_color(
+    fill_color: &Option<crate::schema::AmFillColor>,
+    no_fill: bool,
+) -> Color {
+    if no_fill {
+        return Color::srgba(0.0, 0.0, 0.0, 0.0);
+    }
+
+    if let Some(fc) = fill_color {
+        if !fc.value.is_empty() {
+            if let Ok(c) = crate::schema::parse_color(&fc.value) {
+                return Color::srgba(c[0], c[1], c[2], c[3]);
+            }
+        } else if !fc.keyframes.is_empty() {
+            let mut sorted: Vec<_> = fc.keyframes.iter().collect();
+            sorted.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Ok(c) = crate::schema::parse_color(&sorted[0].value) {
+                return Color::srgba(c[0], c[1], c[2], c[3]);
+            }
+        }
+    }
+
+    Color::WHITE
 }

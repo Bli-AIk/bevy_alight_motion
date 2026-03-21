@@ -38,6 +38,7 @@ pub(crate) fn collect_null(
     let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
     let scale_assist = extract_scale_assist_effect(&null.effects);
+    let parent_helper = extract_parent_helper_effect(&null.effects);
     let stretch2_effect = extract_stretch2_effect(&null.effects);
     let replace_color = extract_replace_color_effect(&null.effects);
     let repeat_effect = extract_repeat_effect(&null.effects);
@@ -136,6 +137,13 @@ pub(crate) fn collect_null(
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
             scale_assist_axis: scale_assist.axis,
+            parenthelper_scale_mode: parent_helper.scale_mode,
+            parenthelper_rotate_mode: parent_helper.rotate_mode,
+            parenthelper_scale_weight: parent_helper.scale_weight,
+            parenthelper_rotate_weight: parent_helper.rotate_weight,
+            parenthelper_auto_rotate: parent_helper.auto_rotate,
+            parenthelper_radius_adjust: parent_helper.radius_adjust,
+            parenthelper_has_effect: parent_helper.has_effect,
             stretch2_scale: stretch2_effect.scale,
             stretch2_angle: stretch2_effect.angle,
             stretch2_content_only: stretch2_effect.content_only,
@@ -328,6 +336,8 @@ pub(crate) fn collect_null(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_requires_composite: false,
+        embed_dynamic_resolution: false,
         embed_inner_total_time: None,
         hidden: null.hidden,
     })
@@ -468,6 +478,13 @@ pub(crate) fn collect_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            parenthelper_scale_mode: 0,
+            parenthelper_rotate_mode: 0,
+            parenthelper_scale_weight: AmAnimatedFloat::default(),
+            parenthelper_rotate_weight: AmAnimatedFloat::default(),
+            parenthelper_auto_rotate: 0,
+            parenthelper_radius_adjust: AmAnimatedFloat::default(),
+            parenthelper_has_effect: false,
             stretch2_scale: AmAnimatedFloat::default(),
             stretch2_angle: AmAnimatedFloat::default(),
             stretch2_content_only: false,
@@ -679,6 +696,8 @@ pub(crate) fn collect_text(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_requires_composite: false,
+        embed_dynamic_resolution: false,
         embed_inner_total_time: None,
         hidden: text.hidden,
     })

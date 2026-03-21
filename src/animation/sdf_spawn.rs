@@ -16,7 +16,7 @@ use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color};
 
 use super::components::{AmSdfParams, AmSdfShapeParent};
 use super::sdf_geometry::compute_sdf_shape_half_extent_from_parts;
-use super::visual::extract_fill_color;
+use super::visual_helpers::extract_fill_color;
 
 #[expect(clippy::too_many_arguments)] // reason: SDF spawn requires many GPU resource handles
 pub fn spawn_sdf_visual(

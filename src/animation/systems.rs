@@ -112,6 +112,69 @@ fn trace_layer_z_once(key: impl Into<String>, message: impl FnOnce() -> String) 
     }
 }
 
+pub(super) fn resolve_unwrapped_rotation_deg(
+    animated: &AmAnimated,
+    layer_time: f32,
+    frame_delta: f32,
+) -> f32 {
+    let base_rotation =
+        interpolate_float_reverse(&animated.rotation, layer_time, frame_delta).unwrap_or(0.0);
+    let mut final_rotation = -base_rotation;
+
+    if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time)
+        && swing_freq > 0.0
+    {
+        let swing_a1 = interpolate_float(&animated.swing_a1, layer_time).unwrap_or(0.0);
+        let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
+        let swing_phase = interpolate_float(&animated.swing_phase, layer_time).unwrap_or(0.0);
+        let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+        let accumulated_freq =
+            accumulate_hz(&animated.swing_freq, layer_time, duration_sec, 1.0, 120.0);
+
+        let wave_value = match animated.swing_type {
+            0 => ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin(),
+            1 => {
+                let x = (accumulated_freq + swing_phase) / 2.0;
+                let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
+                x_mod.abs() * 4.0 - 1.0
+            }
+            _ => ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin(),
+        };
+
+        let swing_angle = ((swing_a2 - swing_a1) * ((wave_value + 1.0) / 2.0)) + swing_a1;
+        final_rotation -= swing_angle;
+    }
+
+    if animated.spin_rpm.value.is_some() || !animated.spin_rpm.keyframes.is_empty() {
+        let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
+        let spin_angle = accumulate_hz(&animated.spin_rpm, layer_time, duration_sec, 6.0, 20.0);
+        final_rotation -= spin_angle;
+    }
+
+    if let Some(effect_angle) = interpolate_float(&animated.effect_angle, layer_time) {
+        final_rotation -= invert_if(effect_angle, animated.effect_ainv);
+    }
+
+    for extra in &animated.extra_transform2 {
+        let Some(extra_angle) = interpolate_float(&extra.angle, layer_time) else {
+            continue;
+        };
+        final_rotation -= invert_if(extra_angle, extra.ainv);
+    }
+
+    final_rotation + animated.repeat_rotation_offset_deg
+}
+
+pub(super) fn compute_normalized_frame_delta(animated: &AmAnimated) -> f32 {
+    let element_duration_ms = (animated.end_time - animated.start_time) as f32;
+    if element_duration_ms <= 0.0 {
+        return 0.0;
+    }
+
+    let fps = animated.scene_fps.max(1.0);
+    (1000.0 / fps) / element_duration_ms * animated.element_speed.abs()
+}
+
 pub fn debug_layer_global_z_system(
     query: Query<(
         Entity,
@@ -342,6 +405,7 @@ pub fn animate_transform_system(
         &crate::scene::AmLayerSpec,
         Option<&AmSdfShapeParent>,
         Option<&crate::masked_sprite::UnifiedEffectMarker>,
+        Option<&super::components::AmUnifiedUsesTransformScale>,
         Option<&crate::scene::AmEmbedContentMarker>,
     )>,
 ) {
@@ -359,6 +423,7 @@ pub fn animate_transform_system(
         layer_spec,
         sdf_parent,
         effect_marker,
+        unified_transform_scale,
         embed_content_marker,
     ) in query.iter_mut()
     {
@@ -367,8 +432,6 @@ pub fn animate_transform_system(
         // by collect_embed/spawn_embed using render_fps at each nesting level.
         // See collect_embed.rs: time_offset includes -half_frame_ms/speed per level.
         let local_time = animated.calc_local_time(global_time);
-        let is_embed_content = embed_content_marker.is_some();
-
         // Use local time for visibility check (affected by speed)
         // This ensures child layers respect parent's speed for start/end time
 
@@ -382,13 +445,7 @@ pub fn animate_transform_system(
         // Compute frame_delta in normalized time for AM's reverseInterpolateFirstFrame.
         // This enables smooth backward extrapolation for transform properties
         // when the first keyframe is near the element's start.
-        let element_duration_ms = (animated.end_time - animated.start_time) as f32;
-        let frame_delta = if element_duration_ms > 0.0 {
-            let fps = animated.scene_fps.max(1.0);
-            (1000.0 / fps) / element_duration_ms * animated.element_speed.abs()
-        } else {
-            0.0
-        };
+        let frame_delta = compute_normalized_frame_delta(animated);
 
         // Get current scale for pivot compensation and flip detection
         // For SDF shapes and effect sprites, magnitude is handled separately, but we need sign for flipping
@@ -465,7 +522,8 @@ pub fn animate_transform_system(
         actual_scale[0] *= combined_posz;
         actual_scale[1] *= combined_posz;
 
-        let current_scale = if sdf_parent.is_some() || effect_marker.is_some() || is_embed_content {
+        let unified_scale_baked = effect_marker.is_some() && unified_transform_scale.is_none();
+        let current_scale = if sdf_parent.is_some() || unified_scale_baked {
             [1.0_f32, 1.0_f32]
         } else {
             actual_scale
@@ -618,90 +676,25 @@ pub fn animate_transform_system(
             transform.translation = Vec3::new(bx, by, transform.translation.z);
         }
 
-        // Interpolate rotation (negate for Bevy's coordinate system)
-        // Get base rotation - default to 0 if not animated
-        let base_rotation =
-            interpolate_float_reverse(&animated.rotation, layer_time, frame_delta).unwrap_or(0.0);
-        let mut final_rotation = -base_rotation; // Negate for Bevy's coordinate system
-
-        // Apply swing effect (oscillating rotation)
-        // AM swing2: freq is Hz-accumulated (integral of freq over time),
-        // sine uses sin((accum + phase) * π), triangle uses AM.triangle((accum + phase) / 2)
-        if let Some(swing_freq) = interpolate_float(&animated.swing_freq, layer_time)
-            && swing_freq > 0.0
-        {
-            let swing_a1 = interpolate_float(&animated.swing_a1, layer_time).unwrap_or(0.0);
-            let swing_a2 = interpolate_float(&animated.swing_a2, layer_time).unwrap_or(0.0);
-            let swing_phase = interpolate_float(&animated.swing_phase, layer_time).unwrap_or(0.0);
-
-            // Hz accumulation: AM integrates freq over time for Hz-type parameters
-            let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
-            let accumulated_freq =
-                accumulate_hz(&animated.swing_freq, layer_time, duration_sec, 1.0, 120.0);
-
-            // Waveform: AM script formula
-            let wave_value = match animated.swing_type {
-                0 => {
-                    // Sine: sin((accumulated_freq + phase) * π)
-                    ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin()
-                }
-                1 => {
-                    // Triangle: AM.triangle((accumulated_freq + phase) / 2.0)
-                    // AM.triangle(x) = abs(((x + 0.75) % 1.0) - 0.5) * 4 - 1
-                    let x = (accumulated_freq + swing_phase) / 2.0;
-                    let x_mod = ((x + 0.75).rem_euclid(1.0)) - 0.5;
-                    x_mod.abs() * 4.0 - 1.0
-                }
-                _ => ((accumulated_freq + swing_phase) * std::f32::consts::PI).sin(),
-            };
-
-            // AM angle formula: ((a2 - a1) * ((m + 1) / 2)) + a1
-            let swing_angle = ((swing_a2 - swing_a1) * ((wave_value + 1.0) / 2.0)) + swing_a1;
-
-            // Add swing angle to base rotation (swing is additive)
-            // Negate for Bevy's coordinate system (like base rotation)
-            final_rotation -= swing_angle;
-        }
-
-        // Apply spin effect (RPM-based continuous rotation)
-        // AM spin: rpm is accumulated like Hz, but each step adds rpm/20 (degrees)
-        // Non-keyed: accumulated = rpm * time_seconds * 6.0
-        if animated.spin_rpm.value.is_some() || !animated.spin_rpm.keyframes.is_empty() {
-            let duration_sec = (animated.end_time - animated.start_time) as f32 / 1000.0;
-            let spin_angle = accumulate_hz(&animated.spin_rpm, layer_time, duration_sec, 6.0, 20.0);
-            // Negate for Bevy's coordinate system
-            final_rotation -= spin_angle;
-        }
-
-        // Apply transform2 effect angle (additional rotation in degrees)
-        if let Some(effect_angle) = interpolate_float(&animated.effect_angle, layer_time) {
-            final_rotation -= invert_if(effect_angle, animated.effect_ainv); // Negate for Bevy's coordinate system
-        }
-        // Apply extra stacked transform2 angles
-        for extra in &animated.extra_transform2 {
-            let Some(ea) = interpolate_float(&extra.angle, layer_time) else {
-                continue;
-            };
-            final_rotation -= invert_if(ea, extra.ainv);
-        }
-
-        // Apply repeat group rotation offset (accumulated per-copy)
-        final_rotation += animated.repeat_rotation_offset_deg;
-
+        let final_rotation = resolve_unwrapped_rotation_deg(animated, layer_time, frame_delta);
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
         // Interpolate scale
         // Skip for SDF shapes (handled by animate_sdf_scale)
-        // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform
-        // However, transform2 posz/angle/position must also be applied via Transform
-        if sdf_parent.is_none() && effect_marker.is_none() && !is_embed_content {
+        // For effect sprites: magnitude is baked into mesh, but sign (flip) needs Transform.
+        //
+        // Plain embed content still needs per-frame Transform.scale updates.
+        // Its visual size is not baked into the RTT output; only the final composite is
+        // isolated. Skipping these updates freezes nested child layers at their spawn-time
+        // scale, which shows up as uniform shrink across the whole embed subtree.
+        if sdf_parent.is_none() && effect_marker.is_none() {
             transform.scale = Vec3::new(
                 current_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
                 current_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
                 1.0,
             );
-        } else if effect_marker.is_some() || is_embed_content {
-            // Effect sprites and embed content: base scale magnitude is baked into mesh.
+        } else if unified_scale_baked {
+            // Unified-effect sprites bake base scale magnitude into mesh.
             // But transform2 effects (posz) still need to be applied via Transform.scale,
             // since the unified effect system doesn't know about transform2.
             let sign_x = actual_scale[0].signum();

@@ -18,6 +18,7 @@ pub mod linear_repeat;
 pub mod mirror;
 pub mod oscillate;
 pub mod palette_map;
+pub mod parenthelper;
 pub mod path_repeat;
 pub mod pixelate;
 pub mod radial_repeat;
@@ -54,6 +55,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &grid::EFFECT,
         &threshold::EFFECT,
         &palette_map::EFFECT,
+        &parenthelper::EFFECT,
         &replace_color::EFFECT,
         &scale_assist::EFFECT,
         &pixelate::EFFECT,

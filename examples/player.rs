@@ -70,12 +70,18 @@ mod video_utils;
 
 use bevy::prelude::MeshMaterial2d;
 use bevy::prelude::*;
+#[cfg(feature = "video-comparison")]
+use bevy::render::view::screenshot::{Captured, Capturing, Screenshot};
 use bevy_alight_motion::prelude::*;
+#[cfg(feature = "video-comparison")]
+use bevy_alight_motion::scene::AmVisualSpawned;
 #[cfg(feature = "player-brp")]
 use bevy_brp_extras::BrpExtrasPlugin;
 
 #[cfg(feature = "debug")]
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
+#[cfg(feature = "video-comparison")]
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Resource storing the offscreen render target image handle for headless rendering.
 /// 无头渲染模式下的离屏渲染目标 Image handle。
@@ -153,20 +159,35 @@ fn main() {
     // Headless mode: no window, offscreen render target, schedule runner loop
     #[cfg(feature = "headless-render")]
     {
-        app.add_plugins(
-            DefaultPlugins
-                .build()
-                .disable::<bevy::winit::WinitPlugin>()
-                .set(WindowPlugin {
-                    primary_window: None,
-                    exit_condition: bevy::window::ExitCondition::DontExit,
-                    ..default()
-                }),
-        )
-        .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(
-            std::time::Duration::from_secs_f64(1.0 / 60.0),
-        ))
-        .insert_resource(HeadlessResolution(resolution));
+        let run_loop_ms = std::env::var("AM_HEADLESS_RUN_LOOP_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(16);
+        let headless_plugins = DefaultPlugins
+            .build()
+            .disable::<bevy::winit::WinitPlugin>()
+            .disable::<bevy::audio::AudioPlugin>()
+            .disable::<bevy::anti_alias::AntiAliasPlugin>()
+            .disable::<bevy::gilrs::GilrsPlugin>()
+            .disable::<bevy::gltf::GltfPlugin>()
+            .disable::<bevy::gizmos::GizmoPlugin>()
+            .disable::<bevy::gizmos_render::GizmoRenderPlugin>()
+            .disable::<bevy::light::LightPlugin>()
+            .disable::<bevy::pbr::PbrPlugin>()
+            .disable::<bevy::post_process::PostProcessPlugin>()
+            .disable::<bevy::scene::ScenePlugin>()
+            .disable::<bevy::ui::UiPlugin>()
+            .disable::<bevy::ui_render::UiRenderPlugin>()
+            .set(WindowPlugin {
+                primary_window: None,
+                exit_condition: bevy::window::ExitCondition::DontExit,
+                ..default()
+            });
+        app.add_plugins(headless_plugins)
+            .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(
+                std::time::Duration::from_millis(run_loop_ms),
+            ))
+            .insert_resource(HeadlessResolution(resolution));
     }
 
     // Normal mode: windowed rendering via WinitPlugin
@@ -240,11 +261,21 @@ fn main() {
     // Add video comparison systems
     #[cfg(feature = "video-comparison")]
     {
+        #[cfg(feature = "headless-render")]
+        app.add_plugins(headless_capture::HeadlessComparisonCapturePlugin);
+
         app.init_resource::<video_comparison_systems::ComparisonState>()
             .add_systems(Startup, video_comparison_systems::setup_comparison)
             // Pause playback at the very beginning of each frame to prevent time advancing
             .add_systems(First, video_comparison_systems::ensure_paused_during_load)
-            .add_systems(Update, video_comparison_systems::comparison_loop);
+            .add_systems(
+                Update,
+                (
+                    video_comparison_systems::comparison_loop,
+                    trace_comparison_debug_counts_system,
+                )
+                    .chain(),
+            );
         println!("Video comparison mode enabled: Running automated test...");
     }
 
@@ -268,6 +299,57 @@ fn main() {
     app.run();
 }
 
+#[cfg(feature = "video-comparison")]
+fn trace_comparison_debug_counts_system(
+    all_entities: Query<Entity>,
+    am_layers: Query<Entity, With<AmLayerMarker>>,
+    am_visuals: Query<Entity, With<AmVisualSpawned>>,
+    screenshots: Query<Entity, With<Screenshot>>,
+    capturing: Query<Entity, With<Capturing>>,
+    captured: Query<Entity, With<Captured>>,
+    pending_layers: Query<&AmPendingLayers>,
+    comparison: Res<video_comparison_systems::ComparisonState>,
+) {
+    if std::env::var_os("AM_ENTITY_COUNT_TRACE").is_none() {
+        return;
+    }
+
+    static FRAME_COUNTER: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNTER.fetch_add(1, Ordering::Relaxed) + 1;
+    let every = std::env::var("AM_ENTITY_COUNT_TRACE_EVERY")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(30);
+    if !frame.is_multiple_of(every) {
+        return;
+    }
+
+    let tracked_spawned_layers: usize = pending_layers
+        .iter()
+        .map(|pending| pending.spawned_entities.len())
+        .sum();
+    let tracked_pending_layers: usize = pending_layers
+        .iter()
+        .map(|pending| pending.layers.len())
+        .sum();
+
+    bevy::log::warn!(
+        "[ENTITY-COUNT] frame={} comparison_frame={} stage={:?} entities={} am_layers={} visuals={} tracked_spawned_layers={} tracked_pending_layers={} screenshots={} capturing={} captured={}",
+        frame,
+        comparison.current_frame,
+        comparison.stage,
+        all_entities.iter().len(),
+        am_layers.iter().len(),
+        am_visuals.iter().len(),
+        tracked_spawned_layers,
+        tracked_pending_layers,
+        screenshots.iter().len(),
+        capturing.iter().len(),
+        captured.iter().len()
+    );
+}
+
 /// Resource to store the project file path.
 #[derive(Resource)]
 struct ProjectFile(String);
@@ -282,6 +364,11 @@ fn setup(
     project_file: Res<ProjectFile>,
     #[cfg(feature = "headless-render")] mut images: ResMut<Assets<Image>>,
     #[cfg(feature = "headless-render")] headless_res: Res<HeadlessResolution>,
+    #[cfg(all(feature = "headless-render", feature = "video-comparison"))] render_device: Res<
+        bevy::render::renderer::RenderDevice,
+    >,
+    #[cfg(all(feature = "headless-render", feature = "video-comparison"))]
+    mut headless_capture_state: ResMut<headless_capture::HeadlessCaptureState>,
 ) {
     // Headless mode: create offscreen render target and camera
     #[cfg(feature = "headless-render")]
@@ -293,7 +380,17 @@ fn setup(
             None,
         );
         let render_handle = images.add(render_image);
+        #[cfg(feature = "video-comparison")]
+        headless_capture::mark_render_target_copy_src(&mut images, &render_handle);
         commands.insert_resource(HeadlessRenderTarget(render_handle.clone()));
+        #[cfg(feature = "video-comparison")]
+        headless_capture::setup_headless_capture(
+            &mut commands,
+            &render_device,
+            render_handle.clone(),
+            &headless_res,
+            &mut headless_capture_state,
+        );
         commands.spawn((
             Camera2d,
             Camera {
@@ -831,6 +928,10 @@ use video_debug_systems::*;
 #[cfg(feature = "video-comparison")]
 #[path = "video_comparison_systems.rs"]
 mod video_comparison_systems;
+
+#[cfg(all(feature = "video-comparison", feature = "headless-render"))]
+#[path = "headless_capture.rs"]
+mod headless_capture;
 
 // ============================================================================
 // Frame Test / FPS Benchmark (requires --features frame-test)

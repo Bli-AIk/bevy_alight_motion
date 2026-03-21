@@ -15,8 +15,12 @@ use std::collections::HashMap;
 use crate::scene::{AmLayerMarker, AmLayerSpec, AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 use crate::sdf_material::SdfMaterial;
 
+use super::components::AmUnifiedUsesTransformScale;
 use super::sdf_spawn::spawn_sdf_visual;
-use super::visual_helpers::{compute_initial_mask_params, create_stretch_bounds_mesh};
+use super::visual_helpers::{
+    compute_initial_mask_params, create_stretch_bounds_mesh, extract_fill_color,
+    trace_visual_path_once,
+};
 
 #[expect(clippy::too_many_arguments)] // reason: visual setup requires many GPU resource handles
 pub(crate) fn add_visual_components(
@@ -61,6 +65,8 @@ pub(crate) fn add_visual_components(
     has_exposure: bool, // True if layer has exposure/gamma effect (needs UnifiedEffectMaterial)
     has_blend: bool, // True if layer has non-normal blend mode (needs UnifiedEffectMaterial)
     has_chromakey: bool, // True if layer has chromakey effect (needs UnifiedEffectMaterial)
+    _has_parenthelper: bool, // Parenthelper is handled via Transform.scale on the fast path
+    has_child_layers: bool, // True if layer has AM children that depend on its visual scale
     rgb_split_max_offset: f32, // Max RGB split offset in UV space (max_strength / 8.0) for mesh expansion
     pixelate_expansion: f32,   // Max pixelate expansion in display units (half max grid cell size)
     wavewarp2_max_m2: f32,     // Max wavewarp2 magnitude across keyframes (for mesh expansion)
@@ -84,22 +90,49 @@ pub(crate) fn add_visual_components(
         has_pixelate
     );
 
-    // Determine which effects are needed
-    // Embed content always needs effect material to support bounds clipping later
-    // Scale_assist also needs effect material for dynamic sizing
+    // Determine which effects are needed.
+    // Embed content no longer forces the unified material path by itself:
+    // Direct embeds can render their content normally, and isolated embeds only
+    // need unified materials when a real effect or clip path requires it.
     let needs_stretch = stretch_params.is_some();
     let needs_wipe = wipe_params.is_some();
     let needs_mask = mask_info.is_some();
     let needs_blur = blur_params.is_some();
     let needs_palette = palette_params.is_some();
     let needs_replace_color = replace_color_params.is_some();
+    // Parenthelper now corrects Transform.scale directly in apply_parenthelper_system.
+    // Plain embed visuals can stay on the cheaper transform-scale path unless
+    // some real effect requires mesh resizing; child AM layers still inherit the
+    // parent's transform through the normal Bevy hierarchy.
+    let unified_uses_transform_scale = is_embed_content
+        && !needs_stretch
+        && !needs_wipe
+        && !needs_mask
+        && !needs_blur
+        && !needs_palette
+        && !needs_replace_color
+        && !has_scale_assist
+        && !has_repeat
+        && !has_threshold
+        && !has_grid
+        && !has_pixelate
+        && !has_stretch2
+        && !has_solidcolor
+        && !has_wavewarp2
+        && !has_mirror
+        && !has_lift
+        && !has_rays
+        && !has_rgb_split
+        && !has_exposure
+        && !has_blend
+        && !has_chromakey;
+
     let needs_any_effect = needs_stretch
         || needs_wipe
         || needs_mask
         || needs_blur
         || needs_palette
         || needs_replace_color
-        || is_embed_content
         || has_scale_assist
         || has_repeat
         || has_threshold
@@ -115,6 +148,36 @@ pub(crate) fn add_visual_components(
         || has_exposure
         || has_blend
         || has_chromakey;
+
+    trace_visual_path_once(format!("{id}:{label}"), || {
+        format!(
+            "[VISUAL-PATH] id={} label='{}' embed_content={} fast_transform_scale={} has_child_layers={} has_parenthelper={} needs_any_effect={} stretch={} wipe={} mask={} blur={} repeat={} pixelate={} wavewarp2={} mirror={} blend={}",
+            id,
+            label,
+            is_embed_content,
+            unified_uses_transform_scale,
+            has_child_layers,
+            _has_parenthelper,
+            needs_any_effect,
+            needs_stretch,
+            needs_wipe,
+            needs_mask,
+            needs_blur,
+            has_repeat,
+            has_pixelate,
+            has_wavewarp2,
+            has_mirror,
+            has_blend,
+        )
+    });
+
+    // Direct embed content bypasses the RTT/unified path, so it must still pick up the
+    // project fit-scale that AM bakes into the rendered composite size.
+    let direct_embed_size_scale = if is_embed_content && !needs_any_effect {
+        fit_scale
+    } else {
+        size_scale
+    };
 
     // Helper function to create a rectangle mesh with anchor offset
     fn create_anchored_rectangle(
@@ -212,7 +275,8 @@ pub(crate) fn add_visual_components(
 
         let mut mesh = Mesh::new(
             bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD
+                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
         );
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
@@ -321,9 +385,8 @@ pub(crate) fn add_visual_components(
             height,
             anchor,
         } => {
-            // Apply size_scale for embed children to compensate for fit_scale
-            let base_width = *width * size_scale;
-            let base_height = *height * size_scale;
+            let base_width = *width * direct_embed_size_scale;
+            let base_height = *height * direct_embed_size_scale;
 
             if *is_media && !image_uri.is_empty() {
                 bevy::log::debug!(
@@ -372,6 +435,16 @@ pub(crate) fn add_visual_components(
                 // Use UnifiedEffectMaterial for combined effects (mask/wipe/stretch + optional blur)
                 let scaled_width = base_width * initial_scale.0.abs();
                 let scaled_height = base_height * initial_scale.1.abs();
+                let material_width = if unified_uses_transform_scale {
+                    base_width
+                } else {
+                    scaled_width
+                };
+                let material_height = if unified_uses_transform_scale {
+                    base_height
+                } else {
+                    scaled_height
+                };
                 let blur_expansion = pixelate_expansion
                     + if has_wavewarp2 {
                         // Expand mesh by max displacement magnitude to show content beyond original bounds
@@ -411,15 +484,15 @@ pub(crate) fn add_visual_components(
                 let mesh = stretch_mesh.unwrap_or_else(|| {
                     create_anchored_rectangle_with_blur(
                         meshes,
-                        scaled_width,
-                        scaled_height,
+                        material_width,
+                        material_height,
                         anchor,
                         blur_expansion,
                     )
                 });
 
                 let blur_params_with_expansion = blur_params
-                    .map(|bp| Vec4::new(bp.x, scaled_width, scaled_height, blur_expansion));
+                    .map(|bp| Vec4::new(bp.x, material_width, material_height, blur_expansion));
                 let mesh_size = initial_stretch_mesh_bounds
                     .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
@@ -427,8 +500,8 @@ pub(crate) fn add_visual_components(
                     unified_materials,
                     handle.clone(),
                     LinearRgba::WHITE,
-                    scaled_width,
-                    scaled_height,
+                    material_width,
+                    material_height,
                     mask_info,
                     wipe_params,
                     stretch_params,
@@ -447,6 +520,12 @@ pub(crate) fn add_visual_components(
                     UnifiedEffectMarker,
                     AmVisualSpawned,
                 ));
+                if unified_uses_transform_scale {
+                    commands.entity(entity).insert(AmUnifiedUsesTransformScale);
+                }
+                if unified_uses_transform_scale {
+                    commands.entity(entity).insert(AmUnifiedUsesTransformScale);
+                }
 
                 bevy::log::trace!(
                     "[Visual] Spawned sprite '{}' with unified effect: scaled_size=({:.1},{:.1}), blur_exp={:.1}, mask={}, wipe={}, stretch={}, blur={}, palette={}, has_stretch_bounds={}",
@@ -483,6 +562,16 @@ pub(crate) fn add_visual_components(
                 let color = extract_fill_color(fill_color, false);
                 let scaled_width = base_width * initial_scale.0.abs();
                 let scaled_height = base_height * initial_scale.1.abs();
+                let mesh_width = if unified_uses_transform_scale {
+                    base_width
+                } else {
+                    scaled_width
+                };
+                let mesh_height = if unified_uses_transform_scale {
+                    base_height
+                } else {
+                    scaled_height
+                };
 
                 let blur_expansion = pixelate_expansion
                     + if has_wavewarp2 {
@@ -510,15 +599,15 @@ pub(crate) fn add_visual_components(
                 let mesh = stretch_mesh.unwrap_or_else(|| {
                     create_anchored_rectangle_with_blur(
                         meshes,
-                        scaled_width,
-                        scaled_height,
+                        mesh_width,
+                        mesh_height,
                         anchor,
                         blur_expansion,
                     )
                 });
 
-                let blur_params_with_expansion = blur_params
-                    .map(|bp| Vec4::new(bp.x, scaled_width, scaled_height, blur_expansion));
+                let blur_params_with_expansion =
+                    blur_params.map(|bp| Vec4::new(bp.x, mesh_width, mesh_height, blur_expansion));
                 let mesh_size = initial_stretch_mesh_bounds
                     .map(|(min_x, max_x, min_y, max_y)| (max_x - min_x, max_y - min_y));
 
@@ -546,6 +635,9 @@ pub(crate) fn add_visual_components(
                     UnifiedEffectMarker,
                     AmVisualSpawned,
                 ));
+                if unified_uses_transform_scale {
+                    commands.entity(entity).insert(AmUnifiedUsesTransformScale);
+                }
 
                 bevy::log::trace!(
                     "[Visual] Spawned fill sprite '{}' with unified effect: base_size=({:.1},{:.1}), has_stretch_bounds={}",
@@ -654,9 +746,8 @@ pub(crate) fn add_visual_components(
             height,
             anchor,
         } => {
-            // Apply size_scale for embed children to compensate for fit_scale
-            let base_width = *width * size_scale;
-            let base_height = *height * size_scale;
+            let base_width = *width * direct_embed_size_scale;
+            let base_height = *height * direct_embed_size_scale;
 
             if let Some(handle) = images.get(image_uri)
                 && needs_any_effect
@@ -769,64 +860,21 @@ pub(crate) fn add_visual_components(
             commands.entity(entity).insert(AmVisualSpawned);
         }
         AmLayerSpec::EmbedScene => {
-            // Add render strategy evaluation marker if scene size is available
-            // The evaluate_render_strategy_system will determine the appropriate strategy
-            if let Some((width, height)) = embed_scene_size {
-                commands.entity(entity).insert((
-                    crate::effects::NeedsStrategyEvaluation {
-                        scene_width: width,
-                        scene_height: height,
-                        has_scale_animation,
-                    },
-                    AmVisualSpawned,
-                ));
-            } else {
+            // EmbedScene strategy metadata is attached during entity spawn, before visuals are
+            // added. Re-inserting it here would overwrite flags such as requires_composite.
+            if embed_scene_size.is_none() {
                 bevy::log::warn!(
                     "[SpawnVisuals] EmbedScene '{}' (id={}) has NO embed_scene_size!",
                     label,
                     id
                 );
-                commands.entity(entity).insert(AmVisualSpawned);
             }
+            let _ = has_scale_animation;
+            commands.entity(entity).insert(AmVisualSpawned);
         }
         AmLayerSpec::Camera { .. } => {
             // Camera layers have no visual — marker only
             commands.entity(entity).insert(AmVisualSpawned);
         }
     }
-}
-
-/// Extract fill color from AmFillColor.
-///
-/// - `no_fill`: When true (fillType="none"), always returns transparent regardless of fill_color.
-/// - When false and `fill_color` is None, returns white as default.
-/// - Otherwise extracts color from fill_color value or keyframes.
-pub(crate) fn extract_fill_color(
-    fill_color: &Option<crate::schema::AmFillColor>,
-    no_fill: bool,
-) -> Color {
-    // fillType="none" means transparent fill
-    if no_fill {
-        return Color::srgba(0.0, 0.0, 0.0, 0.0);
-    }
-
-    if let Some(fc) = fill_color {
-        if !fc.value.is_empty() {
-            if let Ok(c) = crate::schema::parse_color(&fc.value) {
-                return Color::srgba(c[0], c[1], c[2], c[3]);
-            }
-        } else if !fc.keyframes.is_empty() {
-            let mut sorted: Vec<_> = fc.keyframes.iter().collect();
-            sorted.sort_by(|a, b| {
-                a.time
-                    .partial_cmp(&b.time)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            if let Ok(c) = crate::schema::parse_color(&sorted[0].value) {
-                return Color::srgba(c[0], c[1], c[2], c[3]);
-            }
-        }
-    }
-    // Default to white when no fill color specified (fillType="color" without fillColor element)
-    Color::WHITE
 }

@@ -2,6 +2,7 @@ use super::*;
 use crate::video_utils;
 use bevy::app::AppExit;
 use bevy::ecs::message::MessageWriter;
+#[cfg(not(feature = "headless-render"))]
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::window::PrimaryWindow;
 use owo_colors::OwoColorize;
@@ -40,6 +41,7 @@ pub enum TestStage {
     WaitingForProjectLoad, // Wait for project to load and first frame to render
     SettingTime,
     WaitingForRender,
+    PrimingCapture,
     Capturing,
     WaitingForScreenshot, // Wait one frame for screenshot to be executed
     Comparing,
@@ -310,10 +312,13 @@ pub fn ensure_paused_during_load(
         // Start a wait period - lifecycle needs to run with the new time first,
         // then we need to wait for the scene to be rendered.
         playback.force_stopped = true;
-        state.render_wait_frames = 2; // Wait for mesh commands to be applied
+        state.render_wait_frames = std::env::var("COMPARISON_RENDER_WAIT_FRAMES")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(4);
         debug!(
-            "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames=2",
-            time_ms
+            "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames={}",
+            time_ms, state.render_wait_frames
         );
         return; // Don't override force_stopped below
     }
@@ -390,24 +395,40 @@ fn print_critical_failures(critical_failed_frames: &[(usize, f32)], min_frame_si
 pub fn comparison_loop(
     mut state: ResMut<ComparisonState>,
     mut playback: ResMut<AmPlayback>,
-    mut commands: Commands,
+    #[cfg(not(feature = "headless-render"))] mut commands: Commands,
     _window_query: Query<Entity, With<PrimaryWindow>>,
     _time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
     // Query to check if project is loaded
     project_query: Query<&AmProjectRoot>,
-    #[cfg(feature = "headless-render")] headless_target: Option<Res<HeadlessRenderTarget>>,
+    #[cfg(feature = "headless-render")] headless_capture_query: Query<
+        &headless_capture::HeadlessImageCopier,
+    >,
+    #[cfg(feature = "headless-render")] mut headless_capture_state: ResMut<
+        headless_capture::HeadlessCaptureState,
+    >,
 ) {
-    // Use frame-based waiting instead of time-based for determinism
-    // Wait at least 3 frames to ensure:
-    // 1. Animation system processes new time
-    // 2. Transform updates propagate
-    // 3. Render pipeline is flushed
-    // 4. Material GPU buffers are updated (critical for first frame)
-    const WAIT_FRAMES: u32 = 5;
-    // Wait more frames for initial load to ensure textures are uploaded to GPU
-    // Increased to 30 to ensure all GPU resources are fully uploaded before first comparison
-    const INITIAL_WAIT_FRAMES: u32 = 30;
+    // Use frame-based waiting instead of time-based for determinism.
+    // The defaults remain conservative for real comparison runs, but allowing
+    // env overrides makes VPS-side debugging practical without changing repo defaults.
+    let default_wait_frames = if cfg!(feature = "headless-render") {
+        3
+    } else {
+        5
+    };
+    let wait_frames = std::env::var("COMPARISON_WAIT_FRAMES")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(default_wait_frames);
+    let default_initial_wait_frames = if cfg!(feature = "headless-render") {
+        10
+    } else {
+        30
+    };
+    let initial_wait_frames = std::env::var("COMPARISON_INITIAL_WAIT_FRAMES")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(default_initial_wait_frames);
 
     match state.stage {
         TestStage::Initializing => {} // Handled in setup
@@ -421,7 +442,7 @@ pub fn comparison_loop(
             if project_loaded {
                 state.wait_frames += 1;
                 // Wait additional frames for GPU texture upload and first render
-                if state.wait_frames >= INITIAL_WAIT_FRAMES {
+                if state.wait_frames >= initial_wait_frames {
                     println!("[COMPARISON] Project loaded, starting comparison...");
                     state.wait_frames = 0;
                     state.stage = TestStage::SettingTime;
@@ -486,11 +507,28 @@ pub fn comparison_loop(
             // and controls when lifecycle is allowed to run
             if state.render_wait_frames == 0 {
                 state.wait_frames += 1;
-                if state.wait_frames >= WAIT_FRAMES {
-                    state.stage = TestStage::Capturing;
+                if state.wait_frames >= wait_frames {
+                    state.stage = TestStage::PrimingCapture;
                 }
             }
             // If render_wait_frames > 0, just wait for it to count down
+        }
+
+        TestStage::PrimingCapture => {
+            #[cfg(feature = "headless-render")]
+            {
+                if headless_capture_state.pending_path.is_none()
+                    && let Ok(image_copier) = headless_capture_query.single()
+                {
+                    let serial = headless_capture_state.next_serial;
+                    headless_capture_state.next_serial += 1;
+                    headless_capture_state.discard_captures =
+                        headless_capture_state.discard_captures.saturating_add(1);
+                    image_copier.request(serial);
+                }
+            }
+
+            state.stage = TestStage::Capturing;
         }
 
         TestStage::Capturing => {
@@ -504,10 +542,14 @@ pub fn comparison_loop(
             // Trigger screenshot
             #[cfg(feature = "headless-render")]
             {
-                if let Some(ref rt) = headless_target {
-                    commands
-                        .spawn(Screenshot::image(rt.0.clone()))
-                        .observe(save_to_disk(shot_path));
+                if headless_capture_state.pending_path.is_none()
+                    && let Ok(image_copier) = headless_capture_query.single()
+                {
+                    let serial = headless_capture_state.next_serial;
+                    headless_capture_state.next_serial += 1;
+                    image_copier.request(serial);
+                    headless_capture_state.pending_serial = Some(serial);
+                    headless_capture_state.pending_path = Some(shot_path);
                 }
             }
             #[cfg(not(feature = "headless-render"))]
@@ -515,12 +557,16 @@ pub fn comparison_loop(
                 .spawn(Screenshot::primary_window())
                 .observe(save_to_disk(shot_path));
 
+            state.wait_frames = 0;
             state.stage = TestStage::WaitingForScreenshot;
         }
 
         TestStage::WaitingForScreenshot => {
-            // Wait one frame for screenshot to be executed (in Render phase)
-            // This ensures the screenshot captures the frozen state
+            state.wait_frames += 1;
+            if state.wait_frames < 1 {
+                return;
+            }
+
             state.stage = TestStage::Comparing;
         }
 
@@ -529,15 +575,12 @@ pub fn comparison_loop(
             let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
 
             if !shot_path.exists() {
-                // Still saving...
                 return;
             }
 
-            // Give it a tiny moment to flush? Filesystem race is rare but possible.
-            // Load images
             let shot_img = match image::open(&shot_path) {
                 Ok(img) => img.to_rgba8(),
-                Err(_) => return, // Wait more?
+                Err(_) => return,
             };
 
             let ref_path = &state.frame_paths[frame_idx];

@@ -7,7 +7,7 @@ use crate::animation::{
     animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
     animate_sdf_stretch_system, animate_size_system, animate_text_opacity_system,
     animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
-    animate_unified_effect_system, apply_mask_clipping_system,
+    animate_unified_effect_system, apply_mask_clipping_system, apply_parenthelper_system,
     compensate_sdf_ancestor_scale_for_children_system, compensate_sdf_parent_scale_system,
     debug_layer_global_z_system, fix_rtl_line_alignment_system, manage_layer_lifecycle_system,
     update_echo_runtime_system, update_sdf_mask_system, update_unified_mask_system,
@@ -23,6 +23,7 @@ use crate::plugin::resources::AmProjectResolution;
 use crate::plugin::startup::{load_system_fonts_for_fallback, setup_white_pixel_system};
 use crate::sdf::hot_reload_shader_system;
 use crate::sdf_material::SdfMaterial;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub(super) fn build_plugin(app: &mut App) {
     app.add_plugins(Material2dPlugin::<SdfMaterial>::default())
@@ -38,7 +39,8 @@ pub(super) fn build_plugin(app: &mut App) {
         .init_resource::<AmProjectResolution>()
         .init_resource::<crate::effects::LiftCompositeState>()
         .add_systems(Startup, setup_white_pixel_system)
-        .add_systems(Startup, load_system_fonts_for_fallback);
+        .add_systems(Startup, load_system_fonts_for_fallback)
+        .add_systems(Update, trace_asset_counts_system);
 
     configure_update_sets(app);
     register_lifecycle_systems(app);
@@ -106,10 +108,16 @@ fn register_animation_systems(app: &mut App) {
             animate_rtt_blur_system,
             apply_mask_clipping_system,
             hot_reload_shader_system,
-            crate::effects::sync_rtt_camera_position_system,
         )
             .chain()
             .in_set(AlightMotionSystemSet::Animation),
+    )
+    .add_systems(
+        Update,
+        apply_parenthelper_system
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(animate_transform_system)
+            .before(compensate_sdf_parent_scale_system),
     )
     .add_systems(
         Update,
@@ -136,6 +144,35 @@ fn register_post_update_systems(app: &mut App) {
     )
     .add_systems(
         PostUpdate,
+        crate::effects::sync_rtt_camera_position_system
+            .after(bevy::transform::TransformSystems::Propagate),
+    )
+    .add_systems(
+        PostUpdate,
         debug_layer_global_z_system.after(bevy::transform::TransformSystems::Propagate),
+    );
+}
+
+fn trace_asset_counts_system(
+    meshes: Res<Assets<Mesh>>,
+    images: Res<Assets<Image>>,
+    unified_materials: Res<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
+) {
+    if std::env::var_os("AM_ASSET_COUNT_TRACE").is_none() {
+        return;
+    }
+
+    static FRAME_COUNTER: AtomicU32 = AtomicU32::new(0);
+    let frame = FRAME_COUNTER.fetch_add(1, Ordering::Relaxed) + 1;
+    if !frame.is_multiple_of(30) {
+        return;
+    }
+
+    bevy::log::warn!(
+        "[ASSET-COUNT] frame={} meshes={} images={} unified_materials={}",
+        frame,
+        meshes.len(),
+        images.len(),
+        unified_materials.len()
     );
 }

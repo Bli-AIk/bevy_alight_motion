@@ -1,10 +1,19 @@
 {
+<<<<<<< HEAD
   "timestamp": "2026-03-21T16:44:53.032703+08:00",
   "summary": {
     "passed": 175,
     "warnings": 0,
     "skipped": 4,
     "failed": 89
+=======
+  "timestamp": "2026-03-21T20:29:45.349306+08:00",
+  "summary": {
+    "passed": 186,
+    "warnings": 0,
+    "skipped": 4,
+    "failed": 74
+>>>>>>> af81ec1 (fix(parenthelper): pass effect regression and split oversized helpers)
   },
   "results": {
     "basic/bezier/bezier": {
@@ -322,6 +331,9 @@
       "status": "pass"
     },
     "effects/palette/basic": {
+      "status": "pass"
+    },
+    "effects/parenthelper/basic": {
       "status": "pass"
     },
     "effects/path-repeat/animation": {

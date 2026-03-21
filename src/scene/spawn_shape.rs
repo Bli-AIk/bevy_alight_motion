@@ -44,6 +44,7 @@ pub(crate) fn spawn_shape(
     let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
+    let parent_helper = extract_parent_helper_effect(&shape.effects);
     let stretch2_effect = extract_stretch2_effect(&shape.effects);
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
@@ -352,6 +353,13 @@ pub(crate) fn spawn_shape(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                parenthelper_scale_mode: parent_helper.scale_mode,
+                parenthelper_rotate_mode: parent_helper.rotate_mode,
+                parenthelper_scale_weight: parent_helper.scale_weight,
+                parenthelper_rotate_weight: parent_helper.rotate_weight,
+                parenthelper_auto_rotate: parent_helper.auto_rotate,
+                parenthelper_radius_adjust: parent_helper.radius_adjust,
+                parenthelper_has_effect: parent_helper.has_effect,
                 stretch2_scale: stretch2_effect.scale,
                 stretch2_angle: stretch2_effect.angle,
                 stretch2_content_only: stretch2_effect.content_only,

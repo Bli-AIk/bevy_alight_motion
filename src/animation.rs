@@ -16,6 +16,7 @@ mod helpers;
 mod interpolation;
 mod lifecycle;
 mod noise_effects;
+mod parenthelper;
 mod sdf;
 mod sdf_geometry;
 mod sdf_helpers;
@@ -42,6 +43,7 @@ pub use effects::{
     fix_rtl_line_alignment_system, update_unified_mask_system,
 };
 pub use lifecycle::manage_layer_lifecycle_system;
+pub use parenthelper::apply_parenthelper_system;
 pub use sdf::{
     animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
     animate_sdf_stretch_system, apply_mask_clipping_system,

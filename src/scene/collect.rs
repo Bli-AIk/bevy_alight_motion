@@ -770,6 +770,8 @@ mod tests {
             from_deeply_nested_scene: false,
             echo_runtime: None,
             group_fill: None,
+            embed_requires_composite: false,
+            embed_dynamic_resolution: false,
             embed_inner_total_time: None,
             hidden: false,
         }

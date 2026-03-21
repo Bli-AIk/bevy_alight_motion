@@ -44,6 +44,7 @@ pub(super) fn spawn_layer_entity(
     _embed_contents_container: Option<Entity>,
     inv_fit_scale: f32,
     embed_owner_id: u64,
+    has_child_layers: bool,
     spawned_entities: &HashMap<u64, Entity>,
     global_time: f32,
 ) -> Entity {
@@ -352,6 +353,8 @@ pub(super) fn spawn_layer_entity(
                 scene_width: scene_w,
                 scene_height: scene_h,
                 has_scale_animation: !layer.animated.scale.keyframes.is_empty(),
+                requires_composite: layer.embed_requires_composite,
+                dynamic_resolution: layer.embed_dynamic_resolution,
             });
         // Mark as mask embed if blending is mask/exclude
         if layer.blending_mode == AmBlendingMode::Mask
@@ -630,6 +633,8 @@ pub(super) fn spawn_layer_entity(
             layer.animated.exposure_has_effect,  // has_exposure - needs UnifiedEffectMaterial
             layer.blending_mode.is_blend(),      // has_blend - needs UnifiedEffectMaterial
             layer.animated.chromakey_enabled,    // has_chromakey - needs UnifiedEffectMaterial
+            layer.animated.parenthelper_has_effect, // has_parenthelper - requires full unified updates
+            has_child_layers, // has_child_layers - wrapper-only path breaks parent visuals
             if layer.animated.rgb_split_enabled {
                 // Max RGB split offset in UV space = max_strength / 8.0
                 let max_strength = layer
@@ -695,8 +700,8 @@ pub(super) fn spawn_layer_entity(
                 }
                 max_off
             }, // mirror_max_offset
-            global_time as u64,                  // current playback time for mask initialization
-            initial_replace_color,               // replace color params
+            global_time as u64, // current playback time for mask initialization
+            initial_replace_color, // replace color params
             {
                 // Compute max animated scale for SDF mesh sizing
                 let mut max_s = initial_scale.0.abs().max(initial_scale.1.abs());

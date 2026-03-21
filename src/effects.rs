@@ -13,6 +13,7 @@
 
 pub(crate) mod lift_composite;
 mod rtt;
+mod rtt_helpers;
 mod types;
 
 // Re-export all public types

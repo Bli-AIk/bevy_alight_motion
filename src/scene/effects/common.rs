@@ -24,6 +24,8 @@ const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
 /// Legacy transform effect (older Alight Motion versions).
 /// Uses different property names: offset(vec2) → posx/posy, scale → posz.
 const TRANSFORM_LEGACY_ID: &str = "com.alightcreative.effects.transform";
+/// Parent helper effect (controls how a child reacts to its parent's transform).
+const PARENTHELPER_ID: &str = "com.alightcreative.effects.parenthelper";
 
 fn is_transform_effect(id: &str) -> bool {
     id == TRANSFORM2_ID || id == TRANSFORM_LEGACY_ID
@@ -217,6 +219,57 @@ pub(crate) fn extract_all_transform2_effects(effects: &[AmEffect]) -> Vec<Transf
         .map(parse_transform_params)
         .collect()
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct ParentHelperParams {
+    pub scale_mode: i32,
+    pub rotate_mode: i32,
+    pub scale_weight: AmAnimatedFloat,
+    pub rotate_weight: AmAnimatedFloat,
+    pub auto_rotate: i32,
+    pub radius_adjust: AmAnimatedFloat,
+    pub has_effect: bool,
+}
+
+/// Extract parenthelper effect parameters from effects.
+pub(crate) fn extract_parent_helper_effect(effects: &[AmEffect]) -> ParentHelperParams {
+    let mut params = ParentHelperParams::default();
+
+    let Some(effect) = effects.iter().find(|e| e.id == PARENTHELPER_ID) else {
+        return params;
+    };
+
+    params.has_effect = true;
+    params.scale_weight.value = Some(1.0);
+    params.rotate_weight.value = Some(1.0);
+
+    for prop in &effect.properties {
+        match prop.name.as_str() {
+            "scaleMode" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.scale_mode = v;
+                }
+            }
+            "rotateMode" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.rotate_mode = v;
+                }
+            }
+            "scaleWeight" => apply_animated_float(&mut params.scale_weight, prop),
+            "rotateWeight" => apply_animated_float(&mut params.rotate_weight, prop),
+            "autoRotate" => {
+                if let Ok(v) = prop.value.parse::<i32>() {
+                    params.auto_rotate = v;
+                }
+            }
+            "radiusAdjust" => apply_animated_float(&mut params.radius_adjust, prop),
+            _ => {}
+        }
+    }
+
+    params
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct WipeEffectParams {
     pub start: AmAnimatedFloat,

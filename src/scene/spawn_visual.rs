@@ -41,6 +41,7 @@ pub(crate) fn spawn_image(
     let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&image.effects);
     let scale_assist = extract_scale_assist_effect(&image.effects);
+    let parent_helper = extract_parent_helper_effect(&image.effects);
     let stretch2_effect = extract_stretch2_effect(&image.effects);
     let replace_color = extract_replace_color_effect(&image.effects);
     let repeat_effect = extract_repeat_effect(&image.effects);
@@ -163,6 +164,13 @@ pub(crate) fn spawn_image(
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                parenthelper_scale_mode: parent_helper.scale_mode,
+                parenthelper_rotate_mode: parent_helper.rotate_mode,
+                parenthelper_scale_weight: parent_helper.scale_weight,
+                parenthelper_rotate_weight: parent_helper.rotate_weight,
+                parenthelper_auto_rotate: parent_helper.auto_rotate,
+                parenthelper_radius_adjust: parent_helper.radius_adjust,
+                parenthelper_has_effect: parent_helper.has_effect,
                 stretch2_scale: stretch2_effect.scale,
                 stretch2_angle: stretch2_effect.angle,
                 stretch2_content_only: stretch2_effect.content_only,
@@ -515,6 +523,13 @@ pub(crate) fn spawn_text(
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            parenthelper_scale_mode: 0,
+            parenthelper_rotate_mode: 0,
+            parenthelper_scale_weight: AmAnimatedFloat::default(),
+            parenthelper_rotate_weight: AmAnimatedFloat::default(),
+            parenthelper_auto_rotate: 0,
+            parenthelper_radius_adjust: AmAnimatedFloat::default(),
+            parenthelper_has_effect: false,
             stretch2_scale: AmAnimatedFloat::default(),
             stretch2_angle: AmAnimatedFloat::default(),
             stretch2_content_only: false,

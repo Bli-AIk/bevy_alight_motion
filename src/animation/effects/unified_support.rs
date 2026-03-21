@@ -52,6 +52,48 @@ pub(super) fn trace_unified_once(key: impl Into<String>, message: impl FnOnce() 
     }
 }
 
+pub(super) fn trace_parenthelper_unified_state(
+    marker: &crate::scene::AmLayerMarker,
+    material: &crate::masked_sprite::UnifiedEffectMaterial,
+    transform: &Transform,
+    global_transform: &GlobalTransform,
+    visibility: Option<&Visibility>,
+    render_layers: Option<&bevy::camera::visibility::RenderLayers>,
+    parent: Option<Entity>,
+) {
+    let global_pos = global_transform.translation();
+    let has_texture = material.texture.is_some();
+    trace_unified_once(format!("{}:{}", marker.id, marker.label), || {
+        format!(
+            "[UNIFIED:parenthelper] layer_id={} label='{}' parent={:?} has_texture={} color=({:.3},{:.3},{:.3},{:.3}) vis={:?} layers={:?} local=({:.2},{:.2},{:.4}) global=({:.2},{:.2},{:.4}) size=({:.2},{:.2},{:.2},{:.2}) effect_flags=({:.1},{:.1},{:.1},{:.1})",
+            marker.id,
+            marker.label,
+            parent,
+            has_texture,
+            material.uniform_data.color.x,
+            material.uniform_data.color.y,
+            material.uniform_data.color.z,
+            material.uniform_data.color.w,
+            visibility,
+            render_layers,
+            transform.translation.x,
+            transform.translation.y,
+            transform.translation.z,
+            global_pos.x,
+            global_pos.y,
+            global_pos.z,
+            material.uniform_data.original_size.x,
+            material.uniform_data.original_size.y,
+            material.uniform_data.original_size.z,
+            material.uniform_data.original_size.w,
+            material.uniform_data.effect_flags.x,
+            material.uniform_data.effect_flags.y,
+            material.uniform_data.effect_flags.z,
+            material.uniform_data.effect_flags.w,
+        )
+    });
+}
+
 /// Compute accumulated ancestor visual scale by walking up the entity hierarchy.
 /// Only accumulates scale from ancestors that have UnifiedEffectMarker,
 /// because those entities bake their animated scale into mesh size (not Transform.scale).
@@ -90,20 +132,19 @@ pub(super) fn compute_ancestor_scale(
     acc_scale
 }
 
-pub(super) fn insert_quad_mesh(
-    commands: &mut Commands,
+pub(super) fn update_quad_mesh(
     meshes: &mut Assets<Mesh>,
-    entity: Entity,
+    mesh_handle: &bevy::mesh::Mesh2d,
     bounds: [f32; 4],
     uv_rect: [f32; 4],
 ) {
     let [min_x, max_x, min_y, max_y] = bounds;
     let [uv_left, uv_right, uv_top, uv_bottom] = uv_rect;
 
-    let mut mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
-        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-    );
+    let Some(mesh) = meshes.get_mut(&mesh_handle.0) else {
+        return;
+    };
+
     mesh.insert_attribute(
         Mesh::ATTRIBUTE_POSITION,
         vec![
@@ -124,9 +165,4 @@ pub(super) fn insert_quad_mesh(
         ],
     );
     mesh.insert_indices(bevy::mesh::Indices::U32(vec![0u32, 1, 2, 0, 2, 3]));
-
-    let mesh_handle = meshes.add(mesh);
-    commands
-        .entity(entity)
-        .insert(bevy::mesh::Mesh2d(mesh_handle));
 }

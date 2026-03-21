@@ -22,9 +22,15 @@ use bevy::camera::RenderTarget;
 use bevy::camera::ScalingMode;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
+use bevy::render::render_resource::Extent3d;
 use bevy::render::render_resource::TextureFormat;
+use bevy::sprite::Anchor;
 use std::collections::HashMap;
 
+use super::rtt_helpers::{
+    compute_embed_visible_rect, propagate_to_descendants, resize_render_texture, scene_local_rect,
+    sync_dynamic_resolution_mesh, sync_dynamic_resolution_sprite, transformed_rect_edge_lengths,
+};
 use super::types::*;
 
 pub struct EffectRenderPlugin;
@@ -136,6 +142,8 @@ pub struct EmbedSceneRtt {
     /// Scene dimensions (for camera orthographic projection)
     pub scene_width: f32,
     pub scene_height: f32,
+    /// Whether this embed uses AM's dynamicResolution precompose mode.
+    pub dynamic_resolution: bool,
 }
 
 /// Marker component for embedScene RTT cameras
@@ -166,6 +174,7 @@ pub struct EmbedSceneBounds {
 pub struct NeedsEmbedSceneRtt {
     pub scene_width: f32,
     pub scene_height: f32,
+    pub dynamic_resolution: bool,
 }
 
 /// Marker component indicating an embed needs render strategy evaluation.
@@ -179,6 +188,10 @@ pub struct NeedsStrategyEvaluation {
     pub scene_height: f32,
     /// Whether this embed has scale animation (requires bounds clipping)
     pub has_scale_animation: bool,
+    /// Explicit AM intrinsic precompose requests need the composite path.
+    pub requires_composite: bool,
+    /// Whether the nested scene uses AM's dynamicResolution precompose mode.
+    pub dynamic_resolution: bool,
 }
 
 /// Marker component for embedScene layers used as masks (blending="mask"/"exclude").
@@ -226,7 +239,7 @@ pub fn evaluate_render_strategy_system(
         let needs_fill = group_fill.is_some();
         let is_mask = embed_mask.is_some();
 
-        let strategy = if needs_fill || is_mask {
+        let strategy = if needs_eval.requires_composite || needs_fill || is_mask {
             RenderStrategy::Composite
         } else if needs_eval.has_scale_animation {
             RenderStrategy::Stencil
@@ -235,11 +248,12 @@ pub fn evaluate_render_strategy_system(
         };
 
         bevy::log::warn!(
-            "[Strategy-DBG] Embed {:?} → {:?} (fill={}, mask={})",
+            "[Strategy-DBG] Embed {:?} → {:?} (fill={}, mask={}, force_composite={})",
             entity,
             strategy,
             needs_fill,
             is_mask,
+            needs_eval.requires_composite,
         );
 
         // Remove evaluation marker and assign strategy
@@ -269,6 +283,7 @@ pub fn evaluate_render_strategy_system(
             commands.entity(entity).insert(NeedsEmbedSceneRtt {
                 scene_width: needs_eval.scene_width,
                 scene_height: needs_eval.scene_height,
+                dynamic_resolution: needs_eval.dynamic_resolution,
             });
         }
 
@@ -426,6 +441,7 @@ pub fn setup_embed_scene_rtt_system(
                     render_layer,
                     scene_width: needs_rtt.scene_width,
                     scene_height: needs_rtt.scene_height,
+                    dynamic_resolution: needs_rtt.dynamic_resolution,
                 },
                 // Use appropriate RenderLayers based on nesting
                 sprite_render_layer,
@@ -635,6 +651,8 @@ pub fn propagate_render_layers_system(
     children_query: Query<&Children>,
     render_layers_query: Query<&RenderLayers>,
 ) {
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
+
     // Build a map of embed entity -> render layer for Composite embeds
     let composite_layers: HashMap<Entity, u8> = composite_embed_query
         .iter()
@@ -660,6 +678,16 @@ pub fn propagate_render_layers_system(
         } else {
             continue;
         };
+
+        if trace_renderlayers {
+            bevy::log::warn!(
+                "[RenderLayers:Content] content={:?} embed={:?} target={:?} current={:?}",
+                content_entity,
+                marker.embed_entity,
+                target_layer,
+                current_layers,
+            );
+        }
 
         // Check if update is needed for the content entity itself
         let needs_update = match current_layers {
@@ -731,6 +759,7 @@ pub fn propagate_render_layers_to_children_system(
     // Query for entities that are NOT embeds
     non_embed_query: Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
 ) {
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
     let mut total_updates = 0;
 
     // Process Composite strategy embeds (propagate RTT layer)
@@ -769,6 +798,15 @@ pub fn propagate_render_layers_to_children_system(
         direct_with_children += 1;
         direct_total_children += children.len();
 
+        if trace_renderlayers {
+            bevy::log::warn!(
+                "[RenderLayers:DirectEmbed] embed={:?} children={} target={:?}",
+                embed_entity,
+                children.len(),
+                layer_0,
+            );
+        }
+
         total_updates += propagate_to_descendants(
             &mut commands,
             embed_entity,
@@ -792,107 +830,38 @@ pub fn propagate_render_layers_to_children_system(
     }
 }
 
-/// Helper function to propagate RenderLayers to all descendants of an embed.
-fn propagate_to_descendants(
-    commands: &mut Commands,
-    embed_entity: Entity,
-    children: &Children,
-    target_layer: &RenderLayers,
-    children_query: &Query<&Children>,
-    render_layers_query: &Query<&RenderLayers>,
-    visibility_query: &Query<&Visibility>,
-    force_hidden_query: &Query<(), With<crate::scene::AmForceHidden>>,
-    non_embed_query: &Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
-) -> u32 {
-    let mut updates = 0;
-
-    // Process all direct children
-    for child_entity in children.iter() {
-        // Check if needs RenderLayers update
-        let layer_needs_update = match render_layers_query.get(child_entity) {
-            Ok(current) => current != target_layer,
-            Err(_) => true,
-        };
-
-        // Check if needs Visibility update (make visible if currently hidden)
-        let vis_needs_update = match visibility_query.get(child_entity) {
-            Ok(Visibility::Hidden) => true,
-            Err(_) => false, // No Visibility component, don't add one
-            _ => false,      // Already Inherited or Visible
-        } && force_hidden_query.get(child_entity).is_err();
-
-        if layer_needs_update || vis_needs_update {
-            let mut entity_commands = commands.entity(child_entity);
-            if layer_needs_update {
-                entity_commands.insert(target_layer.clone());
-            }
-            if vis_needs_update {
-                entity_commands.insert(Visibility::Inherited);
-            }
-            updates += 1;
-            bevy::log::trace!(
-                "[PropagateChildren] Updated child {:?} of embed {:?}",
-                child_entity,
-                embed_entity
-            );
-        }
-
-        // Recurse into non-embed children
-        let mut to_process: Vec<Entity> = Vec::new();
-        if non_embed_query.get(child_entity).is_ok()
-            && let Ok(grandchildren) = children_query.get(child_entity)
-        {
-            to_process.extend(grandchildren.to_vec());
-        }
-
-        while let Some(entity) = to_process.pop() {
-            // Only process non-embed descendants
-            if non_embed_query.get(entity).is_err() {
-                continue;
-            }
-
-            let layer_needs_update = match render_layers_query.get(entity) {
-                Ok(current) => current != target_layer,
-                Err(_) => true,
-            };
-
-            let vis_needs_update = match visibility_query.get(entity) {
-                Ok(Visibility::Hidden) => true,
-                Err(_) => false,
-                _ => false,
-            } && force_hidden_query.get(entity).is_err();
-
-            if layer_needs_update {
-                commands.entity(entity).insert(target_layer.clone());
-            }
-            if vis_needs_update {
-                commands.entity(entity).insert(Visibility::Inherited);
-            }
-            if layer_needs_update || vis_needs_update {
-                updates += 1;
-            }
-
-            // Continue to grandchildren
-            if let Ok(grandchildren) = children_query.get(entity) {
-                to_process.extend(grandchildren.to_vec());
-            }
-        }
-    }
-
-    updates
-}
-
 /// System to sync RTT camera positions and projection with their embed's GlobalTransform.
 /// This ensures that RTT cameras follow their embed's world position, allowing them to
 /// "see" the embed's Bevy children (which have world positions relative to the embed).
 /// Also syncs the projection's Fixed scaling to account for changes in global scale
 /// (e.g., animated scale on the embed or its parents).
 pub fn sync_rtt_camera_position_system(
-    embed_query: Query<(&EmbedSceneRtt, &GlobalTransform)>,
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut embed_query: Query<(
+        Entity,
+        &EmbedSceneRtt,
+        &GlobalTransform,
+        &crate::animation::AmAnimated,
+        Option<&mut Sprite>,
+        Option<&mut Anchor>,
+        Option<&Mesh2d>,
+    )>,
     mut camera_query: Query<(&EmbedSceneRttCamera, &mut Transform, &mut Projection)>,
 ) {
     for (camera_marker, mut camera_transform, mut projection) in camera_query.iter_mut() {
-        if let Ok((rtt, embed_global)) = embed_query.get(camera_marker.embed_entity) {
+        if let Ok((embed_entity, rtt, embed_global, animated, sprite, anchor, mesh2d)) =
+            embed_query.get_mut(camera_marker.embed_entity)
+        {
+            let full_rect = scene_local_rect(rtt.scene_width, rtt.scene_height);
+            let visible_rect = compute_embed_visible_rect(rtt, embed_global, animated);
+            let visible_size = Vec2::new(
+                visible_rect.width().max(1.0),
+                visible_rect.height().max(1.0),
+            );
+            let local_center = visible_rect.center();
+
             // Sync position, rotation, and scale sign to match embed's world transform.
             // Rotation must match so content (which inherits embed's rotation via
             // Bevy hierarchy) appears unrotated in RTT space.
@@ -906,14 +875,39 @@ pub fn sync_rtt_camera_position_system(
             camera_transform.scale =
                 Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0);
 
-            // Sync projection scale to compensate for inherited global scale
-            let effective_width = rtt.scene_width * global_scale.x.abs();
-            let effective_height = rtt.scene_height * global_scale.y.abs();
+            // dynamicResolution in AM still renders the nested scene in the full-scene basis,
+            // then displays only the visible local sub-rect. Keep the RTT camera centered on
+            // the full scene origin and crop at display time instead of re-centering the camera
+            // to the visible sub-rect, which shrinks/centers the content incorrectly.
+            let effective_size = transformed_rect_edge_lengths(full_rect, embed_global.affine());
             if let Projection::Orthographic(ref mut ortho) = *projection {
                 ortho.scaling_mode = ScalingMode::Fixed {
-                    width: effective_width,
-                    height: effective_height,
+                    width: effective_size.x,
+                    height: effective_size.y,
                 };
+            }
+
+            let new_extent = Extent3d {
+                width: effective_size.x.ceil().max(1.0) as u32,
+                height: effective_size.y.ceil().max(1.0) as u32,
+                depth_or_array_layers: 1,
+            };
+            resize_render_texture(&mut images, &rtt.render_texture, new_extent);
+
+            if let Some(mut sprite) = sprite {
+                sync_dynamic_resolution_sprite(
+                    &mut commands,
+                    embed_entity,
+                    &mut sprite,
+                    anchor,
+                    rtt,
+                    visible_rect,
+                    full_rect,
+                    visible_size,
+                    local_center,
+                );
+            } else if let Some(mesh2d) = mesh2d {
+                sync_dynamic_resolution_mesh(&mut meshes, mesh2d, rtt, visible_rect, full_rect);
             }
         }
     }

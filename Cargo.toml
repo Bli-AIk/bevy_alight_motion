@@ -93,6 +93,9 @@ trace_tracy = ["bevy/trace_tracy", "bevy/trace", "dep:tracing-tracy"]
 # Tracy profiling with system names visible (uses bevy/debug for ECS names)
 # Tracy 性能分析，可见系统名称（使用 bevy/debug 获取 ECS 名称）
 debug_tracy = ["trace_tracy", "bevy/debug"]
+# Tracy memory allocation profiling
+# Tracy 内存分配分析
+trace_tracy_memory = ["trace_tracy", "bevy/trace_tracy_memory"]
 
 
 [[example]]

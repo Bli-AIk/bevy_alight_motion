@@ -111,6 +111,11 @@ pub struct EchoAlphaConfig {
     pub parent_speed: f32,
 }
 
+/// Marker for unified-material visuals whose size should come from Transform.scale
+/// instead of per-frame mesh resizing.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct AmUnifiedUsesTransformScale;
+
 impl EchoAlphaConfig {
     /// Evaluate echo alpha at the given global time.
     /// Returns the multiplier for opacity (0.0 = invisible, 1.0 = fully opaque).
@@ -272,6 +277,20 @@ pub struct AmAnimated {
     pub scale_assist_damp: AmAnimatedFloat,
     /// Scale assist effect axis (1=X, 2=Y, 3=XY).
     pub scale_assist_axis: i32,
+    /// Parenthelper scale mode (0=normal, 1=locked, 2=weighted).
+    pub parenthelper_scale_mode: i32,
+    /// Parenthelper rotation mode (0=normal, 1=locked, 2=weighted).
+    pub parenthelper_rotate_mode: i32,
+    /// Parenthelper scale inheritance weight.
+    pub parenthelper_scale_weight: AmAnimatedFloat,
+    /// Parenthelper rotation inheritance weight.
+    pub parenthelper_rotate_weight: AmAnimatedFloat,
+    /// Parenthelper auto-rotation mode (0=off, 1=X, 2=Y).
+    pub parenthelper_auto_rotate: i32,
+    /// Parenthelper radius adjustment for auto-rotation.
+    pub parenthelper_radius_adjust: AmAnimatedFloat,
+    /// Whether parenthelper is present on this layer.
+    pub parenthelper_has_effect: bool,
     /// Stretch2 effect scale (animated).
     pub stretch2_scale: AmAnimatedFloat,
     /// Stretch2 effect angle in degrees (animated).
