@@ -139,15 +139,24 @@ fn rect_uv_bounds(rect: EmbedVisibleRect, full_rect: EmbedVisibleRect) -> [f32; 
     let height = full_rect.height().max(1.0);
     let uv_left = ((rect.left - full_rect.left) / width).clamp(0.0, 1.0);
     let uv_right = ((rect.right - full_rect.left) / width).clamp(0.0, 1.0);
-    let uv_bottom = ((rect.bottom - full_rect.bottom) / height).clamp(0.0, 1.0);
-    let uv_top = ((rect.top - full_rect.bottom) / height).clamp(0.0, 1.0);
+    // Bevy mesh UVs use v=0 at the top of the texture. Match the sprite rect path so
+    // dynamicResolution crops map to the same top-origin texture coordinates.
+    let uv_top = ((full_rect.top - rect.top) / height).clamp(0.0, 1.0);
+    let uv_bottom = ((full_rect.top - rect.bottom) / height).clamp(0.0, 1.0);
     [uv_left, uv_right, uv_top, uv_bottom]
 }
 
-fn rect_pixel_bounds(rect: EmbedVisibleRect, full_rect: EmbedVisibleRect) -> Rect {
+fn rect_pixel_bounds(
+    rect: EmbedVisibleRect,
+    full_rect: EmbedVisibleRect,
+    texture_size: Vec2,
+) -> Rect {
+    let [uv_left, uv_right, uv_top, uv_bottom] = rect_uv_bounds(rect, full_rect);
     Rect {
-        min: Vec2::new(rect.left - full_rect.left, full_rect.top - rect.top),
-        max: Vec2::new(rect.right - full_rect.left, full_rect.top - rect.bottom),
+        // Sprite::rect expects top-origin pixel coordinates. rect_uv_bounds() already
+        // returns top-origin V values, so applying `1.0 - uv` here would flip Y twice.
+        min: Vec2::new(uv_left * texture_size.x, uv_top * texture_size.y),
+        max: Vec2::new(uv_right * texture_size.x, uv_bottom * texture_size.y),
     }
 }
 
@@ -189,11 +198,12 @@ pub(super) fn sync_dynamic_resolution_sprite(
     full_rect: EmbedVisibleRect,
     visible_size: Vec2,
     local_center: Vec2,
+    texture_size: Vec2,
 ) {
     sprite.custom_size = Some(visible_size);
     let sprite_rect = rtt
         .dynamic_resolution
-        .then(|| rect_pixel_bounds(visible_rect, full_rect));
+        .then(|| rect_pixel_bounds(visible_rect, full_rect, texture_size));
     sprite.rect = sprite_rect;
 
     let custom_anchor = Anchor(Vec2::new(

@@ -15,8 +15,6 @@ pub fn propagate_render_layers_system(
         Option<&RenderLayers>,
         Option<&Visibility>,
     )>,
-    children_query: Query<&Children>,
-    render_layers_query: Query<&RenderLayers>,
 ) {
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
 
@@ -68,29 +66,11 @@ pub fn propagate_render_layers_system(
                 .insert((target_layer.clone(), target_visibility));
             updates += 1;
         }
-
-        let mut to_visit = Vec::new();
-        if let Ok(children) = children_query.get(content_entity) {
-            to_visit.extend(children.iter());
-        }
-        while let Some(child) = to_visit.pop() {
-            let child_needs_update = match render_layers_query.get(child) {
-                Ok(current) => *current != target_layer,
-                Err(_) => true,
-            };
-            if child_needs_update {
-                commands.entity(child).insert(target_layer.clone());
-                updates += 1;
-            }
-            if let Ok(grandchildren) = children_query.get(child) {
-                to_visit.extend(grandchildren.iter());
-            }
-        }
     }
 
     if updates > 0 {
         bevy::log::trace!(
-            "[RenderLayers] Made {} updates this frame (content + descendants)",
+            "[RenderLayers] Made {} direct content updates this frame",
             updates
         );
     }

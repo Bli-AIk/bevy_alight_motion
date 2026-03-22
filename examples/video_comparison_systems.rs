@@ -288,6 +288,18 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
 
     state.frame_paths = frame_paths;
 
+    if let Some(start_frame) = std::env::var("COMPARISON_START_FRAME")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+    {
+        let max_start = state.frame_paths.len().saturating_sub(1);
+        state.current_frame = start_frame.min(max_start);
+        println!(
+            "[COMPARISON] Starting from frame {} via COMPARISON_START_FRAME",
+            state.current_frame
+        );
+    }
+
     println!(
         "[COMPARISON] Starting comparison of {} frames...",
         state.frame_paths.len()
@@ -304,18 +316,25 @@ pub fn ensure_paused_during_load(
     mut state: ResMut<ComparisonState>,
     mut playback: ResMut<AmPlayback>,
 ) {
+    let trace_time = std::env::var_os("COMPARISON_TRACE_TIME").is_some();
+
     // Apply pending time change (set in previous frame's SettingTime stage)
     // This ensures time is set in First schedule, BEFORE lifecycle_system runs in Update
     if let Some(time_ms) = state.pending_time_ms.take() {
         playback.current_time_ms = time_ms;
-        // NOTE: Keep force_stopped=true for this frame!
-        // Start a wait period - lifecycle needs to run with the new time first,
-        // then we need to wait for the scene to be rendered.
-        playback.force_stopped = true;
+        // Keep animation systems running at the paused time so composite RTT chains
+        // can fully settle before capture. `playing=false` already prevents time from advancing.
+        playback.force_stopped = false;
         state.render_wait_frames = std::env::var("COMPARISON_RENDER_WAIT_FRAMES")
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(4);
+        if trace_time {
+            println!(
+                "[COMPARISON TIME] applied current_frame={} time_ms={:.1} render_wait_frames={}",
+                state.current_frame, time_ms, state.render_wait_frames
+            );
+        }
         debug!(
             "[PAUSED] Applied pending time: {:.1}ms, render_wait_frames={}",
             time_ms, state.render_wait_frames
@@ -326,19 +345,17 @@ pub fn ensure_paused_during_load(
     // Handle render_wait_frames countdown
     if state.render_wait_frames > 0 {
         state.render_wait_frames -= 1;
-        if state.render_wait_frames > 0 {
-            // Still waiting - allow lifecycle to run (force_stopped=false)
-            // but don't proceed to screenshot yet
-            playback.force_stopped = false;
-            debug!(
-                "[PAUSED] render_wait_frames={} (allowing lifecycle)",
-                state.render_wait_frames
+        playback.force_stopped = false;
+        if trace_time {
+            println!(
+                "[COMPARISON TIME] waiting current_frame={} time_ms={:.1} render_wait_frames={}",
+                state.current_frame, playback.current_time_ms, state.render_wait_frames
             );
-        } else {
-            // Wait complete - keep force_stopped=true for screenshot capture
-            playback.force_stopped = true;
-            debug!("[PAUSED] render_wait_frames=0 (ready for screenshot)");
         }
+        debug!(
+            "[PAUSED] render_wait_frames={} (keeping systems live at fixed time)",
+            state.render_wait_frames
+        );
         return;
     }
 
@@ -361,8 +378,8 @@ pub fn ensure_paused_during_load(
         | TestStage::Capturing
         | TestStage::WaitingForScreenshot
         | TestStage::Comparing => {
-            playback.force_stopped = true;
-            debug!("[PAUSED] stage={:?} force_stopped=true", state.stage);
+            playback.force_stopped = false;
+            debug!("[PAUSED] stage={:?} force_stopped=false", state.stage);
         }
         // In WaitingForRender, lifecycle should be managed by render_wait_frames
         // If we get here with render_wait_frames=0, it means we're waiting for comparison_loop

@@ -75,6 +75,8 @@ fn register_lifecycle_systems(app: &mut App) {
             ApplyDeferred,
             crate::effects::fix_nested_embed_render_layers_system,
             crate::effects::propagate_render_layers_system,
+            crate::effects::propagate_render_layers_to_children_system,
+            crate::effects::refresh_group_fill_material_texture_system,
             ApplyDeferred,
             crate::effects::setup_lift_composite_system,
             crate::effects::propagate_lift_render_layers_system,

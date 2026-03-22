@@ -8,6 +8,9 @@ use super::{
     GroupFillType, NeedsEmbedSceneRtt,
 };
 
+#[derive(Component)]
+pub(crate) struct PendingGroupFillTextureRefresh(u8);
+
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -32,6 +35,10 @@ pub fn setup_embed_scene_rtt_system(
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
+    let debug_show_fill_rtt = std::env::var_os("AM_GROUP_FILL_DEBUG_SHOW_RTT").is_some();
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
+    let parent_cameras_to_embed = std::env::var_os("AM_PARENT_RTT_CAMERA_TO_EMBED").is_some();
+
     for (
         entity,
         needs_rtt,
@@ -63,6 +70,25 @@ pub fn setup_embed_scene_rtt_system(
         let global_scale = embed_global.to_scale_rotation_translation().0;
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();
         let effective_height = needs_rtt.scene_height * global_scale.y.abs();
+        let parent_camera_to_embed = parent_cameras_to_embed
+            && parent_query
+                .get(entity)
+                .ok()
+                .and_then(|child_of| embed_rtt_query.get(child_of.parent()).ok())
+                .is_some();
+
+        let initial_camera_transform = if parent_camera_to_embed {
+            Transform::from_translation(Vec3::new(0.0, 0.0, 1000.0))
+        } else {
+            let (_, embed_rotation, embed_translation) =
+                embed_global.to_scale_rotation_translation();
+            Transform {
+                translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
+                rotation: embed_rotation,
+                scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
+            }
+        };
+
         let camera_entity = commands
             .spawn((
                 Name::new(format!("EmbedSceneRttCamera[layer={}]", render_layer)),
@@ -87,17 +113,13 @@ pub fn setup_embed_scene_rtt_system(
                     ..OrthographicProjection::default_2d()
                 }),
                 RenderLayers::layer(render_layer_usize),
-                {
-                    let (_, embed_rotation, embed_translation) =
-                        embed_global.to_scale_rotation_translation();
-                    Transform {
-                        translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
-                        rotation: embed_rotation,
-                        scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
-                    }
-                },
+                initial_camera_transform,
             ))
             .id();
+
+        if parent_camera_to_embed {
+            commands.entity(entity).add_child(camera_entity);
+        }
 
         let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
@@ -109,6 +131,15 @@ pub fn setup_embed_scene_rtt_system(
         } else {
             RenderLayers::layer(0)
         };
+
+        if trace_renderlayers {
+            bevy::log::warn!(
+                "[RTT-SetupLayer] embed={:?} render_layer={} sprite_layer={:?}",
+                entity,
+                render_layer,
+                sprite_render_layer,
+            );
+        }
 
         commands
             .entity(entity)
@@ -133,38 +164,48 @@ pub fn setup_embed_scene_rtt_system(
             );
         } else if let Some(fill) = group_fill {
             if fill.fill_type != GroupFillType::None {
-                use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
-                let uniform = match &fill.fill_type {
-                    GroupFillType::Color => GroupFillUniform {
-                        fill_color: fill.fill_color,
-                        gradient_config: Vec4::ZERO,
+                if debug_show_fill_rtt {
+                    commands.entity(entity).insert(Sprite {
+                        image: render_texture_handle,
+                        custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
                         ..default()
-                    },
-                    GroupFillType::Gradient {
-                        gradient_type,
-                        start_color,
-                        end_color,
-                        points,
-                    } => GroupFillUniform {
-                        fill_color: Vec4::ONE,
-                        gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
-                        gradient_start_color: *start_color,
-                        gradient_end_color: *end_color,
-                        gradient_points: *points,
-                    },
-                    GroupFillType::None => unreachable!(),
-                };
-                let material = fill_materials.add(GroupFillMaterial {
-                    uniform_data: uniform,
-                    texture: Some(render_texture_handle),
-                });
-                let mesh = meshes.add(Rectangle::new(
-                    needs_rtt.scene_width,
-                    needs_rtt.scene_height,
-                ));
-                commands
-                    .entity(entity)
-                    .insert((Mesh2d(mesh), MeshMaterial2d(material)));
+                    });
+                } else {
+                    use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
+                    let uniform = match &fill.fill_type {
+                        GroupFillType::Color => GroupFillUniform {
+                            fill_color: fill.fill_color,
+                            gradient_config: Vec4::ZERO,
+                            ..default()
+                        },
+                        GroupFillType::Gradient {
+                            gradient_type,
+                            start_color,
+                            end_color,
+                            points,
+                        } => GroupFillUniform {
+                            fill_color: Vec4::ONE,
+                            gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
+                            gradient_start_color: *start_color,
+                            gradient_end_color: *end_color,
+                            gradient_points: *points,
+                        },
+                        GroupFillType::None => unreachable!(),
+                    };
+                    let material = fill_materials.add(GroupFillMaterial {
+                        uniform_data: uniform,
+                        texture: Some(render_texture_handle),
+                    });
+                    let mesh = meshes.add(Rectangle::new(
+                        needs_rtt.scene_width,
+                        needs_rtt.scene_height,
+                    ));
+                    commands.entity(entity).insert((
+                        Mesh2d(mesh),
+                        MeshMaterial2d(material),
+                        PendingGroupFillTextureRefresh(8),
+                    ));
+                }
             }
         } else {
             let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
@@ -259,12 +300,43 @@ pub fn setup_embed_scene_rtt_system(
     }
 }
 
+pub(crate) fn refresh_group_fill_material_texture_system(
+    mut commands: Commands,
+    query: Query<(
+        Entity,
+        &EmbedSceneRtt,
+        &MeshMaterial2d<crate::group_fill::GroupFillMaterial>,
+        &PendingGroupFillTextureRefresh,
+    )>,
+    mut materials: ResMut<Assets<crate::group_fill::GroupFillMaterial>>,
+) {
+    for (entity, rtt, material_handle, pending) in query.iter() {
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+
+        material.texture = Some(rtt.render_texture.clone());
+
+        if pending.0 <= 1 {
+            commands
+                .entity(entity)
+                .remove::<PendingGroupFillTextureRefresh>();
+        } else {
+            commands
+                .entity(entity)
+                .insert(PendingGroupFillTextureRefresh(pending.0 - 1));
+        }
+    }
+}
+
 pub fn fix_nested_embed_render_layers_system(
     mut commands: Commands,
     embed_query: Query<(Entity, &EmbedSceneRtt, &RenderLayers)>,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
 ) {
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
+
     for (entity, _rtt, current_layers) in embed_query.iter() {
         let Ok(child_of) = parent_query.get(entity) else {
             continue;
@@ -275,12 +347,21 @@ pub fn fix_nested_embed_render_layers_system(
         };
         let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
         if *current_layers != expected_layer {
-            bevy::log::trace!(
-                "[RTT] Fixing nested embed {:?} RenderLayers: was {:?}, now layer {}",
-                entity,
-                current_layers,
-                parent_rtt.render_layer
-            );
+            if trace_renderlayers {
+                bevy::log::warn!(
+                    "[RTT-FixLayer] embed={:?} was={:?} now={:?}",
+                    entity,
+                    current_layers,
+                    expected_layer,
+                );
+            } else {
+                bevy::log::trace!(
+                    "[RTT] Fixing nested embed {:?} RenderLayers: was {:?}, now layer {}",
+                    entity,
+                    current_layers,
+                    parent_rtt.render_layer
+                );
+            }
             commands.entity(entity).insert(expected_layer);
         }
     }

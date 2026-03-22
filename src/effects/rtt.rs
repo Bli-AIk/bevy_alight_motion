@@ -37,6 +37,7 @@ pub use components::{
 pub use layers::{propagate_render_layers_system, propagate_render_layers_to_children_system};
 pub use plugin::EffectRenderPlugin;
 pub use pool::EmbedSceneRenderLayerPool;
+pub(crate) use setup::refresh_group_fill_material_texture_system;
 pub use setup::{fix_nested_embed_render_layers_system, setup_embed_scene_rtt_system};
 pub use strategy::evaluate_render_strategy_system;
 pub use sync::sync_rtt_camera_position_system;

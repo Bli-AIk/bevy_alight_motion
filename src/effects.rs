@@ -42,6 +42,7 @@ pub use types::{
     wipe_params_to_vec4,
 };
 
+pub(crate) use rtt::refresh_group_fill_material_texture_system;
 pub use rtt::{
     AmEmbedMask, EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
     EmbedSceneRttCamera, NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
