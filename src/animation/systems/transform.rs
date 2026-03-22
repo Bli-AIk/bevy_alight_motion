@@ -4,8 +4,7 @@ use crate::animation::components::{
     AmAnimated, AmPlayback, AmSdfShapeParent, AmUnifiedUsesTransformScale,
 };
 use crate::animation::interpolation::{
-    interpolate_float, interpolate_vec2, interpolate_vec2_reverse,
-    interpolate_vec3_reverse,
+    interpolate_float, interpolate_vec2, interpolate_vec2_reverse, interpolate_vec3_reverse,
 };
 use crate::animation::noise_effects::{compute_jitter, compute_simplex_displace};
 use crate::scene::{AmLayerMarker, AmLayerSpec};
