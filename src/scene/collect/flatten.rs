@@ -132,7 +132,6 @@ pub(super) fn flatten_pending_layers(
     flatten_pending_layers_inner(layers, 0, 0, nesting_depth, 0)
 }
 
-#[expect(clippy::only_used_in_recursion)]
 fn flatten_pending_layers_inner(
     layers: Vec<PendingLayer>,
     current_embed_id: u64,

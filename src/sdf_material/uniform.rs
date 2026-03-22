@@ -111,10 +111,11 @@ pub(crate) fn build_base_uniform(
     shape_type: f32,
     frame_half: f32,
 ) -> SdfMaterialUniform {
-    let mut uniform = SdfMaterialUniform::default();
-    uniform.color = color;
-    uniform.params = params;
-    uniform.shape_type = shape_type;
-    uniform.frame_half = frame_half;
-    uniform
+    SdfMaterialUniform {
+        color,
+        params,
+        shape_type,
+        frame_half,
+        ..SdfMaterialUniform::default()
+    }
 }

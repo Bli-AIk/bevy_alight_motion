@@ -53,7 +53,6 @@ pub(super) fn update_blur_mesh(
     }
 }
 
-#[expect(clippy::too_many_arguments)] // reason: stretch mesh update depends on current frame geometry
 pub(super) fn update_stretch_mesh(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,

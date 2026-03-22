@@ -31,7 +31,7 @@ pub use uniform::SdfMaterialUniform;
 /// - `params.y`: half_height (for box) or radius_y (for circle/ellipse)
 /// - `params.z`: stroke_width
 /// - `params.w`: packed stroke color (RGBA as u32 bits stored in f32)
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 pub struct SdfMaterial {
     /// Combined uniform data
     #[uniform(0)]

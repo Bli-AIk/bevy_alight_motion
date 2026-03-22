@@ -5,7 +5,6 @@ use crate::scene::{AmMaskInfo, AmPaletteMapParams};
 
 use super::super::visual_helpers::compute_initial_mask_params;
 
-#[expect(clippy::too_many_arguments)] // reason: unified material creation mirrors runtime uniforms
 pub(super) fn create_unified_material(
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
     texture: Handle<Image>,

@@ -51,14 +51,6 @@ impl SdfMaterial {
     }
 }
 
-impl Default for SdfMaterial {
-    fn default() -> Self {
-        Self {
-            uniform_data: super::SdfMaterialUniform::default(),
-        }
-    }
-}
-
 impl SdfMaterial {
     pub fn new(
         shape_type: SdfShapeType,
@@ -127,7 +119,6 @@ impl SdfMaterial {
         )
     }
 
-    #[expect(clippy::too_many_arguments)] // reason: material creation mirrors runtime mask payload
     pub fn new_with_mask_and_frame_half(
         shape_type: SdfShapeType,
         half_width: f32,

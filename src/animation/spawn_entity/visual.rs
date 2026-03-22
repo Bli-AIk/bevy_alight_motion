@@ -10,7 +10,6 @@ use super::super::helpers::get_initial_scale_from_animated;
 use super::super::interpolation::{interpolate_float, interpolate_vec2, parse_keyframe_color};
 use super::super::visual::add_visual_components;
 
-#[expect(clippy::too_many_arguments)] // reason: visual spawn wires a large cross-section of runtime state
 pub(super) fn spawn_visuals_for_layer(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
