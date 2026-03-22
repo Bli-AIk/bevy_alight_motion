@@ -11,6 +11,64 @@ use super::{
 #[derive(Component)]
 pub(crate) struct PendingGroupFillTextureRefresh(u8);
 
+fn insert_group_fill_debug_sprite(
+    commands: &mut Commands,
+    entity: Entity,
+    render_texture_handle: Handle<Image>,
+    scene_width: f32,
+    scene_height: f32,
+) {
+    commands.entity(entity).insert(Sprite {
+        image: render_texture_handle,
+        custom_size: Some(Vec2::new(scene_width, scene_height)),
+        ..default()
+    });
+}
+
+fn insert_group_fill_mesh(
+    commands: &mut Commands,
+    fill: &AmGroupFill,
+    entity: Entity,
+    render_texture_handle: Handle<Image>,
+    scene_width: f32,
+    scene_height: f32,
+    fill_materials: &mut Assets<crate::group_fill::GroupFillMaterial>,
+    meshes: &mut Assets<Mesh>,
+) {
+    use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
+
+    let uniform = match &fill.fill_type {
+        GroupFillType::Color => GroupFillUniform {
+            fill_color: fill.fill_color,
+            gradient_config: Vec4::ZERO,
+            ..default()
+        },
+        GroupFillType::Gradient {
+            gradient_type,
+            start_color,
+            end_color,
+            points,
+        } => GroupFillUniform {
+            fill_color: Vec4::ONE,
+            gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
+            gradient_start_color: *start_color,
+            gradient_end_color: *end_color,
+            gradient_points: *points,
+        },
+        GroupFillType::None => unreachable!(),
+    };
+    let material = fill_materials.add(GroupFillMaterial {
+        uniform_data: uniform,
+        texture: Some(render_texture_handle),
+    });
+    let mesh = meshes.add(Rectangle::new(scene_width, scene_height));
+    commands.entity(entity).insert((
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
+        PendingGroupFillTextureRefresh(8),
+    ));
+}
+
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -162,50 +220,26 @@ pub fn setup_embed_scene_rtt_system(
                 entity,
                 render_layer
             );
-        } else if let Some(fill) = group_fill {
-            if fill.fill_type != GroupFillType::None {
-                if debug_show_fill_rtt {
-                    commands.entity(entity).insert(Sprite {
-                        image: render_texture_handle,
-                        custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
-                        ..default()
-                    });
-                } else {
-                    use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
-                    let uniform = match &fill.fill_type {
-                        GroupFillType::Color => GroupFillUniform {
-                            fill_color: fill.fill_color,
-                            gradient_config: Vec4::ZERO,
-                            ..default()
-                        },
-                        GroupFillType::Gradient {
-                            gradient_type,
-                            start_color,
-                            end_color,
-                            points,
-                        } => GroupFillUniform {
-                            fill_color: Vec4::ONE,
-                            gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
-                            gradient_start_color: *start_color,
-                            gradient_end_color: *end_color,
-                            gradient_points: *points,
-                        },
-                        GroupFillType::None => unreachable!(),
-                    };
-                    let material = fill_materials.add(GroupFillMaterial {
-                        uniform_data: uniform,
-                        texture: Some(render_texture_handle),
-                    });
-                    let mesh = meshes.add(Rectangle::new(
-                        needs_rtt.scene_width,
-                        needs_rtt.scene_height,
-                    ));
-                    commands.entity(entity).insert((
-                        Mesh2d(mesh),
-                        MeshMaterial2d(material),
-                        PendingGroupFillTextureRefresh(8),
-                    ));
-                }
+        } else if let Some(fill) = group_fill.filter(|fill| fill.fill_type != GroupFillType::None) {
+            if debug_show_fill_rtt {
+                insert_group_fill_debug_sprite(
+                    &mut commands,
+                    entity,
+                    render_texture_handle,
+                    needs_rtt.scene_width,
+                    needs_rtt.scene_height,
+                );
+            } else {
+                insert_group_fill_mesh(
+                    &mut commands,
+                    fill,
+                    entity,
+                    render_texture_handle,
+                    needs_rtt.scene_width,
+                    needs_rtt.scene_height,
+                    &mut fill_materials,
+                    &mut meshes,
+                );
             }
         } else {
             let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
