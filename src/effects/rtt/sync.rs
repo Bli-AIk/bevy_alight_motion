@@ -5,7 +5,7 @@ use bevy::sprite::Anchor;
 use super::{
     EmbedSceneRtt, EmbedSceneRttCamera, compute_embed_visible_rect, resize_render_texture,
     scene_local_rect, sync_dynamic_resolution_mesh, sync_dynamic_resolution_sprite,
-    transformed_rect_edge_lengths,
+    transformed_rect_edge_lengths, EMBED_RTT_CAMERA_Z,
 };
 
 pub fn sync_rtt_camera_position_system(
@@ -76,12 +76,12 @@ pub fn sync_rtt_camera_position_system(
             let (global_scale, embed_rotation, embed_translation) =
                 embed_global.to_scale_rotation_translation();
             if parent_cameras_to_embed && camera_parent.is_some() {
-                camera_transform.translation = Vec3::new(0.0, 0.0, 1000.0);
+                camera_transform.translation = Vec3::new(0.0, 0.0, EMBED_RTT_CAMERA_Z);
                 camera_transform.rotation = Quat::IDENTITY;
                 camera_transform.scale = Vec3::ONE;
             } else {
                 camera_transform.translation =
-                    Vec3::new(embed_translation.x, embed_translation.y, 1000.0);
+                    Vec3::new(embed_translation.x, embed_translation.y, EMBED_RTT_CAMERA_Z);
                 camera_transform.rotation = embed_rotation;
                 camera_transform.scale =
                     Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0);

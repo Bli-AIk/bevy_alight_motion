@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-23T01:16:05.125411+08:00",
+  "timestamp": "2026-03-23T07:56:34.261234+08:00",
   "summary": {
-    "passed": 172,
+    "passed": 174,
     "warnings": 0,
-    "skipped": 5,
-    "failed": 92
+    "skipped": 4,
+    "failed": 91
   },
   "results": {
     "basic/bezier/bezier": {
@@ -89,11 +89,10 @@
       "avg_similarity": 0.9618
     },
     "basic/group/multi-level/basic": {
-      "status": "fail",
-      "avg_similarity": 0.9297
+      "status": "pass"
     },
     "basic/group/multi-level/ex": {
-      "status": "cancelled"
+      "status": "pass"
     },
     "basic/group/multi-level/ex2": {
       "status": "pass"

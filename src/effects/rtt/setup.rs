@@ -5,7 +5,8 @@ use bevy::render::render_resource::TextureFormat;
 
 use super::{
     AmEmbedMask, AmGroupFill, EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera,
-    GroupFillType, NeedsEmbedSceneRtt,
+    GroupFillType, NeedsEmbedSceneRtt, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR,
+    EMBED_RTT_CAMERA_Z,
 };
 
 #[derive(Component)]
@@ -136,12 +137,12 @@ pub fn setup_embed_scene_rtt_system(
                 .is_some();
 
         let initial_camera_transform = if parent_camera_to_embed {
-            Transform::from_translation(Vec3::new(0.0, 0.0, 1000.0))
+            Transform::from_translation(Vec3::new(0.0, 0.0, EMBED_RTT_CAMERA_Z))
         } else {
             let (_, embed_rotation, embed_translation) =
                 embed_global.to_scale_rotation_translation();
             Transform {
-                translation: Vec3::new(embed_translation.x, embed_translation.y, 1000.0),
+                translation: Vec3::new(embed_translation.x, embed_translation.y, EMBED_RTT_CAMERA_Z),
                 rotation: embed_rotation,
                 scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
             }
@@ -166,8 +167,8 @@ pub fn setup_embed_scene_rtt_system(
                         width: effective_width,
                         height: effective_height,
                     },
-                    near: -1000.0,
-                    far: 1000.0,
+                    near: EMBED_RTT_CAMERA_NEAR,
+                    far: EMBED_RTT_CAMERA_FAR,
                     ..OrthographicProjection::default_2d()
                 }),
                 RenderLayers::layer(render_layer_usize),
