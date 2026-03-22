@@ -17,7 +17,6 @@ mod rtt_helpers;
 mod types;
 
 // Re-export all public types
-#[allow(deprecated)]
 pub use types::{
     AmGroupFill,
     EffectLayer,
@@ -26,7 +25,6 @@ pub use types::{
     EffectType,
     GroupFillType,
     MaskParams,
-    NeedsRenderStrategyEvaluation,
     PingPongBuffer,
     RenderHierarchyInfo,
     // Render strategy types for hybrid rendering pipeline

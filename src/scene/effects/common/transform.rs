@@ -3,11 +3,11 @@ use crate::schema::{AmAnimatedFloat, AmEffect};
 use super::shared::{apply_animated_float, parse_vec2_value, split_vec2_keyframes};
 
 const TRANSFORM2_ID: &str = "com.alightcreative.effects.transform2";
-const TRANSFORM_LEGACY_ID: &str = "com.alightcreative.effects.transform";
+const TRANSFORM_V1_ID: &str = "com.alightcreative.effects.transform";
 const PARENTHELPER_ID: &str = "com.alightcreative.effects.parenthelper";
 
 fn is_transform_effect(id: &str) -> bool {
-    id == TRANSFORM2_ID || id == TRANSFORM_LEGACY_ID
+    id == TRANSFORM2_ID || id == TRANSFORM_V1_ID
 }
 
 #[derive(Debug, Clone, Default)]
@@ -23,26 +23,26 @@ pub struct Transform2Params {
 }
 
 fn parse_transform_params(effect: &AmEffect) -> Transform2Params {
-    let is_legacy = effect.id == TRANSFORM_LEGACY_ID;
+    let is_v1 = effect.id == TRANSFORM_V1_ID;
     let mut params = Transform2Params::default();
 
     for prop in &effect.properties {
         match prop.name.as_str() {
-            "posx" if !is_legacy => {
+            "posx" if !is_v1 => {
                 if !prop.keyframes.is_empty() {
                     params.pos_x.keyframes = prop.keyframes.clone();
                 } else if let Ok(v) = prop.value.parse::<f32>() {
                     params.pos_x.value = Some(v);
                 }
             }
-            "posy" if !is_legacy => {
+            "posy" if !is_v1 => {
                 if !prop.keyframes.is_empty() {
                     params.pos_y.keyframes = prop.keyframes.clone();
                 } else if let Ok(v) = prop.value.parse::<f32>() {
                     params.pos_y.value = Some(v);
                 }
             }
-            "offset" if is_legacy => {
+            "offset" if is_v1 => {
                 if !prop.keyframes.is_empty() {
                     let (kf_x, kf_y) = split_vec2_keyframes(&prop.keyframes);
                     params.pos_x.keyframes = kf_x;
@@ -52,14 +52,14 @@ fn parse_transform_params(effect: &AmEffect) -> Transform2Params {
                     params.pos_y.value = Some(y);
                 }
             }
-            "posz" if !is_legacy => {
+            "posz" if !is_v1 => {
                 if !prop.keyframes.is_empty() {
                     params.pos_z.keyframes = prop.keyframes.clone();
                 } else if let Ok(v) = prop.value.parse::<f32>() {
                     params.pos_z.value = Some(v);
                 }
             }
-            "scale" if is_legacy => {
+            "scale" if is_v1 => {
                 if !prop.keyframes.is_empty() {
                     params.pos_z.keyframes = prop.keyframes.clone();
                 } else if let Ok(v) = prop.value.parse::<f32>() {

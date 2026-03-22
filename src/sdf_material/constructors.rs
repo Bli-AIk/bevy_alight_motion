@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use super::uniform::build_base_uniform;
 use super::{SdfMaterial, SdfShapeType, pack_color, repack_with_alpha};
 
-// Proxy accessors for compatibility
+// Convenience accessors for uniform-backed fields
 impl SdfMaterial {
     pub fn color(&self) -> LinearRgba {
         LinearRgba::new(

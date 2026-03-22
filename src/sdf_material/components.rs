@@ -3,7 +3,6 @@ use bevy::prelude::*;
 use super::SdfShapeType;
 
 /// Component for AM SDF shapes that need special animation handling.
-/// This replaces the AmSdfShape from the old sdf.rs
 #[derive(Component, Debug, Clone)]
 pub struct AmSdfShapeComponent {
     pub fill_color: Color,

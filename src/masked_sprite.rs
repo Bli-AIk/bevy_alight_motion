@@ -281,7 +281,7 @@ pub struct UnifiedEffectMaterial {
     pub mask_texture: Option<Handle<Image>>,
 }
 
-// Proxy accessors for backward compatibility
+// Convenience accessors for uniform-backed fields
 impl UnifiedEffectMaterial {
     /// Get color
     pub fn color(&self) -> LinearRgba {

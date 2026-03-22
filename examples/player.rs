@@ -1,4 +1,4 @@
-#![allow(deprecated, dead_code)]
+#![allow(dead_code)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
 //!
