@@ -3,9 +3,9 @@ use bevy::render::render_resource::Extent3d;
 use bevy::sprite::Anchor;
 
 use super::{
-    EmbedSceneRtt, EmbedSceneRttCamera, compute_embed_visible_rect, resize_render_texture,
-    scene_local_rect, sync_dynamic_resolution_mesh, sync_dynamic_resolution_sprite,
-    transformed_rect_edge_lengths, EMBED_RTT_CAMERA_Z,
+    EMBED_RTT_CAMERA_Z, EmbedSceneRtt, EmbedSceneRttCamera, compute_embed_visible_rect,
+    resize_render_texture, scene_local_rect, sync_dynamic_resolution_mesh,
+    sync_dynamic_resolution_sprite, transformed_rect_edge_lengths,
 };
 
 pub fn sync_rtt_camera_position_system(

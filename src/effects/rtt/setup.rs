@@ -4,9 +4,9 @@ use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 
 use super::{
-    AmEmbedMask, AmGroupFill, EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera,
-    GroupFillType, NeedsEmbedSceneRtt, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR,
-    EMBED_RTT_CAMERA_Z,
+    AmEmbedMask, AmGroupFill, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR, EMBED_RTT_CAMERA_Z,
+    EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, GroupFillType,
+    NeedsEmbedSceneRtt,
 };
 
 #[derive(Component)]
@@ -142,7 +142,11 @@ pub fn setup_embed_scene_rtt_system(
             let (_, embed_rotation, embed_translation) =
                 embed_global.to_scale_rotation_translation();
             Transform {
-                translation: Vec3::new(embed_translation.x, embed_translation.y, EMBED_RTT_CAMERA_Z),
+                translation: Vec3::new(
+                    embed_translation.x,
+                    embed_translation.y,
+                    EMBED_RTT_CAMERA_Z,
+                ),
                 rotation: embed_rotation,
                 scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
             }
