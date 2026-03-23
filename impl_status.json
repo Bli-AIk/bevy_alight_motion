@@ -1,22 +1,114 @@
 {
+  "com.alightcreative.effects.counter": {
+    "implemented_fields": ["offset", "scale"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.fade": {
+    "implemented_fields": ["inTime", "outTime"],
+    "pattern_fields": []
+  },
   "com.alightcreative.effects.gaussianblur": {
     "implemented_fields": [],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.grid2": {
+    "implemented_fields": ["position", "spacing", "width", "color", "punchout", "smoothing", "screenSpace"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.jitter": {
+    "implemented_fields": ["angle", "freq", "mag", "seed", "slack", "zjitter"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.lift": {
+    "implemented_fields": [],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.mirror": {
+    "implemented_fields": ["type", "blendMode", "alpha", "offset"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.oscillate3": {
+    "implemented_fields": ["direction", "angle", "freq", "mag", "type", "phase"],
     "pattern_fields": []
   },
   "com.alightcreative.effects.palettemap": {
     "implemented_fields": ["alpha", "palette", "shades"],
     "pattern_fields": ["color*"]
   },
+  "com.alightcreative.effects.pixelate2": {
+    "implemented_fields": ["size", "stretch", "angle", "vignette", "threshold", "saturation", "screenSpace"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.randomdisplace": {
+    "implemented_fields": ["mag", "evolution", "seed", "scatter"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.rays": {
+    "implemented_fields": ["centerPoint", "strength", "intensity", "threshold", "thresholdColor", "fillColor", "blend", "quality"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.repeat": {
+    "implemented_fields": ["count", "time", "offset", "angle", "scale", "alpha", "position", "fillColor", "blend", "colorAltCopies", "start", "end", "phase", "easeIn", "easeOut", "overlap", "shape", "invert", "randomOrder", "seed"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.repeat.echokf": {
+    "implemented_fields": ["seconds", "count", "alpha", "mode"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.repeat.line": {
+    "implemented_fields": [],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.repeat.path": {
+    "implemented_fields": ["count", "startPos", "endPos", "pathPhase", "tangent", "offset", "angle", "scale", "alpha", "fillColor", "blend", "colorAltCopies", "start", "end", "phase", "easeIn", "easeOut", "overlap", "shape", "invert", "randomOrder", "seed"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.repeat.radial": {
+    "implemented_fields": ["count", "radius", "orientation", "startAngle", "sweep", "baseScale", "offset", "angle", "scale", "alpha", "fillColor", "blend", "colorAltCopies", "start", "end", "phase", "easeIn", "easeOut", "overlap", "shape", "invert", "randomOrder", "seed"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.rgbsep": {
+    "implemented_fields": ["strength", "angle", "centerChannel", "mode"],
+    "pattern_fields": []
+  },
   "com.alightcreative.effects.scaleassist": {
     "implemented_fields": ["axis", "scale", "damp"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.spin": {
+    "implemented_fields": [],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.stretch2": {
+    "implemented_fields": ["scale", "angle", "contentOnly"],
     "pattern_fields": []
   },
   "com.alightcreative.effects.stretchsegment": {
     "implemented_fields": ["angle", "stretch", "offset", "smooth"],
     "pattern_fields": []
   },
-  "com.alightcreative.effects.transform2": {
-    "implemented_fields": ["posx", "posy"],
+  "com.alightcreative.effects.swing2": {
+    "implemented_fields": ["freq", "a1", "a2", "phase", "type"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.textprogress": {
+    "implemented_fields": ["start", "end", "cursor", "blink"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.textspacing": {
+    "implemented_fields": ["letterspacing", "linespacing"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.threshold": {
+    "implemented_fields": ["threshold", "feather", "invert", "blendMode"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.transform": {
+    "implemented_fields": ["angle", "xinv", "yinv", "zinv", "ainv"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.effects.wavewarp2": {
+    "implemented_fields": ["phase", "a1d", "m1", "m2", "a2d", "damping", "dampingSpace", "dampingOrigin", "screenSpace"],
     "pattern_fields": []
   },
   "com.alightcreative.effects.wipe2": {
@@ -25,6 +117,10 @@
   },
   "com.alightcreative.replacecolor": {
     "implemented_fields": ["oldcolor", "newcolor", "threshold", "feather", "alpha", "lockLuminance"],
+    "pattern_fields": []
+  },
+  "com.alightcreative.solidcolor": {
+    "implemented_fields": ["color", "alpha", "blendMode"],
     "pattern_fields": []
   }
 }

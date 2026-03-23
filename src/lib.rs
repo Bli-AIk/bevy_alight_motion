@@ -58,7 +58,9 @@ pub mod prelude {
     pub use crate::animation::{AmAnimated, AmPlayback, interpolate_vec2};
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
-    pub use crate::plugin::{AlightMotionPlugin, AmProjectResolution, load_am_project};
+    pub use crate::plugin::{
+        AlightMotionPlugin, AlightMotionSystemSet, AmProjectResolution, load_am_project,
+    };
     pub use crate::scene::{
         AmElement,
         // 2.2 扩展钩子系统

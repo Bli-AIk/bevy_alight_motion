@@ -5,17 +5,21 @@
 //! Functions for collecting embed scene layer data into PendingLayer.
 //! 嵌入场景图层数据收集为 PendingLayer 的函数。
 
+mod base;
+mod group_fill;
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::animation::{AmAnimated, AmRetimeInfo, RetimeMode};
+use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 
-use super::collect::{apply_mask_to_children, collect_pending_layers};
+use self::base::collect_embed_base;
+use self::group_fill::build_group_fill;
 use super::components::*;
 use super::effects::*;
-use super::helpers::*;
+use super::helpers::get_base_alpha;
 
 /// Collect an embed scene's data recursively.
 pub(crate) fn collect_embed_scene(
@@ -25,170 +29,9 @@ pub(crate) fn collect_embed_scene(
     config: &AmSceneConfig,
     z: f32,
 ) -> PendingLayer {
-    let has_parent = embed.parent != 0;
-    let (mut tx, mut ty) = get_initial_location(&embed.transform.location, config, has_parent);
-    let rotation = get_initial_rotation(&embed.transform.rotation);
-    let (sx, sy) = get_initial_scale(&embed.transform.scale);
-    let pivot = get_initial_pivot(&embed.transform.pivot);
+    let base = collect_embed_base(embed, fonts, font_metrics, config, z);
+    let group_fill = build_group_fill(embed);
 
-    // For embed scenes with rotation/scale and non-zero pivot, we need to calculate
-    // the correct position compensation. In AM, objects rotate/scale around (location + pivot).
-    // Bevy rotates/scales around the Transform.translation, so we need to adjust.
-    let (comp_x, comp_y) =
-        calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
-    tx += comp_x;
-    ty += comp_y;
-
-    let transform = Transform {
-        translation: Vec3::new(tx, ty, z),
-        rotation: Quat::from_rotation_z(rotation.to_radians()),
-        scale: Vec3::new(sx, sy, 1.0),
-    };
-
-    // Collect children with nested config
-    // Nested scenes use smaller z_spacing to keep all children within
-    // the parent's z-range (between parent and next sibling)
-    // Using /100 instead of /1000 for better numerical precision
-    let nested_z_spacing = config.z_spacing / 100.0;
-
-    // Calculate the internal time offset for the embedded scene.
-    // When the parent timeline reaches startTime, the embedded scene should be at inTime.
-    //
-    // The formula for local_time in the animation system is:
-    //   local_time = (global_time - time_offset) * speed_multiplier
-    //
-    // For retime=OFF, AM uses: innerTimeMs = (parentTimeMs - embedStart) * speed + inTime
-    // This is a direct 1:1 mapping (no proportional scaling by totalTime).
-    //
-    // embed.start_time is relative to PARENT's internal time, not global time.
-    // When parent's internal time = embed.start_time, child should start.
-    // Parent internal time = (global_time - parent_time_offset) * parent_speed
-    // global_start = parent_time_offset + embed.start_time / parent_speed
-    let in_time = embed.in_time.unwrap_or(0) as f32;
-    let effective_speed = config.speed_multiplier * embed.speed;
-    let global_start = if config.speed_multiplier > 0.0 {
-        config.time_offset as f32 + embed.start_time as f32 / config.speed_multiplier
-    } else {
-        config.time_offset as f32 + embed.start_time as f32
-    };
-    let time_offset_with_in_time = if effective_speed > 0.0 {
-        global_start - in_time / effective_speed
-    } else {
-        global_start
-    };
-
-    // Lifecycle offset also needs to account for parent speed, since spawn/despawn
-    // uses lifecycle_time = global_time - lifecycle_offset and compares with start_time/end_time.
-    // When global_time = global_start, lifecycle_time should be 0 (or in_time if specified).
-    // lifecycle_offset = global_start - in_time
-    let lifecycle_offset_with_in_time = global_start - in_time;
-
-    // Note: retime="off" means "don't retime" - use normal animation speed
-    // It does NOT mean freeze animations. The parent's speed still applies.
-    let nested_speed = effective_speed;
-
-    // Parse retime mode from the nested scene.
-    // When retime is active, children get AmRetimeInfo so their time is remapped.
-    let retime_mode = RetimeMode::parse(&embed.scene.retime);
-    let retime_info = if retime_mode != RetimeMode::Off {
-        let container_duration = (embed.end_time - embed.start_time) as f32;
-        let nested_total = embed.scene.total_time as f32;
-        bevy::log::debug!(
-            "  [Retime] embed '{}': mode={:?}, container={}, total={}, speed={}",
-            embed.label,
-            retime_mode,
-            container_duration,
-            nested_total,
-            effective_speed,
-        );
-        Some(AmRetimeInfo {
-            mode: retime_mode,
-            embed_global_start: global_start,
-            container_duration_ms: container_duration,
-            nested_total_time_ms: nested_total,
-            embed_speed: effective_speed,
-        })
-    } else {
-        // Inherit retime from parent config (for deeply nested scenes within a retimed embed)
-        config.retime.clone()
-    };
-
-    bevy::log::trace!(
-        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
-        embed.label,
-        config.time_offset,
-        embed.start_time,
-        in_time,
-        effective_speed,
-        time_offset_with_in_time,
-        lifecycle_offset_with_in_time,
-        nested_speed
-    );
-
-    let nested_config = AmSceneConfig {
-        canvas_width: embed.scene.width as f32,
-        canvas_height: embed.scene.height as f32,
-        time_offset: time_offset_with_in_time as i32,
-        lifecycle_offset: lifecycle_offset_with_in_time as i32,
-        z_spacing: nested_z_spacing,
-        nesting_depth: config.nesting_depth + 1,
-        speed_multiplier: nested_speed,
-        scene_fps: embed.scene.fps as f32,
-        scene_total_time: embed.scene.total_time as f32,
-        retime: retime_info,
-        ..config.clone()
-    };
-
-    let mut children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
-
-    // Process mask relationships within this embed scene
-    apply_mask_to_children(&mut children);
-
-    // Propagate embed's replaceColor effect to children that don't have their own.
-    // In AM, group effects apply after compositing children into an FBO.
-    // For direct rendering, we approximate by applying the embed's replaceColor to each child.
-    let embed_replace = extract_replace_color_effect(&embed.effects);
-    if embed_replace.old_color != Vec4::ZERO {
-        for child in &mut children {
-            if child.animated.replace_old_color == Vec4::ZERO {
-                child.animated.replace_old_color = embed_replace.old_color;
-                child.animated.replace_new_color = embed_replace.new_color.clone();
-                child.animated.replace_threshold = embed_replace.threshold.clone();
-                child.animated.replace_feather = embed_replace.feather.clone();
-                child.animated.replace_alpha = embed_replace.alpha.clone();
-                child.animated.replace_lock_luminance = embed_replace.lock_luminance;
-            }
-        }
-    }
-
-    // Propagate embed's pixelate effect to children.
-    // In AM, the embed renders children to FBO then applies its own pixelate as a post-process.
-    // For children that already have their own pixelate with the same grid origin (centered shapes),
-    // the group pixelation on the composited FBO doesn't change already-uniform cells.
-    // We keep the child's own size rather than multiplying, which is more accurate for aligned grids.
-    let embed_pixelate = extract_pixelate_effect(&embed.effects);
-    if let Some(embed_pix_size) = embed_pixelate.size.value
-        && embed_pix_size > 1.0
-    {
-        for child in &mut children {
-            if child.animated.pixelate_size.value.is_some() {
-                // Child already has pixelate: keep child's own size.
-                // When both grids share the same origin (common for centered shapes),
-                // the group re-pixelation on aligned uniform cells is a no-op.
-            } else if child.animated.pixelate_size.keyframes.is_empty() {
-                // Child has no pixelate: apply embed's pixelate directly
-                child.animated.pixelate_size = embed_pixelate.size.clone();
-                child.animated.pixelate_stretch = embed_pixelate.stretch.clone();
-                child.animated.pixelate_angle = embed_pixelate.angle.clone();
-                child.animated.pixelate_vignette = embed_pixelate.vignette.clone();
-                child.animated.pixelate_threshold = embed_pixelate.threshold.clone();
-                child.animated.pixelate_saturation = embed_pixelate.saturation.clone();
-                child.animated.pixelate_screen_space = embed_pixelate.screen_space;
-            }
-        }
-    }
-
-    // Extract transform2 effects from embed
     let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
     let embed_transform2 = if all_embed_transform2.is_empty() {
         Transform2Params::default()
@@ -197,11 +40,16 @@ pub(crate) fn collect_embed_scene(
     };
     let embed_extra_transform2 = all_embed_transform2;
 
-    // Extract jitter effect from embed
     let jitter_effect = extract_jitter_effect(&embed.effects);
-
-    // Extract group fill data from embed's fillType
-    let group_fill = build_group_fill(embed);
+    let sd_effect = extract_simplex_displace_effect(&embed.effects);
+    let rgb_split_effect = extract_rgb_split_effect(&embed.effects);
+    let fade_effect = extract_fade_effect(&embed.effects);
+    let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
+    let mirror_effect = extract_mirror_effect(&embed.effects);
+    let lift_effect = extract_lift_effect(&embed.effects);
+    let rays_effect = extract_rays_effect(&embed.effects);
+    let exposure_gamma_effect = extract_exposure_gamma_effect(&embed.effects);
+    let chromakey_effect = extract_chromakey_effect(&embed.effects);
 
     PendingLayer {
         id: embed.id,
@@ -209,7 +57,7 @@ pub(crate) fn collect_embed_scene(
         parent: embed.parent,
         start_time: embed.start_time,
         end_time: embed.end_time,
-        transform,
+        transform: base.transform,
         animated: AmAnimated {
             layer_id: embed.id,
             start_time: embed.start_time,
@@ -223,7 +71,7 @@ pub(crate) fn collect_embed_scene(
             opacity: embed.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
-            has_parent,
+            has_parent: base.has_parent,
             parent_layer_id: embed.parent,
             effect_pos_x: embed_transform2.pos_x,
             effect_pos_y: embed_transform2.pos_y,
@@ -259,14 +107,51 @@ pub(crate) fn collect_embed_scene(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&embed.fill_color, false),
+            base_alpha: get_base_alpha(&embed.fill_color, false) * config.repeat_alpha_factor,
+            fade_in_time: fade_effect.in_time,
+            fade_out_time: fade_effect.out_time,
+            fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,
             palette_alpha: AmAnimatedFloat::default(),
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
             scale_assist_axis: 0,
+            parenthelper_scale_mode: 0,
+            parenthelper_rotate_mode: 0,
+            parenthelper_scale_weight: AmAnimatedFloat::default(),
+            parenthelper_rotate_weight: AmAnimatedFloat::default(),
+            parenthelper_auto_rotate: 0,
+            parenthelper_radius_adjust: AmAnimatedFloat::default(),
+            parenthelper_has_effect: false,
             stretch2_scale: AmAnimatedFloat::default(),
             stretch2_angle: AmAnimatedFloat::default(),
             stretch2_content_only: false,
+            wavewarp2_phase: wavewarp2_effect.phase,
+            wavewarp2_a1d: wavewarp2_effect.a1d,
+            wavewarp2_m1: wavewarp2_effect.m1,
+            wavewarp2_m2: wavewarp2_effect.m2,
+            wavewarp2_a2d: wavewarp2_effect.a2d,
+            wavewarp2_damping: wavewarp2_effect.damping,
+            wavewarp2_damping_space: wavewarp2_effect.damping_space,
+            wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
+            wavewarp2_screen_space: wavewarp2_effect.screen_space,
+            wavewarp2_has_effect: wavewarp2_effect.has_effect,
+            mirror_type: mirror_effect.mirror_type,
+            mirror_blend_mode: mirror_effect.blend_mode,
+            mirror_alpha: mirror_effect.alpha,
+            mirror_offset: mirror_effect.offset,
+            mirror_has_effect: mirror_effect.has_effect,
+            lift_fill: lift_effect.fill,
+            lift_has_effect: lift_effect.has_effect,
+            rays_center_x: rays_effect.center_x,
+            rays_center_y: rays_effect.center_y,
+            rays_strength: rays_effect.strength,
+            rays_intensity: rays_effect.intensity,
+            rays_threshold: rays_effect.threshold,
+            rays_threshold_color: rays_effect.threshold_color,
+            rays_fill_color: rays_effect.fill_color,
+            rays_blend: rays_effect.blend,
+            rays_quality: rays_effect.quality,
+            rays_has_effect: rays_effect.has_effect,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -278,7 +163,6 @@ pub(crate) fn collect_embed_scene(
             repeat_angle: AmAnimatedFloat::default(),
             repeat_scale: AmAnimatedFloat::default(),
             repeat_alpha: AmAnimatedFloat::default(),
-            // Linear repeat effect (defaults for embed)
             linear_repeat_count: AmAnimatedFloat::default(),
             linear_repeat_position: AmAnimatedVec2::default(),
             linear_repeat_offset: AmAnimatedVec2::default(),
@@ -308,7 +192,6 @@ pub(crate) fn collect_embed_scene(
             linear_repeat_random_order: false,
             linear_repeat_seed: AmAnimatedFloat::default(),
             linear_repeat2: None,
-            // Radial repeat effect (defaults)
             radial_repeat_count: AmAnimatedFloat::default(),
             radial_repeat_radius: AmAnimatedFloat::default(),
             radial_repeat_orientation: AmAnimatedFloat::default(),
@@ -335,13 +218,11 @@ pub(crate) fn collect_embed_scene(
             radial_repeat_invert: false,
             radial_repeat_random_order: false,
             radial_repeat_seed: 0.0,
-            // Swing effect (defaults for embed)
             swing_freq: AmAnimatedFloat::default(),
             swing_a1: AmAnimatedFloat::default(),
             swing_a2: AmAnimatedFloat::default(),
             swing_phase: AmAnimatedFloat::default(),
             swing_type: 0,
-            // Oscillate effect (defaults)
             oscillate_direction: 0,
             oscillate_angle: AmAnimatedFloat::default(),
             oscillate_freq: AmAnimatedFloat::default(),
@@ -349,12 +230,10 @@ pub(crate) fn collect_embed_scene(
             oscillate_wave_type: 0,
             oscillate_phase: AmAnimatedFloat::default(),
             spin_rpm: AmAnimatedFloat::default(),
-            // Threshold effect (defaults for embed)
             threshold_value: AmAnimatedFloat::default(),
             threshold_feather: AmAnimatedFloat::default(),
             threshold_invert: false,
             threshold_blend_mode: 0,
-            // Grid effect (defaults for embed)
             grid_position: AmAnimatedVec2::default(),
             grid_spacing: AmAnimatedFloat::default(),
             grid_width: AmAnimatedFloat::default(),
@@ -362,7 +241,6 @@ pub(crate) fn collect_embed_scene(
             grid_punchout: false,
             grid_smoothing: AmAnimatedFloat::default(),
             grid_screen_space: false,
-            // Pixelate effect (defaults for embed)
             pixelate_size: AmAnimatedFloat::default(),
             pixelate_stretch: AmAnimatedVec2::default(),
             pixelate_angle: AmAnimatedFloat::default(),
@@ -374,6 +252,7 @@ pub(crate) fn collect_embed_scene(
             solid_color_alpha: Default::default(),
             solid_color_blend_mode: 0,
             base_fill_color: [0.0; 4],
+            fill_color: Default::default(),
             path_repeat: None,
             textspacing_letter: Default::default(),
             textspacing_line: AmAnimatedFloat {
@@ -387,9 +266,10 @@ pub(crate) fn collect_embed_scene(
             },
             textprogress_cursor: 0,
             textprogress_blink: false,
+            counter_offset: AmAnimatedFloat::default(),
+            counter_scale: AmAnimatedFloat::default(),
             shape_props: Default::default(),
             shape_points: Default::default(),
-            // Jitter effect
             jitter_enabled: jitter_effect.enabled,
             jitter_angle: jitter_effect.angle,
             jitter_freq: jitter_effect.freq,
@@ -397,14 +277,39 @@ pub(crate) fn collect_embed_scene(
             jitter_seed: jitter_effect.seed,
             jitter_slack: jitter_effect.slack,
             jitter_zjitter: jitter_effect.zjitter,
+            sd_enabled: sd_effect.enabled,
+            sd_mag: sd_effect.mag,
+            sd_evolution: sd_effect.evolution,
+            sd_seed: sd_effect.seed,
+            sd_scatter: sd_effect.scatter,
+            rgb_split_enabled: rgb_split_effect.enabled,
+            rgb_split_strength: rgb_split_effect.strength,
+            rgb_split_angle: rgb_split_effect.angle,
+            rgb_split_center: rgb_split_effect.center_channel,
+            rgb_split_mode: rgb_split_effect.mode,
+            exposure_value: exposure_gamma_effect.exposure,
+            exposure_gamma: exposure_gamma_effect.gamma,
+            exposure_offset: exposure_gamma_effect.offset,
+            exposure_has_effect: exposure_gamma_effect.has_effect,
+            chromakey_enabled: chromakey_effect.enabled,
+            chromakey_key_color: chromakey_effect.key_color,
+            chromakey_threshold: chromakey_effect.threshold,
+            chromakey_feather: chromakey_effect.feather,
+            chromakey_defringe: chromakey_effect.defringe,
+            chromakey_invert: chromakey_effect.invert,
+            blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: -config.repeat_rotation_deg,
+            repeat_scale_factor: config.repeat_scale_factor,
+            repeat_position_offset: config.repeat_offset,
+            embed_inner_total_time: None,
         },
         spec: AmLayerSpec::EmbedScene,
         z_index: z,
-        children,
-        blending_mode: AmBlendingMode::Normal,
+        children: base.children,
+        blending_mode: AmBlendingMode::parse_am(embed.blending.as_str()),
         mask_info: None,
         palette_params: None,
         embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
@@ -412,81 +317,9 @@ pub(crate) fn collect_embed_scene(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill,
-    }
-}
-
-/// Build AmGroupFill from embed scene's fill type and color/gradient data.
-fn build_group_fill(embed: &crate::schema::AmEmbedScene) -> Option<crate::effects::AmGroupFill> {
-    use crate::effects::{AmGroupFill, GroupFillType};
-
-    match embed.fill_type.as_str() {
-        "" => None, // Normal rendering (INTRINSIC)
-        "none" => Some(AmGroupFill {
-            fill_type: GroupFillType::None,
-            fill_color: Vec4::ZERO,
-        }),
-        "color" => {
-            let color = if let Some(ref fc) = embed.fill_color {
-                if let Ok(c) = crate::schema::parse_color(&fc.value) {
-                    // Convert sRGB to linear for shader
-                    let srgb = Color::srgba(c[0], c[1], c[2], c[3]);
-                    let linear = srgb.to_linear();
-                    Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
-                } else {
-                    Vec4::ONE
-                }
-            } else {
-                Vec4::ONE
-            };
-            Some(AmGroupFill {
-                fill_type: GroupFillType::Color,
-                fill_color: color,
-            })
-        }
-        "gradient" => {
-            if let Some(ref g) = embed.gradient {
-                let gradient_type = match g.gradient_type.as_str() {
-                    "linear" => 1u8,
-                    "radial" => 2u8,
-                    "sweep" => 3u8,
-                    _ => 1u8,
-                };
-                // Keep gradient colors in sRGB space (AM interpolates in sRGB)
-                let start_color = if let Ok(c) = crate::schema::parse_color(&g.start_color) {
-                    Vec4::new(c[0], c[1], c[2], c[3])
-                } else {
-                    Vec4::ZERO
-                };
-                let end_color = if let Ok(c) = crate::schema::parse_color(&g.end_color) {
-                    Vec4::new(c[0], c[1], c[2], c[3])
-                } else {
-                    Vec4::ONE
-                };
-                // AM default points: (0,0) → (1,1) (diagonal)
-                let start_pt = g.start.unwrap_or([0.0, 0.0]);
-                let end_pt = g.end.unwrap_or([1.0, 1.0]);
-                Some(AmGroupFill {
-                    fill_type: GroupFillType::Gradient {
-                        gradient_type,
-                        start_color,
-                        end_color,
-                        points: Vec4::new(start_pt[0], start_pt[1], end_pt[0], end_pt[1]),
-                    },
-                    fill_color: Vec4::ONE,
-                })
-            } else {
-                // AM default: LINEAR gradient from BLACK to WHITE, (0,0)→(1,1)
-                Some(AmGroupFill {
-                    fill_type: GroupFillType::Gradient {
-                        gradient_type: 1, // LINEAR
-                        start_color: Vec4::new(0.0, 0.0, 0.0, 1.0),
-                        end_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-                        points: Vec4::new(0.0, 0.0, 1.0, 1.0),
-                    },
-                    fill_color: Vec4::ONE,
-                })
-            }
-        }
-        _ => None,
+        embed_requires_composite: embed.fill_type == "intrinsic",
+        embed_dynamic_resolution: embed.scene.precompose == "dynamicResolution",
+        embed_inner_total_time: None,
+        hidden: embed.hidden,
     }
 }

@@ -99,5 +99,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     let children_rgb = tex.rgb / max(dst_a, 0.001);
     let blended_rgb = mix(children_rgb, linear_rgb, color.a);
-    return vec4(blended_rgb * dst_a, dst_a);
+    // Output non-premultiplied; AlphaMode2d::Blend (SrcAlpha) handles premultiplication.
+    return vec4(blended_rgb, dst_a);
 }

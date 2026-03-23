@@ -10,8 +10,13 @@
 
 mod collect;
 mod collect_camera;
+mod collect_echo;
 mod collect_embed;
+mod collect_image;
+mod collect_mask;
 mod collect_shape;
+#[cfg(test)]
+mod collect_shape_tests;
 mod collect_types;
 mod components;
 pub(crate) mod effects;
@@ -72,7 +77,7 @@ mod tests {
             canvas_height: 960.0,
             flip_y: true,
             z_spacing: 0.001,
-            time_offset: 0,
+            time_offset: 0.0,
             speed_multiplier: 1.0,
             nesting_depth: 0,
             lifecycle_offset: 0,
@@ -81,6 +86,11 @@ mod tests {
             retime: None,
             echo_time_shift_ms: 0.0,
             echo_alpha_config: None,
+            render_fps: 30.0,
+            repeat_alpha_factor: 1.0,
+            repeat_offset: bevy::math::Vec2::ZERO,
+            repeat_rotation_deg: 0.0,
+            repeat_scale_factor: 1.0,
         };
 
         // Center of AM canvas should be at Bevy origin
@@ -125,12 +135,66 @@ mod tests {
         }];
 
         // Size is always doubled (half-extent to full size)
-        let (w, h) = get_shape_size(&props, "media");
+        let (w, h) = get_shape_size(&props, "", "media");
         assert!((w - 400.0).abs() < 0.01);
         assert!((h - 600.0).abs() < 0.01);
 
-        let (w, h) = get_shape_size(&props, "color");
+        let (w, h) = get_shape_size(&props, "", "color");
         assert!((w - 400.0).abs() < 0.01);
         assert!((h - 600.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_shape_size_from_radius_when_size_missing() {
+        let props = vec![crate::schema::AmProperty {
+            name: "radius".to_string(),
+            prop_type: "float".to_string(),
+            value: "100.0".to_string(),
+            keyframes: vec![],
+        }];
+
+        let (w, h) = get_shape_size(&props, ".pie", "color");
+        assert!((w - 200.0).abs() < 0.01);
+        assert!((h - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_shape_size_from_arrow_geometry_when_size_missing() {
+        let props = vec![
+            crate::schema::AmProperty {
+                name: "start".to_string(),
+                prop_type: "vec2".to_string(),
+                value: "0.0,0.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "end".to_string(),
+                prop_type: "vec2".to_string(),
+                value: "100.0,0.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "lineWidth".to_string(),
+                prop_type: "float".to_string(),
+                value: "20.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "headWidth".to_string(),
+                prop_type: "float".to_string(),
+                value: "80.0".to_string(),
+                keyframes: vec![],
+            },
+            crate::schema::AmProperty {
+                name: "headLength".to_string(),
+                prop_type: "float".to_string(),
+                value: "30.0".to_string(),
+                keyframes: vec![],
+            },
+        ];
+
+        let (w, h) = get_shape_size(&props, ".arrow", "color");
+        assert!((w - 100.0).abs() < 0.01);
+        assert!((h - 160.0).abs() < 0.01);
     }
 }

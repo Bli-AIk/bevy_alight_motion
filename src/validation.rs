@@ -22,10 +22,6 @@ use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use owo_colors::OwoColorize;
 
-/// Effect support level (re-exported for backward compatibility)
-/// 效果支持级别（为向后兼容而重新导出）
-pub use crate::effects_registry::types::SupportLevel as EffectSupportLevel;
-
 /// Validation report containing information about supported and unsupported features
 /// 验证报告，包含支持和不支持的特性信息
 #[derive(Debug, Default, Clone, Serialize)]

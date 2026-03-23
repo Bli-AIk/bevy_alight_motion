@@ -5,9 +5,6 @@
 //! Effect parameter types and data structures.
 //! 效果参数类型和数据结构。
 
-// Allow deprecated items in this module (NeedsRenderStrategyEvaluation is deprecated but kept for compatibility)
-#![allow(deprecated)]
-
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -418,15 +415,6 @@ pub enum RenderStrategy {
     /// - Content renders to RTT, result composites to parent
     Composite,
 }
-
-/// Component to mark an entity as needing render strategy evaluation.
-/// Added to new EmbedScene entities, removed after strategy is determined.
-///
-/// Note: This is defined in rtt.rs as NeedsStrategyEvaluation with scene dimensions.
-/// This marker type is kept for compatibility but the rtt.rs version should be used.
-#[deprecated(note = "Use NeedsStrategyEvaluation from rtt.rs instead")]
-#[derive(Component, Debug, Default)]
-pub struct NeedsRenderStrategyEvaluation;
 
 /// Group fill type for embed scenes.
 /// Determines how the group's RTT output is rendered.

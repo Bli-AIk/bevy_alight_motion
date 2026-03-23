@@ -44,6 +44,7 @@ pub(crate) fn spawn_shape(
     let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
     let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
     let scale_assist = extract_scale_assist_effect(&shape.effects);
+    let parent_helper = extract_parent_helper_effect(&shape.effects);
     let stretch2_effect = extract_stretch2_effect(&shape.effects);
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
@@ -57,10 +58,15 @@ pub(crate) fn spawn_shape(
     let pixelate_effect = extract_pixelate_effect(&shape.effects);
     let solid_color_effect = extract_solid_color_effect(&shape.effects);
     let path_repeat_effect = extract_path_repeat_effect(&shape.effects);
+    let fade_effect = extract_fade_effect(&shape.effects);
+    let wavewarp2_effect = extract_wavewarp2_effect(&shape.effects);
+    let mirror_effect = extract_mirror_effect(&shape.effects);
+    let lift_effect = extract_lift_effect(&shape.effects);
+    let rays_effect = extract_rays_effect(&shape.effects);
     let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
 
     // Get size from properties
-    let (width, height) = get_shape_size(&shape.properties, &shape.fill_type);
+    let (width, height) = get_shape_size(&shape.properties, &shape.shape_type, &shape.fill_type);
 
     // AM location points to object CENTER, not pivot. No position compensation needed.
     // Pivot only affects rotation/scale center, which is handled by Anchor.
@@ -233,7 +239,9 @@ pub(crate) fn spawn_shape(
             gradient_end_color,
             gradient_points,
         }
-    } else if shape.fill_type == "media" && !shape.fill_image.is_empty() {
+    } else if !shape.fill_image.is_empty()
+        && (shape.fill_type == "media" || shape.fill_type == "color")
+    {
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,
@@ -271,7 +279,7 @@ pub(crate) fn spawn_shape(
     let base_alpha = if shape.hidden {
         0.0
     } else {
-        get_base_alpha(&shape.fill_color, no_fill)
+        get_base_alpha(&shape.fill_color, no_fill) * config.repeat_alpha_factor
     };
     let palette_map = extract_palette_map_effect(&shape.effects);
     let replace_color = extract_replace_color_effect(&shape.effects);
@@ -308,7 +316,7 @@ pub(crate) fn spawn_shape(
                 effect_ainv: transform2.ainv,
                 extra_transform2,
                 font_y_offset: 0.0,
-                size: get_shape_size_animation(&shape.properties),
+                size: get_shape_size_animation(&shape.properties, &shape.shape_type),
                 anchor_offset,
                 wipe_start: wipe_effect.start,
                 wipe_end: wipe_effect.end,
@@ -338,13 +346,50 @@ pub(crate) fn spawn_shape(
                 inv_fit_scale: 1.0,
                 stroke_width: stroke_width_anim,
                 base_alpha,
+                fade_in_time: fade_effect.in_time,
+                fade_out_time: fade_effect.out_time,
+                fade_layer_duration_ms: (shape.end_time - shape.start_time) as f32,
                 palette_alpha: palette_map.alpha.clone(),
                 scale_assist: scale_assist.scale,
                 scale_assist_damp: scale_assist.damp,
                 scale_assist_axis: scale_assist.axis,
+                parenthelper_scale_mode: parent_helper.scale_mode,
+                parenthelper_rotate_mode: parent_helper.rotate_mode,
+                parenthelper_scale_weight: parent_helper.scale_weight,
+                parenthelper_rotate_weight: parent_helper.rotate_weight,
+                parenthelper_auto_rotate: parent_helper.auto_rotate,
+                parenthelper_radius_adjust: parent_helper.radius_adjust,
+                parenthelper_has_effect: parent_helper.has_effect,
                 stretch2_scale: stretch2_effect.scale,
                 stretch2_angle: stretch2_effect.angle,
                 stretch2_content_only: stretch2_effect.content_only,
+                wavewarp2_phase: wavewarp2_effect.phase,
+                wavewarp2_a1d: wavewarp2_effect.a1d,
+                wavewarp2_m1: wavewarp2_effect.m1,
+                wavewarp2_m2: wavewarp2_effect.m2,
+                wavewarp2_a2d: wavewarp2_effect.a2d,
+                wavewarp2_damping: wavewarp2_effect.damping,
+                wavewarp2_damping_space: wavewarp2_effect.damping_space,
+                wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
+                wavewarp2_screen_space: wavewarp2_effect.screen_space,
+                wavewarp2_has_effect: wavewarp2_effect.has_effect,
+                mirror_type: mirror_effect.mirror_type,
+                mirror_blend_mode: mirror_effect.blend_mode,
+                mirror_alpha: mirror_effect.alpha,
+                mirror_offset: mirror_effect.offset,
+                mirror_has_effect: mirror_effect.has_effect,
+                lift_fill: lift_effect.fill,
+                lift_has_effect: lift_effect.has_effect,
+                rays_center_x: rays_effect.center_x,
+                rays_center_y: rays_effect.center_y,
+                rays_strength: rays_effect.strength,
+                rays_intensity: rays_effect.intensity,
+                rays_threshold: rays_effect.threshold,
+                rays_threshold_color: rays_effect.threshold_color,
+                rays_fill_color: rays_effect.fill_color,
+                rays_blend: rays_effect.blend,
+                rays_quality: rays_effect.quality,
+                rays_has_effect: rays_effect.has_effect,
                 replace_old_color: replace_color.old_color,
                 replace_new_color: replace_color.new_color,
                 replace_threshold: replace_color.threshold,
@@ -441,6 +486,7 @@ pub(crate) fn spawn_shape(
                 solid_color_alpha: solid_color_effect.alpha,
                 solid_color_blend_mode: solid_color_effect.blend_mode,
                 base_fill_color: get_initial_fill_color_rgba(&shape.fill_color, no_fill),
+                fill_color: fill_color_to_animated(&shape.fill_color),
                 path_repeat: if path_repeat_effect.has_effect() {
                     Some(path_repeat_effect)
                 } else {
@@ -458,6 +504,8 @@ pub(crate) fn spawn_shape(
                 },
                 textprogress_cursor: 0,
                 textprogress_blink: false,
+                counter_offset: AmAnimatedFloat::default(),
+                counter_scale: AmAnimatedFloat::default(),
                 shape_props: Default::default(),
                 shape_points: Default::default(),
                 jitter_enabled: false,
@@ -467,9 +515,34 @@ pub(crate) fn spawn_shape(
                 jitter_seed: AmAnimatedFloat::default(),
                 jitter_slack: AmAnimatedFloat::default(),
                 jitter_zjitter: AmAnimatedFloat::default(),
+                sd_enabled: false,
+                sd_mag: AmAnimatedFloat::default(),
+                sd_evolution: AmAnimatedFloat::default(),
+                sd_seed: AmAnimatedFloat::default(),
+                sd_scatter: AmAnimatedFloat::default(),
+                rgb_split_enabled: false,
+                rgb_split_strength: AmAnimatedFloat::default(),
+                rgb_split_angle: AmAnimatedFloat::default(),
+                rgb_split_center: 1,
+                rgb_split_mode: 2,
+                exposure_value: AmAnimatedFloat::default(),
+                exposure_gamma: AmAnimatedFloat::default(),
+                exposure_offset: AmAnimatedFloat::default(),
+                exposure_has_effect: false,
+                chromakey_enabled: false,
+                chromakey_key_color: crate::schema::AmAnimatedColor::default(),
+                chromakey_threshold: AmAnimatedFloat::default(),
+                chromakey_feather: AmAnimatedFloat::default(),
+                chromakey_defringe: false,
+                chromakey_invert: false,
+                blend_mode: AmBlendingMode::default(),
                 retime: config.retime.clone(),
                 echo_time_shift_ms: config.echo_time_shift_ms,
                 echo_alpha_config: config.echo_alpha_config.clone(),
+                repeat_rotation_offset_deg: 0.0,
+                repeat_scale_factor: 1.0,
+                repeat_position_offset: Vec2::ZERO,
+                embed_inner_total_time: None,
             },
             layer_spec,
             transform,

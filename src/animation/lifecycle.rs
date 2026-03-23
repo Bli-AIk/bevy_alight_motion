@@ -33,6 +33,7 @@ pub fn manage_layer_lifecycle_system(
     playback: Res<AmPlayback>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
+    mut color_materials: ResMut<Assets<ColorMaterial>>,
     mut sdf_materials: ResMut<Assets<SdfMaterial>>,
     white_pixel: Option<Res<AmWhitePixel>>,
     projects: Res<Assets<AmProject>>,
@@ -71,6 +72,7 @@ pub fn manage_layer_lifecycle_system(
             &mut commands,
             &mut meshes,
             &mut unified_materials,
+            &mut color_materials,
             &mut sdf_materials,
             &mut pending,
             &project.images,
@@ -78,7 +80,7 @@ pub fn manage_layer_lifecycle_system(
             white_pixel_handle.as_ref(),
             global_time,
             parent_for_layers,
-            0, // root time offset
+            0.0, // root time offset
             filter,
         );
     }

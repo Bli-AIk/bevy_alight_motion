@@ -5,7 +5,7 @@
 // Shape types:
 // 0=BoxRound, 1=BoxMiter, 2=BoxBevel, 3=Circle/Ellipse,
 // 4=RoundRect, 5=Polygon, 6=Star, 7=Pie, 8=Plus, 9=Multifoil,
-// 10=Line, 11=Arc, 12=Triangle, 13=Quad, 14=Penta, 15=Path
+// 10=Line, 11=Arc, 12=Triangle, 13=Quad, 14=Penta, 15=Path, 16=Arrow
 
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
@@ -39,6 +39,27 @@ struct SdfMaterialUniform {
     gradient_config: vec4<f32>,
     mask_blend: vec4<f32>,
     mask2_blend: vec4<f32>,
+    // Mask1 radial repeat params
+    mask1_rr_params1: vec4<f32>,       // (count, radius, orientation_deg, start_angle_deg)
+    mask1_rr_params2: vec4<f32>,       // (sweep_deg, base_scale, angle_deg, scale)
+    mask1_rr_params3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
+    mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
+    mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+    // Mask1 linear repeat params
+    mask1_lr_params1: vec4<f32>,       // (count, position_x, position_y, angle_deg)
+    mask1_lr_params2: vec4<f32>,       // (offset_x, offset_y, scale, alpha)
+    mask1_lr_params3: vec4<f32>,       // (start, end, phase, overlap)
+    mask1_lr_params4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
+    mask1_lr_params5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
+    // Shape linear repeat params
+    linear_repeat_params1: vec4<f32>,  // (count, position_x, position_y, angle_deg)
+    linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
+    linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
+    linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, 0, shape_invert_alt)
+    linear_repeat_params5: vec4<f32>,  // (random_order, seed_lo, seed_hi, 0)
+    // Stretch segment params
+    stretch_params: vec4<f32>,         // (angle_rad, adj_stretch, offset_norm, smooth_raw)
+    stretch_meta: vec4<f32>,           // (transform_rotation_rad, 0, scene_width, scene_height)
 };
 
 @group(2) @binding(0) var<uniform> material: SdfMaterialUniform;
@@ -330,6 +351,51 @@ fn poly_edge(p: vec2<f32>, vi: vec2<f32>, vj: vec2<f32>, d_sq: f32, s: f32) -> v
     return vec2<f32>(new_d, new_s);
 }
 
+// SDF for arrow composed from a shaft and triangular head.
+fn sd_arrow(
+    p: vec2<f32>,
+    start: vec2<f32>,
+    end: vec2<f32>,
+    line_width: f32,
+    head_width: f32,
+    head_length: f32,
+) -> f32 {
+    let delta = end - start;
+    let len2 = dot(delta, delta);
+    let max_width = max(abs(line_width), abs(head_width));
+    if len2 < 0.0001 {
+        return sd_circle(p - end, max_width);
+    }
+
+    let len = sqrt(len2);
+    let dir = delta / len;
+    let cw = vec2<f32>(-dir.y, dir.x);
+    let ccw = vec2<f32>(dir.y, -dir.x);
+    let head_width_clamped = max(abs(head_width), 0.0);
+    let line_width_clamped = min(abs(line_width), head_width_clamped);
+    let clamped_head_length = clamp(max(abs(head_length), 0.0), 0.0, len);
+    let tail_length = len - clamped_head_length;
+
+    let a = start + cw * line_width_clamped;
+    let b = start + ccw * line_width_clamped;
+    let c = start + ccw * line_width_clamped + dir * tail_length;
+    let d = end;
+    let e = start + ccw * head_width_clamped + dir * tail_length;
+    let f = start + cw * head_width_clamped + dir * tail_length;
+    let g = start + cw * line_width_clamped + dir * tail_length;
+
+    let w0 = p - a;
+    var ds = vec2<f32>(dot(w0, w0), 1.0);
+    ds = poly_edge(p, a, b, ds.x, ds.y);
+    ds = poly_edge(p, b, c, ds.x, ds.y);
+    ds = poly_edge(p, c, e, ds.x, ds.y);
+    ds = poly_edge(p, e, d, ds.x, ds.y);
+    ds = poly_edge(p, d, f, ds.x, ds.y);
+    ds = poly_edge(p, f, g, ds.x, ds.y);
+    ds = poly_edge(p, g, a, ds.x, ds.y);
+    return ds.y * sqrt(ds.x);
+}
+
 // SDF for quadrilateral (4 points, convex or concave) - proper winding number
 fn sd_quad(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>, c: vec2<f32>, d: vec2<f32>) -> f32 {
     let w0 = p - a;
@@ -494,6 +560,428 @@ fn compute_mask_blend_factor(
     }
 }
 
+// Compute mask blend factor for a mask with radial repeat effect.
+// Evaluates the SDF mask shape at each radially-placed copy position.
+// Uses simplified progress (RAMP shape, no random order).
+fn compute_mask_with_radial_repeat(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    rr1: vec4<f32>,       // (count, radius, orientation_deg, start_angle_deg)
+    rr2: vec4<f32>,       // (sweep_deg, base_scale, angle_deg, scale)
+    rr3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
+    rr4: vec4<f32>,       // (start, end, phase, overlap)
+    rr5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
+    let is_exclude = mask_type > 2.5;
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    // Compute rel in mask-local frame
+    var rel_base = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
+    }
+
+    let rr_count = max(i32(round(rr1.x)), 0);
+    let rr_radius = rr1.y;
+    let rr_orientation_deg = rr1.z;
+    let rr_start_angle_deg = rr1.w;
+    let rr_sweep_deg = rr2.x;
+    let rr_base_scale = rr2.y;
+    let rr_angle_deg = rr2.z;
+    let rr_scale = rr2.w;
+    let rr_alpha = rr3.x;
+    let rr_offset = vec2<f32>(rr3.y, rr3.z);
+    let rr_start = rr4.x;
+    let rr_end = rr4.y;
+
+    let deg2rad = 3.14159265 / 180.0;
+    var max_mask_alpha = 0.0;
+
+    for (var i = 0; i < rr_count; i = i + 1) {
+        // Simplified progress: RAMP shape, linear from start to end
+        var base_progress: f32;
+        if rr_count > 1 {
+            base_progress = f32(i) / f32(rr_count - 1);
+        } else {
+            base_progress = 0.0;
+        }
+        let interp_progress = clamp((base_progress - rr_start) / max(rr_end - rr_start, 0.001), 0.0, 1.0);
+
+        let spread = (rr_start_angle_deg - rr_sweep_deg / 2.0
+            + (rr_sweep_deg - rr_sweep_deg / f32(max(rr_count, 1))) * base_progress) * deg2rad;
+        let orbit = (rr_orientation_deg + rr_angle_deg * interp_progress) * deg2rad;
+
+        let mix_scale = 1.0 + (rr_scale - 1.0) * interp_progress;
+        let copy_alpha = 1.0 + (rr_alpha - 1.0) * interp_progress;
+
+        if copy_alpha < 0.001 || abs(mix_scale) < 0.001 || abs(rr_base_scale) < 0.001 {
+            continue;
+        }
+
+        // Inverse transform in world coords (Y-up):
+        // Forward uses R(-θ) and (0,-radius), so inverse uses R(θ) and +(0,radius)
+        var tc = rel_base - rr_offset * interp_progress;
+        let cos_s = cos(spread);
+        let sin_s = sin(spread);
+        tc = vec2<f32>(tc.x * cos_s - tc.y * sin_s, tc.x * sin_s + tc.y * cos_s);
+        tc = tc / mix_scale;
+        tc = tc + vec2<f32>(0.0, rr_radius);
+        let cos_o = cos(orbit);
+        let sin_o = sin(orbit);
+        tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
+        tc = tc / rr_base_scale;
+
+        var mask_sdf: f32;
+        if is_ellipse {
+            let norm = tc / shape_half;
+            let r = length(norm);
+            mask_sdf = (r - 1.0) * min(shape_half.x, shape_half.y);
+        } else {
+            mask_sdf = max(abs(tc.x) - shape_half.x, abs(tc.y) - shape_half.y);
+        }
+
+        let copy_fill = select(0.0, fill_alpha, mask_sdf < 0.0);
+        let aa = min(1.0, sw * 0.5);
+        let copy_stroke = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+        let copy_mask_alpha = min(max(copy_fill, copy_stroke), 1.0) * copy_alpha;
+
+        max_mask_alpha = max(max_mask_alpha, copy_mask_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - opacity * max_mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - max_mask_alpha);
+    }
+}
+
+// Compute mask blend factor for a mask with linear repeat effect.
+// Evaluates the SDF mask shape at the original position plus each linearly-placed copy.
+// Uses simplified progress (RAMP shape, no random order).
+fn compute_mask_with_linear_repeat(
+    world_pos: vec2<f32>,
+    mask_params: vec4<f32>,
+    mask_rotation: f32,
+    mask_type: f32,
+    mask_blend: vec4<f32>,
+    lr1: vec4<f32>,       // (count, position_x, position_y, angle_deg)
+    lr2: vec4<f32>,       // (offset_x, offset_y, scale, alpha)
+    lr3: vec4<f32>,       // (start, end, phase, overlap)
+    lr4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
+    lr5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
+) -> f32 {
+    if mask_type < 0.5 || mask_params.z > 5000.0 {
+        return 1.0;
+    }
+
+    let center = mask_params.xy;
+    let half_size = mask_params.zw;
+    let fill_alpha = mask_blend.x;
+    let opacity = mask_blend.y;
+    let sw = mask_blend.z;
+    let is_exclude = mask_type > 2.5;
+    let is_ellipse = (mask_type > 1.5 && mask_type < 2.5) || mask_type > 3.5;
+    let shape_half = max(half_size - sw * 0.5, vec2<f32>(0.001));
+
+    // Compute rel in mask-local frame (without repeat displacement)
+    var rel_base = world_pos - center;
+    if abs(mask_rotation) > 0.001 {
+        let c = cos(-mask_rotation);
+        let s = sin(-mask_rotation);
+        rel_base = vec2<f32>(rel_base.x * c - rel_base.y * s, rel_base.x * s + rel_base.y * c);
+    }
+
+    let lr_count = max(i32(round(lr1.x)), 0);
+    let lr_position = lr1.yz;      // already in mask-local world units
+    let lr_angle_deg = lr1.w;
+    let lr_offset = lr2.xy;
+    let lr_scale = lr2.z;
+    let lr_alpha = lr2.w;
+    let lr_start = lr3.x;
+    let lr_end = lr3.y;
+    let lr_phase = lr3.z;
+    let lr_overlap = lr3.w;
+
+    // AM algorithm: count=N means N total items (including original).
+    // Loop runs N times (i = 0..count-1), matching AM's RepeatEasingKt.
+    let fcount = f32(lr_count);
+    let overlap_value = lr_overlap + 1.0;
+    let denominator = (2.0 * overlap_value) + fcount - 1.0;
+    let step_width = 1.0 / denominator;
+    let half_width_val = step_width * overlap_value;
+
+    var max_mask_alpha = 0.0;
+    let deg2rad = 3.14159265 / 180.0;
+
+    for (var i = 0; i < lr_count; i = i + 1) {
+        let fi = f32(i);
+
+        // base_progress: AM uses i / (count - 1), 0 when count <= 1
+        var base_progress: f32;
+        if lr_count > 1 {
+            base_progress = fi / (fcount - 1.0);
+        } else {
+            base_progress = 0.0;
+        }
+
+        // interp_progress: AM's center-based interpolation (RAMP shape, simplified)
+        let base_position = (fi + overlap_value) / denominator + lr_phase;
+        let center_pos = base_position + half_width_val * 0.5;
+        let range = max(lr_end - lr_start, 0.001);
+        let interp_progress = clamp((center_pos - lr_start) / range, 0.0, 1.0);
+
+        // Per-copy displacement, scale, rotation, alpha
+        let displacement = lr_position * base_progress + lr_offset * interp_progress;
+        let copy_scale = 1.0 + (lr_scale - 1.0) * interp_progress;
+        let copy_angle_rad = lr_angle_deg * deg2rad * interp_progress;
+        let copy_alpha = 1.0 + (lr_alpha - 1.0) * interp_progress;
+
+        if copy_alpha < 0.001 || abs(copy_scale) < 0.001 {
+            continue;
+        }
+
+        // Shift rel_base by displacement and apply per-copy rotation/scale
+        var rel_copy = rel_base - displacement;
+
+        if abs(copy_angle_rad) > 0.001 {
+            let ca = cos(-copy_angle_rad);
+            let sa = sin(-copy_angle_rad);
+            rel_copy = vec2<f32>(rel_copy.x * ca - rel_copy.y * sa,
+                                 rel_copy.x * sa + rel_copy.y * ca);
+        }
+
+        let copy_half = shape_half * copy_scale;
+
+        var mask_sdf: f32;
+        if is_ellipse {
+            let norm = rel_copy / copy_half;
+            let r = length(norm);
+            mask_sdf = (r - 1.0) * min(copy_half.x, copy_half.y);
+        } else {
+            mask_sdf = max(abs(rel_copy.x) - copy_half.x, abs(rel_copy.y) - copy_half.y);
+        }
+
+        let copy_fill = select(0.0, fill_alpha, mask_sdf < 0.0);
+        let aa = min(1.0, sw * 0.5);
+        let copy_stroke = select(0.0, 1.0 - smoothstep(sw * 0.5 - aa, sw * 0.5, abs(mask_sdf)), sw > 0.01);
+        let copy_mask_alpha = min(max(copy_fill, copy_stroke), 1.0) * copy_alpha;
+
+        max_mask_alpha = max(max_mask_alpha, copy_mask_alpha);
+    }
+
+    if is_exclude {
+        return 1.0 - opacity * max_mask_alpha;
+    } else {
+        return 1.0 - opacity * (1.0 - max_mask_alpha);
+    }
+}
+
+// Smooth minimum for stretch segment feathering (same as unified_effect.wgsl)
+fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * h * k * (1.0 / 6.0);
+}
+
+// Apply stretch segment effect to SDF local position.
+// `pos` uses the SDF shader's AM-local convention where +Y points downward
+// because it is reconstructed from Bevy Rectangle UVs (top-left = 0,0).
+// StretchSegment itself operates in AM screen-normalized space where +Y points up,
+// so we must flip Y on the way in and out of the screen-space transform.
+fn apply_sdf_stretch_segment(pos: vec2<f32>, frame_size: f32) -> vec2<f32> {
+    let angle = material.stretch_params.x;
+    let adj_stretch = material.stretch_params.y;
+    let offset_norm = material.stretch_params.z;
+    let smooth_raw = material.stretch_params.w;
+
+    if adj_stretch < 0.00001 {
+        return pos;
+    }
+
+    let transform_rot = material.stretch_meta.x;
+    let scene_width = material.stretch_meta.z;
+    let scene_height = material.stretch_meta.w;
+
+    // `pos` is in the shader's local AM coordinate basis (+Y = down).
+    // Flip to Bevy/screen-space (+Y = up) before applying the AM formula.
+    let local_px_x = pos.x;
+    let local_px_y = -pos.y;
+
+    // Rotate local coords to screen space using entity's transform rotation
+    let cos_r = cos(transform_rot);
+    let sin_r = sin(transform_rot);
+    let screen_px_x = local_px_x * cos_r - local_px_y * sin_r;
+    let screen_px_y = local_px_x * sin_r + local_px_y * cos_r;
+
+    // Convert to scene-normalized coords
+    let st = vec2<f32>(screen_px_x / scene_width, screen_px_y / scene_height);
+
+    // Direction vector
+    let v = vec2<f32>(cos(angle), sin(angle));
+
+    // Distance along direction + offset
+    let dist = dot(st, v) + offset_norm;
+
+    // Smooth cubic min
+    let smooth_k = max(0.00001, smooth_raw * adj_stretch);
+    let d = smin_cubic(adj_stretch, abs(dist), smooth_k);
+
+    // Displace in scene-norm space
+    let displaced_norm = st + v * d * -sign(dist);
+
+    // Convert back to screen pixel coords
+    let disp_screen_px_x = displaced_norm.x * scene_width;
+    let disp_screen_px_y = displaced_norm.y * scene_height;
+
+    // Rotate back to local space
+    let disp_local_px_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
+    let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
+
+    // Convert back to the shader's local AM coordinate basis (+Y = down).
+    return vec2<f32>(disp_local_px_x, -disp_local_px_y);
+}
+
+fn compute_sdf_shape_distance(pos: vec2<f32>, half_width: f32, half_height: f32) -> f32 {
+    let shape_type = i32(material.shape_type);
+
+    // Scale factor for vertex-based shapes (triangle, quad, penta, path, line)
+    // base_half_width stores the initial half_width at spawn time
+    // Current half_width (params.x) changes with animation scale
+    var vertex_scale = 1.0;
+    if material.base_half_width > 0.01 {
+        vertex_scale = half_width / material.base_half_width;
+    }
+
+    if shape_type == 0 {
+        return sd_box(pos, vec2<f32>(half_width, half_height));
+    } else if shape_type == 1 {
+        return sd_box_miter(pos, vec2<f32>(half_width, half_height));
+    } else if shape_type == 2 {
+        return sd_box_bevel(pos, vec2<f32>(half_width, half_height));
+    } else if shape_type == 3 {
+        if abs(half_width - half_height) < 0.001 {
+            return sd_circle(pos, half_width);
+        }
+        return sd_ellipse(pos, half_width, half_height);
+    } else if shape_type == 4 {
+        let corner_r = material.shape_extra.x;
+        return sd_roundrect(pos, vec2<f32>(half_width, half_height), corner_r);
+    } else if shape_type == 5 {
+        let side_count = material.shape_extra.x;
+        let radius = material.shape_extra.y * vertex_scale;
+        let offset_angle = material.shape_extra.z;
+        return sd_polygon(pos, side_count, radius, offset_angle);
+    } else if shape_type == 6 {
+        let point_count = material.shape_extra.x;
+        let outer_r = material.shape_extra.y * vertex_scale;
+        let inner_r = material.shape_extra.z * vertex_scale;
+        let offset_angle = material.shape_extra.w;
+        return sd_star(pos, point_count, outer_r, inner_r, offset_angle);
+    } else if shape_type == 7 {
+        let start_angle = material.shape_extra.x;
+        let end_angle = material.shape_extra.y;
+        let radius = material.shape_extra.z * vertex_scale;
+        return sd_pie(pos, start_angle, end_angle, radius);
+    } else if shape_type == 8 {
+        let stem_size = material.shape_extra.x;
+        return sd_plus(pos, half_width, half_height, stem_size);
+    } else if shape_type == 9 {
+        let point_count = material.shape_extra.x;
+        let outer_r = material.shape_extra.y * vertex_scale;
+        let inner_r = material.shape_extra.z * vertex_scale;
+        let offset_angle = material.shape_extra.w;
+        return sd_multifoil(pos, point_count, outer_r, inner_r, offset_angle);
+    } else if shape_type == 10 {
+        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
+        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
+        return sd_line(pos, p1, p2);
+    } else if shape_type == 11 {
+        let start_angle = material.shape_extra.x;
+        let end_angle = material.shape_extra.y;
+        let radius = material.shape_extra.z * vertex_scale;
+        return sd_arc(pos, start_angle, end_angle, radius);
+    } else if shape_type == 12 {
+        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
+        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
+        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
+        return sd_triangle(pos, p1, p2, p3);
+    } else if shape_type == 13 {
+        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
+        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
+        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
+        let p4 = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
+        return sd_quad(pos, p1, p2, p3, p4);
+    } else if shape_type == 14 {
+        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
+        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
+        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
+        let p4 = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
+        let p5 = vec2<f32>(material.shape_extra3.x, material.shape_extra3.y) * vertex_scale;
+        return sd_penta(pos, p1, p2, p3, p4, p5);
+    } else if shape_type == 15 {
+        let vertex_count = i32(material.shape_extra7.z);
+        var pts: array<vec2<f32>, 14>;
+        pts[0] = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
+        pts[1] = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
+        pts[2] = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
+        pts[3] = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
+        pts[4] = vec2<f32>(material.shape_extra3.x, material.shape_extra3.y) * vertex_scale;
+        pts[5] = vec2<f32>(material.shape_extra3.z, material.shape_extra3.w) * vertex_scale;
+        pts[6] = vec2<f32>(material.shape_extra4.x, material.shape_extra4.y) * vertex_scale;
+        pts[7] = vec2<f32>(material.shape_extra4.z, material.shape_extra4.w) * vertex_scale;
+        pts[8] = vec2<f32>(material.shape_extra5.x, material.shape_extra5.y) * vertex_scale;
+        pts[9] = vec2<f32>(material.shape_extra5.z, material.shape_extra5.w) * vertex_scale;
+        pts[10] = vec2<f32>(material.shape_extra6.x, material.shape_extra6.y) * vertex_scale;
+        pts[11] = vec2<f32>(material.shape_extra6.z, material.shape_extra6.w) * vertex_scale;
+        pts[12] = vec2<f32>(material.shape_extra7.x, material.shape_extra7.y) * vertex_scale;
+        pts[13] = vec2<f32>(0.0, 0.0);
+        var nv = vertex_count;
+        if nv <= 0 {
+            nv = 3;
+            for (var i = 3; i < 14; i++) {
+                if length(pts[i] - pts[0]) < 0.01 {
+                    break;
+                }
+                nv = i + 1;
+            }
+        }
+        nv = min(nv, 14);
+        let w0 = pos - pts[0];
+        var ds = vec2<f32>(dot(w0, w0), 1.0);
+        for (var i = 0; i < 14; i++) {
+            if i >= nv { break; }
+            let next = select(i + 1, 0, i + 1 >= nv);
+            ds = poly_edge(pos, pts[i], pts[next], ds.x, ds.y);
+        }
+        return ds.y * sqrt(ds.x);
+    } else if shape_type == 16 {
+        let point_scale = vertex_scale;
+        let width_scale = abs(vertex_scale);
+        let start = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * point_scale;
+        let end = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * point_scale;
+        let line_width = material.shape_extra2.x * width_scale;
+        let head_width = material.shape_extra2.y * width_scale;
+        let head_length = material.shape_extra2.z * width_scale;
+        return sd_arrow(pos, start, end, line_width, head_width, head_length);
+    }
+
+    return sd_circle(pos, half_width);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let _debug_st = i32(material.shape_type);
@@ -506,13 +994,43 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var mask_factor = 1.0;
     if mask1_enabled {
-        mask_factor *= compute_mask_blend_factor(
-            in.world_position.xy,
-            material.mask_params,
-            material.mask_rotation,
-            mask1_type,
-            material.mask_blend,
-        );
+        let has_mask_radial_repeat = material.mask1_rr_params1.x > 0.5;
+        let has_mask_linear_repeat = material.mask1_lr_params1.x > 0.5;
+        if has_mask_radial_repeat {
+            mask_factor *= compute_mask_with_radial_repeat(
+                in.world_position.xy,
+                material.mask_params,
+                material.mask_rotation,
+                mask1_type,
+                material.mask_blend,
+                material.mask1_rr_params1,
+                material.mask1_rr_params2,
+                material.mask1_rr_params3,
+                material.mask1_rr_params4,
+                material.mask1_rr_params5,
+            );
+        } else if has_mask_linear_repeat {
+            mask_factor *= compute_mask_with_linear_repeat(
+                in.world_position.xy,
+                material.mask_params,
+                material.mask_rotation,
+                mask1_type,
+                material.mask_blend,
+                material.mask1_lr_params1,
+                material.mask1_lr_params2,
+                material.mask1_lr_params3,
+                material.mask1_lr_params4,
+                material.mask1_lr_params5,
+            );
+        } else {
+            mask_factor *= compute_mask_blend_factor(
+                in.world_position.xy,
+                material.mask_params,
+                material.mask_rotation,
+                mask1_type,
+                material.mask_blend,
+            );
+        }
     }
     if mask2_enabled {
         mask_factor *= compute_mask_blend_factor(
@@ -540,145 +1058,82 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let frame_size = material.frame_half * 2.0;
     
     // Convert UV to local coordinates centered at origin
-    let pos = (in.uv - 0.5) * frame_size;
+    var pos = (in.uv - 0.5) * frame_size;
+
+    // Apply stretch segment effect if enabled
+    if material.stretch_params.y > 0.00001 {
+        pos = apply_sdf_stretch_segment(pos, frame_size);
+    }
     
-    // Calculate SDF based on shape type
-    var dist: f32;
-    let shape_type = i32(material.shape_type);
-    
-    // Scale factor for vertex-based shapes (triangle, quad, penta, path, line)
-    // base_half_width stores the initial half_width at spawn time
-    // Current half_width (params.x) changes with animation scale
-    var vertex_scale = 1.0;
-    if material.base_half_width > 0.01 {
-        vertex_scale = half_width / material.base_half_width;
+    let linear_repeat_count = i32(round(material.linear_repeat_params1.x));
+    let linear_repeat_enabled = linear_repeat_count > 0;
+    let linear_repeat_activated = linear_repeat_count >= 0;
+    if linear_repeat_activated && !linear_repeat_enabled {
+        discard;
     }
 
-    if shape_type == 0 {
-        // BoxRound
-        dist = sd_box(pos, vec2<f32>(half_width, half_height));
-    } else if shape_type == 1 {
-        // BoxMiter
-        dist = sd_box_miter(pos, vec2<f32>(half_width, half_height));
-    } else if shape_type == 2 {
-        // BoxBevel
-        dist = sd_box_bevel(pos, vec2<f32>(half_width, half_height));
-    } else if shape_type == 3 {
-        // Circle/Ellipse
-        if abs(half_width - half_height) < 0.001 {
-            dist = sd_circle(pos, half_width);
-        } else {
-            dist = sd_ellipse(pos, half_width, half_height);
-        }
-    } else if shape_type == 4 {
-        // RoundRect
-        let corner_r = material.shape_extra.x;
-        dist = sd_roundrect(pos, vec2<f32>(half_width, half_height), corner_r);
-    } else if shape_type == 5 {
-        // Polygon
-        let side_count = material.shape_extra.x;
-        let radius = material.shape_extra.y * vertex_scale;
-        let offset_angle = material.shape_extra.z;
-        dist = sd_polygon(pos, side_count, radius, offset_angle);
-    } else if shape_type == 6 {
-        // Star
-        let point_count = material.shape_extra.x;
-        let outer_r = material.shape_extra.y * vertex_scale;
-        let inner_r = material.shape_extra.z * vertex_scale;
-        let offset_angle = material.shape_extra.w;
-        dist = sd_star(pos, point_count, outer_r, inner_r, offset_angle);
-    } else if shape_type == 7 {
-        // Pie
-        let start_angle = material.shape_extra.x;
-        let end_angle = material.shape_extra.y;
-        let radius = material.shape_extra.z * vertex_scale;
-        dist = sd_pie(pos, start_angle, end_angle, radius);
-    } else if shape_type == 8 {
-        // Plus
-        let stem_size = material.shape_extra.x;
-        dist = sd_plus(pos, half_width, half_height, stem_size);
-    } else if shape_type == 9 {
-        // Multifoil
-        let point_count = material.shape_extra.x;
-        let outer_r = material.shape_extra.y * vertex_scale;
-        let inner_r = material.shape_extra.z * vertex_scale;
-        let offset_angle = material.shape_extra.w;
-        dist = sd_multifoil(pos, point_count, outer_r, inner_r, offset_angle);
-    } else if shape_type == 10 {
-        // Line
-        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
-        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
-        dist = sd_line(pos, p1, p2);
-    } else if shape_type == 11 {
-        // Arc - radius-based shapes scale via their radius parameter
-        let start_angle = material.shape_extra.x;
-        let end_angle = material.shape_extra.y;
-        let radius = material.shape_extra.z * vertex_scale;
-        dist = sd_arc(pos, start_angle, end_angle, radius);
-    } else if shape_type == 12 {
-        // Triangle
-        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
-        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
-        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
-        dist = sd_triangle(pos, p1, p2, p3);
-    } else if shape_type == 13 {
-        // Quad
-        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
-        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
-        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
-        let p4 = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
-        dist = sd_quad(pos, p1, p2, p3, p4);
-    } else if shape_type == 14 {
-        // Penta
-        let p1 = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
-        let p2 = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
-        let p3 = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
-        let p4 = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
-        let p5 = vec2<f32>(material.shape_extra3.x, material.shape_extra3.y) * vertex_scale;
-        dist = sd_penta(pos, p1, p2, p3, p4, p5);
-    } else if shape_type == 15 {
-        // Path - polygon SDF with up to 14 vertices from shape_extra fields
-        // Vertex count stored in shape_extra7.z (0 = auto-detect via zero-check)
-        let vertex_count = i32(material.shape_extra7.z);
-        var pts: array<vec2<f32>, 14>;
-        pts[0] = vec2<f32>(material.shape_extra.x, material.shape_extra.y) * vertex_scale;
-        pts[1] = vec2<f32>(material.shape_extra.z, material.shape_extra.w) * vertex_scale;
-        pts[2] = vec2<f32>(material.shape_extra2.x, material.shape_extra2.y) * vertex_scale;
-        pts[3] = vec2<f32>(material.shape_extra2.z, material.shape_extra2.w) * vertex_scale;
-        pts[4] = vec2<f32>(material.shape_extra3.x, material.shape_extra3.y) * vertex_scale;
-        pts[5] = vec2<f32>(material.shape_extra3.z, material.shape_extra3.w) * vertex_scale;
-        pts[6] = vec2<f32>(material.shape_extra4.x, material.shape_extra4.y) * vertex_scale;
-        pts[7] = vec2<f32>(material.shape_extra4.z, material.shape_extra4.w) * vertex_scale;
-        pts[8] = vec2<f32>(material.shape_extra5.x, material.shape_extra5.y) * vertex_scale;
-        pts[9] = vec2<f32>(material.shape_extra5.z, material.shape_extra5.w) * vertex_scale;
-        pts[10] = vec2<f32>(material.shape_extra6.x, material.shape_extra6.y) * vertex_scale;
-        pts[11] = vec2<f32>(material.shape_extra6.z, material.shape_extra6.w) * vertex_scale;
-        pts[12] = vec2<f32>(material.shape_extra7.x, material.shape_extra7.y) * vertex_scale;
-        pts[13] = vec2<f32>(0.0, 0.0); // sentinel
-        // Determine actual vertex count
-        var nv = vertex_count;
-        if nv <= 0 {
-            // Auto-detect: find first vertex that matches vertex 0
-            nv = 3;
-            for (var i = 3; i < 14; i++) {
-                if length(pts[i] - pts[0]) < 0.01 {
-                    break;
-                }
-                nv = i + 1;
+    var dist = compute_sdf_shape_distance(pos, half_width, half_height);
+    if linear_repeat_enabled {
+        let lr_position = vec2<f32>(
+            material.linear_repeat_params1.y,
+            material.linear_repeat_params1.z,
+        );
+        let lr_angle_deg = material.linear_repeat_params1.w;
+        let lr_offset = vec2<f32>(
+            material.linear_repeat_params2.x,
+            material.linear_repeat_params2.y,
+        );
+        let lr_scale = material.linear_repeat_params2.z;
+        let lr_alpha = material.linear_repeat_params2.w;
+        let lr_start = material.linear_repeat_params3.x;
+        let lr_end = material.linear_repeat_params3.y;
+        let lr_phase = material.linear_repeat_params3.z;
+        let lr_overlap = material.linear_repeat_params3.w;
+
+        let fcount = f32(linear_repeat_count);
+        let overlap_value = lr_overlap + 1.0;
+        let denominator = (2.0 * overlap_value) + fcount - 1.0;
+        let step_width = 1.0 / denominator;
+        let half_width_val = step_width * overlap_value;
+        let deg2rad = 3.14159265 / 180.0;
+
+        for (var i = 0; i < linear_repeat_count; i = i + 1) {
+            let fi = f32(i);
+            var base_progress = 0.0;
+            if linear_repeat_count > 1 {
+                base_progress = fi / (fcount - 1.0);
+            }
+            let base_position = (fi + overlap_value) / denominator + lr_phase;
+            let center_pos = base_position + half_width_val * 0.5;
+            let range = max(lr_end - lr_start, 0.001);
+            let interp_progress = clamp((center_pos - lr_start) / range, 0.0, 1.0);
+
+            let copy_scale = 1.0 + (lr_scale - 1.0) * interp_progress;
+            let copy_alpha = 1.0 + (lr_alpha - 1.0) * interp_progress;
+            if copy_alpha < 0.001 || abs(copy_scale) < 0.001 {
+                continue;
+            }
+
+            let displacement = lr_position * base_progress + lr_offset * interp_progress;
+            let copy_angle_rad = lr_angle_deg * deg2rad * interp_progress;
+
+            var rel_copy = pos - displacement;
+            if abs(copy_angle_rad) > 0.001 {
+                let ca = cos(-copy_angle_rad);
+                let sa = sin(-copy_angle_rad);
+                rel_copy = vec2<f32>(
+                    rel_copy.x * ca - rel_copy.y * sa,
+                    rel_copy.x * sa + rel_copy.y * ca,
+                );
+            }
+            rel_copy = rel_copy / copy_scale;
+
+            let copy_dist =
+                compute_sdf_shape_distance(rel_copy, half_width, half_height) * copy_scale;
+            if copy_dist == copy_dist && copy_dist > -1e10 && copy_dist < 1e10 {
+                dist = min(dist, copy_dist);
             }
         }
-        nv = min(nv, 14);
-        let w0 = pos - pts[0];
-        var ds = vec2<f32>(dot(w0, w0), 1.0);
-        for (var i = 0; i < 14; i++) {
-            if i >= nv { break; }
-            let next = select(i + 1, 0, i + 1 >= nv);
-            ds = poly_edge(pos, pts[i], pts[next], ds.x, ds.y);
-        }
-        dist = ds.y * sqrt(ds.x);
-    } else {
-        // Fallback: circle
-        dist = sd_circle(pos, half_width);
     }
     
     // NaN protection: if SDF function produced NaN (e.g., from degenerate geometry),

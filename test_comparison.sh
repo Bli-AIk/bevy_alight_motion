@@ -25,9 +25,11 @@
 #   ./test_comparison.sh effects/     # Run only effects/* tests
 #   ./test_comparison.sh complex/     # Run only complex/* tests
 #   ./test_comparison.sh effects/stretch  # Run tests matching effects/stretch*
+#   ./test_comparison.sh private/.../target2 --single  # Run only the exact example
 #   ./test_comparison.sh --frame-test              # Run FPS benchmark on basic/* tests
 #   ./test_comparison.sh --frame-test --all        # Run FPS benchmark on all tests
 #   ./test_comparison.sh --frame-test effects/     # Run FPS benchmark on effects/* tests
+#   AM_PLAYER_EXTRA_FEATURES=player-brp ./test_comparison.sh private/.../target2 --single --headless
 #   PARALLEL_JOBS=8 ./test_comparison.sh  # More parallel frame extraction jobs
 #
 # Note: Rendering tests run sequentially to avoid GPU resource contention.
@@ -35,11 +37,45 @@
 
 # Configuration
 PARALLEL_JOBS=${PARALLEL_JOBS:-4}  # Default 4 parallel jobs (for frame extraction)
+PLAYER_EXTRA_FEATURES=${AM_PLAYER_EXTRA_FEATURES:-}
 
 # Parse command line arguments
 FILTER_PATTERN=""
 RUN_ALL=false
 FRAME_TEST=false
+HEADLESS=false
+EXACT_MATCH=false
+HAS_EXPLICIT_FILTER=false
+
+# Parse flags that can appear anywhere
+for arg in "$@"; do
+    if [ "$arg" == "--headless" ]; then
+        HEADLESS=true
+    elif [ "$arg" == "--single" ]; then
+        EXACT_MATCH=true
+    fi
+done
+# Remove flags that can appear anywhere from positional args
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ]; then
+        ARGS+=("$arg")
+    fi
+done
+set -- "${ARGS[@]}"
+
+# Auto-detect headless: if no DISPLAY or WAYLAND_DISPLAY, enable headless
+if [ "$HEADLESS" = false ] && [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    echo "No display detected, enabling headless mode automatically."
+    HEADLESS=true
+fi
+
+# Headless mode uses headless-render feature (no xvfb needed)
+# Fallback to xvfb-run if headless-render build fails
+HEADLESS_RENDER=false
+if [ "$HEADLESS" = true ]; then
+    HEADLESS_RENDER=true
+fi
 
 if [ "$1" == "--all" ]; then
     RUN_ALL=true
@@ -56,6 +92,7 @@ elif [ "$1" == "--frame-test" ]; then
         FILTER_PATTERN="${FILTER_PATTERN#./}"
         FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
         FILTER_PATTERN="${FILTER_PATTERN#projects/}"
+        HAS_EXPLICIT_FILTER=true
     else
         FILTER_PATTERN="basic/"
     fi
@@ -66,9 +103,20 @@ elif [ -n "$1" ]; then
     FILTER_PATTERN="${FILTER_PATTERN#./}"
     FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
     FILTER_PATTERN="${FILTER_PATTERN#projects/}"
+    HAS_EXPLICIT_FILTER=true
 else
     # Default: only run basic/* tests
     FILTER_PATTERN="basic/"
+fi
+
+if [ "$EXACT_MATCH" = true ] && [ "$RUN_ALL" = true ]; then
+    echo "Error: --single cannot be combined with --all"
+    exit 1
+fi
+
+if [ "$EXACT_MATCH" = true ] && [ "$HAS_EXPLICIT_FILTER" = false ]; then
+    echo "Error: --single requires an explicit example path"
+    exit 1
 fi
 
 # Ensure we are in the correct directory
@@ -83,6 +131,165 @@ else
     exit 1
 fi
 
+COMPARISON_CONFIG_PATH="${BASE_DIR}/comparison_config.toml"
+FRAME_CACHE_DIR="${PROJECTS_DIR}/_video_frames"
+DEBUG_FRAME_CACHE_DIR="${BASE_DIR}/assets/debug/_video_frames"
+
+sort_examples() {
+    printf '%s\n' "$1" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' '
+}
+
+partition_examples_by_skip() {
+    local examples="$1"
+    local config_path="$2"
+
+    if [ -z "$examples" ] || [ ! -f "$config_path" ]; then
+        printf '%s\n' "$examples" | tr ' ' '\n' | sed '/^$/d' | while IFS= read -r test_id; do
+            [ -n "$test_id" ] && printf 'RUN\t%s\n' "$test_id"
+        done
+        return 0
+    fi
+
+    EXAMPLES_INPUT="$examples" python3 - "$config_path" <<'PY'
+import os
+import sys
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib
+
+config_path = sys.argv[1]
+examples = [line.strip() for line in os.environ.get("EXAMPLES_INPUT", "").split() if line.strip()]
+
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+
+default = config.get("default", {})
+default_skip = bool(default.get("skip", False))
+overrides = config.get("overrides", {})
+
+for test_id in examples:
+    skip = default_skip
+    override = overrides.get(test_id)
+    if isinstance(override, dict) and override.get("skip") is not None:
+        skip = bool(override["skip"])
+    kind = "SKIP" if skip else "RUN"
+    print(f"{kind}\t{test_id}")
+PY
+}
+
+discover_skip_only_examples() {
+    local config_path="$1"
+    local projects_dir="$2"
+    local filter_pattern="$3"
+    local exact_match="$4"
+    local run_all="$5"
+
+    if [ ! -f "$config_path" ]; then
+        return 0
+    fi
+
+    python3 - "$config_path" "$projects_dir" "$filter_pattern" "$exact_match" "$run_all" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib
+
+config_path, projects_dir, filter_pattern, exact_match, run_all = sys.argv[1:]
+projects_dir = Path(projects_dir)
+
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+
+overrides = config.get("overrides", {})
+
+def matches_filter(test_id: str) -> bool:
+    if run_all == "true":
+        return True
+    if filter_pattern:
+        if exact_match == "true":
+            return test_id == filter_pattern
+        return test_id.startswith(filter_pattern)
+    return test_id.startswith("basic/")
+
+for test_id, override in overrides.items():
+    if not isinstance(override, dict) or not override.get("skip"):
+        continue
+    if not matches_filter(test_id):
+        continue
+    if (projects_dir / f"{test_id}.amproj").exists():
+        print(test_id)
+PY
+}
+
+cleanup_stale_frame_cache() {
+    local cache_root="$1"
+    local interval_hours="${FRAME_CACHE_CLEANUP_INTERVAL_HOURS:-24}"
+    local max_age_days="${FRAME_CACHE_MAX_AGE_DAYS:-14}"
+
+    if [ "${FRAME_CACHE_DISABLE_CLEANUP:-0}" = "1" ]; then
+        return 0
+    fi
+
+    mkdir -p "$cache_root"
+    local marker_file="${cache_root}/.last_cleanup"
+    local now
+    now=$(date +%s)
+    local interval_secs=$((interval_hours * 3600))
+    local max_age_secs=$((max_age_days * 86400))
+
+    if [ -f "$marker_file" ]; then
+        local last_cleanup
+        last_cleanup=$(stat -c %Y "$marker_file" 2>/dev/null || echo 0)
+        if [ $((now - last_cleanup)) -lt "$interval_secs" ]; then
+            return 0
+        fi
+    fi
+
+    echo "Checking stale frame cache under $cache_root ..."
+    local pruned=0
+
+    while IFS= read -r cache_dir; do
+        [ -z "$cache_dir" ] && continue
+        local extracted_marker="${cache_dir}/.extracted"
+        local last_used_marker="${cache_dir}/.last_used"
+
+        if [ ! -f "$extracted_marker" ] || [ ! -f "$last_used_marker" ]; then
+            rm -rf "$cache_dir"
+            pruned=$((pruned + 1))
+            continue
+        fi
+
+        local last_used
+        last_used=$(stat -c %Y "$last_used_marker" 2>/dev/null || echo 0)
+        if [ $((now - last_used)) -ge "$max_age_secs" ]; then
+            rm -rf "$cache_dir"
+            pruned=$((pruned + 1))
+        fi
+    done < <(find "$cache_root" -mindepth 1 -maxdepth 1 -type d | sort)
+
+    touch "$marker_file"
+    echo "  [CACHE-CLEANUP] pruned ${pruned} stale cache director$( [ "$pruned" -eq 1 ] && echo 'y' || echo 'ies' )"
+}
+
+remove_example_caches() {
+    local test_id="$1"
+    local flat_name
+    flat_name=$(echo "$test_id" | tr '/' '_')
+    local dir_name
+    dir_name=$(dirname "$test_id")
+    local base_name
+    base_name=$(basename "$test_id")
+
+    rm -rf "${FRAME_CACHE_DIR}/${flat_name}"
+    rm -rf "${PROJECTS_DIR}/${dir_name}/_video_frames/${base_name}"
+    rm -rf "${DEBUG_FRAME_CACHE_DIR}/${base_name}"
+}
+
 if [ "$FRAME_TEST" = true ]; then
     echo "========================================"
     echo "Frame Test (FPS Benchmark) Suite"
@@ -95,18 +302,54 @@ else
 fi
 if [ "$RUN_ALL" = true ]; then
     echo "Mode: Running ALL tests (basic_*, fx_*, complex_*)"
+elif [ "$EXACT_MATCH" = true ]; then
+    echo "Mode: Running exact test '$FILTER_PATTERN'"
 elif [ -n "$FILTER_PATTERN" ]; then
     echo "Mode: Running tests matching '$FILTER_PATTERN*'"
 fi
+if [ "$HEADLESS" = true ]; then
+    if [ "$HEADLESS_RENDER" = true ]; then
+        echo "Headless: enabled (headless-render feature, no display server needed)"
+    else
+        echo "Headless: enabled (software rendering via llvmpipe + Xvfb)"
+    fi
+fi
 echo ""
 
+# Set llvmpipe optimization environment variables for software rendering
+if [ "$HEADLESS" = true ]; then
+    export LP_NUM_THREADS=${LP_NUM_THREADS:-4}
+    export GALLIVM_PERF_LEVEL=${GALLIVM_PERF_LEVEL:-3}
+    export MESA_GLTHREAD=${MESA_GLTHREAD:-true}
+    export RAYON_NUM_THREADS=${RAYON_NUM_THREADS:-4}
+    export MESA_NO_ERROR=${MESA_NO_ERROR:-1}
+    export WGPU_BACKEND=${WGPU_BACKEND:-vulkan}
+fi
+
 # Build player example first
+HEADLESS_FEATURES=""
+if [ "$HEADLESS_RENDER" = true ]; then
+    HEADLESS_FEATURES=",headless-render"
+fi
+
+BUILD_FEATURES=""
 if [ "$FRAME_TEST" = true ]; then
-    echo "Building player example (frame-test)..."
-    cargo build -p bevy_alight_motion --example player --features frame-test --release
+    BUILD_FEATURES="frame-test${HEADLESS_FEATURES}"
 else
-    echo "Building player example (video-comparison)..."
-    cargo build -p bevy_alight_motion --example player --features video-comparison --release
+    BUILD_FEATURES="video-comparison${HEADLESS_FEATURES}"
+fi
+
+if [ -n "$PLAYER_EXTRA_FEATURES" ]; then
+    BUILD_FEATURES="${BUILD_FEATURES},${PLAYER_EXTRA_FEATURES}"
+    echo "Extra player features: $PLAYER_EXTRA_FEATURES"
+fi
+
+if [ "$FRAME_TEST" = true ]; then
+    echo "Building player example (${BUILD_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
+else
+    echo "Building player example (${BUILD_FEATURES})..."
+    cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
 fi
 if [ $? -ne 0 ]; then
     echo "Build failed!"
@@ -165,7 +408,11 @@ while IFS= read -r amproj; do
         if [ "$RUN_ALL" = true ]; then
             EXAMPLES="$EXAMPLES $test_id"
         elif [ -n "$FILTER_PATTERN" ]; then
-            if echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
+            if [ "$EXACT_MATCH" = true ]; then
+                if [ "$test_id" = "$FILTER_PATTERN" ]; then
+                    EXAMPLES="$EXAMPLES $test_id"
+                fi
+            elif echo "$test_id" | grep -q "^${FILTER_PATTERN}"; then
                 EXAMPLES="$EXAMPLES $test_id"
             fi
         else
@@ -175,14 +422,43 @@ while IFS= read -r amproj; do
         fi
     fi
 done < <(find "$PROJECTS_DIR" \( -name "*.amproj" -type d -print -prune \) -o \( -name "*.amproj" -type f -print \) | sort)
-EXAMPLES=$(echo $EXAMPLES | tr ' ' '\n' | sort | tr '\n' ' ')
 
-EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
+if [ "$FRAME_TEST" != true ]; then
+    EXTRA_SKIP_EXAMPLES=$(discover_skip_only_examples \
+        "$COMPARISON_CONFIG_PATH" \
+        "$PROJECTS_DIR" \
+        "$FILTER_PATTERN" \
+        "$EXACT_MATCH" \
+        "$RUN_ALL")
+    EXAMPLES=$(sort_examples "$EXAMPLES $EXTRA_SKIP_EXAMPLES")
+else
+    EXAMPLES=$(sort_examples "$EXAMPLES")
+fi
+
+RUN_EXAMPLES=""
+SKIP_EXAMPLES=""
+while IFS=$'\t' read -r kind test_id; do
+    [ -z "$test_id" ] && continue
+    if [ "$kind" = "SKIP" ]; then
+        SKIP_EXAMPLES="$SKIP_EXAMPLES $test_id"
+    else
+        RUN_EXAMPLES="$RUN_EXAMPLES $test_id"
+    fi
+done < <(partition_examples_by_skip "$EXAMPLES" "$COMPARISON_CONFIG_PATH")
+
+RUN_EXAMPLES=$(sort_examples "$RUN_EXAMPLES")
+SKIP_EXAMPLES=$(sort_examples "$SKIP_EXAMPLES")
+
+TOTAL_EXAMPLE_COUNT=$(echo "$EXAMPLES" | wc -w)
+RUN_EXAMPLE_COUNT=$(echo "$RUN_EXAMPLES" | wc -w)
+SKIP_EXAMPLE_COUNT=$(echo "$SKIP_EXAMPLES" | wc -w)
 echo ""
-echo "Found $EXAMPLE_COUNT examples with videos to test"
+echo "Found $TOTAL_EXAMPLE_COUNT matching examples"
+echo "Runnable: $RUN_EXAMPLE_COUNT"
+echo "Skipped by config: $SKIP_EXAMPLE_COUNT"
 echo ""
 
-if [ "$EXAMPLE_COUNT" -eq 0 ]; then
+if [ "$TOTAL_EXAMPLE_COUNT" -eq 0 ]; then
     echo "No examples to test!"
     exit 0
 fi
@@ -191,6 +467,11 @@ fi
 RESULTS_DIR=$(mktemp -d)
 trap "rm -rf $RESULTS_DIR" EXIT
 
+# Drop any stale caches for config-skipped examples immediately.
+for example in $SKIP_EXAMPLES; do
+    remove_example_caches "$example"
+done
+
 # Phase 1: Pre-extract video frames in parallel (CPU-bound)
 # Skip this phase in frame-test mode (no video comparison needed)
 if [ "$FRAME_TEST" != true ]; then
@@ -198,8 +479,8 @@ echo "========================================"
 echo "Phase 1: Extracting video frames (parallel)"
 echo "========================================"
 
-FRAME_CACHE_DIR="${PROJECTS_DIR}/_video_frames"
 mkdir -p "$FRAME_CACHE_DIR"
+cleanup_stale_frame_cache "$FRAME_CACHE_DIR"
 
 extract_frames_for_video() {
     local test_id=$1
@@ -212,6 +493,7 @@ extract_frames_for_video() {
     
     # Skip if already extracted (cache hit)
     if [ -f "$marker_file" ]; then
+        touch "${frame_dir}/.last_used"
         echo "  [CACHE] $test_id"
         return 0
     fi
@@ -232,6 +514,7 @@ extract_frames_for_video() {
     
     # Write marker file
     echo "$fps" > "$marker_file"
+    touch "${frame_dir}/.last_used"
     
     local frame_count=$(ls "$frame_dir"/*.png 2>/dev/null | wc -l)
     echo "  [DONE] $test_id ($frame_count frames)"
@@ -242,7 +525,11 @@ export PROJECTS_DIR FRAME_CACHE_DIR
 
 # Run frame extraction in parallel
 echo "Extracting frames with $PARALLEL_JOBS parallel jobs..."
-echo "$EXAMPLES" | tr ' ' '\n' | xargs -P "$PARALLEL_JOBS" -I {} bash -c 'extract_frames_for_video "$@"' _ {}
+if [ "$RUN_EXAMPLE_COUNT" -gt 0 ]; then
+    echo "$RUN_EXAMPLES" | tr ' ' '\n' | xargs -P "$PARALLEL_JOBS" -I {} bash -c 'extract_frames_for_video "$@"' _ {}
+else
+    echo "No runnable examples require frame extraction."
+fi
 
 echo ""
 echo "Frame extraction complete!"
@@ -278,10 +565,18 @@ run_single_test() {
     local result_file="$RESULTS_DIR/${flat_name}.result"
     local log_file="$RESULTS_DIR/${flat_name}.log"
     
-    # Run directly without virtual framebuffer for consistent results
-    # with manual testing. This requires a real display or proper GPU access.
+    # In headless mode, wrap with xvfb-run and pass --headless to player
+    # With headless-render feature, no xvfb needed at all
+    local headless_flag=""
+    local xvfb_prefix=""
+    if [ "$HEADLESS" = true ]; then
+        headless_flag="--headless"
+        if [ "$HEADLESS_RENDER" != true ]; then
+            xvfb_prefix="xvfb-run -a"
+        fi
+    fi
     CARGO_MANIFEST_DIR="$MANIFEST_DIR" \
-        "$PLAYER_BIN" "$test_id" > "$log_file" 2>&1
+        $xvfb_prefix "$PLAYER_BIN" "$test_id" $headless_flag > "$log_file" 2>&1
     
     local exit_code=$?
     
@@ -308,9 +603,86 @@ run_single_test() {
     fi
 }
 
+# Function to incrementally write a single test result to JSON
+write_result_to_json() {
+    local result_file=$1
+    local json_output="${BASE_DIR}/test_results.json"
+    local result_key
+    if [ "$FRAME_TEST" = "true" ]; then
+        result_key="frame_test_results"
+    else
+        result_key="results"
+    fi
+
+    if [ ! -f "$result_file" ]; then
+        return
+    fi
+
+    IFS='|' read -r status name avg_details frame_details < "$result_file"
+    local avg_val=""
+    if [ -n "$avg_details" ]; then
+        avg_val=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
+    fi
+    local status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
+
+    python3 << PYEOF
+import json, os
+from datetime import datetime
+
+json_output = "$json_output"
+result_key = "$result_key"
+name = "$name"
+status = "$status_lower"
+avg_val = "$avg_val"
+frame_test = "$FRAME_TEST" == "true"
+
+existing_data = {}
+if os.path.exists(json_output):
+    try:
+        with open(json_output, 'r') as f:
+            existing_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results = existing_data.get(result_key, {})
+entry = {"status": status}
+if avg_val:
+    if frame_test:
+        entry["avg_fps"] = float(avg_val)
+    else:
+        entry["avg_similarity"] = float(avg_val)
+results[name] = entry
+
+existing_data[result_key] = dict(sorted(results.items()))
+
+# Recalculate summary
+summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
+passed = sum(1 for r in results.values() if r.get('status') == 'pass')
+failed = sum(1 for r in results.values() if r.get('status') == 'fail')
+warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
+skipped = sum(1 for r in results.values() if r.get('status') in ('skip', 'cancelled'))
+existing_data[summary_key] = {"passed": passed, "warnings": warnings, "skipped": skipped, "failed": failed}
+existing_data["timestamp"] = datetime.now().astimezone().isoformat()
+
+with open(json_output, 'w') as f:
+    json.dump(existing_data, f, indent=2)
+PYEOF
+}
+
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
-for example in $EXAMPLES; do
+for example in $SKIP_EXAMPLES; do
+    flat_name=$(echo "$example" | tr '/' '_')
+    result_file="$RESULTS_DIR/${flat_name}.result"
+    echo "SKIP|$example|" > "$result_file"
+    write_result_to_json "$result_file"
+    echo "⚠️  $example (SKIP by config)"
+done
+
+for example in $RUN_EXAMPLES; do
     run_single_test "$example"
+    # Write result to JSON immediately after each test
+    local_flat=$(echo "$example" | tr '/' '_')
+    write_result_to_json "$RESULTS_DIR/${local_flat}.result"
     # Cooldown between tests to mitigate GPU thermal throttling (especially on iGPUs)
     if [ "$FRAME_TEST" = "true" ]; then
         sleep 3

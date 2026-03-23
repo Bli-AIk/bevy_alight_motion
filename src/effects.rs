@@ -11,11 +11,12 @@
 //!
 //! 混合渲染管线。支持无限层级嵌套。
 
+pub(crate) mod lift_composite;
 mod rtt;
+mod rtt_helpers;
 mod types;
 
 // Re-export all public types
-#[allow(deprecated)]
 pub use types::{
     AmGroupFill,
     EffectLayer,
@@ -24,7 +25,6 @@ pub use types::{
     EffectType,
     GroupFillType,
     MaskParams,
-    NeedsRenderStrategyEvaluation,
     PingPongBuffer,
     RenderHierarchyInfo,
     // Render strategy types for hybrid rendering pipeline
@@ -42,12 +42,18 @@ pub use types::{
     wipe_params_to_vec4,
 };
 
+pub(crate) use rtt::refresh_group_fill_material_texture_system;
 pub use rtt::{
-    EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
+    AmEmbedMask, EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,
     EmbedSceneRttCamera, NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
     apply_embed_bounds_clipping_system, cleanup_embed_content_system,
-    cleanup_embed_scene_rtt_system, debug_rtt_camera_projection_system,
-    evaluate_render_strategy_system, fix_nested_embed_render_layers_system,
-    propagate_render_layers_system, propagate_render_layers_to_children_system,
-    setup_embed_scene_rtt_system, sync_rtt_camera_position_system,
+    cleanup_embed_scene_rtt_system, evaluate_render_strategy_system,
+    fix_nested_embed_render_layers_system, propagate_render_layers_system,
+    propagate_render_layers_to_children_system, setup_embed_scene_rtt_system,
+    sync_rtt_camera_position_system,
+};
+
+pub use lift_composite::{
+    LiftCompositeCameraMarker, LiftCompositeState, propagate_lift_render_layers_system,
+    setup_lift_composite_system, update_lift_comp_material_system,
 };

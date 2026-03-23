@@ -26,6 +26,7 @@ agent_*.md
 ai_check.sh
 
 logs/
+.codex_logs/
 dev/
 
 # System
@@ -50,4 +51,4 @@ assets/projects/private/
 _video_frames/
 
 reports/
-check.txt
+check.txt*

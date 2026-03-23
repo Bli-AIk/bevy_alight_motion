@@ -5,19 +5,29 @@
 //! Entry point for all effect definitions.
 //! 所有效果定义的入口模块。
 
+pub mod chromakey;
+pub mod counter;
 pub mod echokf;
+pub mod exposure_gamma;
+pub mod fade;
 pub mod gaussian_blur;
 pub mod grid;
 pub mod jitter;
+pub mod lift;
 pub mod linear_repeat;
+pub mod mirror;
 pub mod oscillate;
 pub mod palette_map;
+pub mod parenthelper;
 pub mod path_repeat;
 pub mod pixelate;
 pub mod radial_repeat;
+pub mod rays;
 pub mod repeat;
 pub mod replace_color;
+pub mod rgb_split;
 pub mod scale_assist;
+pub mod simplex_displace;
 pub mod solidcolor;
 pub mod spin;
 pub mod stretch2;
@@ -27,7 +37,8 @@ pub mod textprogress;
 pub mod textspacing;
 pub mod threshold;
 pub mod transform2;
-pub mod transform_legacy;
+pub mod transform_v1;
+pub mod wavewarp2;
 pub mod wipe2;
 
 use super::types::EffectDef;
@@ -36,7 +47,7 @@ use super::types::EffectDef;
 pub fn all() -> &'static [&'static EffectDef] {
     &[
         &transform2::EFFECT,
-        &transform_legacy::EFFECT,
+        &transform_v1::EFFECT,
         &wipe2::EFFECT,
         &stretch_segment::EFFECT,
         &stretch2::EFFECT,
@@ -44,6 +55,7 @@ pub fn all() -> &'static [&'static EffectDef] {
         &grid::EFFECT,
         &threshold::EFFECT,
         &palette_map::EFFECT,
+        &parenthelper::EFFECT,
         &replace_color::EFFECT,
         &scale_assist::EFFECT,
         &pixelate::EFFECT,
@@ -54,11 +66,21 @@ pub fn all() -> &'static [&'static EffectDef] {
         &radial_repeat::EFFECT,
         &path_repeat::EFFECT,
         &echokf::EFFECT,
+        &fade::EFFECT,
         &solidcolor::EFFECT,
         &swing::EFFECT,
         &spin::EFFECT,
         &textprogress::EFFECT,
         &textspacing::EFFECT,
+        &wavewarp2::EFFECT,
+        &mirror::EFFECT,
+        &lift::EFFECT,
+        &rays::EFFECT,
+        &counter::EFFECT,
+        &simplex_displace::EFFECT,
+        &rgb_split::EFFECT,
+        &exposure_gamma::EFFECT,
+        &chromakey::EFFECT,
     ]
 }
 
