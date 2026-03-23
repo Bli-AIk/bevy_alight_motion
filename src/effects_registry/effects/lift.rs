@@ -1,3 +1,10 @@
+//! Registers metadata for the built-in Lift / Copy Background effect.
+//! 注册内置 Lift / Copy Background 效果的元数据。
+//!
+//! Lift is primarily useful when combined with downstream compositing effects, so the registry entry
+//! explains it as a background-copy primitive rather than a standalone visible transform.
+//! Lift 往往是和后续合成效果一起使用的，因此这里把它登记为一种背景复制原语，而不是孤立的可见变换。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

@@ -1,3 +1,14 @@
+//! Resolves animated scale for SDF parents and propagates it to their children.
+//! 解析 SDF 父级图层的缩放动画，并把结果传播给子对象。
+//!
+//! SDF visuals split their transform between the entity transform and material-backed shape data.
+//! This module computes the effective scale after parenting, repeat, and fit-scale adjustments, then
+//! updates both transforms and shader uniforms so the rendered shape size matches Alight Motion's
+//! authored result.
+//! SDF 可视对象会把变换拆分到实体 `Transform` 和材质中的形状数据上。这个模块负责在父子继承、
+//! 重复效果和 fit-scale 补偿之后求出最终缩放，并同步更新变换与 shader uniform，确保渲染出的
+//! 形状尺寸与 Alight Motion 原工程一致。
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 

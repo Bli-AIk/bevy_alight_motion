@@ -1,3 +1,12 @@
+//! Emits one-shot debug traces for suspicious runtime layer Z values.
+//! 对可疑的运行时图层 Z 值输出一次性调试日志。
+//!
+//! This module is intentionally diagnostic-only. It helps inspect how collected layers, parenting,
+//! and runtime transforms combine into global depth ordering, without mixing that instrumentation
+//! into the main animation systems.
+//! 这个模块是纯调试用途。它用来观察收集结果、父子继承和运行时变换是如何组合成最终全局深度排序的，
+//! 同时避免把这些观测逻辑混进正式动画系统里。
+
 use std::{
     collections::HashSet,
     sync::{Mutex, OnceLock},

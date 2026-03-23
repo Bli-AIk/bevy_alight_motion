@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Threshold effect.
+//! 注册内置 Threshold 效果的元数据。
+//!
+//! Threshold is a classic luminance-based filter with feathering and inversion controls. This file
+//! defines the registry record that docs and support tables use to explain that effect surface.
+//! Threshold 是一个经典的亮度阈值滤镜，并带有羽化和反相控制。
+//! 这个文件定义了文档和支持表会使用的注册表记录，用来解释这组效果参数。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

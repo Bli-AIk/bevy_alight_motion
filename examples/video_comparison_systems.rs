@@ -1,3 +1,12 @@
+//! Systems that compare rendered frames against reference video.
+//! 负责将渲染结果与参考视频逐帧对比的系统集合。
+//!
+//! This module is the execution core behind the example player's video-comparison mode. It drives
+//! capture timing, loads extracted reference frames, computes similarity scores, and writes the
+//! final report that decides whether the render matches the expected video.
+//! 这个模块是示例播放器视频对比模式的执行核心。它负责推进截图时机、加载提取出的参考帧、计算相似度，
+//! 并最终产出用来判定渲染是否符合预期视频的报告。
+
 use super::*;
 use crate::video_utils;
 use bevy::app::AppExit;

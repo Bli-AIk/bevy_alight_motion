@@ -1,3 +1,12 @@
+//! This file evaluates the linear-repeat effect for unified visuals.
+//! It turns the authored repeat count, offsets, ordering, color, and timing
+//! parameters into uniform values and any supporting mesh/entity updates required
+//! by the runtime.
+//!
+//! 这个文件负责为统一材质视觉对象求值 linear repeat 效果。它会把作者写下的重复次数、
+//! 位移、顺序、颜色和时间参数转换成 uniform 数据，并在运行时需要时同步更新相关
+//! 网格或辅助实体。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;

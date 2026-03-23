@@ -1,3 +1,14 @@
+//! Calculates geometric extents for SDF shapes.
+//! 计算 SDF 形状的几何范围。
+//!
+//! Several runtime systems need to know how large an authored SDF shape really is after corner
+//! radii, arrow points, or polygon parameters are applied. This file centralizes those extent
+//! calculations so scale, stretch, mask, and mesh-offset code can reason about the same shape
+//! bounds instead of each path re-implementing its own approximation.
+//! 多个运行时系统都需要知道：在圆角、箭头控制点或多边形参数生效之后，一个 SDF 形状的真实包围范围
+//! 到底有多大。这个文件把这些范围计算集中到一起，让缩放、拉伸、遮罩和 mesh 偏移等路径使用同一套
+//! 形状边界逻辑，而不是各自重复写近似算法。
+
 use bevy::prelude::*;
 
 use crate::sdf_material::{SdfMaterialUniform, SdfShapeType};

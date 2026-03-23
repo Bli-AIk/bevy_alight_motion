@@ -1,3 +1,11 @@
+//! This file extracts transform-related effects from authored layer effect lists.
+//! It parses Transform v1/v2 and ParentHelper payloads into normalized runtime
+//! parameter structs that the collector can attach to pending layers.
+//!
+//! 这个文件负责从作者写下的 effect 列表里提取与变换相关的效果。它会把 Transform
+//! v1/v2 和 ParentHelper 的数据解析成规范化的运行时参数结构，供收集器挂到
+//! pending layer 上。
+
 use crate::schema::{AmAnimatedFloat, AmEffect};
 
 use super::shared::{apply_animated_float, parse_vec2_value, split_vec2_keyframes};

@@ -1,3 +1,14 @@
+//! Builds runtime visuals for sprite-shape layers.
+//! 为 SpriteShape 图层构建运行时可视对象。
+//!
+//! Sprite-shape layers sit between plain images and true SDF shapes: they may render a fill image,
+//! a solid-color fallback, unified shader effects, or transform-scale compensation. This file owns
+//! that branch of the spawn pipeline so the caller can treat sprite-shape layers as one case even
+//! though the final rendering setup has several sub-paths.
+//! SpriteShape 图层介于普通图片和真正的 SDF 形状之间：它既可能渲染填充图片，也可能渲染纯色兜底，
+//! 还可能叠加统一 shader 效果或变换缩放补偿。这个文件负责这条 spawn 分支，让上层调用方可以把
+//! SpriteShape 当成一个案例处理，而底层渲染配置仍能按不同子路径展开。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;

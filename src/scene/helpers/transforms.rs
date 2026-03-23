@@ -1,3 +1,12 @@
+//! This file contains transform and coordinate helpers used during scene collection.
+//! It converts authored AM coordinates into Bevy space and extracts sensible
+//! initial location, rotation, scale, opacity, and pivot values from animated
+//! schema fields.
+//!
+//! 这个文件存放场景收集阶段使用的变换与坐标辅助函数。它负责把作者侧的 AM 坐标转换成
+//! Bevy 空间，并从带动画的 schema 字段里提取合理的初始位置、旋转、缩放、透明度和
+//! pivot 数值。
+
 use bevy::prelude::*;
 
 use super::super::components::AmSceneConfig;

@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Stretch effect.
+//! 注册内置 Stretch 效果的元数据。
+//!
+//! Stretch changes UV-space sampling rather than geometric scale, which makes its semantics easy to
+//! misunderstand. The registry entry here is the bilingual contract used to describe those controls.
+//! Stretch 改变的是 UV 空间采样，而不是几何缩放，因此它的语义很容易被误解。
+//! 这里的注册表条目就是那份双语契约，用来解释这些控制项真正作用的是什么。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Counter text effect.
+//! 注册内置 Counter 文本效果的元数据。
+//!
+//! This file declares how the registry, docs, and test discovery systems should understand the
+//! Counter effect: its public id, field schema, bilingual descriptions, and sample XML shape.
+//! 这个文件声明注册表、文档生成器和测试发现链应该如何理解 Counter 效果：包括公开 id、字段结构、
+//! 双语说明以及示例 XML 片段。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

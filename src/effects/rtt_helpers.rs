@@ -1,3 +1,11 @@
+//! This file contains geometry helpers shared by RTT synchronization code.
+//! It models visible rectangles, rectangle intersection, viewport transforms, and
+//! texture resizing helpers that the RTT camera systems use to compute effective
+//! embed bounds.
+//!
+//! 这个文件存放 RTT 同步代码共用的几何辅助函数。它描述可见矩形、矩形相交、
+//! 视口变换以及纹理缩放等逻辑，供 RTT 相机系统计算嵌套场景的有效显示边界。
+
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;

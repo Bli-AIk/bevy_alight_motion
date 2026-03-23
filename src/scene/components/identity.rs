@@ -1,3 +1,12 @@
+//! This file defines identity and tagging components for scene layers.
+//! These types give spawned entities stable ids, labels, and coarse element kinds
+//! so later systems can find, debug, and reason about layers without reaching
+//! back into the original XML structures.
+//!
+//! 这个文件定义了场景图层的身份与标记组件。它们会给已生成实体附上稳定的 id、
+//! 标签和粗粒度元素类型，让后续系统无需回头依赖原始 XML 结构，也能定位、调试和
+//! 识别各个图层。
+
 use bevy::prelude::*;
 
 #[derive(Component, Debug, Clone)]

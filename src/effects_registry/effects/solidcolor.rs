@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Solid Color effect.
+//! 注册内置 Solid Color 效果的元数据。
+//!
+//! Solid Color is a lightweight overlay effect, but it still participates in support reporting and
+//! generated docs. This file records its blend-related schema for the registry.
+//! Solid Color 虽然是一个相对轻量的叠色效果，但它仍然参与支持报告和自动生成文档。
+//! 这个文件把它和混合相关的字段结构记录到注册表里。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

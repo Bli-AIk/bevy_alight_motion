@@ -1,3 +1,12 @@
+//! Defines project-root components and spawn-time project state.
+//! 定义工程根实体组件以及生成阶段的工程状态。
+//!
+//! These components sit at the boundary between asset loading and scene spawning. They identify the
+//! root entity for an imported project, hold pending collected layers, and track the helper
+//! containers used for spawned layers, embed contents, and RTT cameras.
+//! 这些组件位于资源加载与场景生成的边界上。它们用于标识导入工程的根实体、保存尚未生成的图层集合，
+//! 以及记录图层容器、嵌入内容容器和 RTT 相机容器等辅助实体状态。
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 

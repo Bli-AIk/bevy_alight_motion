@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Swing effect.
+//! 注册内置 Swing 效果的元数据。
+//!
+//! Swing is a rotation-oscillation effect with min/max angle and waveform controls. This file
+//! defines the registry-facing description that generated docs and support tooling consume.
+//! Swing 是一个带有最小 / 最大角度和波形控制的旋转摆动效果。
+//! 这个文件定义了注册表对外可见的描述，供自动文档和支持分析工具消费。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

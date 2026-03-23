@@ -1,3 +1,14 @@
+//! Builds the initial transform payload for spawned runtime layers.
+//! 为运行时新生成的图层构建初始变换载荷。
+//!
+//! Scene collection produces `PendingLayer` records, but spawning still has to resolve anchor
+//! offsets, fit-scale compensation, initial animated values, and effect-derived flags into a single
+//! `Transform + AmAnimated` bundle. This file performs that translation so later spawn steps can
+//! attach visuals without having to recompute the authored transform state.
+//! scene 收集阶段只会生成 `PendingLayer`，真正生成实体时仍要把锚点偏移、fit-scale 补偿、初始动画值
+//! 和效果派生标记统一折算成一组 `Transform + AmAnimated`。这个文件负责这一步转换，后续的 spawn
+//! 阶段就可以直接附加可视对象，而不用重复计算作者定义的初始变换状态。
+
 use bevy::prelude::*;
 
 use crate::scene::PendingLayer;

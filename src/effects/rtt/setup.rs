@@ -1,3 +1,12 @@
+//! This file sets up RTT infrastructure for composite embed scenes.
+//! It creates render textures, cameras, render-layer assignments, and any
+//! matching sprite or mesh bindings needed so an embed scene can render off-screen
+//! and then be composited back into its parent layer.
+//!
+//! 这个文件负责为 composite 路径的嵌套场景建立 RTT 基础设施。它会创建渲染纹理、
+//! 相机、render layer 分配，以及与之对应的 sprite 或 mesh 绑定，让 embed scene
+//! 可以先离屏渲染，再被合成回父图层里。
+
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::prelude::*;

@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Exposure / Gamma effect.
+//! 注册内置 Exposure / Gamma 效果的元数据。
+//!
+//! This entry documents the tone-adjustment effect that changes exposure, gamma, and offset on
+//! media layers. The registry consumes it for docs, support matrices, and test linkage.
+//! 这个条目描述的是会调整媒体图层曝光、伽马和偏移的色调效果。
+//! 注册表会消费它来生成文档、支持矩阵以及关联测试信息。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

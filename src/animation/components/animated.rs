@@ -1,3 +1,12 @@
+//! This file defines the main per-entity animation payload used at runtime.
+//! `AmAnimated` is the dense component that carries timeline data, effect
+//! parameters, repeat settings, and various precomputed fields needed by the
+//! transform, opacity, text, and unified-effect systems every frame.
+//!
+//! 这个文件定义了运行时最核心的逐实体动画载荷。`AmAnimated` 是那个高密度组件，
+//! 它承载时间轴数据、效果参数、重复设置，以及变换、透明度、文本和统一特效系统
+//! 每帧都会读取的各种预计算字段。
+
 use bevy::prelude::*;
 
 use crate::scene::AmBlendingMode;

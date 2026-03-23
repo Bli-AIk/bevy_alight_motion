@@ -1,3 +1,12 @@
+//! Attaches the correct visual representation for a spawned layer entity.
+//! 为新生成的图层实体附加正确的可视表示。
+//!
+//! Once spawn-time transforms have been resolved, the runtime still needs to decide whether a layer
+//! becomes an image, SDF shape, text, or effect-enabled sprite. This file performs that fan-out,
+//! creating the meshes, materials, and marker components that later animation systems expect.
+//! 在生成阶段把变换准备好之后，运行时还要决定一个图层到底应该落成图片、SDF 形状、文本，还是带效果
+//! 的 sprite。这个文件负责这次分发，创建后续动画系统会依赖的 mesh、material 和标记组件。
+
 use std::collections::HashMap;
 
 use bevy::asset::Assets;

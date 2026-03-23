@@ -1,3 +1,14 @@
+//! Constructs unified effect materials for image and sprite-shape visuals.
+//! 为图片与 SpriteShape 可视对象构建统一效果材质。
+//!
+//! A large portion of imported effects are implemented in a single shader material rather than
+//! separate ECS systems. This file packs initial color, mask, wipe, stretch, blur, palette, and
+//! replace-color state into that material so spawned visuals start with the same authored effect
+//! configuration the animation systems will later update.
+//! 导入的很多效果不是单独 ECS 系统，而是统一收敛到一个 shader 材质里实现。这个文件负责把初始颜色、
+//! 遮罩、wipe、stretch、blur、调色板和替色等状态打包进材质，让新生成的可视对象从一开始就带着作者
+//! 设置好的效果配置，后续动画系统只需要持续更新即可。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 

@@ -1,3 +1,10 @@
+//! This file contains shared helper code for the unified-effect animation path.
+//! It provides color conversion, one-shot tracing utilities, and a few reusable
+//! mesh update helpers that multiple unified-effect modules rely on.
+//!
+//! 这个文件存放统一特效动画路径共用的辅助逻辑。它提供颜色空间转换、一次性追踪日志，
+//! 以及多个统一特效模块都会复用的网格更新工具函数。
+
 use bevy::prelude::*;
 use std::{
     collections::HashSet,

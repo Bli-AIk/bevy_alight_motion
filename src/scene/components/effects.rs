@@ -1,3 +1,12 @@
+//! This file defines scene-level effect metadata shared across collection and spawning.
+//! It includes enums and small structs that describe blend modes, extracted effect
+//! parameters, and other effect-related identities that are cheaper to keep near
+//! the scene layer model than inside the runtime animation component itself.
+//!
+//! 这个文件定义了场景层面共用的特效元数据。它包含混合模式枚举以及若干小型结构，
+//! 用来描述提取后的效果参数和相关身份信息；这些内容更适合放在场景图层模型附近，而不是
+//! 直接塞进运行时动画组件本体里。
+
 use bevy::prelude::*;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]

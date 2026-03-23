@@ -1,3 +1,10 @@
+//! This file adapts embed-scene RTT masks into unified-material UV parameters.
+//! It reads the spawned mask layer transform and writes the corresponding mask
+//! rectangle and rotation into the material uniforms used by embed-scene content.
+//!
+//! 这个文件负责把嵌套场景的 RTT 遮罩转换成统一材质使用的 UV 参数。它读取已经生成的
+//! 遮罩图层变换，并把对应的遮罩矩形与旋转角写进 embed scene 内容所使用的材质 uniform。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;

@@ -1,3 +1,12 @@
+//! This file repairs RTL line alignment after Bevy text layout has run.
+//! It detects right-to-left paragraphs in Alight Motion text layers and nudges
+//! glyph positions so left/right alignment semantics better match the authored
+//! expectations from the source project.
+//!
+//! 这个文件负责在 Bevy 文本布局完成后修正 RTL 行对齐。它会识别 Alight Motion
+//! 文本图层里的从右到左段落，并调整字形位置，让 left/right 对齐的实际表现更贴近
+//! 源项目中的作者预期。
+
 use bevy::prelude::*;
 use bevy::sprite::Text2d;
 use bevy::text::TextLayoutInfo;

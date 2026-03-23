@@ -1,3 +1,12 @@
+//! This file applies embed-scene bounds clipping for RTT content.
+//! When an embed scene is rendered through a texture rather than directly, the
+//! systems here write a clip rectangle into unified materials so child content
+//! stays inside the visible embed bounds unless a stronger mask is already active.
+//!
+//! 这个文件负责给 RTT 路径下的嵌套场景内容施加边界裁剪。当 embed scene 通过纹理而非
+//! 直接路径渲染时，这里的系统会把裁剪矩形写进统一材质，确保子内容保持在可见的嵌套场景
+//! 边界内；如果已有更强的遮罩在生效，则这里会让位。
+
 use bevy::prelude::*;
 
 use super::{EmbedSceneBounds, RenderStrategy};

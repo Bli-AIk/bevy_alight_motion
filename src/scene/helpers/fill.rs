@@ -1,3 +1,12 @@
+//! This file contains helpers for deriving fill and stroke state from schema data.
+//! It converts authored fill colors, gradients, and stroke declarations into the
+//! alpha values and animated parameter forms used by shape collection and runtime
+//! rendering setup.
+//!
+//! 这个文件存放从 schema 数据里推导 fill 和 stroke 状态的辅助函数。它会把作者侧
+//! 的填充颜色、渐变和描边声明转换成形状收集与运行时渲染初始化要使用的透明度值和
+//! 动画参数形式。
+
 use bevy::math::Vec4;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmFillColor, AmGradient, AmStroke};

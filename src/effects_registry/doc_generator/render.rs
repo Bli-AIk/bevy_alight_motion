@@ -1,3 +1,12 @@
+//! Renders shared Markdown fragments for registry documentation generation.
+//! 为注册表文档生成渲染共享的 Markdown 片段。
+//!
+//! Page generation relies on many repeated fragments such as headers, support badges, field rows,
+//! and auto-generated notices. This file centralizes those rendering helpers so the page generator
+//! can describe document structure without duplicating formatting rules.
+//! 文档生成会重复使用许多片段，例如标题、支持等级标记、字段行和自动生成提示。
+//! 这个文件把这些渲染辅助统一起来，让页面生成逻辑可以专注于文档结构，而不用到处重复格式规则。
+
 use std::collections::HashMap;
 use std::fmt::Write;
 

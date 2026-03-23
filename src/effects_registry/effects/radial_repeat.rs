@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Radial Repeat effect.
+//! 注册内置 Radial Repeat 效果的元数据。
+//!
+//! Radial Repeat combines circular placement, easing, randomization, and copy styling. This file
+//! declares that schema for the built-in effect registry and the documentation pipeline.
+//! Radial Repeat 会同时涉及圆周分布、缓动、随机化以及副本样式。这个文件把这套字段结构声明给内置效果
+//! 注册表和文档生成流程使用。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

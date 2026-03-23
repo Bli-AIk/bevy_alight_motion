@@ -1,3 +1,12 @@
+//! This file defines runtime-only helper types that do not come directly from the
+//! authored project schema. It includes embed-scene retime metadata, live echo
+//! bookkeeping, and marker/config types that later systems use to specialize how
+//! visuals are updated.
+//!
+//! 这个文件定义了一批不直接来自作者侧 project schema 的运行时辅助类型。它包括
+//! 嵌套场景的 retime 元数据、实时 echo 状态，以及后续系统用来细化视觉更新方式的
+//! 标记与配置类型。
+
 use bevy::prelude::*;
 
 /// Retime mode for embedded scenes.

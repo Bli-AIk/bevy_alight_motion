@@ -1,3 +1,11 @@
+//! This file implements the small allocator for embed-scene render layers.
+//! Composite embeds need unique off-screen layers, and this pool tracks which
+//! slots are in use so RTT setup and cleanup can borrow and release them safely.
+//!
+//! 这个文件实现了嵌套场景 render layer 的小型分配器。走 composite 路径的 embed
+//! 需要唯一的离屏 layer，这个池子会记录哪些槽位正在使用，让 RTT 的设置与清理阶段
+//! 能够安全地借出和归还它们。
+
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]

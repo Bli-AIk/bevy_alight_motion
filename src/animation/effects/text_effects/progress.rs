@@ -1,3 +1,11 @@
+//! This file implements the text-progress reveal effect.
+//! It stores original text, computes the currently visible character range from
+//! animated progress values, and manages the optional cursor entity that travels
+//! with the revealed text.
+//!
+//! 这个文件实现文本逐步揭示效果。它会保存原始文本，根据动画进度值计算当前可见的
+//! 字符范围，并管理一个可选的光标实体，让光标能跟随已经揭示出的文本一起移动。
+
 use bevy::prelude::*;
 use bevy::sprite::Text2d;
 

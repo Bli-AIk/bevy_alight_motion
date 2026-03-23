@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Simplex Displace effect.
+//! 注册内置 Simplex Displace 效果的元数据。
+//!
+//! This effect uses spatial noise rather than temporal oscillation, so its registry definition has
+//! to communicate magnitude, evolution, seed, and scatter semantics clearly for tests and docs.
+//! 这个效果使用的是空间噪声，而不是时间振荡，所以它的注册表定义必须把幅度、演变、seed 与散布含义
+//! 讲清楚，方便测试与文档消费。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;
