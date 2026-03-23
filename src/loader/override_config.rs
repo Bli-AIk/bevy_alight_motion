@@ -1,3 +1,12 @@
+//! This file defines the optional sidecar override format for `.amproj` assets.
+//! It lets authors patch missing or ambiguous media filenames with a small TOML
+//! file, which keeps the main loader simpler while still supporting imperfect
+//! exports from real-world Alight Motion projects.
+//!
+//! 这个文件定义了 `.amproj` 资产可选的旁路覆盖配置格式。它允许作者用一个小型
+//! TOML 文件修补缺失或含糊的媒体文件名，从而在保持主加载器简洁的同时，仍能兼容
+//! 现实中并不总是完整的 Alight Motion 导出结果。
+
 use std::collections::HashMap;
 use std::path::Path;
 

@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Wave Warp effect.
+//! 注册内置 Wave Warp 效果的元数据。
+//!
+//! Wave Warp is one of the more expressive UV-distortion effects in the built-in set. This file
+//! records its oscillation, damping, and screen-space controls for the registry-driven docs and
+//! support analysis pipeline.
+//! Wave Warp 是内置效果里表达力较强的一类 UV 扭曲效果。这个文件把它的振荡、阻尼和屏幕空间控制项
+//! 记录到注册表中，供文档生成和支持分析流程使用。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

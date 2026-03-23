@@ -1,3 +1,10 @@
+//! This file advances the global playback clock.
+//! It is intentionally small: one system updates project time, handles looping,
+//! and stops playback at the end when looping is disabled.
+//!
+//! 这个文件负责推进全局播放时钟。它刻意保持很小：只有一个系统更新项目时间、
+//! 处理循环逻辑，并在禁用循环时于结尾处停止播放。
+
 use bevy::prelude::*;
 
 use crate::animation::AmPlayback;

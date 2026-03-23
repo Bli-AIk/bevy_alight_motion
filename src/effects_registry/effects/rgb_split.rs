@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in RGB Split effect.
+//! 注册内置 RGB Split 效果的元数据。
+//!
+//! RGB Split is a common chromatic-aberration effect with several perceptual modes. The registry
+//! entry documents those controls so generated docs can explain the intended rendering behavior.
+//! RGB Split 是常见的色差效果，并带有多种感知模式。这个注册表条目把这些控制项明确定义出来，
+//! 让生成的文档能够解释它预期的渲染行为。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

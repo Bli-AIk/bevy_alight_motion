@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Text Progress effect.
+//! 注册内置 Text Progress 效果的元数据。
+//!
+//! Text Progress is currently treated as unsupported at runtime, but it still needs a complete
+//! registry description so unsupported status, fields, and reference tests remain visible.
+//! Text Progress 目前在运行时仍被视为未支持，但它依然需要一份完整的注册表描述，
+//! 这样未支持状态、字段定义和参考测试才能继续被看见。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

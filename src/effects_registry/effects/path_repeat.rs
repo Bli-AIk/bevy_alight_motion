@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Path Repeat effect.
+//! 注册内置 Path Repeat 效果的元数据。
+//!
+//! Path Repeat creates copies along a path and exposes a relatively rich parameter surface. The
+//! registry entry in this file is the source used by docs, tests, and support reporting to explain
+//! that parameter set.
+//! Path Repeat 会沿路径分布多个副本，参数面也相对丰富。这个文件里的注册表条目就是文档、测试和支持报告
+//! 解释这套参数的真源。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

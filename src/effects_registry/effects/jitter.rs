@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Jitter effect.
+//! 注册内置 Jitter 效果的元数据。
+//!
+//! Jitter uses noise-driven displacement, so its registry entry needs to document direction,
+//! frequency, magnitude, and seed-related controls clearly for users and tooling.
+//! Jitter 依赖噪声位移，因此它的注册表条目需要把方向、频率、幅度和 seed 相关控制项清楚写明，
+//! 方便用户和工具链正确理解。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

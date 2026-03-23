@@ -1,3 +1,13 @@
+//! Defines the uniform payload shared with the SDF shader.
+//! 定义与 SDF shader 共享的 uniform 载荷。
+//!
+//! This structure must stay layout-compatible with the WGSL shader, so every SDF runtime system and
+//! constructor ultimately writes through it. Keeping the uniform definition in its own file makes
+//! the shader contract explicit and gives tests one stable place to validate size assumptions.
+//! 这个结构必须与 WGSL shader 保持内存布局兼容，因此所有 SDF 运行时系统和构造器最终都会写到这里。
+//! 把 uniform 定义单独放在这个文件里，可以显式地固定 shader 协议，也为测试提供一个稳定的位置来校验
+//! 大小假设。
+
 use bevy::{prelude::*, render::render_resource::ShaderType};
 
 /// Uniform data for SDF shader - must match the struct in the shader exactly

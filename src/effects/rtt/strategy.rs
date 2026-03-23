@@ -1,3 +1,12 @@
+//! This file decides how each embed scene should be rendered.
+//! It inspects scale animation, fill requirements, masking, and other constraints
+//! to choose between direct, stencil, and composite rendering, then seeds the
+//! follow-up components that the chosen path needs.
+//!
+//! 这个文件负责决定每个嵌套场景应当采用哪种渲染策略。它会检查缩放动画、fill 需求、
+//! 遮罩以及其他约束，在 direct、stencil 和 composite 之间做选择，然后补上该路径
+//! 后续系统所需要的组件。
+
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 

@@ -1,3 +1,11 @@
+//! This file groups miscellaneous effect extractors that do not fit the larger
+//! common/transform/compositing buckets. It re-exports echo, image, and motion
+//! effect parsers and provides a couple of tiny parsing helpers they share.
+//!
+//! 这个文件把那些不适合放进 common/transform/compositing 分类的杂项 effect
+//! extractor 收拢到一起。它重导出 echo、image 和 motion 相关解析器，并提供几个
+//! 这些模块共用的小型解析辅助函数。
+
 mod echo;
 mod image;
 mod motion;

@@ -1,3 +1,14 @@
+//! Shared helpers for SDF animation systems.
+//! 提供 SDF 动画系统共享的辅助逻辑。
+//!
+//! The SDF runtime spreads work across opacity, scale, mask, stretch, and repeat systems, but they
+//! all need the same low-level operations: color blending, parent-scale accumulation, uniform patch
+//! helpers, and one-shot tracing. This file gathers those cross-cutting helpers so the individual
+//! systems can stay focused on their specific animation responsibility.
+//! SDF 运行时被拆成透明度、缩放、遮罩、拉伸、重复等多个系统，但它们都依赖同一批底层操作：
+//! 颜色混合、父级缩放累积、uniform 更新辅助以及一次性 trace。这个文件把这些横切逻辑集中起来，
+//! 让每个系统只关注自己的那一段动画职责。
+
 use bevy::prelude::*;
 use std::{
     collections::HashSet,

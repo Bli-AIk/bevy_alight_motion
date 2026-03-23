@@ -1,3 +1,10 @@
+//! This file evaluates the radial-repeat effect for unified visuals.
+//! It computes circular copy placement, scale, alpha, color, and timing values
+//! from the animated parameters and writes the result into shader uniforms.
+//!
+//! 这个文件负责为统一材质视觉对象求值 radial repeat 效果。它根据动画参数计算环形
+//! 副本的排布、缩放、透明度、颜色和时序，并把结果写入 shader uniform。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;

@@ -1,6 +1,10 @@
-#![allow(dead_code)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
+//!
+//! This example is the main manual verification harness for the crate. It can run interactively,
+//! expose BRP hooks, benchmark frame rate, or compare rendered frames against reference video.
+//! 这个示例是整个 crate 最主要的人工验证载体。它既可以交互播放，也可以暴露 BRP 控制接口、执行帧率基准，
+//! 或把渲染结果逐帧与参考视频进行对比。
 //!
 //! # Usage / 用法
 //!
@@ -48,6 +52,7 @@
 //!
 //! # Available projects / 可用工程
 //!   - `simple_gb` (default)
+#![allow(dead_code)]
 //!   - `basic_shape`
 //!   - `basic_pivot`
 //!   - `complex_1`

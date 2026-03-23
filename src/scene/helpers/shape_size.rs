@@ -1,3 +1,11 @@
+//! This file computes effective sizes for authored shape types.
+//! Some shapes expose width and height directly, while others derive bounds from
+//! points, arrows, stars, or other parameters; this helper normalizes those cases
+//! into a consistent width/height result.
+//!
+//! 这个文件负责计算作者侧各种形状类型的有效尺寸。有些形状直接给出宽高，有些则需要
+//! 从点集、箭头、星形或其他参数推导边界；这里会把这些差异统一成一致的宽高结果。
+
 use bevy::prelude::*;
 
 use super::shape_properties::{get_shape_float_property, get_shape_vec2_property};

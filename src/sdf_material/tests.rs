@@ -1,3 +1,12 @@
+//! Tests for SDF material packing helpers and uniform layout.
+//! 覆盖 SDF 材质打包辅助与 uniform 布局的测试。
+//!
+//! The SDF renderer relies on packed-color helpers and a shader-aligned uniform struct. These tests
+//! pin those assumptions so refactors do not silently change the binary contract used by the SDF
+//! pipeline.
+//! SDF 渲染器依赖颜色打包辅助函数和与 shader 对齐的 uniform 结构。
+//! 这些测试会固定这些假设，避免重构时悄悄改变 SDF 管线依赖的二进制协议。
+
 use super::*;
 
 const SDF_MATERIAL_UNIFORM_MIN_SIZE_BYTES: u64 = 592;

@@ -1,3 +1,12 @@
+//! This file applies position, rotation, scale, pivot, and related spatial
+//! effects to animated entities each frame. It is the main transform execution
+//! path for the runtime, including repeat offsets, noise-driven motion, embed
+//! adjustments, and the special handling needed by SDF and unified visuals.
+//!
+//! 这个文件负责在每一帧把位置、旋转、缩放、pivot 以及相关空间效果应用到动画实体上。
+//! 它是运行时最主要的变换执行路径，同时处理 repeat 偏移、噪声驱动位移、嵌套场景修正，
+//! 以及 SDF 与统一材质视觉对象所需的特殊逻辑。
+
 use bevy::prelude::*;
 
 use crate::animation::components::{

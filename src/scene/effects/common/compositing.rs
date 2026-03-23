@@ -1,3 +1,14 @@
+//! Extracts compositing-style effects during scene collection.
+//! 在 scene 收集阶段提取合成类效果。
+//!
+//! Fade, wave warp, mirror, lift, and similar effects all read from the raw imported effect list
+//! and feed later runtime systems or shader materials. This file owns the parsing for those common
+//! compositing parameters so collection code can stay declarative and avoid effect-specific XML
+//! branching.
+//! Fade、Wave Warp、Mirror、Lift 等效果都会从导入的原始 effect 列表里取值，再交给后续运行时系统
+//! 或 shader 材质消费。这个文件负责解析这些常见的合成类参数，让收集代码保持声明式，而不需要到处写
+//! 针对某个 effect 的 XML 分支判断。
+
 use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect};

@@ -1,3 +1,12 @@
+//! Regression tests for shape collection edge cases.
+//! 覆盖 shape 收集边界行为的回归测试。
+//!
+//! These tests focus on shape-specific collection rules such as preserving fill-image references
+//! when the authored fill mode still needs media-backed rendering. They protect the translation from
+//! imported XML shape data into `AmLayerSpec::SpriteShape`.
+//! 这些测试专门覆盖 shape 收集阶段的边界规则，例如在作者仍需要媒体贴图渲染时，是否正确保留 fill-image
+//! 引用。它们用于保护从导入 XML shape 数据到 `AmLayerSpec::SpriteShape` 的这段转换逻辑。
+
 use super::collect_shape::collect_shape;
 use crate::scene::{AmLayerSpec, AmSceneConfig};
 use crate::schema::{AmProperty, AmShape};

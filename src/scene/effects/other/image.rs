@@ -1,3 +1,12 @@
+//! This file extracts image-oriented effects such as thresholding, chroma key,
+//! palette replacement, and similar pixel-level adjustments.
+//! It converts raw effect properties into typed parameter structs that scene
+//! collection and animation systems can consume directly.
+//!
+//! 这个文件负责提取与图像处理相关的效果，例如 threshold、chroma key、
+//! 调色板替换等像素级调整。它会把原始 effect 属性转换成带类型的参数结构，
+//! 供场景收集和动画系统直接使用。
+
 use bevy::prelude::*;
 
 use super::{parse_color_keyframe, parse_vec2_value};

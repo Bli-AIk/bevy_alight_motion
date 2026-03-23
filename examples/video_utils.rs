@@ -1,3 +1,11 @@
+//! Shared helper functions for the example player's video workflows.
+//! 为示例播放器的视频流程提供共享辅助函数。
+//!
+//! The example modes that debug or compare against reference video all need the same filesystem and
+//! ffmpeg-facing utilities: locating candidate videos, extracting frames, and managing temporary
+//! output. This file centralizes those helpers so the example systems stay focused on orchestration.
+//! 示例里的视频调试和视频对比模式都依赖同一批文件系统与 ffmpeg 相关工具：查找候选视频、抽帧以及管理
+//! 临时输出目录。这个文件把这些辅助统一起来，让示例系统只关注流程编排本身。
 #![allow(dead_code, unused_imports)]
 
 use std::fs;

@@ -1,3 +1,12 @@
+//! This file contains the small serde adapters needed by the XML schema types.
+//! Alight Motion stores many numeric vectors and optional values as comma-separated
+//! strings, so these helpers centralize the parse/serialize rules instead of
+//! scattering custom serde code across every schema struct.
+//!
+//! 这个文件存放 XML schema 类型需要的那组小型 serde 适配器。Alight Motion
+//! 会把很多数值向量和可选字段编码成逗号分隔字符串，因此这些辅助函数把解析与
+//! 序列化规则集中到一起，避免每个 schema 结构都各自写一份自定义 serde 代码。
+
 use serde::{Deserialize, Deserializer, Serializer};
 
 use crate::schema::parsing::{parse_vec2, parse_vec3};

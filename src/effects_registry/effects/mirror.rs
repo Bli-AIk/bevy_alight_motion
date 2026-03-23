@@ -1,3 +1,11 @@
+//! Registers metadata for the built-in Mirror effect.
+//! 注册内置 Mirror 效果的元数据。
+//!
+//! Mirror affects compositing direction, blend mode, alpha, and offset. This file records that
+//! schema for the effect registry so docs and support tables can treat it as a first-class effect.
+//! Mirror 会影响镜像方向、混合模式、透明度和偏移。这个文件把这些字段结构登记到效果注册表中，
+//! 让文档与支持矩阵都能把它当成一等效果来处理。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

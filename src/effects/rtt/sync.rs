@@ -1,3 +1,11 @@
+//! This file keeps RTT cameras and render textures synchronized with their embed scenes.
+//! It updates camera placement, projection, dynamic-resolution sizing, and the
+//! matching sprite or mesh representation when an embed scene moves or scales.
+//!
+//! 这个文件负责让 RTT 相机和渲染纹理持续与嵌套场景同步。它会在 embed scene 发生
+//! 位移或缩放时，更新相机位置、投影、动态分辨率尺寸，以及与之配套的 sprite 或 mesh
+//! 表现。
+
 use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;
 use bevy::sprite::Anchor;

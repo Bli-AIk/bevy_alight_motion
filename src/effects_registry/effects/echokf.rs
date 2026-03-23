@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Echo Keyframes effect.
+//! 注册内置 Echo Keyframes 效果的元数据。
+//!
+//! Echo Keyframes is a timeline-driven duplication effect, so the registry needs to describe its
+//! timing, count, alpha, and mode fields precisely for docs and validation. This file is that
+//! canonical metadata entry.
+//! Echo Keyframes 是一个由时间线驱动的复制效果，因此注册表必须精确描述它的时间、数量、透明度和模式
+//! 字段，供文档和校验使用。这个文件就是那份权威元数据入口。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

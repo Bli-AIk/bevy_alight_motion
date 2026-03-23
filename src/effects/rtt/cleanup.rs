@@ -1,3 +1,10 @@
+//! This file cleans up render-to-texture resources associated with embed scenes.
+//! It despawns orphaned embed content and RTT cameras, and returns no-longer-used
+//! render layers to the pool so composite rendering can keep reusing scarce slots.
+//!
+//! 这个文件负责清理嵌套场景相关的 RTT 资源。它会销毁已经失去宿主的 embed 内容和
+//! RTT 相机，并把不再使用的 render layer 归还给池子，让复合渲染继续复用稀缺槽位。
+
 use bevy::prelude::*;
 
 use super::{EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera};

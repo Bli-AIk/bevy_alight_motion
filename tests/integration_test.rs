@@ -1,3 +1,12 @@
+//! Integration tests against real Alight Motion project archives.
+//! 针对真实 Alight Motion 工程归档的集成测试。
+//!
+//! These tests open actual `.amproj` files, inspect parsed scene structure, and print hierarchy data
+//! for debugging. They exist to catch importer regressions that only appear when the full archive
+//! format, XML parser, and schema model interact together.
+//! 这些测试会打开真实的 `.amproj` 文件，检查解析后的 scene 结构，并输出层级信息辅助调试。
+//! 它们用于捕获那些只有在完整归档格式、XML 解析器和 schema 模型共同作用时才会暴露出来的导入回归。
+
 use std::io::{Cursor, Read};
 
 #[test]

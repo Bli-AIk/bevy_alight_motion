@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Parent Helper effect.
+//! 注册内置 Parent Helper 效果的元数据。
+//!
+//! Parent Helper is unusual because it changes transform inheritance semantics rather than directly
+//! drawing pixels. This file gives the registry the vocabulary to describe those inheritance modes
+//! and how the runtime implementation interprets them.
+//! Parent Helper 的特殊之处在于它修改的是变换继承语义，而不是直接绘制像素。
+//! 这个文件为注册表提供描述这些继承模式的词汇，也让运行时实现的解释规则可以在文档层被看见。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;
