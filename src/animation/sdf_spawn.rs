@@ -15,7 +15,8 @@ use crate::scene::{AmLayerMarker, AmMaskInfo, AmVisualSpawned};
 use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color};
 
 use super::components::{AmSdfParams, AmSdfShapeParent};
-use super::visual::extract_fill_color;
+use super::sdf_geometry::compute_sdf_shape_half_extent_from_parts;
+use super::visual_helpers::extract_fill_color;
 
 #[expect(clippy::too_many_arguments)] // reason: SDF spawn requires many GPU resource handles
 pub fn spawn_sdf_visual(
@@ -104,6 +105,7 @@ pub fn spawn_sdf_visual(
         ".plus" => SdfShapeType::Plus,
         ".multifoil" => SdfShapeType::Multifoil,
         ".line" => SdfShapeType::Line,
+        ".arrow" => SdfShapeType::Arrow,
         ".arc" => SdfShapeType::Arc,
         ".triangle" => SdfShapeType::Triangle,
         ".quad" => SdfShapeType::Quad,
@@ -135,59 +137,19 @@ pub fn spawn_sdf_visual(
     // Pack stroke color into u32 bits stored as f32
     let packed_stroke = pack_color(stroke);
 
-    // Frame size for rendering - must be large enough for the largest expected shape.
-    // For shapes with radius-based sizing (poly, star, pie, etc.), use shape_extra params.
-    let shape_extent = match sdf_shape_type {
-        SdfShapeType::Polygon | SdfShapeType::Pie | SdfShapeType::Arc => shape_extra.y, // radius
-        SdfShapeType::Star | SdfShapeType::Multifoil => shape_extra.y.max(shape_extra.z), // max(outer, inner)
-        SdfShapeType::Line => {
-            let dx = shape_extra.z - shape_extra.x;
-            let dy = shape_extra.w - shape_extra.y;
-            (dx * dx + dy * dy).sqrt() * 0.5 + 50.0
-        }
-        SdfShapeType::Triangle | SdfShapeType::Quad | SdfShapeType::Penta | SdfShapeType::Path => {
-            // Max extent from all points
-            let mut max_r: f32 = 0.0;
-            let pts = [
-                shape_extra.x,
-                shape_extra.y,
-                shape_extra.z,
-                shape_extra.w,
-                shape_extra2.x,
-                shape_extra2.y,
-                shape_extra2.z,
-                shape_extra2.w,
-                shape_extra3.x,
-                shape_extra3.y,
-                shape_extra3.z,
-                shape_extra3.w,
-                shape_extra4.x,
-                shape_extra4.y,
-                shape_extra4.z,
-                shape_extra4.w,
-                shape_extra5.x,
-                shape_extra5.y,
-                shape_extra5.z,
-                shape_extra5.w,
-                shape_extra6.x,
-                shape_extra6.y,
-                shape_extra6.z,
-                shape_extra6.w,
-                shape_extra7.x,
-                shape_extra7.y,
-            ];
-            let mut i = 0;
-            while i < 26 {
-                let r = (pts[i] * pts[i] + pts[i + 1] * pts[i + 1]).sqrt();
-                if r > max_r {
-                    max_r = r;
-                }
-                i += 2;
-            }
-            max_r + 10.0
-        }
-        _ => target_half_width.max(target_half_height),
-    };
+    let shape_extent = compute_sdf_shape_half_extent_from_parts(
+        sdf_shape_type,
+        target_half_width,
+        target_half_height,
+        target_half_width,
+        shape_extra,
+        shape_extra2,
+        shape_extra3,
+        shape_extra4,
+        shape_extra5,
+        shape_extra6,
+        shape_extra7,
+    );
     let max_scale_factor = max_animated_scale.max(1.0) * 2.0;
     let frame_half = (shape_extent.max(target_half_width.max(target_half_height))
         * max_scale_factor)
@@ -235,7 +197,7 @@ pub fn spawn_sdf_visual(
     let material = if let Some(mask) = active_mask {
         // Scale mask center and half_size by fit_scale for world coordinate space
         let scaled_center = mask.center * fit_scale;
-        let scaled_half_size = mask.half_size * fit_scale * mask.scale;
+        let scaled_half_size = mask.half_size * fit_scale;
         bevy::log::info!(
             "[SDF_SPAWN] '{}': Creating material with mask center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.2}, original_center=({:.1},{:.1})",
             marker.label,
@@ -331,6 +293,7 @@ pub fn spawn_sdf_visual(
                 border2_width,
                 border2_packed_color: packed_border2,
                 border2_mode,
+                spawn_frame_half: frame_half,
             },
         ))
         .id();

@@ -33,6 +33,7 @@ pub(crate) fn process_pending_layers(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
+    color_materials: &mut Assets<ColorMaterial>,
     sdf_materials: &mut Assets<SdfMaterial>,
     pending: &mut AmPendingLayers,
     images: &HashMap<String, Handle<Image>>,
@@ -40,7 +41,7 @@ pub(crate) fn process_pending_layers(
     white_pixel: Option<&Handle<Image>>,
     global_time: f32,
     parent_entity: Entity,
-    time_offset: i32,
+    time_offset: f32,
     filter: &crate::scene::LayerFilter,
 ) {
     // We need to collect actions to avoid borrowing issues
@@ -52,7 +53,7 @@ pub(crate) fn process_pending_layers(
         layer_id: u64,
         layers: &[PendingLayer],
         global_time: f32,
-        _time_offset: i32,
+        _time_offset: f32,
     ) -> bool {
         is_ancestor_active_impl(layer_id, layers, global_time, _time_offset, &mut Vec::new())
     }
@@ -61,7 +62,7 @@ pub(crate) fn process_pending_layers(
         layer_id: u64,
         layers: &[PendingLayer],
         global_time: f32,
-        _time_offset: i32,
+        _time_offset: f32,
         visited: &mut Vec<u64>,
     ) -> bool {
         // Cycle detection: if we've already visited this layer, assume active to break cycle
@@ -120,6 +121,8 @@ pub(crate) fn process_pending_layers(
 
         // Check if layer should be active (considering both own time range and parent's time range)
         // Note: AM uses half-open interval [start, end) for layer visibility
+        // Note: PendingLayer.end_time is already extended by echo_time_shift_ms
+        // via extend_children_lifecycle() for echo/repeat copies.
         let own_time_active =
             local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 
@@ -299,10 +302,33 @@ pub(crate) fn process_pending_layers(
             parent_entity
         };
 
+        // Prefer the direct parent embed as the render-layer owner for content
+        // nested immediately under an embed. This keeps nested group fill content
+        // attached to the inner composite layer even if flatten remapping widened
+        // containing_embed_id to an outer ancestor.
+        let resolved_embed_owner_id = if layer.containing_embed_id == 0 {
+            0
+        } else {
+            pending
+                .layers
+                .iter()
+                .find(|candidate| candidate.id == layer.parent)
+                .filter(|parent_layer| {
+                    matches!(parent_layer.spec, crate::scene::AmLayerSpec::EmbedScene)
+                })
+                .map(|parent_layer| parent_layer.id)
+                .unwrap_or(layer.containing_embed_id)
+        };
+        let has_child_layers = pending
+            .layers
+            .iter()
+            .any(|candidate| candidate.parent == layer.id);
+
         let entity = spawn_layer_entity(
             commands,
             meshes,
             unified_materials,
+            color_materials,
             sdf_materials,
             layer,
             images,
@@ -311,6 +337,8 @@ pub(crate) fn process_pending_layers(
             actual_parent,
             pending.embed_contents_container,
             pending.inv_fit_scale,
+            resolved_embed_owner_id,
+            has_child_layers,
             &pending.spawned_entities,
             global_time,
         );
@@ -320,7 +348,7 @@ pub(crate) fn process_pending_layers(
             layer.label,
             layer.id,
             layer.parent,
-            layer.containing_embed_id,
+            resolved_embed_owner_id,
             layer.transform.translation.z,
             layer.start_time,
             layer.end_time,

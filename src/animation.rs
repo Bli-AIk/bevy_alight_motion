@@ -15,13 +15,19 @@ mod effects;
 mod helpers;
 mod interpolation;
 mod lifecycle;
+mod noise_effects;
+mod parenthelper;
 mod sdf;
+mod sdf_geometry;
+mod sdf_helpers;
+mod sdf_mask;
 mod sdf_spawn;
 pub(crate) mod simplex_noise;
 mod spawn;
 mod spawn_entity;
 mod systems;
 mod visual;
+mod visual_helpers;
 
 // Re-export components
 pub use components::{
@@ -32,18 +38,22 @@ pub use components::{
 
 // Re-export systems
 pub use effects::{
-    animate_path_repeat_system, animate_rtt_blur_system, animate_text_progress_system,
-    animate_text_spacing_system, animate_unified_effect_system, fix_rtl_line_alignment_system,
-    update_unified_mask_system,
+    animate_counter_system, animate_path_repeat_system, animate_rtt_blur_system,
+    animate_text_progress_system, animate_text_spacing_system, animate_unified_effect_system,
+    fix_rtl_line_alignment_system, update_unified_mask_system,
 };
 pub use lifecycle::manage_layer_lifecycle_system;
+pub use parenthelper::apply_parenthelper_system;
 pub use sdf::{
-    animate_sdf_opacity_system, animate_sdf_scale_system, apply_mask_clipping_system,
+    animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
+    animate_sdf_stretch_system, apply_mask_clipping_system,
+    compensate_sdf_ancestor_scale_for_children_system, compensate_sdf_parent_scale_system,
     update_sdf_mask_system,
 };
 pub use systems::{
     advance_playback_system, animate_am_camera_system, animate_opacity_system, animate_size_system,
-    animate_text_opacity_system, animate_transform_system, update_echo_runtime_system,
+    animate_text_opacity_system, animate_transform_system, debug_layer_global_z_system,
+    update_echo_runtime_system,
 };
 
 // Re-export interpolation functions

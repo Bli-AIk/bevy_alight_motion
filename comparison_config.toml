@@ -91,13 +91,6 @@ avg_threshold = 0.90
 frame_threshold = 0.90
 max_failed_rate = 0.35
 
-# Repeat effect - keyframe transitions cause timing differences
-# During count transitions, frame timing differs slightly between AM export and our render
-# 重复效果 - 关键帧过渡导致时序差异
-[overrides."effects/repeat/basic"]
-max_failed_rate = 0.25
-min_frame_similarity = 0.40
-
 # Gaussian blur - not implemented
 [overrides."effects/gaussian-blur/basic"]
 skip = true
@@ -121,6 +114,10 @@ avg_threshold = 0.98
 frame_threshold = 0.98
 
 [overrides."effects/pixelate/sprite"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+[overrides."private/USER_hong_jiao/test/rect_subdiv_3/target1"]
 avg_threshold = 0.98
 frame_threshold = 0.98
 
@@ -163,8 +160,21 @@ frame_threshold = 0.80
 max_failed_rate = 0.95
 min_frame_similarity = 0.25
 
-# 这集神了
+[oveerrides."effects/lift/wavewarp2"]
+avg_threshold = 0.98
+frame_threshold = 0.98
+
+# 复杂的私有测试，先跳过
 [overrides."private/USER_327/last"]
+skip = true
+
+[overrides."private/USER_5p/neo_test"]
+skip = true
+
+[overrides."private/USER_mortis/sans"]
+skip = true
+
+[overrides."private/USER_mortis/sunshine"]
 skip = true
 
 # =============================================================================

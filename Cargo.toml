@@ -8,6 +8,8 @@ repository = "https://github.com/Bli-AIk/bevy_alight_motion"
 readme = "readme.md"
 # Disable auto-discovery to prevent video_utils.rs from being compiled as an example
 description = "Bevy plugin for loading and playing Alight Motion project files"
+keywords = ["bevy", "animation", "sdf", "alight-motion", "2d"]
+categories = ["game-development", "rendering", "multimedia"]
 exclude = [
     "target/*",
     ".github/*",
@@ -54,6 +56,7 @@ fontdb = "0.23"
 cosmic-text = "0.16"
 owo-colors = "4.3"
 bevy-inspector-egui = { version = "0.36.0", optional = true }
+bevy_brp_extras = { version = "0.18", optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
 
@@ -75,9 +78,14 @@ optional = true
 [features]
 default = []
 debug = ["bevy-inspector-egui"]
+player-brp = ["dep:bevy_brp_extras", "bevy/bevy_remote"]
 video-debug = []
 video-comparison = []
 frame-test = []
+# Headless rendering without a display server (no X11/Wayland/xvfb needed).
+# Uses offscreen render target + Vulkan software renderer (llvmpipe).
+# 无头渲染模式，无需显示服务器（不需要 X11/Wayland/xvfb）。
+headless-render = []
 
 # Tracy profiling with minimal overhead (no GUI)
 # Tracy 性能分析，最小开销（无 GUI）
@@ -85,6 +93,9 @@ trace_tracy = ["bevy/trace_tracy", "bevy/trace", "dep:tracing-tracy"]
 # Tracy profiling with system names visible (uses bevy/debug for ECS names)
 # Tracy 性能分析，可见系统名称（使用 bevy/debug 获取 ECS 名称）
 debug_tracy = ["trace_tracy", "bevy/debug"]
+# Tracy memory allocation profiling
+# Tracy 内存分配分析
+trace_tracy_memory = ["trace_tracy", "bevy/trace_tracy_memory"]
 
 
 [[example]]

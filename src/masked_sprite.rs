@@ -9,9 +9,9 @@
 use bevy::{
     prelude::*,
     reflect::TypePath,
-    render::render_resource::{AsBindGroup, ShaderType},
+    render::render_resource::{AsBindGroup, BlendState, ShaderType},
     shader::ShaderRef,
-    sprite_render::{AlphaMode2d, Material2d},
+    sprite_render::{AlphaMode2d, Material2d, Material2dKey},
 };
 
 /// Packed uniform data for unified effect material.
@@ -185,6 +185,78 @@ pub struct UnifiedEffectUniform {
     pub mask1_stretch2_params: Vec4,
     /// Mask1 stretch aspect info: (aspect_w, aspect_h, orig_half_w, orig_half_h)
     pub mask1_stretch_info: Vec4,
+
+    // Wavewarp2 effect (波浪歪曲)
+    /// Wavewarp2 params1: (phase, a1_rad, m1_spacing, m2_magnitude)
+    pub wavewarp2_params1: Vec4,
+    /// Wavewarp2 params2: (a2_rad, damping, damping_space, damping_origin)
+    pub wavewarp2_params2: Vec4,
+    /// Wavewarp2 flags: (screen_space, enabled, 0, 0)
+    pub wavewarp2_flags: Vec4,
+    /// Mirror params: (type_plus_1, blend_mode, alpha, offset)
+    /// type_plus_1 = 0 → disabled, 1 → horizontal, 2 → vertical
+    pub mirror_params: Vec4,
+    /// Lift (copy background) params: (fill, canvas_width, canvas_height, enabled)
+    pub lift_params: Vec4,
+    // Rays (volumetric light rays) effect / 射线效果
+    /// Rays params1: (strength, intensity, threshold, quality)
+    pub rays_params1: Vec4,
+    /// Rays params2: (blend, center_x_norm, center_y_norm, enabled)
+    pub rays_params2: Vec4,
+    /// Rays threshold color (linear RGBA)
+    pub rays_threshold_color: Vec4,
+    /// Rays fill color (linear RGBA)
+    pub rays_fill_color: Vec4,
+    // RGB split (chromatic aberration) effect / RGB 分离效果
+    /// RGB split params: (offset_x, offset_y, center_channel, mode)
+    pub rgb_split_params: Vec4,
+    // Exposure / Gamma effect / 曝光/伽马效果
+    /// Exposure/gamma params: (exposure, gamma, offset, enabled)
+    pub exposure_gamma_params: Vec4,
+    // Blend mode / 混合模式
+    /// Blend mode params: (mode_id, canvas_w, canvas_h, enabled)
+    pub blend_mode_params: Vec4,
+    // ChromaKey (chroma keying) effect / 色度键效果
+    /// ChromaKey params: (threshold, feather, defringe, invert)
+    pub chromakey_params: Vec4,
+    /// ChromaKey key color (linear RGBA)
+    pub chromakey_key_color: Vec4,
+    // Mask 1 linear repeat effect / 蒙版1线性重复效果
+    /// Mask1 linear repeat params1: (count, position_x, position_y, angle_deg)
+    pub mask1_lr_params1: Vec4,
+    /// Mask1 linear repeat params2: (offset_x, offset_y, scale, alpha)
+    pub mask1_lr_params2: Vec4,
+    /// Mask1 linear repeat params3: (start, end, phase, overlap)
+    pub mask1_lr_params3: Vec4,
+    /// Mask1 linear repeat params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub mask1_lr_params4: Vec4,
+    /// Mask1 linear repeat params5: (random_order, seed_lo, seed_hi, 0)
+    pub mask1_lr_params5: Vec4,
+    // Mask 1 second linear repeat effect (dual repeat) / 蒙版1第二线性重复效果
+    /// Mask1 linear repeat2 params1: (count, position_x, position_y, angle_deg)
+    pub mask1_lr2_params1: Vec4,
+    /// Mask1 linear repeat2 params2: (offset_x, offset_y, scale, alpha)
+    pub mask1_lr2_params2: Vec4,
+    /// Mask1 linear repeat2 params3: (start, end, phase, overlap)
+    pub mask1_lr2_params3: Vec4,
+    /// Mask1 linear repeat2 params4: (ease_in, ease_out, 0, shape_invert_alt)
+    pub mask1_lr2_params4: Vec4,
+    /// Mask1 linear repeat2 params5: (random_order, seed_lo, seed_hi, 0)
+    pub mask1_lr2_params5: Vec4,
+    /// Mask1 basic repeat params1: (count, offset_x_world, offset_y_world, angle_deg)
+    pub mask1_repeat_params1: Vec4,
+    /// Mask1 basic repeat params2: (scale, alpha, 0, 0)
+    pub mask1_repeat_params2: Vec4,
+    /// Mask1 radial repeat params1: (count, radius, orientation_deg, start_angle_deg)
+    pub mask1_rr_params1: Vec4,
+    /// Mask1 radial repeat params2: (sweep_deg, base_scale, angle_deg, scale)
+    pub mask1_rr_params2: Vec4,
+    /// Mask1 radial repeat params3: (alpha, offset_x, offset_y, 0)
+    pub mask1_rr_params3: Vec4,
+    /// Mask1 radial repeat params4: (start, end, phase, overlap)
+    pub mask1_rr_params4: Vec4,
+    /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
+    pub mask1_rr_params5: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -197,9 +269,19 @@ pub struct UnifiedEffectMaterial {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
+
+    /// Lift (copy background) composite texture - background rendered to RTT
+    #[texture(3)]
+    #[sampler(4)]
+    pub lift_comp_texture: Option<Handle<Image>>,
+
+    /// Mask RTT texture - embedScene (group) mask rendered to texture
+    #[texture(5)]
+    #[sampler(6)]
+    pub mask_texture: Option<Handle<Image>>,
 }
 
-// Proxy accessors for backward compatibility
+// Convenience accessors for uniform-backed fields
 impl UnifiedEffectMaterial {
     /// Get color
     pub fn color(&self) -> LinearRgba {
@@ -377,6 +459,39 @@ impl UnifiedEffectMaterial {
         self.uniform_data.replace_new_color = new_color;
         self.uniform_data.replace_color_params = Vec4::new(threshold, feather, alpha, 0.0);
     }
+
+    pub fn set_exposure_gamma(&mut self, exposure: f32, gamma: f32, offset: f32, enabled: bool) {
+        self.uniform_data.exposure_gamma_params =
+            Vec4::new(exposure, gamma, offset, if enabled { 1.0 } else { 0.0 });
+    }
+
+    /// Set blend mode: (mode_id, canvas_w, canvas_h, enabled)
+    pub fn set_blend_mode(&mut self, mode_id: f32, canvas_w: f32, canvas_h: f32) {
+        self.uniform_data.blend_mode_params = Vec4::new(
+            mode_id,
+            canvas_w,
+            canvas_h,
+            if mode_id > 0.5 { 1.0 } else { 0.0 },
+        );
+    }
+
+    /// Set chromakey params: (threshold, feather, defringe, invert) + key_color
+    pub fn set_chromakey(
+        &mut self,
+        key_color: Vec4,
+        threshold: f32,
+        feather: f32,
+        defringe: bool,
+        invert: bool,
+    ) {
+        self.uniform_data.chromakey_params = Vec4::new(
+            threshold,
+            feather,
+            if defringe { 1.0 } else { 0.0 },
+            if invert { 1.0 } else { 0.0 },
+        );
+        self.uniform_data.chromakey_key_color = key_color;
+    }
 }
 
 impl Default for UnifiedEffectUniform {
@@ -442,6 +557,37 @@ impl Default for UnifiedEffectUniform {
             mask1_stretch1_params: Vec4::ZERO,
             mask1_stretch2_params: Vec4::ZERO,
             mask1_stretch_info: Vec4::ZERO,
+            wavewarp2_params1: Vec4::ZERO,
+            wavewarp2_params2: Vec4::ZERO,
+            wavewarp2_flags: Vec4::ZERO,
+            mirror_params: Vec4::ZERO,
+            lift_params: Vec4::ZERO,
+            rays_params1: Vec4::ZERO,
+            rays_params2: Vec4::ZERO,
+            rays_threshold_color: Vec4::ZERO,
+            rays_fill_color: Vec4::ZERO,
+            rgb_split_params: Vec4::new(0.0, 0.0, 0.0, -1.0),
+            exposure_gamma_params: Vec4::ZERO,
+            blend_mode_params: Vec4::ZERO,
+            chromakey_params: Vec4::ZERO,
+            chromakey_key_color: Vec4::ZERO,
+            mask1_lr_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            mask1_lr_params2: Vec4::ZERO,
+            mask1_lr_params3: Vec4::ZERO,
+            mask1_lr_params4: Vec4::ZERO,
+            mask1_lr_params5: Vec4::ZERO,
+            mask1_lr2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
+            mask1_lr2_params2: Vec4::ZERO,
+            mask1_lr2_params3: Vec4::ZERO,
+            mask1_lr2_params4: Vec4::ZERO,
+            mask1_lr2_params5: Vec4::ZERO,
+            mask1_repeat_params1: Vec4::ZERO,
+            mask1_repeat_params2: Vec4::new(1.0, 1.0, 0.0, 0.0),
+            mask1_rr_params1: Vec4::ZERO,
+            mask1_rr_params2: Vec4::ZERO,
+            mask1_rr_params3: Vec4::ZERO,
+            mask1_rr_params4: Vec4::ZERO,
+            mask1_rr_params5: Vec4::ZERO,
         }
     }
 }
@@ -452,6 +598,24 @@ impl Material2d for UnifiedEffectMaterial {
     }
     fn alpha_mode(&self) -> AlphaMode2d {
         AlphaMode2d::Blend
+    }
+    fn specialize(
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: Material2dKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        // Override blend state to premultiplied alpha (ONE, ONE_MINUS_SRC_ALPHA).
+        // AM composites layers with premultiplied blending. This is required for
+        // RGB split (chromatic aberration) where the effect outputs non-premultiplied
+        // RGB with mode-specific alpha — producing additive color fringes at
+        // transparent regions. The fragment shader premultiplies all non-RGB-split
+        // outputs manually so other rendering is unchanged.
+        if let Some(fragment) = &mut descriptor.fragment {
+            for target_state in fragment.targets.iter_mut().flatten() {
+                target_state.blend = Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING);
+            }
+        }
+        Ok(())
     }
 }
 

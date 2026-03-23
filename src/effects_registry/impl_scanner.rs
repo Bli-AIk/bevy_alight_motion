@@ -227,13 +227,25 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
     let mut in_match_block = false;
     let mut brace_depth = 0;
 
+    // First pass: collect const declarations for effect IDs
+    // e.g. `const FADE_ID: &str = "com.alightcreative.effects.fade";`
+    let mut const_map: HashMap<String, String> = HashMap::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(id) = extract_const_effect_id(trimmed) {
+            const_map.insert(id.0, id.1);
+        }
+    }
+
     for (line_num, line) in content.lines().enumerate() {
         let line_num = line_num + 1; // 1-based line numbers
         let trimmed = line.trim();
 
         // Detect effect ID
-        // Format: if effect.id == "com.alightcreative.effects.xxx"
-        if let Some(effect_id) = extract_effect_id(trimmed) {
+        // Patterns: `effect.id == "..."`, `effect.id != "..."`,
+        //           `effect.id == CONST`, `effect.id != CONST`,
+        //           `e.id == "..."` (in closures)
+        if let Some(effect_id) = extract_effect_id_extended(trimmed, &const_map) {
             current_effect_id = Some(effect_id.clone());
             effects
                 .entry(effect_id.clone())
@@ -296,10 +308,56 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
     Ok(effects)
 }
 
-/// Extract effect ID from a code condition line like `effect.id == "..."`
-fn extract_effect_id(trimmed: &str) -> Option<String> {
-    let start = trimmed.find("effect.id == \"")?;
-    let rest = &trimmed[start + 14..];
+/// Extract const effect ID declaration like `const FADE_ID: &str = "com.alightcreative...";`
+/// Returns (constant_name, effect_id)
+fn extract_const_effect_id(trimmed: &str) -> Option<(String, String)> {
+    if !trimmed.starts_with("const ") || !trimmed.contains("com.alightcreative") {
+        return None;
+    }
+    let name_end = trimmed.find(':')?;
+    let const_name = trimmed[6..name_end].trim().to_string();
+    let quote_start = trimmed.find('"')?;
+    let rest = &trimmed[quote_start + 1..];
+    let quote_end = rest.find('"')?;
+    Some((const_name, rest[..quote_end].to_string()))
+}
+
+/// Extended effect ID extractor that handles multiple patterns:
+/// - `effect.id == "..."` / `effect.id != "..."`
+/// - `effect.id == CONST` / `effect.id != CONST`
+/// - `e.id == "..."` (in closures like `.filter(|e| e.id == "...")`)
+fn extract_effect_id_extended(
+    trimmed: &str,
+    const_map: &HashMap<String, String>,
+) -> Option<String> {
+    // Try direct string literal patterns (== and !=)
+    for pattern in &[".id == \"", ".id != \""] {
+        let id =
+            extract_quoted_after(trimmed, pattern).filter(|s| s.starts_with("com.alightcreative"));
+        if id.is_some() {
+            return id;
+        }
+    }
+    // Try constant reference patterns (== CONST and != CONST)
+    for op in &[".id == ", ".id != "] {
+        if let Some(start) = trimmed.find(op) {
+            let rest = trimmed[start + op.len()..].trim();
+            let ident: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if let Some(resolved) = const_map.get(&ident) {
+                return Some(resolved.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Extract a quoted string after a pattern marker
+fn extract_quoted_after(text: &str, pattern: &str) -> Option<String> {
+    let start = text.find(pattern)?;
+    let rest = &text[start + pattern.len()..];
     let end = rest.find('"')?;
     Some(rest[..end].to_string())
 }

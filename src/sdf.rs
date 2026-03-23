@@ -51,9 +51,7 @@ pub use crate::sdf_material::{SdfMaterial, SdfShapeType, pack_color, repack_with
 /// SDF 形状的基础半尺寸（AM 使用 100x100 基础正方形 -> 50x50 半尺寸）
 pub const BASE_HALF_EXTENT: f32 = 50.0;
 
-/// Legacy resource placeholder for shader handles.
-/// This is now deprecated as we use SdfMaterial directly.
-/// Kept for compatibility with scene.rs during transition.
+/// Resource placeholder for SDF shader handles used by the scene spawn path.
 #[derive(Resource, Default)]
 pub struct AmSdfShaders {
     pub stroked_fill_box: Option<()>,
@@ -72,24 +70,6 @@ pub fn hot_reload_shader_system(_keyboard: Res<ButtonInput<KeyCode>>) {
 #[cfg(not(feature = "debug"))]
 pub fn hot_reload_shader_system() {
     // Intentionally empty - hot-reload only available in debug builds
-}
-
-/// Component for AM SDF shapes that need special animation handling.
-/// Deprecated: Use sdf_material::AmSdfShapeComponent instead.
-#[derive(Component, Debug, Clone)]
-pub struct AmSdfShape {
-    /// Fill color of the shape.
-    pub fill_color: Color,
-    /// Stroke color (if any).
-    pub stroke_color: Option<Color>,
-    /// Stroke width in pixels.
-    pub stroke_width: f32,
-    /// Corner radius for rounded rectangles.
-    pub corner_radius: f32,
-    /// Original width of the shape (before scale).
-    pub width: f32,
-    /// Original height of the shape (before scale).
-    pub height: f32,
 }
 
 #[cfg(test)]

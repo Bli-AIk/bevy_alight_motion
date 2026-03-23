@@ -6,11 +6,13 @@
 //! AM 图层的效果参数提取。
 
 mod common;
+mod extended;
 mod other;
 mod repeat;
 
 pub use common::*;
-pub use other::*;
+pub use extended::*;
+pub(crate) use other::*;
 pub use repeat::*;
 
 use crate::schema::{AmAnimatedFloat, AmProperty};

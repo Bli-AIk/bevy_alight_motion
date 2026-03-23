@@ -68,6 +68,10 @@ pub(crate) fn collect_camera(
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
+            embed_inner_total_time: None,
             ..Default::default()
         },
         spec: AmLayerSpec::Camera {
@@ -84,5 +88,9 @@ pub(crate) fn collect_camera(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
+        embed_requires_composite: false,
+        embed_dynamic_resolution: false,
+        embed_inner_total_time: None,
+        hidden: camera.hidden,
     })
 }
