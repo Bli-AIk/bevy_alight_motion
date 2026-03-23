@@ -87,7 +87,6 @@ pub fn setup_embed_scene_rtt_system(
             Option<&AmGroupFill>,
             &crate::animation::AmAnimated,
             Option<&AmEmbedMask>,
-            Option<&crate::scene::AmMaskInfo>,
         ),
         Without<EmbedSceneRtt>,
     >,
@@ -106,7 +105,6 @@ pub fn setup_embed_scene_rtt_system(
         group_fill,
         animated,
         embed_mask,
-        mask_info,
     ) in query.iter()
     {
         let Some(render_layer) = layer_pool.allocate() else {
@@ -247,7 +245,6 @@ pub fn setup_embed_scene_rtt_system(
                 );
             }
         } else {
-            let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
             let has_wipe = animated.wipe_end.value != Some(1.0)
                 || !animated.wipe_end.keyframes.is_empty()
                 || animated.wipe_start.value.is_some()
@@ -283,8 +280,7 @@ pub fn setup_embed_scene_rtt_system(
             let has_replace_color = animated.replace_old_color.w > 0.0
                 || animated.replace_new_color.value.is_some()
                 || !animated.replace_new_color.keyframes.is_empty();
-            let needs_unified = has_mask
-                || has_wipe
+            let needs_unified = has_wipe
                 || has_stretch
                 || has_blur
                 || has_stretch2

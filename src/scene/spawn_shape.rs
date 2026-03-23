@@ -340,7 +340,13 @@ pub(crate) fn spawn_shape(
                     .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
                 blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
-                element_speed: shape.speed,
+                // Keep transform/effect keyframes on the layer timeline for media fills;
+                // AM's speedMap is source-time remapping, not a global layer-time scale.
+                element_speed: if shape.fill_type == "media" {
+                    1.0
+                } else {
+                    shape.speed
+                },
                 scene_fps: config.scene_fps,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,

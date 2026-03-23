@@ -243,7 +243,14 @@ pub(crate) fn collect_shape(
                 .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
-            element_speed: shape.speed,
+            // AM serializes media speed via SceneElement speedMap/timeMapping, which
+            // affects source-time trimming rather than transform/effect keyframes.
+            // Applying it to layer_time makes still media shapes animate too slowly.
+            element_speed: if shape.fill_type == "media" {
+                1.0
+            } else {
+                shape.speed
+            },
             scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
