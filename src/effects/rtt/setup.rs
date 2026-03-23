@@ -97,15 +97,8 @@ pub fn setup_embed_scene_rtt_system(
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
     let parent_cameras_to_embed = std::env::var_os("AM_PARENT_RTT_CAMERA_TO_EMBED").is_some();
 
-    for (
-        entity,
-        needs_rtt,
-        _embed_transform,
-        embed_global,
-        group_fill,
-        animated,
-        embed_mask,
-    ) in query.iter()
+    for (entity, needs_rtt, _embed_transform, embed_global, group_fill, animated, embed_mask) in
+        query.iter()
     {
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!(

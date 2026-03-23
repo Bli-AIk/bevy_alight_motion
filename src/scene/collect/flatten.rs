@@ -51,12 +51,15 @@ fn remap_flattened_child(
             );
         }
     } else {
-        let new_parent_id = latest_id_mapping.get(&original_parent).copied().or_else(|| {
-            id_mappings
-                .iter()
-                .find(|(old, _new)| *old == original_parent)
-                .map(|(_, new)| *new)
-        });
+        let new_parent_id = latest_id_mapping
+            .get(&original_parent)
+            .copied()
+            .or_else(|| {
+                id_mappings
+                    .iter()
+                    .find(|(old, _new)| *old == original_parent)
+                    .map(|(_, new)| *new)
+            });
 
         if let Some(new_parent_id) = new_parent_id {
             child.parent = new_parent_id;
