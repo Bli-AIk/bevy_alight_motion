@@ -91,6 +91,7 @@ pub fn update_unified_mask_system(
                 apply_embed_mask_uv(mask_entity, mask1, &mask_layer_query, fit_scale, material);
             } else {
                 #[expect(clippy::excessive_nesting)]
+                // reason: keep the missing-RTT trace at the exact fallback branch
                 trace_mask_once(format!("embed-rtt-missing:{}", mask1.mask_layer_id), || {
                     format!(
                         "[MASK-DBG] RTT NOT found for mask layer_id={}",

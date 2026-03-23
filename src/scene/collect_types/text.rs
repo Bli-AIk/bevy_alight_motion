@@ -1,88 +1,99 @@
-//! # collect_embed.rs
-//!
-//! # 嵌入场景收集
-//!
-//! Functions for collecting embed scene layer data into PendingLayer.
-//! 嵌入场景图层数据收集为 PendingLayer 的函数。
-
-mod base;
-mod group_fill;
-
 use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::animation::AmAnimated;
 use crate::loader::FontMetrics;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmText};
 
-use self::base::collect_embed_base;
-use self::group_fill::build_group_fill;
-use super::components::*;
-use super::effects::*;
-use super::helpers::get_base_alpha;
+use super::super::components::*;
+use super::super::effects::*;
+use super::super::helpers::*;
 
-/// Collect an embed scene's data recursively.
-pub(crate) fn collect_embed_scene(
-    embed: &crate::schema::AmEmbedScene,
-    fonts: &HashMap<String, Handle<Font>>,
+pub(crate) fn collect_text(
+    text: &AmText,
+    _fonts: &HashMap<String, Handle<Font>>,
     font_metrics: &HashMap<String, FontMetrics>,
     config: &AmSceneConfig,
     z: f32,
-) -> PendingLayer {
-    let base = collect_embed_base(embed, fonts, font_metrics, config, z);
-    let group_fill = build_group_fill(embed);
+) -> Option<PendingLayer> {
+    let has_parent = text.parent != 0;
+    let (tx, ty) = get_initial_location(&text.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&text.transform.rotation);
+    let (sx, sy) = get_initial_scale(&text.transform.scale);
 
-    let mut all_embed_transform2 = extract_all_transform2_effects(&embed.effects);
-    let embed_transform2 = if all_embed_transform2.is_empty() {
-        Transform2Params::default()
+    let font_name = text
+        .font
+        .strip_prefix("imported?name=")
+        .unwrap_or(&text.font)
+        .to_string();
+
+    const TEXT_SIZE_MULTIPLIER: f32 = 3.0;
+    let font_size = if text.size > 0.0 {
+        text.size * TEXT_SIZE_MULTIPLIER
     } else {
-        all_embed_transform2.remove(0)
+        48.0
     };
-    let embed_extra_transform2 = all_embed_transform2;
 
-    let jitter_effect = extract_jitter_effect(&embed.effects);
-    let sd_effect = extract_simplex_displace_effect(&embed.effects);
-    let rgb_split_effect = extract_rgb_split_effect(&embed.effects);
-    let fade_effect = extract_fade_effect(&embed.effects);
-    let wavewarp2_effect = extract_wavewarp2_effect(&embed.effects);
-    let mirror_effect = extract_mirror_effect(&embed.effects);
-    let lift_effect = extract_lift_effect(&embed.effects);
-    let rays_effect = extract_rays_effect(&embed.effects);
-    let exposure_gamma_effect = extract_exposure_gamma_effect(&embed.effects);
-    let chromakey_effect = extract_chromakey_effect(&embed.effects);
+    let wrap_offset_x = 0.0;
+    let font_y_offset = if let Some(metrics) = font_metrics.get(&font_name) {
+        let n_lines = text.content.chars().filter(|c| *c == '\n').count() as f32 + 1.0;
+        let damping = (2.0_f32 / n_lines).min(1.0);
+        metrics.include_pad_y_offset(font_size) * damping
+    } else {
+        0.0
+    };
 
-    PendingLayer {
-        id: embed.id,
-        label: embed.label.clone(),
-        parent: embed.parent,
-        start_time: embed.start_time,
-        end_time: embed.end_time,
-        transform: base.transform,
+    let transform = Transform {
+        translation: Vec3::new(tx + wrap_offset_x, ty, z),
+        rotation: Quat::from_rotation_z(rotation.to_radians()),
+        scale: Vec3::new(sx, sy, 1.0),
+    };
+
+    let mut modified_location = text.transform.location.clone();
+    if wrap_offset_x != 0.0 {
+        if let Some(ref mut val) = modified_location.value {
+            val[0] += wrap_offset_x;
+        }
+        for kf in &mut modified_location.keyframes {
+            if let Ok(mut parsed) = crate::schema::parse_vec3(&kf.value) {
+                parsed[0] += wrap_offset_x;
+                kf.value = format!("{},{},{}", parsed[0], parsed[1], parsed[2]);
+            }
+        }
+    }
+
+    Some(PendingLayer {
+        id: text.id,
+        label: text.label.clone(),
+        parent: text.parent,
+        start_time: text.start_time,
+        end_time: text.end_time,
+        transform,
         animated: AmAnimated {
-            layer_id: embed.id,
-            start_time: embed.start_time,
-            end_time: embed.end_time,
+            layer_id: text.id,
+            start_time: text.start_time,
+            end_time: text.end_time,
             time_offset: config.time_offset,
             lifecycle_offset: config.lifecycle_offset,
-            location: embed.transform.location.clone(),
-            pivot: embed.transform.pivot.clone(),
-            rotation: embed.transform.rotation.clone(),
-            scale: embed.transform.scale.clone(),
-            opacity: embed.transform.opacity.clone(),
+            location: modified_location,
+            pivot: text.transform.pivot.clone(),
+            rotation: text.transform.rotation.clone(),
+            scale: text.transform.scale.clone(),
+            opacity: text.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
-            has_parent: base.has_parent,
-            parent_layer_id: embed.parent,
-            effect_pos_x: embed_transform2.pos_x,
-            effect_pos_y: embed_transform2.pos_y,
-            effect_posz: embed_transform2.pos_z,
-            effect_angle: embed_transform2.angle,
-            effect_xinv: embed_transform2.xinv,
-            effect_yinv: embed_transform2.yinv,
-            effect_zinv: embed_transform2.zinv,
-            effect_ainv: embed_transform2.ainv,
-            extra_transform2: embed_extra_transform2,
-            font_y_offset: 0.0,
+            has_parent,
+            parent_layer_id: text.parent,
+            effect_pos_x: AmAnimatedFloat::default(),
+            effect_pos_y: AmAnimatedFloat::default(),
+            effect_posz: AmAnimatedFloat::default(),
+            effect_angle: AmAnimatedFloat::default(),
+            effect_xinv: false,
+            effect_yinv: false,
+            effect_zinv: false,
+            effect_ainv: false,
+            extra_transform2: vec![],
+            font_y_offset,
             size: AmAnimatedVec2::default(),
             anchor_offset: Vec2::ZERO,
             wipe_start: AmAnimatedFloat::default(),
@@ -107,10 +118,10 @@ pub(crate) fn collect_embed_scene(
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
             stroke_width: AmAnimatedFloat::default(),
-            base_alpha: get_base_alpha(&embed.fill_color, false) * config.repeat_alpha_factor,
-            fade_in_time: fade_effect.in_time,
-            fade_out_time: fade_effect.out_time,
-            fade_layer_duration_ms: (embed.end_time - embed.start_time) as f32,
+            base_alpha: get_base_alpha(&text.fill_color, false) * config.repeat_alpha_factor,
+            fade_in_time: AmAnimatedFloat::default(),
+            fade_out_time: AmAnimatedFloat::default(),
+            fade_layer_duration_ms: (text.end_time - text.start_time) as f32,
             palette_alpha: AmAnimatedFloat::default(),
             scale_assist: AmAnimatedFloat::default(),
             scale_assist_damp: AmAnimatedFloat::default(),
@@ -125,33 +136,33 @@ pub(crate) fn collect_embed_scene(
             stretch2_scale: AmAnimatedFloat::default(),
             stretch2_angle: AmAnimatedFloat::default(),
             stretch2_content_only: false,
-            wavewarp2_phase: wavewarp2_effect.phase,
-            wavewarp2_a1d: wavewarp2_effect.a1d,
-            wavewarp2_m1: wavewarp2_effect.m1,
-            wavewarp2_m2: wavewarp2_effect.m2,
-            wavewarp2_a2d: wavewarp2_effect.a2d,
-            wavewarp2_damping: wavewarp2_effect.damping,
-            wavewarp2_damping_space: wavewarp2_effect.damping_space,
-            wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
-            wavewarp2_screen_space: wavewarp2_effect.screen_space,
-            wavewarp2_has_effect: wavewarp2_effect.has_effect,
-            mirror_type: mirror_effect.mirror_type,
-            mirror_blend_mode: mirror_effect.blend_mode,
-            mirror_alpha: mirror_effect.alpha,
-            mirror_offset: mirror_effect.offset,
-            mirror_has_effect: mirror_effect.has_effect,
-            lift_fill: lift_effect.fill,
-            lift_has_effect: lift_effect.has_effect,
-            rays_center_x: rays_effect.center_x,
-            rays_center_y: rays_effect.center_y,
-            rays_strength: rays_effect.strength,
-            rays_intensity: rays_effect.intensity,
-            rays_threshold: rays_effect.threshold,
-            rays_threshold_color: rays_effect.threshold_color,
-            rays_fill_color: rays_effect.fill_color,
-            rays_blend: rays_effect.blend,
-            rays_quality: rays_effect.quality,
-            rays_has_effect: rays_effect.has_effect,
+            wavewarp2_phase: AmAnimatedFloat::default(),
+            wavewarp2_a1d: AmAnimatedFloat::default(),
+            wavewarp2_m1: AmAnimatedFloat::default(),
+            wavewarp2_m2: AmAnimatedFloat::default(),
+            wavewarp2_a2d: AmAnimatedFloat::default(),
+            wavewarp2_damping: AmAnimatedFloat::default(),
+            wavewarp2_damping_space: AmAnimatedFloat::default(),
+            wavewarp2_damping_origin: AmAnimatedFloat::default(),
+            wavewarp2_screen_space: false,
+            wavewarp2_has_effect: false,
+            mirror_type: 0,
+            mirror_blend_mode: 0,
+            mirror_alpha: AmAnimatedFloat::default(),
+            mirror_offset: AmAnimatedFloat::default(),
+            mirror_has_effect: false,
+            lift_fill: AmAnimatedFloat::default(),
+            lift_has_effect: false,
+            rays_center_x: AmAnimatedFloat::default(),
+            rays_center_y: AmAnimatedFloat::default(),
+            rays_strength: AmAnimatedFloat::default(),
+            rays_intensity: AmAnimatedFloat::default(),
+            rays_threshold: AmAnimatedFloat::default(),
+            rays_threshold_color: Vec4::ZERO,
+            rays_fill_color: Vec4::ZERO,
+            rays_blend: AmAnimatedFloat::default(),
+            rays_quality: AmAnimatedFloat::default(),
+            rays_has_effect: false,
             replace_old_color: Vec4::ZERO,
             replace_new_color: crate::schema::AmAnimatedColor::default(),
             replace_threshold: AmAnimatedFloat::default(),
@@ -254,72 +265,77 @@ pub(crate) fn collect_embed_scene(
             base_fill_color: [0.0; 4],
             fill_color: Default::default(),
             path_repeat: None,
-            textspacing_letter: Default::default(),
-            textspacing_line: AmAnimatedFloat {
-                value: Some(1.0),
-                keyframes: vec![],
-            },
-            textprogress_start: Default::default(),
-            textprogress_end: AmAnimatedFloat {
-                value: Some(1.0),
-                keyframes: vec![],
-            },
-            textprogress_cursor: 0,
-            textprogress_blink: false,
-            counter_offset: AmAnimatedFloat::default(),
-            counter_scale: AmAnimatedFloat::default(),
+            textspacing_letter: extract_text_spacing_effect(&text.effects).letter_spacing,
+            textspacing_line: extract_text_spacing_effect(&text.effects).line_spacing,
+            textprogress_start: extract_text_progress_effect(&text.effects).start,
+            textprogress_end: extract_text_progress_effect(&text.effects).end,
+            textprogress_cursor: extract_text_progress_effect(&text.effects).cursor,
+            textprogress_blink: extract_text_progress_effect(&text.effects).blink,
+            counter_offset: extract_counter_effect(&text.effects).offset,
+            counter_scale: extract_counter_effect(&text.effects).scale,
             shape_props: Default::default(),
             shape_points: Default::default(),
-            jitter_enabled: jitter_effect.enabled,
-            jitter_angle: jitter_effect.angle,
-            jitter_freq: jitter_effect.freq,
-            jitter_mag: jitter_effect.mag,
-            jitter_seed: jitter_effect.seed,
-            jitter_slack: jitter_effect.slack,
-            jitter_zjitter: jitter_effect.zjitter,
-            sd_enabled: sd_effect.enabled,
-            sd_mag: sd_effect.mag,
-            sd_evolution: sd_effect.evolution,
-            sd_seed: sd_effect.seed,
-            sd_scatter: sd_effect.scatter,
-            rgb_split_enabled: rgb_split_effect.enabled,
-            rgb_split_strength: rgb_split_effect.strength,
-            rgb_split_angle: rgb_split_effect.angle,
-            rgb_split_center: rgb_split_effect.center_channel,
-            rgb_split_mode: rgb_split_effect.mode,
-            exposure_value: exposure_gamma_effect.exposure,
-            exposure_gamma: exposure_gamma_effect.gamma,
-            exposure_offset: exposure_gamma_effect.offset,
-            exposure_has_effect: exposure_gamma_effect.has_effect,
-            chromakey_enabled: chromakey_effect.enabled,
-            chromakey_key_color: chromakey_effect.key_color,
-            chromakey_threshold: chromakey_effect.threshold,
-            chromakey_feather: chromakey_effect.feather,
-            chromakey_defringe: chromakey_effect.defringe,
-            chromakey_invert: chromakey_effect.invert,
+            jitter_enabled: false,
+            jitter_angle: AmAnimatedFloat::default(),
+            jitter_freq: AmAnimatedFloat::default(),
+            jitter_mag: AmAnimatedFloat::default(),
+            jitter_seed: AmAnimatedFloat::default(),
+            jitter_slack: AmAnimatedFloat::default(),
+            jitter_zjitter: AmAnimatedFloat::default(),
+            sd_enabled: false,
+            sd_mag: AmAnimatedFloat::default(),
+            sd_evolution: AmAnimatedFloat::default(),
+            sd_seed: AmAnimatedFloat::default(),
+            sd_scatter: AmAnimatedFloat::default(),
+            rgb_split_enabled: false,
+            rgb_split_strength: AmAnimatedFloat::default(),
+            rgb_split_angle: AmAnimatedFloat::default(),
+            rgb_split_center: 1,
+            rgb_split_mode: 2,
+            exposure_value: AmAnimatedFloat::default(),
+            exposure_gamma: AmAnimatedFloat::default(),
+            exposure_offset: AmAnimatedFloat::default(),
+            exposure_has_effect: false,
+            chromakey_enabled: false,
+            chromakey_key_color: crate::schema::AmAnimatedColor::default(),
+            chromakey_threshold: AmAnimatedFloat::default(),
+            chromakey_feather: AmAnimatedFloat::default(),
+            chromakey_defringe: false,
+            chromakey_invert: false,
             blend_mode: AmBlendingMode::default(),
             retime: config.retime.clone(),
             echo_time_shift_ms: config.echo_time_shift_ms,
             echo_alpha_config: config.echo_alpha_config.clone(),
-            repeat_rotation_offset_deg: -config.repeat_rotation_deg,
-            repeat_scale_factor: config.repeat_scale_factor,
-            repeat_position_offset: config.repeat_offset,
+            repeat_rotation_offset_deg: 0.0,
+            repeat_scale_factor: 1.0,
+            repeat_position_offset: Vec2::ZERO,
             embed_inner_total_time: None,
         },
-        spec: AmLayerSpec::EmbedScene,
+        spec: AmLayerSpec::Text {
+            content: text.content.clone(),
+            font_name: font_name.clone(),
+            font_size,
+            align: text.align.clone(),
+            fill_color: text.fill_color.clone(),
+            wrap_width: text.wrap_width,
+            line_height_ratio: font_metrics
+                .get(&font_name)
+                .map(|m| m.am_line_height_ratio(font_size))
+                .unwrap_or(1.2),
+        },
         z_index: z,
-        children: base.children,
-        blending_mode: AmBlendingMode::parse_am(embed.blending.as_str()),
+        children: Vec::new(),
+        blending_mode: AmBlendingMode::Normal,
         mask_info: None,
         palette_params: None,
-        embed_scene_size: Some((embed.scene.width as f32, embed.scene.height as f32)),
+        embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
-        group_fill,
-        embed_requires_composite: embed.fill_type == "intrinsic",
-        embed_dynamic_resolution: embed.scene.precompose == "dynamicResolution",
+        group_fill: None,
+        embed_requires_composite: false,
+        embed_dynamic_resolution: false,
         embed_inner_total_time: None,
-        hidden: embed.hidden,
-    }
+        hidden: text.hidden,
+    })
 }

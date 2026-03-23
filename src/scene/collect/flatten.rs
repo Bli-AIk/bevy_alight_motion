@@ -229,6 +229,7 @@ fn flatten_pending_layers_inner(
                 child.transform.translation.z -= parent_z;
 
                 #[expect(clippy::excessive_nesting)]
+                // reason: keep the targeted flatten trace beside the guarded label filter
                 if child.label.starts_with("spr_s_boneloop_0.png Copy")
                     || child.label.starts_with("Rectangle 1 Copy")
                 {

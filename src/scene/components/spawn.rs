@@ -31,7 +31,7 @@ pub struct AmSpawnSettings {
 pub struct AmVisualSpawned;
 
 #[derive(Component, Debug, Clone)]
-#[expect(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)] // reason: layer specs intentionally inline heavyweight visual payloads to avoid extra indirection across spawn/animation paths
 pub enum AmLayerSpec {
     SpriteShape {
         image_uri: String,

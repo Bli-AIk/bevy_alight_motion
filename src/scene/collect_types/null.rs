@@ -1,214 +1,86 @@
-//! # collect_shape.rs
-//!
-//! # 形状图层收集
-//!
-//! Functions for collecting shape layer data into PendingLayer.
-//! 形状图层数据收集为 PendingLayer 的函数。
-
-mod shape_extras;
-mod spec;
-
-use super::helpers;
 use bevy::prelude::*;
 
 use crate::animation::AmAnimated;
-use crate::schema::{AmAnimatedFloat, AmShape};
+use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
 
-use self::spec::build_shape_spec;
-use super::components::*;
-use super::effects::*;
-use super::helpers::*;
-pub(crate) use shape_extras::extract_shape_extras;
+use super::super::components::*;
+use super::super::effects::*;
+use super::super::helpers::*;
 
-pub(crate) fn collect_shape(
-    shape: &AmShape,
+/// Collect a null object's data.
+pub(crate) fn collect_null(
+    null: &crate::schema::AmNullObj,
     config: &AmSceneConfig,
     z: f32,
 ) -> Option<PendingLayer> {
-    let has_parent = shape.parent != 0;
-    let (tx, ty) = get_initial_location(&shape.transform.location, config, has_parent);
-    let rotation = get_initial_rotation(&shape.transform.rotation);
-    let (sx, sy) = get_initial_scale(&shape.transform.scale);
-
-    bevy::log::debug!(
-        "[collect_shape] '{}': has_parent={}, canvas={}x{}, time_offset={}, bevy_pos=({:.1},{:.1})",
-        shape.label,
-        has_parent,
-        config.canvas_width,
-        config.canvas_height,
-        config.time_offset,
-        tx,
-        ty
-    );
-    let mut all_transform2 = extract_all_transform2_effects(&shape.effects);
+    let has_parent = null.parent != 0;
+    let (tx, ty) = get_initial_location(&null.transform.location, config, has_parent);
+    let rotation = get_initial_rotation(&null.transform.rotation);
+    let (sx, sy) = get_initial_scale(&null.transform.scale);
+    let mut all_transform2 = extract_all_transform2_effects(&null.effects);
     let transform2 = if all_transform2.is_empty() {
         Transform2Params::default()
     } else {
         all_transform2.remove(0)
     };
     let extra_transform2 = all_transform2;
-    let wipe_effect = extract_wipe_effect(&shape.effects);
-    let all_stretch_segments = extract_all_stretch_segment_effects(&shape.effects);
+    let wipe_effect = extract_wipe_effect(&null.effects);
+    let all_stretch_segments = extract_all_stretch_segment_effects(&null.effects);
     let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
-    let gaussian_blur = extract_gaussian_blur_effect(&shape.effects);
-    let palette_map = extract_palette_map_effect(&shape.effects);
-    let scale_assist = extract_scale_assist_effect(&shape.effects);
-    let parent_helper = extract_parent_helper_effect(&shape.effects);
-    let stretch2_effect = extract_stretch2_effect(&shape.effects);
-    if stretch2_effect.scale.value.is_some() {
-        bevy::log::warn!(
-            "[collect_shape] '{}' has stretch2: scale={:?}",
-            shape.label,
-            stretch2_effect.scale.value
-        );
-    }
-    let replace_color = extract_replace_color_effect(&shape.effects);
-    let repeat_effect = extract_repeat_effect(&shape.effects);
+    let gaussian_blur = extract_gaussian_blur_effect(&null.effects);
+    let scale_assist = extract_scale_assist_effect(&null.effects);
+    let parent_helper = extract_parent_helper_effect(&null.effects);
+    let stretch2_effect = extract_stretch2_effect(&null.effects);
+    let replace_color = extract_replace_color_effect(&null.effects);
+    let repeat_effect = extract_repeat_effect(&null.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
-        extract_linear_repeat_effects(&shape.effects);
-    let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
-    let swing_effect = extract_swing_effect(&shape.effects);
-    let oscillate_effect = extract_oscillate_effect(&shape.effects);
-    let jitter_effect = extract_jitter_effect(&shape.effects);
-    let sd_effect = extract_simplex_displace_effect(&shape.effects);
-    let rgb_split_effect = extract_rgb_split_effect(&shape.effects);
-    let exposure_gamma_effect = extract_exposure_gamma_effect(&shape.effects);
-    let chromakey_effect = extract_chromakey_effect(&shape.effects);
-    let spin_rpm = extract_spin_rpm(&shape.effects);
-    let threshold_effect = extract_threshold_effect(&shape.effects);
-    let grid_effect = extract_grid_effect(&shape.effects);
-    let pixelate_effect = extract_pixelate_effect(&shape.effects);
-    let solid_color_effect = extract_solid_color_effect(&shape.effects);
-    let fade_effect = extract_fade_effect(&shape.effects);
-    let wavewarp2_effect = extract_wavewarp2_effect(&shape.effects);
-    let mirror_effect = extract_mirror_effect(&shape.effects);
-    let lift_effect = extract_lift_effect(&shape.effects);
-    let rays_effect = extract_rays_effect(&shape.effects);
-    if scale_assist.axis != 0 {
-        bevy::log::info!(
-            "[COLLECT] Shape '{}' has scale_assist: axis={}, has_keyframes={}",
-            shape.label,
-            scale_assist.axis,
-            !scale_assist.scale.keyframes.is_empty()
-        );
-    }
-    let (pivot_x, pivot_y) = get_initial_pivot(&shape.transform.pivot);
-    let (width, height) = get_shape_size(&shape.properties, &shape.shape_type, &shape.fill_type);
-    let size_animation = get_shape_size_animation(&shape.properties, &shape.shape_type);
-
-    let has_stroke_or_border = shape.stroke.as_ref().is_some_and(|s| {
-        s.size
-            .as_ref()
-            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-            || s.end_size > 0.0
-    }) || shape.borders.iter().any(|b| {
-        b.size
-            .as_ref()
-            .is_some_and(|sz| sz.value.unwrap_or(0.0) > 0.0 || !sz.keyframes.is_empty())
-            || b.end_size > 0.0
-    });
-    let needs_sdf = shape.fill_type == "gradient"
-        || ((shape.fill_type == "color" || shape.fill_type == "none")
-            && (shape.shape_type != ".rect" || has_stroke_or_border));
-
-    // Calculate anchor and position compensation for non-SDF shapes
-    let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
-
-    // For SpriteShape, we need to compensate position when anchor is not CENTER
-    // For SDF shapes, parent should be at pivot point (for rotation/scale around pivot)
-    let (final_tx, final_ty) = if needs_sdf {
-        // SDF parent is at pivot point: AM center + pivot offset (with Y flip)
-        // pivot is relative to center in AM coords, so pivot_point = center + (pivot_x, -pivot_y) in Bevy
-        (tx + pivot_x, ty - pivot_y)
-    } else {
-        (tx + comp_x, ty + comp_y)
-    };
-
-    // For SDF shapes, we don't apply scale to the transform because:
-    // 1. Scale will be applied to SDF params instead (to avoid stretching stroke width)
-    // 2. The SDF dimensions are updated dynamically via animate_sdf_scale system
+        extract_linear_repeat_effects(&null.effects);
+    let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
+    let swing_effect = extract_swing_effect(&null.effects);
+    let oscillate_effect = extract_oscillate_effect(&null.effects);
+    let jitter_effect = extract_jitter_effect(&null.effects);
+    let sd_effect = extract_simplex_displace_effect(&null.effects);
+    let rgb_split_effect = extract_rgb_split_effect(&null.effects);
+    let spin_rpm = extract_spin_rpm(&null.effects);
+    let threshold_effect = extract_threshold_effect(&null.effects);
+    let grid_effect = extract_grid_effect(&null.effects);
+    let pixelate_effect = extract_pixelate_effect(&null.effects);
+    let solid_color_effect = extract_solid_color_effect(&null.effects);
+    let fade_effect = extract_fade_effect(&null.effects);
+    let wavewarp2_effect = extract_wavewarp2_effect(&null.effects);
+    let mirror_effect = extract_mirror_effect(&null.effects);
+    let lift_effect = extract_lift_effect(&null.effects);
+    let rays_effect = extract_rays_effect(&null.effects);
+    let exposure_gamma_effect = extract_exposure_gamma_effect(&null.effects);
+    let chromakey_effect = extract_chromakey_effect(&null.effects);
     let transform = Transform {
-        translation: Vec3::new(final_tx, final_ty, z),
+        translation: Vec3::new(tx, ty, z),
         rotation: Quat::from_rotation_z(rotation.to_radians()),
-        scale: if needs_sdf {
-            Vec3::new(1.0, 1.0, 1.0)
-        } else {
-            Vec3::new(sx, sy, 1.0)
-        },
+        scale: Vec3::new(sx, sy, 1.0),
     };
-
-    // Extract animated shape properties (for SDF shapes; defaults for others)
-    let (shape_props, shape_points) = if needs_sdf {
-        helpers::extract_shape_animations(&shape.shape_type, &shape.properties)
-    } else {
-        Default::default()
-    };
-
-    let spec = build_shape_spec(
-        shape, config, needs_sdf, width, height, pivot_x, pivot_y, anchor,
-    );
-
-    // For SDF shapes, anchor_offset moves parent from center to pivot point
-    // For SpriteShape, use the computed compensation
-    let anchor_offset = if needs_sdf {
-        // SDF parent needs to be offset from center to pivot point
-        Vec2::new(pivot_x, -pivot_y)
-    } else {
-        Vec2::new(comp_x, comp_y)
-    };
-
-    let has_path_stroke = shape.stroke.is_some();
-    let border_scale = if has_path_stroke {
-        1.0
-    } else {
-        let direction = shape
-            .borders
-            .first()
-            .map(|b| b.direction.as_str())
-            .unwrap_or("centered");
-        if direction == "centered" {
-            1.0
-        } else {
-            config.canvas_width / 2048.0
-        }
-    };
-    let mut stroke_width_anim =
-        get_stroke_width_animation(shape.stroke.as_ref().or_else(|| shape.borders.first()));
-    // Scale border-sourced keyframe values by comp_width/2048
-    if border_scale != 1.0 {
-        if let Some(ref mut v) = stroke_width_anim.value {
-            *v *= border_scale;
-        }
-        for kf in &mut stroke_width_anim.keyframes {
-            let Ok(val) = kf.value.parse::<f32>() else {
-                continue;
-            };
-            kf.value = (val * border_scale).to_string();
-        }
-    }
 
     Some(PendingLayer {
-        id: shape.id,
-        label: shape.label.clone(),
-        parent: shape.parent,
-        start_time: shape.start_time,
-        end_time: shape.end_time,
+        id: null.id,
+        label: null.label.clone(),
+        parent: null.parent,
+        start_time: null.start_time,
+        end_time: null.end_time,
         transform,
         animated: AmAnimated {
-            layer_id: shape.id,
-            start_time: shape.start_time,
-            end_time: shape.end_time,
+            layer_id: null.id,
+            start_time: null.start_time,
+            end_time: null.end_time,
             time_offset: config.time_offset,
             lifecycle_offset: config.lifecycle_offset,
-            location: shape.transform.location.clone(),
-            pivot: shape.transform.pivot.clone(),
-            rotation: shape.transform.rotation.clone(),
-            scale: shape.transform.scale.clone(),
-            opacity: shape.transform.opacity.clone(),
+            location: null.transform.location.clone(),
+            pivot: null.transform.pivot.clone(),
+            rotation: null.transform.rotation.clone(),
+            scale: null.transform.scale.clone(),
+            opacity: null.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
             has_parent,
-            parent_layer_id: shape.parent,
+            parent_layer_id: null.parent,
             effect_pos_x: transform2.pos_x,
             effect_pos_y: transform2.pos_y,
             effect_posz: transform2.pos_z,
@@ -219,8 +91,8 @@ pub(crate) fn collect_shape(
             effect_ainv: transform2.ainv,
             extra_transform2,
             font_y_offset: 0.0,
-            size: size_animation,
-            anchor_offset,
+            size: AmAnimatedVec2::default(),
+            anchor_offset: Vec2::ZERO,
             wipe_start: wipe_effect.start,
             wipe_end: wipe_effect.end,
             wipe_angle: wipe_effect.angle,
@@ -243,22 +115,16 @@ pub(crate) fn collect_shape(
                 .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
-            element_speed: shape.speed,
+            element_speed: 1.0,
             scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
-            stroke_width: stroke_width_anim,
-            // If shape is marked hidden in AM, force base_alpha to 0 so it's never visible
-            base_alpha: if shape.hidden {
-                0.0
-            } else {
-                get_base_alpha(&shape.fill_color, shape.fill_type == "none")
-                    * config.repeat_alpha_factor
-            },
+            stroke_width: AmAnimatedFloat::default(),
+            base_alpha: config.repeat_alpha_factor,
             fade_in_time: fade_effect.in_time,
             fade_out_time: fade_effect.out_time,
-            fade_layer_duration_ms: (shape.end_time - shape.start_time) as f32,
-            palette_alpha: palette_map.alpha.clone(),
+            fade_layer_duration_ms: (null.end_time - null.start_time) as f32,
+            palette_alpha: AmAnimatedFloat::default(),
             scale_assist: scale_assist.scale,
             scale_assist_damp: scale_assist.damp,
             scale_assist_axis: scale_assist.axis,
@@ -272,32 +138,32 @@ pub(crate) fn collect_shape(
             stretch2_scale: stretch2_effect.scale,
             stretch2_angle: stretch2_effect.angle,
             stretch2_content_only: stretch2_effect.content_only,
-            wavewarp2_phase: wavewarp2_effect.phase,
-            wavewarp2_a1d: wavewarp2_effect.a1d,
-            wavewarp2_m1: wavewarp2_effect.m1,
-            wavewarp2_m2: wavewarp2_effect.m2,
-            wavewarp2_a2d: wavewarp2_effect.a2d,
-            wavewarp2_damping: wavewarp2_effect.damping,
-            wavewarp2_damping_space: wavewarp2_effect.damping_space,
-            wavewarp2_damping_origin: wavewarp2_effect.damping_origin,
+            wavewarp2_phase: wavewarp2_effect.phase.clone(),
+            wavewarp2_a1d: wavewarp2_effect.a1d.clone(),
+            wavewarp2_m1: wavewarp2_effect.m1.clone(),
+            wavewarp2_m2: wavewarp2_effect.m2.clone(),
+            wavewarp2_a2d: wavewarp2_effect.a2d.clone(),
+            wavewarp2_damping: wavewarp2_effect.damping.clone(),
+            wavewarp2_damping_space: wavewarp2_effect.damping_space.clone(),
+            wavewarp2_damping_origin: wavewarp2_effect.damping_origin.clone(),
             wavewarp2_screen_space: wavewarp2_effect.screen_space,
             wavewarp2_has_effect: wavewarp2_effect.has_effect,
             mirror_type: mirror_effect.mirror_type,
             mirror_blend_mode: mirror_effect.blend_mode,
-            mirror_alpha: mirror_effect.alpha,
-            mirror_offset: mirror_effect.offset,
+            mirror_alpha: mirror_effect.alpha.clone(),
+            mirror_offset: mirror_effect.offset.clone(),
             mirror_has_effect: mirror_effect.has_effect,
-            lift_fill: lift_effect.fill,
+            lift_fill: lift_effect.fill.clone(),
             lift_has_effect: lift_effect.has_effect,
-            rays_center_x: rays_effect.center_x,
-            rays_center_y: rays_effect.center_y,
-            rays_strength: rays_effect.strength,
-            rays_intensity: rays_effect.intensity,
-            rays_threshold: rays_effect.threshold,
+            rays_center_x: rays_effect.center_x.clone(),
+            rays_center_y: rays_effect.center_y.clone(),
+            rays_strength: rays_effect.strength.clone(),
+            rays_intensity: rays_effect.intensity.clone(),
+            rays_threshold: rays_effect.threshold.clone(),
             rays_threshold_color: rays_effect.threshold_color,
             rays_fill_color: rays_effect.fill_color,
-            rays_blend: rays_effect.blend,
-            rays_quality: rays_effect.quality,
+            rays_blend: rays_effect.blend.clone(),
+            rays_quality: rays_effect.quality.clone(),
             rays_has_effect: rays_effect.has_effect,
             replace_old_color: replace_color.old_color,
             replace_new_color: replace_color.new_color,
@@ -310,7 +176,6 @@ pub(crate) fn collect_shape(
             repeat_angle: repeat_effect.angle,
             repeat_scale: repeat_effect.scale,
             repeat_alpha: repeat_effect.alpha,
-            // Linear repeat effect
             linear_repeat_count: linear_repeat_effect.count,
             linear_repeat_position: linear_repeat_effect.position,
             linear_repeat_offset: linear_repeat_effect.offset,
@@ -331,7 +196,6 @@ pub(crate) fn collect_shape(
             linear_repeat_random_order: linear_repeat_effect.random_order,
             linear_repeat_seed: linear_repeat_effect.seed,
             linear_repeat2: linear_repeat_effect2.map(Box::new),
-            // Radial repeat effect
             radial_repeat_count: radial_repeat_effect.count.clone(),
             radial_repeat_radius: radial_repeat_effect.radius.clone(),
             radial_repeat_orientation: radial_repeat_effect.orientation.clone(),
@@ -355,13 +219,11 @@ pub(crate) fn collect_shape(
             radial_repeat_invert: radial_repeat_effect.invert,
             radial_repeat_random_order: radial_repeat_effect.random_order,
             radial_repeat_seed: radial_repeat_effect.seed,
-            // Swing effect
             swing_freq: swing_effect.freq,
             swing_a1: swing_effect.a1,
             swing_a2: swing_effect.a2,
             swing_phase: swing_effect.phase,
             swing_type: swing_effect.swing_type,
-            // Oscillate effect
             oscillate_direction: oscillate_effect.direction,
             oscillate_angle: oscillate_effect.angle.clone(),
             oscillate_freq: oscillate_effect.freq.clone(),
@@ -369,12 +231,10 @@ pub(crate) fn collect_shape(
             oscillate_wave_type: oscillate_effect.wave_type,
             oscillate_phase: oscillate_effect.phase.clone(),
             spin_rpm,
-            // Threshold effect
             threshold_value: threshold_effect.threshold,
             threshold_feather: threshold_effect.feather,
             threshold_invert: threshold_effect.invert,
             threshold_blend_mode: threshold_effect.blend_mode,
-            // Grid effect
             grid_position: grid_effect.position,
             grid_spacing: grid_effect.spacing,
             grid_width: grid_effect.width,
@@ -382,7 +242,6 @@ pub(crate) fn collect_shape(
             grid_punchout: grid_effect.punchout,
             grid_smoothing: grid_effect.smoothing,
             grid_screen_space: grid_effect.screen_space,
-            // Pixelate effect
             pixelate_size: pixelate_effect.size,
             pixelate_stretch: pixelate_effect.stretch,
             pixelate_angle: pixelate_effect.angle,
@@ -393,15 +252,9 @@ pub(crate) fn collect_shape(
             solid_color: solid_color_effect.color,
             solid_color_alpha: solid_color_effect.alpha,
             solid_color_blend_mode: solid_color_effect.blend_mode,
-            base_fill_color: get_initial_fill_color_rgba(
-                &shape.fill_color,
-                shape.fill_type == "none",
-            ),
-            fill_color: fill_color_to_animated(&shape.fill_color),
-            path_repeat: {
-                let pr = extract_path_repeat_effect(&shape.effects);
-                if pr.has_effect() { Some(pr) } else { None }
-            },
+            base_fill_color: [0.0; 4],
+            fill_color: Default::default(),
+            path_repeat: None,
             textspacing_letter: Default::default(),
             textspacing_line: AmAnimatedFloat {
                 value: Some(1.0),
@@ -416,9 +269,8 @@ pub(crate) fn collect_shape(
             textprogress_blink: false,
             counter_offset: AmAnimatedFloat::default(),
             counter_scale: AmAnimatedFloat::default(),
-            shape_props,
-            shape_points,
-            // Jitter effect
+            shape_props: Default::default(),
+            shape_points: Default::default(),
             jitter_enabled: jitter_effect.enabled,
             jitter_angle: jitter_effect.angle,
             jitter_freq: jitter_effect.freq,
@@ -426,7 +278,6 @@ pub(crate) fn collect_shape(
             jitter_seed: jitter_effect.seed,
             jitter_slack: jitter_effect.slack,
             jitter_zjitter: jitter_effect.zjitter,
-            // Simplex displace effect
             sd_enabled: sd_effect.enabled,
             sd_mag: sd_effect.mag,
             sd_evolution: sd_effect.evolution,
@@ -456,16 +307,12 @@ pub(crate) fn collect_shape(
             repeat_position_offset: Vec2::ZERO,
             embed_inner_total_time: None,
         },
-        spec,
+        spec: AmLayerSpec::Null,
         z_index: z,
         children: Vec::new(),
-        blending_mode: AmBlendingMode::parse_am(shape.blending.as_str()),
+        blending_mode: AmBlendingMode::Normal,
         mask_info: None,
-        palette_params: if palette_map.has_effect() {
-            Some(AmPaletteMapParams::from_params(&palette_map))
-        } else {
-            None
-        },
+        palette_params: None,
         embed_scene_size: None,
         containing_embed_id: 0,
         from_deeply_nested_scene: config.nesting_depth > 1,
@@ -474,6 +321,6 @@ pub(crate) fn collect_shape(
         embed_requires_composite: false,
         embed_dynamic_resolution: false,
         embed_inner_total_time: None,
-        hidden: shape.hidden,
+        hidden: null.hidden,
     })
 }

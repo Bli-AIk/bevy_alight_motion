@@ -170,7 +170,7 @@ pub struct RaysParams {
     pub has_effect: bool,
 }
 
-#[expect(clippy::excessive_nesting)]
+#[expect(clippy::excessive_nesting)] // reason: nested effect-property parsing keeps each rays override close to its guard
 pub(crate) fn extract_rays_effect(effects: &[AmEffect]) -> RaysParams {
     let mut params = RaysParams::default();
 
