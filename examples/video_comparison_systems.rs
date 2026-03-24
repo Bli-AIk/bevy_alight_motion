@@ -667,8 +667,7 @@ pub fn comparison_loop(
                         &mut headless_capture_state,
                         Some(shot_path),
                     )
-                {
-                }
+                {}
             }
             #[cfg(not(feature = "headless-render"))]
             commands
