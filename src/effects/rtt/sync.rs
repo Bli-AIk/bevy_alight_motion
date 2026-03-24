@@ -26,6 +26,7 @@ pub fn sync_rtt_camera_position_system(
         &GlobalTransform,
         Option<&Name>,
         &crate::animation::AmAnimated,
+        Option<&crate::effects::AmGroupFill>,
         Option<&mut Sprite>,
         Option<&mut Anchor>,
         Option<&Mesh2d>,
@@ -43,8 +44,17 @@ pub fn sync_rtt_camera_position_system(
     for (camera_marker, mut camera_transform, mut projection, camera_parent) in
         camera_query.iter_mut()
     {
-        if let Ok((embed_entity, rtt, embed_global, name, animated, sprite, anchor, mesh2d)) =
-            embed_query.get_mut(camera_marker.embed_entity)
+        if let Ok((
+            embed_entity,
+            rtt,
+            embed_global,
+            name,
+            animated,
+            group_fill,
+            sprite,
+            anchor,
+            mesh2d,
+        )) = embed_query.get_mut(camera_marker.embed_entity)
         {
             let full_rect = scene_local_rect(rtt.scene_width, rtt.scene_height);
             let visible_rect = compute_embed_visible_rect(rtt, embed_global, animated);
@@ -107,7 +117,10 @@ pub fn sync_rtt_camera_position_system(
                 height: effective_size.y.ceil().max(1.0) as u32,
                 depth_or_array_layers: 1,
             };
-            if !disable_resize {
+            let keep_full_resolution_for_group_fill = group_fill
+                .is_some_and(|fill| fill.fill_type != crate::effects::GroupFillType::None);
+
+            if !disable_resize && !keep_full_resolution_for_group_fill {
                 resize_render_texture(&mut images, &rtt.render_texture, new_extent);
             }
             let texture_size = images
