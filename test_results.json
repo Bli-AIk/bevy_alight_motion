@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-24T09:01:44.128195+08:00",
+  "timestamp": "2026-03-24T09:44:33.744045+08:00",
   "summary": {
     "passed": 176,
     "warnings": 0,
@@ -846,23 +846,23 @@
     },
     "private/USER_mortis/revenge/split1": {
       "status": "fail",
-      "avg_similarity": 0.7501
+      "avg_similarity": 0.4423
     },
     "private/USER_mortis/revenge/split2": {
       "status": "fail",
-      "avg_similarity": 0.6836
+      "avg_similarity": 0.3503
     },
     "private/USER_mortis/revenge/split3": {
       "status": "fail",
-      "avg_similarity": 0.6782
+      "avg_similarity": 0.2765
     },
     "private/USER_mortis/revenge/split4": {
       "status": "fail",
-      "avg_similarity": 0.5376
+      "avg_similarity": 0.2635
     },
     "private/USER_mortis/revenge/split5": {
       "status": "fail",
-      "avg_similarity": 0.4546
+      "avg_similarity": 0.2945
     },
     "private/USER_mortis/sans": {
       "status": "skip"
