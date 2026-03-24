@@ -87,7 +87,6 @@ pub(super) fn resolve_google_fonts(
             try_load_system_font(&font_ref, data, &path, fonts, font_metrics, load_context);
         }
     }
-
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -134,7 +133,6 @@ fn try_load_system_font(
         }
     }
 }
-
 
 #[cfg(not(target_arch = "wasm32"))]
 fn collect_google_font_refs(layers: &[AmLayer]) -> std::collections::HashSet<String> {
