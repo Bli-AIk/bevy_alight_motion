@@ -45,9 +45,19 @@ fn remap_flattened_child(
     child_embed_id: u64,
 ) {
     let original_parent = child.parent;
+    let preserve_scene_root_animation_parent =
+        original_parent != 0 && child.animated.parent_layer_id == 0 && !child.animated.has_parent;
 
     if original_parent == 0 {
         child.parent = layer_id;
+
+        // Direct children of an embed are Bevy-children for hierarchy/render-layer purposes,
+        // but their authored coordinates still belong to the nested scene root. Keep the
+        // animation-side parent semantics rooted at the scene so transform systems continue to
+        // convert local scene coordinates with canvas centering instead of treating them as
+        // parent-relative offsets.
+        child.animated.parent_layer_id = 0;
+        child.animated.has_parent = false;
 
         if is_embed {
             child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
@@ -72,19 +82,32 @@ fn remap_flattened_child(
 
         if let Some(new_parent_id) = new_parent_id {
             child.parent = new_parent_id;
-            child.animated.parent_layer_id = new_parent_id;
+            if preserve_scene_root_animation_parent {
+                // This child was already flattened out of an inner embed once. Keep the Bevy
+                // hierarchy parent for transforms/render-layers, but preserve scene-root
+                // animation semantics so nested embed coordinates stay centered in their own
+                // authored canvas instead of being reinterpreted as raw parent-relative offsets.
+                child.animated.parent_layer_id = 0;
+            } else {
+                child.animated.parent_layer_id = new_parent_id;
+            }
         } else {
             bevy::log::trace!(
                 "[Flatten] Parent {} not found in mapping for '{}', keeping as-is",
                 original_parent,
                 child.label
             );
+            if !preserve_scene_root_animation_parent {
+                child.animated.parent_layer_id = child.parent;
+            }
         }
-    }
 
-    // Keep the animation-side parent bookkeeping aligned with the remapped layer graph.
-    child.animated.parent_layer_id = child.parent;
-    child.animated.has_parent = child.parent != 0;
+        child.animated.has_parent = if preserve_scene_root_animation_parent {
+            false
+        } else {
+            child.animated.parent_layer_id != 0
+        };
+    }
 
     if child.containing_embed_id != 0 {
         if original_parent == 0 && child.containing_embed_id == child_embed_id && is_embed {
@@ -391,9 +414,39 @@ mod tests {
         );
 
         assert_eq!(child.parent, current_embed_layer_id);
-        assert_eq!(child.animated.parent_layer_id, current_embed_layer_id);
-        assert!(child.animated.has_parent);
+        assert_eq!(child.animated.parent_layer_id, 0);
+        assert!(!child.animated.has_parent);
         assert_eq!(child.containing_embed_id, current_embed_layer_id);
+    }
+
+    #[test]
+    fn remap_preserves_scene_root_animation_parent_across_reflatten() {
+        let current_embed_layer_id = 102_373_407;
+        let nested_embed_old_id = 12_372_971;
+        let nested_embed_new_id = 1_000_000_000_021;
+        let mut child = make_pending_layer(
+            12_372_970,
+            nested_embed_old_id,
+            nested_embed_old_id,
+            "nested-direct-child",
+        );
+        child.animated.parent_layer_id = 0;
+        child.animated.has_parent = false;
+
+        remap_flattened_child(
+            &mut child,
+            &[(nested_embed_old_id, nested_embed_new_id)],
+            &HashMap::new(),
+            current_embed_layer_id,
+            true,
+            Vec3::ZERO,
+            nested_embed_old_id,
+        );
+
+        assert_eq!(child.parent, nested_embed_new_id);
+        assert_eq!(child.animated.parent_layer_id, 0);
+        assert!(!child.animated.has_parent);
+        assert_eq!(child.containing_embed_id, nested_embed_new_id);
     }
 
     #[test]
