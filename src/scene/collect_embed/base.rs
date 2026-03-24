@@ -61,14 +61,8 @@ pub(super) fn collect_embed_base(
     } else {
         config.time_offset + embed.start_time as f32
     };
-    let half_frame_ms = if config.render_fps > 0.0 {
-        500.0 / config.render_fps
-    } else {
-        0.0
-    };
-
     let time_offset_with_in_time = if effective_speed > 0.0 {
-        global_start - in_time / effective_speed - half_frame_ms / effective_speed
+        global_start - in_time / effective_speed
     } else {
         global_start
     };
@@ -93,6 +87,7 @@ pub(super) fn collect_embed_base(
             container_duration_ms: container_duration,
             nested_total_time_ms: nested_total,
             embed_speed: effective_speed,
+            comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
         })
     } else {
         config.retime.clone()
@@ -141,6 +136,7 @@ pub(super) fn collect_embed_base(
         repeat_offset: Vec2::ZERO,
         repeat_rotation_deg: 0.0,
         repeat_scale_factor: 1.0,
+        comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
         ..config.clone()
     };
 

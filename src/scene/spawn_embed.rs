@@ -474,16 +474,7 @@ pub(crate) fn spawn_embed_scene(
         config.time_offset + embed.start_time as f32
     };
     let time_offset_with_in_time = if effective_speed > 0.0 {
-        // AM's retimeNestedScene computes the parent time via
-        //   timeFromFrameNumber(parentFrame, parentFPHS)
-        // which includes a +50000/fphs half-frame offset (the frame CENTER time).
-        // See NestedSceneElementKt.java:103 and TimeKt.java timeFromFrameNumber.
-        let half_frame_ms = if config.render_fps > 0.0 {
-            500.0 / config.render_fps
-        } else {
-            0.0
-        };
-        global_start - in_time / effective_speed - half_frame_ms / effective_speed
+        global_start - in_time / effective_speed
     } else {
         global_start
     };
@@ -502,6 +493,7 @@ pub(crate) fn spawn_embed_scene(
             container_duration_ms: container_duration,
             nested_total_time_ms: nested_total,
             embed_speed: effective_speed,
+            comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
         })
     } else {
         config.retime.clone()
@@ -540,6 +532,7 @@ pub(crate) fn spawn_embed_scene(
         repeat_offset: Vec2::ZERO,
         repeat_rotation_deg: 0.0,
         repeat_scale_factor: 1.0,
+        comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
         ..config.clone()
     };
 

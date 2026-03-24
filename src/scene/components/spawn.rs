@@ -147,6 +147,7 @@ pub struct AmSceneConfig {
     pub repeat_rotation_deg: f32,
     pub repeat_scale_factor: f32,
     pub render_fps: f32,
+    pub comparison_frame_center_bias_ms: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -170,6 +171,7 @@ impl Default for AmSceneConfig {
             repeat_rotation_deg: 0.0,
             repeat_scale_factor: 1.0,
             render_fps: 30.0,
+            comparison_frame_center_bias_ms: 0.0,
         }
     }
 }

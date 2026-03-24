@@ -42,6 +42,7 @@ pub struct AmRetimeInfo {
     pub container_duration_ms: f32,
     pub nested_total_time_ms: f32,
     pub embed_speed: f32,
+    pub comparison_frame_center_bias_ms: f32,
 }
 
 /// Runtime echokf data for dynamically updating echo entities each frame.

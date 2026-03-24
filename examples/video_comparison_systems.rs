@@ -42,6 +42,9 @@ pub struct ComparisonState {
     pub skipped: bool,
     pub pending_time_ms: Option<f32>, // Time to set in next First schedule
     pub render_wait_frames: u32, // Frames to wait after applying time before allowing screenshot
+    pub settle_signature: Option<(usize, usize, usize)>,
+    pub settle_stable_frames: u32,
+    pub prime_capture_requests_remaining: u32,
 }
 
 #[derive(PartialEq, Debug)]
@@ -81,6 +84,9 @@ impl Default for ComparisonState {
             skipped: false,
             pending_time_ms: None,
             render_wait_frames: 0,
+            settle_signature: None,
+            settle_stable_frames: 0,
+            prime_capture_requests_remaining: 0,
         }
     }
 }
@@ -338,6 +344,9 @@ pub fn ensure_paused_during_load(
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(4);
+        state.settle_signature = None;
+        state.settle_stable_frames = 0;
+        state.prime_capture_requests_remaining = 0;
         if trace_time {
             println!(
                 "[COMPARISON TIME] applied current_frame={} time_ms={:.1} render_wait_frames={}",
@@ -427,6 +436,14 @@ pub fn comparison_loop(
     mut exit: MessageWriter<AppExit>,
     // Query to check if project is loaded
     project_query: Query<&AmProjectRoot>,
+    all_entities: Query<Entity>,
+    am_visuals: Query<Entity, With<AmVisualSpawned>>,
+    pending_layers_query: Query<&bevy_alight_motion::scene::AmPendingLayers>,
+    pending_strategy_query: Query<
+        Entity,
+        With<bevy_alight_motion::effects::NeedsStrategyEvaluation>,
+    >,
+    pending_rtt_query: Query<Entity, With<bevy_alight_motion::effects::NeedsEmbedSceneRtt>>,
     #[cfg(feature = "headless-render")] headless_capture_query: Query<
         &headless_capture::HeadlessImageCopier,
     >,
@@ -532,8 +549,40 @@ pub fn comparison_loop(
             // This is decremented in ensure_paused_during_load (First schedule)
             // and controls when lifecycle is allowed to run
             if state.render_wait_frames == 0 {
-                state.wait_frames += 1;
-                if state.wait_frames >= wait_frames {
+                let pending_setup =
+                    pending_strategy_query.iter().len() + pending_rtt_query.iter().len();
+                let tracked_spawned_layers: usize = pending_layers_query
+                    .iter()
+                    .map(|pending| pending.spawned_entities.len())
+                    .sum();
+                let settle_signature = (
+                    all_entities.iter().len(),
+                    am_visuals.iter().len(),
+                    tracked_spawned_layers,
+                );
+
+                if pending_setup > 0 {
+                    state.settle_signature = None;
+                    state.settle_stable_frames = 0;
+                    return;
+                }
+
+                if state.settle_signature == Some(settle_signature) {
+                    state.settle_stable_frames += 1;
+                } else {
+                    state.settle_signature = Some(settle_signature);
+                    state.settle_stable_frames = 1;
+                }
+
+                state.wait_frames = state.settle_stable_frames;
+                if state.settle_stable_frames >= wait_frames {
+                    state.settle_signature = None;
+                    state.settle_stable_frames = 0;
+                    state.prime_capture_requests_remaining =
+                        std::env::var("COMPARISON_PRIME_CAPTURES")
+                            .ok()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(1);
                     state.stage = TestStage::PrimingCapture;
                 }
             }
@@ -543,14 +592,25 @@ pub fn comparison_loop(
         TestStage::PrimingCapture => {
             #[cfg(feature = "headless-render")]
             {
-                if headless_capture_state.pending_path.is_none()
-                    && let Ok(image_copier) = headless_capture_query.single()
+                if state.prime_capture_requests_remaining > 0 {
+                    if headless_capture_state.pending_path.is_none()
+                        && headless_capture_state.discard_captures == 0
+                        && let Ok(image_copier) = headless_capture_query.single()
+                    {
+                        let serial = headless_capture_state.next_serial;
+                        headless_capture_state.next_serial += 1;
+                        headless_capture_state.discard_captures =
+                            headless_capture_state.discard_captures.saturating_add(1);
+                        state.prime_capture_requests_remaining -= 1;
+                        image_copier.request(serial);
+                    }
+                    return;
+                }
+
+                if headless_capture_state.discard_captures > 0
+                    || headless_capture_state.pending_path.is_some()
                 {
-                    let serial = headless_capture_state.next_serial;
-                    headless_capture_state.next_serial += 1;
-                    headless_capture_state.discard_captures =
-                        headless_capture_state.discard_captures.saturating_add(1);
-                    image_copier.request(serial);
+                    return;
                 }
             }
 

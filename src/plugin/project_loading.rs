@@ -58,6 +58,7 @@ pub(super) fn spawn_loaded_projects_system(
             scene_fps: project.scene.fps as f32,
             scene_total_time: project.scene.total_time as f32,
             render_fps: project.scene.fps as f32,
+            comparison_frame_center_bias_ms: 500.0 / project.scene.fps.max(1) as f32,
             ..Default::default()
         };
 

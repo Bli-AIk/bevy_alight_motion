@@ -249,12 +249,29 @@ pub struct AmAnimated {
 }
 
 impl AmAnimated {
+    fn renderable_nested_total(total_ms: f32, scene_fps: f32) -> f32 {
+        if total_ms <= 0.0 {
+            return 0.0;
+        }
+        let total_ms_i = total_ms.floor().max(0.0) as i32;
+        let sample_ms = total_ms_i.saturating_sub(1);
+        let fphs = (scene_fps * 100.0).round().max(1.0) as i32;
+        let frame_number = (sample_ms * fphs) / 100_000;
+        (((frame_number * 100_000) + 50_000) / fphs) as f32
+    }
+
     fn apply_retime(&self, global_time: f32) -> Option<f32> {
         let rt = self.retime.as_ref()?;
         if rt.mode == RetimeMode::Off {
             return None;
         }
-        let embed_elapsed = (global_time - rt.embed_global_start) * rt.embed_speed;
+        let comparison_time = match rt.mode {
+            RetimeMode::Stretch | RetimeMode::LoopStretch => {
+                global_time + rt.comparison_frame_center_bias_ms
+            }
+            _ => global_time,
+        };
+        let embed_elapsed = (comparison_time - rt.embed_global_start) * rt.embed_speed;
         if embed_elapsed < 0.0 {
             return Some(0.0);
         }
@@ -262,6 +279,9 @@ impl AmAnimated {
         if total <= 0.0 {
             return Some(0.0);
         }
+        let renderable_total = Self::renderable_nested_total(total, self.scene_fps)
+            .max(0.0)
+            .min(total);
         let nested_time = match rt.mode {
             RetimeMode::Off => return None,
             RetimeMode::Stretch => {
@@ -272,18 +292,45 @@ impl AmAnimated {
                     embed_elapsed
                 }
             }
-            RetimeMode::Freeze => embed_elapsed.min(total),
-            RetimeMode::Loop => embed_elapsed.rem_euclid(total),
+            RetimeMode::Freeze => embed_elapsed.min(renderable_total.max(0.0)),
+            RetimeMode::Loop => {
+                let loop_total = renderable_total.max(1.0);
+                embed_elapsed.rem_euclid(loop_total)
+            }
             RetimeMode::LoopStretch => {
                 Self::calc_loop_stretch_time(rt.container_duration_ms, total, embed_elapsed)
             }
             RetimeMode::Blank => {
-                if embed_elapsed > total {
+                if embed_elapsed > renderable_total.max(0.0) {
                     return Some(-1.0);
                 }
                 embed_elapsed
             }
         };
+        if let Some(trace_ids) =
+            std::env::var_os("AM_RETIME_TRACE_IDS").and_then(|value| value.into_string().ok())
+        {
+            let should_trace = trace_ids
+                .split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == self.layer_id);
+            if should_trace {
+                bevy::log::warn!(
+                    "[RetimeTrace] id={} mode={:?} global={:.3} comparison={:.3} bias={:.3} embed_start={:.3} embed_elapsed={:.3} total={:.3} renderable_total={:.3} nested={:.3} scene_fps={:.3}",
+                    self.layer_id,
+                    rt.mode,
+                    global_time,
+                    comparison_time,
+                    rt.comparison_frame_center_bias_ms,
+                    rt.embed_global_start,
+                    embed_elapsed,
+                    total,
+                    renderable_total,
+                    nested_time,
+                    self.scene_fps,
+                );
+            }
+        }
         Some(nested_time)
     }
 

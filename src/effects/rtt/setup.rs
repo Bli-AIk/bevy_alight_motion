@@ -21,6 +21,38 @@ use super::{
 #[derive(Component)]
 pub(crate) struct PendingGroupFillTextureRefresh(u8);
 
+fn composite_camera_order(
+    embed_entity: Entity,
+    render_layer: u8,
+    parent_query: &Query<&ChildOf>,
+    layer_spec_query: &Query<&crate::scene::AmLayerSpec>,
+) -> isize {
+    let mut embed_depth = 0_isize;
+    let mut current = embed_entity;
+
+    while let Ok(child_of) = parent_query.get(current) {
+        let parent = child_of.parent();
+        if layer_spec_query
+            .get(parent)
+            .is_ok_and(|spec| matches!(spec, crate::scene::AmLayerSpec::EmbedScene))
+        {
+            embed_depth += 1;
+        }
+        current = parent;
+    }
+
+    // Bevy renders smaller camera orders first.
+    // Top-level composite embeds already work with plain `-render_layer`.
+    // The ordering bug appears when a composite embed is nested inside another composite:
+    // those child RTT cameras must render before their composite ancestors even if the layer
+    // pool reuses a smaller render_layer number.
+    if embed_depth == 0 {
+        -(render_layer as isize)
+    } else {
+        -((embed_depth + 1) * 100 + render_layer as isize)
+    }
+}
+
 fn insert_group_fill_debug_sprite(
     commands: &mut Commands,
     entity: Entity,
@@ -101,6 +133,7 @@ pub fn setup_embed_scene_rtt_system(
     >,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
+    layer_spec_query: Query<&crate::scene::AmLayerSpec>,
 ) {
     let debug_show_fill_rtt = std::env::var_os("AM_GROUP_FILL_DEBUG_SHOW_RTT").is_some();
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
@@ -151,6 +184,8 @@ pub fn setup_embed_scene_rtt_system(
                 scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
             }
         };
+        let camera_order =
+            composite_camera_order(entity, render_layer, &parent_query, &layer_spec_query);
 
         let camera_entity = commands
             .spawn((
@@ -162,7 +197,7 @@ pub fn setup_embed_scene_rtt_system(
                 Camera2d,
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
-                    order: -(render_layer as isize),
+                    order: camera_order,
                     ..default()
                 },
                 RenderTarget::Image(render_texture_handle.clone().into()),
