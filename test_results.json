@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-24T21:36:35.518651+08:00",
+  "timestamp": "2026-03-25T06:41:36.242410+08:00",
   "summary": {
     "passed": 185,
     "warnings": 0,
@@ -748,11 +748,11 @@
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_nomask": {
       "status": "fail",
-      "avg_similarity": 0.5735
+      "avg_similarity": 0.5075
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_norepeat": {
       "status": "fail",
-      "avg_similarity": 0.3989
+      "avg_similarity": 0.8615
     },
     "private/USER_hong_jiao/test": {
       "status": "fail",

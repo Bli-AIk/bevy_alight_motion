@@ -410,6 +410,52 @@ pub fn ensure_paused_during_load(
     }
 }
 
+#[cfg(feature = "headless-render")]
+fn request_headless_capture(
+    headless_capture_query: &Query<&headless_capture::HeadlessImageCopier>,
+    headless_capture_state: &mut headless_capture::HeadlessCaptureState,
+    pending_path: Option<PathBuf>,
+) -> bool {
+    let Ok(image_copier) = headless_capture_query.single() else {
+        return false;
+    };
+
+    let serial = headless_capture_state.next_serial;
+    headless_capture_state.next_serial += 1;
+    image_copier.request(serial);
+
+    if let Some(path) = pending_path {
+        headless_capture_state.pending_serial = Some(serial);
+        headless_capture_state.pending_path = Some(path);
+    }
+
+    true
+}
+
+#[cfg(feature = "headless-render")]
+fn continue_priming_capture(
+    state: &mut ComparisonState,
+    headless_capture_query: &Query<&headless_capture::HeadlessImageCopier>,
+    headless_capture_state: &mut headless_capture::HeadlessCaptureState,
+) -> bool {
+    if state.prime_capture_requests_remaining == 0 {
+        return headless_capture_state.discard_captures > 0
+            || headless_capture_state.pending_path.is_some();
+    }
+
+    let can_request_capture = headless_capture_state.pending_path.is_none()
+        && headless_capture_state.discard_captures == 0;
+    if can_request_capture
+        && request_headless_capture(headless_capture_query, headless_capture_state, None)
+    {
+        headless_capture_state.discard_captures =
+            headless_capture_state.discard_captures.saturating_add(1);
+        state.prime_capture_requests_remaining -= 1;
+    }
+
+    true
+}
+
 fn print_critical_failures(critical_failed_frames: &[(usize, f32)], min_frame_similarity: f32) {
     if critical_failed_frames.is_empty() {
         return;
@@ -592,24 +638,11 @@ pub fn comparison_loop(
         TestStage::PrimingCapture => {
             #[cfg(feature = "headless-render")]
             {
-                if state.prime_capture_requests_remaining > 0 {
-                    if headless_capture_state.pending_path.is_none()
-                        && headless_capture_state.discard_captures == 0
-                        && let Ok(image_copier) = headless_capture_query.single()
-                    {
-                        let serial = headless_capture_state.next_serial;
-                        headless_capture_state.next_serial += 1;
-                        headless_capture_state.discard_captures =
-                            headless_capture_state.discard_captures.saturating_add(1);
-                        state.prime_capture_requests_remaining -= 1;
-                        image_copier.request(serial);
-                    }
-                    return;
-                }
-
-                if headless_capture_state.discard_captures > 0
-                    || headless_capture_state.pending_path.is_some()
-                {
+                if continue_priming_capture(
+                    &mut state,
+                    &headless_capture_query,
+                    &mut headless_capture_state,
+                ) {
                     return;
                 }
             }
@@ -629,13 +662,12 @@ pub fn comparison_loop(
             #[cfg(feature = "headless-render")]
             {
                 if headless_capture_state.pending_path.is_none()
-                    && let Ok(image_copier) = headless_capture_query.single()
+                    && request_headless_capture(
+                        &headless_capture_query,
+                        &mut headless_capture_state,
+                        Some(shot_path),
+                    )
                 {
-                    let serial = headless_capture_state.next_serial;
-                    headless_capture_state.next_serial += 1;
-                    image_copier.request(serial);
-                    headless_capture_state.pending_serial = Some(serial);
-                    headless_capture_state.pending_path = Some(shot_path);
                 }
             }
             #[cfg(not(feature = "headless-render"))]
