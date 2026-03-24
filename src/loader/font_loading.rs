@@ -87,6 +87,7 @@ pub(super) fn resolve_google_fonts(
             try_load_system_font(&font_ref, data, &path, fonts, font_metrics, load_context);
         }
     }
+
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -134,6 +135,7 @@ fn try_load_system_font(
     }
 }
 
+
 #[cfg(not(target_arch = "wasm32"))]
 fn collect_google_font_refs(layers: &[AmLayer]) -> std::collections::HashSet<String> {
     let mut refs = std::collections::HashSet::new();
@@ -178,6 +180,19 @@ fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
         900 => "Black",
         _ => "Regular",
     };
+
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let bundled_roboto = match (font_name, weight) {
+        ("Roboto", 400) => Some(manifest_dir.join("assets/fonts/roboto_regular.ttf")),
+        ("Roboto", 500) => Some(manifest_dir.join("assets/fonts/roboto_medium.ttf")),
+        ("Roboto", 700) => Some(manifest_dir.join("assets/fonts/roboto_bold.ttf")),
+        _ => None,
+    };
+    if let Some(path) = bundled_roboto
+        && path.exists()
+    {
+        return Some(path.to_string_lossy().into_owned());
+    }
 
     let candidates = [
         format!("/usr/share/fonts/TTF/{}-{}.ttf", font_name, suffix),
