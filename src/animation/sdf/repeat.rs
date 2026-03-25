@@ -1,12 +1,14 @@
 //! Applies repeat-effect uniforms to SDF materials at runtime.
+//!
 //! 在运行时把重复效果参数写入 SDF 材质。
 //!
 //! Linear repeat and radial repeat are represented as animated fields on `AmAnimated`, but the GPU
-//! shaders expect flattened parameter vectors. This file reads the active repeat keyframes for each
+//! shaders expect flattened parameter vectors. The module reads the active repeat keyframes for each
 //! parent SDF layer and encodes them into the material uniform blocks consumed by the fragment
 //! shader.
+//!
 //! 线性重复和径向重复在 `AmAnimated` 里以动画字段表示，但 GPU shader 需要的是展平后的参数向量。
-//! 这个文件会读取每个父级 SDF 图层当前生效的重复关键帧，并把它们编码进片元 shader 消费的
+//! 该模块会读取每个父级 SDF 图层当前生效的重复关键帧，并把它们编码进片元 shader 消费的
 //! 材质 uniform 块。
 
 use bevy::prelude::*;

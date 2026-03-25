@@ -1,11 +1,13 @@
 //! Defines spawn-time layer payloads and filters for collected scene data.
+//!
 //! 定义收集后场景数据在生成阶段使用的图层载荷与过滤规则。
 //!
 //! Scene collection flattens XML layers into runtime-friendly records before anything is spawned.
-//! This file contains those records: layer filters, spawn settings, the large `AmLayerSpec` enum,
+//! Contains those records: layer filters, spawn settings, the large `AmLayerSpec` enum,
 //! and the pending layer payload that later animation and visual systems consume.
+//!
 //! scene 收集阶段会先把 XML 图层整理成适合运行时消费的记录，然后才开始真正生成实体。
-//! 这个文件保存的就是这些记录：图层过滤器、生成设置、大型 `AmLayerSpec` 枚举，以及后续动画和视觉系统
+//! 保存的就是这些记录：图层过滤器、生成设置、大型 `AmLayerSpec` 枚举，以及后续动画和视觉系统
 //! 都会消费的 pending layer 载荷。
 
 use bevy::prelude::*;

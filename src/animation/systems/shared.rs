@@ -1,9 +1,9 @@
-//! This file holds math helpers shared by multiple animation systems.
+//! Holds math helpers shared by multiple animation systems.
 //! It centralizes reusable calculations such as perspective zoom, accumulated
 //! frequencies, oscillation waveforms, and unwrapped rotation resolution so the
 //! per-feature systems can stay focused on applying results to entities.
 //!
-//! 这个文件存放多个动画系统共用的数学辅助逻辑。它把透视缩放、频率累积、振荡波形、
+//! 存放多个动画系统共用的数学辅助逻辑。它把透视缩放、频率累积、振荡波形、
 //! 以及连续旋转角解析等可复用计算集中起来，让具体效果系统只需要专注于把结果应用到
 //! 实体上。
 

@@ -1,11 +1,13 @@
 //! Headless frame-capture support for example rendering workflows.
+//!
 //! 为示例渲染流程提供无窗口帧捕获支持。
 //!
 //! Video comparison and screenshot-based example modes need a way to read back rendered frames
-//! without user interaction. This file wires the render graph, staging buffers, and cross-thread
+//! without user interaction. The module wires the render graph, staging buffers, and cross-thread
 //! message passing needed to capture frames from the render world into image files.
+//!
 //! 视频对比和截图型示例模式都需要一种无需用户交互的帧回读能力。
-//! 这个文件负责接入 render graph、暂存缓冲区以及跨线程消息传递，把 render world 里的画面捕获成图片。
+//! 负责接入 render graph、暂存缓冲区以及跨线程消息传递，把 render world 里的画面捕获成图片。
 
 use super::HeadlessResolution;
 use bevy::image::TextureFormatPixelInfo;

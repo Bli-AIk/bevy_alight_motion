@@ -1,9 +1,9 @@
-//! This file propagates render-layer assignments for embed-scene rendering.
+//! Propagates render-layer assignments for embed-scene rendering.
 //! It keeps direct and composite embed content on the correct `RenderLayers`,
 //! and cascades those choices to descendants so cameras and child visuals render
 //! into the intended pass.
 //!
-//! 这个文件负责传播嵌套场景渲染所需的 render layer 分配。它会让 direct 和 composite
+//! 负责传播嵌套场景渲染所需的 render layer 分配。它会让 direct 和 composite
 //! 两种路径下的 embed 内容都处在正确的 `RenderLayers` 上，并把这个选择级联到子节点，
 //! 确保相机和视觉对象进入预期的渲染通道。
 

@@ -1,11 +1,13 @@
 //! Repairs parent-helper inheritance for runtime layer transforms.
+//!
 //! 修正运行时图层在 Parent Helper 效果下的父子继承结果。
 //!
-//! This file reconstructs world-space translation, rotation, and scale for layers that opt into
+//! Reconstructs world-space translation, rotation, and scale for layers that opt into
 //! Alight Motion's parent-helper behavior. It is the runtime half of the parent-helper effect:
 //! scene collection records the effect parameters, and this module applies them every frame so
 //! child layers inherit only the weighted subset of parent motion that the effect requests.
-//! 这个文件负责在运行时重建启用了 Parent Helper 效果的图层世界空间平移、旋转和缩放。
+//!
+//! 负责在运行时重建启用了 Parent Helper 效果的图层世界空间平移、旋转和缩放。
 //! 它是 Parent Helper 效果的运行时一半：scene 收集阶段先记录效果参数，这里再按帧应用，
 //! 让子图层只继承效果要求的那部分父级运动。
 

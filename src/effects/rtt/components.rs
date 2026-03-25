@@ -1,9 +1,9 @@
-//! This file defines the components that mark and configure RTT-backed embed scenes.
+//! Defines the components that mark and configure RTT-backed embed scenes.
 //! It captures the render texture, camera association, layer allocation, scene
 //! bounds, and the transient “needs setup/evaluation” markers that drive the RTT
 //! lifecycle systems.
 //!
-//! 这个文件定义了 RTT 驱动的嵌套场景所使用的组件。它描述渲染纹理、关联相机、
+//! 定义了 RTT 驱动的嵌套场景所使用的组件。它描述渲染纹理、关联相机、
 //! layer 分配、场景边界，以及驱动 RTT 生命周期系统的那些“等待设置/等待评估”
 //! 过渡标记。
 

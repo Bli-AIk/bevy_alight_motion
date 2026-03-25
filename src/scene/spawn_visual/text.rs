@@ -1,9 +1,9 @@
-//! This file spawns text layers into Bevy text entities.
+//! Spawns text layers into Bevy text entities.
 //! It resolves fonts, initial text styling, positioning, and the runtime animation
 //! payload so authored AM text layers become Bevy text nodes that later systems
 //! can animate.
 //!
-//! 这个文件负责把文本图层生成成 Bevy 文本实体。它会解析字体、初始文本样式、位置以及
+//! 负责把文本图层生成成 Bevy 文本实体。它会解析字体、初始文本样式、位置以及
 //! 运行时动画载荷，让作者写下的 AM 文本图层变成后续系统可以继续驱动的 Bevy 文本节点。
 
 use bevy::prelude::*;

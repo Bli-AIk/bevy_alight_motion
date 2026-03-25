@@ -1,9 +1,9 @@
-//! This file is the main scene-to-pending-layer collection pass.
+//! Acts as the main scene-to-pending-layer collection pass.
 //! It walks the parsed `AmScene`, dispatches each authored layer to the matching
 //! collector, flattens nested results, and produces the `PendingLayer` list that
 //! later spawning systems consume.
 //!
-//! 这个文件是从场景 schema 到待生成图层列表的主收集入口。它会遍历解析后的
+//! 从场景 schema 到待生成图层列表的主收集入口。它会遍历解析后的
 //! `AmScene`，把每个作者侧图层分发给对应的收集器，再把嵌套结果拍平，最终产出
 //! 后续生成系统会消费的 `PendingLayer` 列表。
 

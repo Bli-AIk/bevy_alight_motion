@@ -1,11 +1,13 @@
 //! Builds runtime visuals for image-backed layers.
+//!
 //! 为图片图层构建运行时可视对象。
 //!
-//! This file is responsible for the image branch of the spawn pipeline: it picks the correct
+//! Handles the image branch of the spawn pipeline: it picks the correct
 //! texture handle, creates the anchored mesh, configures unified effect materials when needed, and
 //! marks the entity as having a visual payload. It is the bridge between collected image layer data
 //! and the concrete Bevy components that render it.
-//! 这个文件负责 spawn 管线里的图片分支：选择正确的纹理句柄、创建带锚点的 mesh、在需要时配置统一效果
+//!
+//! 负责 spawn 管线里的图片分支：选择正确的纹理句柄、创建带锚点的 mesh、在需要时配置统一效果
 //! 材质，并标记实体已经拥有可视载荷。它是收集后的图片图层数据与真正 Bevy 渲染组件之间的桥梁。
 
 use bevy::asset::Assets;

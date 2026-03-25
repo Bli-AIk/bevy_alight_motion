@@ -1,9 +1,9 @@
-//! This file defines the font metrics extracted from TTF/OTF data and the helper
+//! Defines the font metrics extracted from TTF/OTF data and the helper
 //! routines that normalize them for Alight Motion text layout.
 //! Its job is to translate low-level font tables into the ascent, descent,
 //! line-height, and padding values used by the runtime's text placement code.
 //!
-//! 这个文件定义了从 TTF/OTF 数据里提取出来的字体度量，以及把它们规范化给
+//! 定义了从 TTF/OTF 数据里提取出来的字体度量，以及把它们规范化给
 //! Alight Motion 文本布局使用的辅助逻辑。它的职责是把底层字体表转换成运行时
 //! 文本排版真正需要的 ascent、descent、行高和补边数值。
 

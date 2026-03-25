@@ -1,8 +1,8 @@
-//! This file mirrors the Java `Random` seeding logic used by Alight Motion's
+//! Mirrors the Java `Random` seeding logic used by Alight Motion's
 //! repeat effects. The shader path needs identical pseudo-random ordering, so
 //! this helper computes the packed initial state from the authored seed value.
 //!
-//! 这个文件复现了 Alight Motion 重复效果依赖的 Java `Random` 初始化逻辑。
+//! 复现了 Alight Motion 重复效果依赖的 Java `Random` 初始化逻辑。
 //! 着色器路径需要和原始工具保持一致的伪随机顺序，因此这里会从作者输入的 seed
 //! 计算出打包后的初始随机状态。
 

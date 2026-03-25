@@ -1,9 +1,9 @@
-//! This file contains startup-only helpers for the plugin runtime.
+//! Contains startup-only helpers for the plugin runtime.
 //! It creates the shared white-pixel texture and loads system fonts for fallback
 //! on native platforms, so later text and sprite code can assume those defaults
 //! already exist.
 //!
-//! 这个文件存放插件运行时只在启动阶段执行的辅助逻辑。它会创建共享的白像素纹理，
+//! 存放插件运行时只在启动阶段执行的辅助逻辑。它会创建共享的白像素纹理，
 //! 并在原生平台上加载系统字体作为回退来源，让后续文本和精灵代码可以默认这些基础
 //! 资源已经就绪。
 

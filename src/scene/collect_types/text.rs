@@ -1,9 +1,9 @@
-//! This file collects text layers into pending runtime layers.
+//! Collects text layers into pending runtime layers.
 //! It resolves font names and metrics, computes initial placement and wrap-aware
 //! offsets, extracts text-related effects, and produces the animated text layer
 //! payload that later spawn code turns into Bevy text entities.
 //!
-//! 这个文件负责把文本图层收集成待生成的运行时图层。它会解析字体名称和度量、计算
+//! 负责把文本图层收集成待生成的运行时图层。它会解析字体名称和度量、计算
 //! 初始位置与换行相关偏移、提取文本特效，并生成后续 spawn 代码会变成 Bevy 文本实体的
 //! 动画图层载荷。
 

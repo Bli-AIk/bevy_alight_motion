@@ -1,10 +1,10 @@
-//! This file assembles the Bevy-side runtime for `bevy_alight_motion`.
+//! Assembles the Bevy-side runtime for `bevy_alight_motion`.
 //! It is the internal plugin wiring layer: material plugins, asset loaders,
 //! core resources, startup hooks, lifecycle system ordering, animation updates,
 //! and post-update cleanup are all registered here so the public plugin surface
 //! can stay thin.
 //!
-//! 这个文件负责组装 `bevy_alight_motion` 的 Bevy 运行时。它是内部插件接线层：
+//! 负责组装 `bevy_alight_motion` 的 Bevy 运行时。它是内部插件接线层：
 //! 材质插件、资产加载器、核心资源、启动钩子、生命周期系统顺序、动画更新以及
 //! 后处理清理都在这里注册，从而让公开插件入口保持精简。
 

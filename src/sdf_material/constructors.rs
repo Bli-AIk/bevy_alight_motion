@@ -1,11 +1,13 @@
 //! Provides constructors and accessors for SDF materials.
+//!
 //! 为 SDF 材质提供构造器与访问器。
 //!
 //! The SDF renderer exposes a large uniform block and several convenience constructors for common
-//! shapes. This file keeps those material-building helpers together so scene spawning and runtime
+//! shapes. The module keeps those material-building helpers together so scene spawning and runtime
 //! updates can create shape materials without duplicating the low-level uniform initialization.
+//!
 //! SDF 渲染器对外暴露了一个很大的 uniform 块，以及若干面向常见形状的便捷构造函数。
-//! 这个文件把这些材质构建辅助集中起来，让 scene spawn 和运行时更新都能复用统一的初始化逻辑，
+//! 该模块把这些材质构建辅助集中起来，让 scene spawn 和运行时更新都能复用统一的初始化逻辑，
 //! 不必重复拼装底层 uniform。
 
 use bevy::prelude::*;

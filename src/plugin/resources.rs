@@ -1,9 +1,9 @@
-//! This file defines small plugin-level resources shared across the runtime.
+//! Defines small plugin-level resources shared across the runtime.
 //! It covers project-to-window resolution policy and the single white-pixel image
 //! that solid-color visuals reuse, so startup code and scene spawning can depend
 //! on one centralized definition.
 //!
-//! 这个文件定义了运行时共用的少量插件级资源。它包含项目到窗口的分辨率策略，
+//! 定义了运行时共用的少量插件级资源。它包含项目到窗口的分辨率策略，
 //! 以及纯色视觉对象复用的单白像素图片，让启动逻辑和场景生成都可以依赖同一份
 //! 集中定义。
 

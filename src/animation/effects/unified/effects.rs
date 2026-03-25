@@ -1,8 +1,8 @@
-//! This file updates the effect uniforms used by the unified material path.
+//! Updates the effect uniforms used by the unified material path.
 //! It converts animated wipe, stretch, wavewarp, mirror, palette, and other
 //! effect parameters into GPU-ready uniform fields on `UnifiedEffectMaterial`.
 //!
-//! 这个文件负责更新统一材质路径使用的特效 uniform。它会把 wipe、stretch、
+//! 负责更新统一材质路径使用的特效 uniform。它会把 wipe、stretch、
 //! wavewarp、mirror、palette 等动画参数转换成 `UnifiedEffectMaterial`
 //! 可直接提交给 GPU 的 uniform 字段。
 

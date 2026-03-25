@@ -1,9 +1,9 @@
-//! This file handles font ingestion during project loading.
+//! Handles font ingestion during project loading.
 //! It turns embedded font blobs or resolved system-font fallbacks into Bevy font
 //! handles, preserves raw bytes when later stages still need them, and extracts
 //! the metrics that text layout code depends on.
 //!
-//! 这个文件负责项目加载阶段的字体导入。它会把嵌入字体数据或解析出的系统字体回退
+//! 负责项目加载阶段的字体导入。它会把嵌入字体数据或解析出的系统字体回退
 //! 转成 Bevy 字体句柄，在后续阶段仍需要时保留原始字节，并提取文本布局所依赖的
 //! 字体度量信息。
 

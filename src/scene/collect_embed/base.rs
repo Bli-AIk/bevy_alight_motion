@@ -1,8 +1,8 @@
-//! This file builds the shared base state for collected embed scenes.
+//! Builds the shared base state for collected embed scenes.
 //! It computes the outer transform, retime information, and nested child layers
 //! before specialized embed features such as group fill or RTT strategy are added.
 //!
-//! 这个文件负责构建嵌套场景收集阶段的公共基础状态。它会先计算外层变换、retime
+//! 负责构建嵌套场景收集阶段的公共基础状态。它会先计算外层变换、retime
 //! 信息和嵌套子图层，然后再让 group fill、RTT 策略等更具体的嵌套场景特性叠加上去。
 
 use bevy::prelude::*;

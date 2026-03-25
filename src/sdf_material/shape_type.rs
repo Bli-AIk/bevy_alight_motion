@@ -1,11 +1,13 @@
 //! Enumerates the SDF shape variants supported by the renderer.
+//!
 //! 枚举渲染器支持的 SDF 形状种类。
 //!
 //! Scene collection and shader materials communicate shape identity through numeric discriminants.
-//! This file is the typed source of truth for those variants, mapping human-readable Rust enums to
+//! Acts as the typed source of truth for those variants, mapping human-readable Rust enums to
 //! the float values expected by the SDF material uniform.
+//!
 //! scene 收集阶段与 shader 材质之间，会通过数值判别值来传递形状类型。
-//! 这个文件就是那套判别值的强类型真源：它把可读的 Rust 枚举映射到 SDF 材质 uniform 期望的 float 值。
+//! 就是那套判别值的强类型真源：它把可读的 Rust 枚举映射到 SDF 材质 uniform 期望的 float 值。
 
 /// SDF shape types supported by the material.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

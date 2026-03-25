@@ -1,8 +1,8 @@
-//! This file extracts the `echokf` effect from layer effect lists.
+//! Extracts the `echokf` effect from layer effect lists.
 //! It turns the authored repeat-like echo properties into a normalized parameter
 //! struct that runtime systems use to spawn and animate echo copies.
 //!
-//! 这个文件负责从图层 effect 列表里提取 `echokf` 效果。它会把作者写下的
+//! 负责从图层 effect 列表里提取 `echokf` 效果。它会把作者写下的
 //! echo 属性转换成规范化参数结构，供运行时系统生成并驱动 echo 副本。
 
 use crate::schema::{AmAnimatedFloat, AmEffect};

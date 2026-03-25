@@ -1,11 +1,13 @@
 //! Drives the Bevy camera from animated Alight Motion camera layers.
+//!
 //! 使用 Alight Motion 的相机图层驱动 Bevy 相机。
 //!
 //! Imported camera layers store their authored pan, rotation, and field-of-view curves on
-//! `AmAnimated` and `AmCameraLayer`. This file translates the active layer time into Bevy camera
+//! `AmAnimated` and `AmCameraLayer`. The module translates the active layer time into Bevy camera
 //! transform/projection updates so the rendered scene matches the project timeline.
+//!
 //! 导入后的相机图层会把作者设置的平移、旋转和视野曲线记录在 `AmAnimated` 与 `AmCameraLayer` 上。
-//! 这个文件把当前图层时间换算成 Bevy 相机的变换与投影更新，让最终画面和工程时间线保持一致。
+//! 该模块会把当前图层时间换算成 Bevy 相机的变换与投影更新，让最终画面和工程时间线保持一致。
 
 use bevy::prelude::*;
 

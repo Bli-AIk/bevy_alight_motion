@@ -1,11 +1,13 @@
 //! Builds runtime visuals for text layers.
+//!
 //! 为文本图层构建运行时可视对象。
 //!
 //! Text layers need their font handle, wrapping width, line height, alignment, and fill color
-//! resolved before animation starts. This file performs that translation from collected layer data
+//! resolved before animation starts. The module performs that translation from collected layer data
 //! into Bevy `Text2d` components and marks the entity as visually spawned.
+//!
 //! 文本图层在动画开始前就需要确定字体句柄、换行宽度、行高、对齐方式和填充颜色。
-//! 这个文件把收集后的图层数据转换成 Bevy `Text2d` 组件，并标记实体已经完成可视化生成。
+//! 该模块会把收集后的图层数据转换成 Bevy `Text2d` 组件，并标记实体已经完成可视化生成。
 
 use bevy::prelude::*;
 use std::collections::HashMap;

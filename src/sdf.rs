@@ -14,7 +14,7 @@
 //!
 //! ## 源文件概述
 //!
-//! This file provides SDF-based rendering for AM shapes, matching AM's stroke behavior
+//! Provides SDF-based rendering for AM shapes, matching AM's stroke behavior
 //! where stroke width stays constant during scale animations.
 //!
 //! 本文件提供基于 SDF 的 AM 形状渲染，匹配 AM 的描边行为，即在缩放动画期间描边宽度保持不变。

@@ -1,9 +1,9 @@
-//! This file flattens nested pending-layer trees into spawnable layer lists.
+//! Flattens nested pending-layer trees into spawnable layer lists.
 //! It remaps ids and parent links, preserves embed-specific offsets, and keeps
 //! masking and repeat-related relationships coherent after child layers are pulled
 //! up into a single pending collection.
 //!
-//! 这个文件负责把嵌套的待生成图层树拍平成可直接生成的图层列表。它会重映射 id 和
+//! 负责把嵌套的待生成图层树拍平成可直接生成的图层列表。它会重映射 id 和
 //! 父子关系、保留嵌套场景特有的偏移信息，并在子图层被提升到同一层列表后继续维持
 //! 遮罩与 repeat 相关关系的正确性。
 

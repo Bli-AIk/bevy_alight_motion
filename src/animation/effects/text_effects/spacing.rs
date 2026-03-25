@@ -1,9 +1,9 @@
-//! This file implements animated text spacing adjustments.
+//! Implements animated text spacing adjustments.
 //! It captures the original glyph layout, then reapplies per-frame spacing and
 //! line-position offsets so authored text-spacing effects can deform Bevy's text
 //! output without rebuilding the text mesh from scratch.
 //!
-//! 这个文件实现文本字距动画调整。它会先记录原始字形布局，再在每帧重新施加字距和
+//! 实现文本字距动画调整。它会先记录原始字形布局，再在每帧重新施加字距和
 //! 行偏移变化，使作者定义的 text spacing 效果能够作用在 Bevy 产出的文本结果上，
 //! 而不必每次都完全重建文本网格。
 

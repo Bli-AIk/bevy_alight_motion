@@ -1,8 +1,8 @@
-//! This file contains shared parsers and applicators for scene effect extraction.
+//! Contains shared parsers and applicators for scene effect extraction.
 //! It holds the small helpers that multiple effect extractors reuse for animated
 //! floats, vec2 keyframes, palette colors, and related schema conversions.
 //!
-//! 这个文件存放场景特效提取阶段共用的解析与赋值辅助函数。多个 effect extractor
+//! 存放场景特效提取阶段共用的解析与赋值辅助函数。多个 effect extractor
 //! 都会复用这里的逻辑来处理动画浮点数、vec2 关键帧、调色板颜色以及相关的 schema 转换。
 
 use bevy::prelude::*;

@@ -1,9 +1,9 @@
-//! This file collects embed-scene layers into pending runtime structures.
+//! Collects embed-scene layers into pending runtime structures.
 //! It expands nested scenes, applies repeat-copy semantics, extends child
 //! lifecycles when needed, and packages the result so embed scenes behave like
 //! first-class layers in the outer timeline.
 //!
-//! 这个文件负责把嵌套场景图层收集成待生成的运行时结构。它会展开子场景、应用
+//! 负责把嵌套场景图层收集成待生成的运行时结构。它会展开子场景、应用
 //! repeat copy 语义、在需要时延长子节点生命周期，并把结果打包成外层时间轴中的
 //! 一级图层表现。
 

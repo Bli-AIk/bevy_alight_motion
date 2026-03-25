@@ -1,9 +1,9 @@
-//! This file adjusts the render mesh used by unified-effect visuals.
+//! Adjusts the render mesh used by unified-effect visuals.
 //! When blur, stretch, or other geometry-expanding effects are active, the code
 //! here grows or reshapes the quad so shader-side sampling has enough space and
 //! effect edges do not get clipped.
 //!
-//! 这个文件负责调整统一特效视觉对象使用的渲染网格。当 blur、stretch 或其他会
+//! 负责调整统一特效视觉对象使用的渲染网格。当 blur、stretch 或其他会
 //! 扩张几何边界的效果启用时，这里的逻辑会放大或重塑 quad，确保 shader 采样空间
 //! 足够，特效边缘不会被提前裁掉。
 

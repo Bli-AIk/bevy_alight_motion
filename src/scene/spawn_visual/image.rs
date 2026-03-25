@@ -1,8 +1,8 @@
-//! This file spawns image layers into Bevy entities.
+//! Spawns image layers into Bevy entities.
 //! It translates collected image-layer data and extracted effects into the runtime
 //! component bundle expected by later animation and rendering systems.
 //!
-//! 这个文件负责把图片图层生成成 Bevy 实体。它会把收集阶段得到的图片图层数据以及提取好的
+//! 负责把图片图层生成成 Bevy 实体。它会把收集阶段得到的图片图层数据以及提取好的
 //! 特效参数转换成后续动画与渲染系统期望的运行时组件组合。
 
 use bevy::prelude::*;

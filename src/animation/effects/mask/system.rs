@@ -1,9 +1,9 @@
-//! This file applies active mask state to unified materials each frame.
+//! Applies active mask state to unified materials each frame.
 //! It looks up the currently active masks for a layer, chooses the correct mask
 //! mode, and then combines direct, embed-scene, and repeat-aware mask data into
 //! the final uniform payload used for rendering.
 //!
-//! 这个文件负责在每一帧把活动中的遮罩状态应用到统一材质上。它会查找当前图层正在
+//! 负责在每一帧把活动中的遮罩状态应用到统一材质上。它会查找当前图层正在
 //! 生效的遮罩，选择正确的 mask 模式，并把直接遮罩、嵌套场景遮罩和带重复信息的遮罩
 //! 合并成最终用于渲染的 uniform 数据。
 

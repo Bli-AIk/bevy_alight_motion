@@ -1,9 +1,9 @@
-//! This file collects Alight Motion null layers into pending runtime layers.
+//! Collects Alight Motion null layers into pending runtime layers.
 //! Nulls do not render by themselves, but they carry transform hierarchies and
 //! many reusable motion effects, so this collector converts them into the same
 //! animated runtime representation used by visible layers.
 //!
-//! 这个文件负责把 Alight Motion 的 null 图层收集成待生成的运行时图层。Null
+//! 负责把 Alight Motion 的 null 图层收集成待生成的运行时图层。Null
 //! 自身不直接渲染，但它们承载层级变换和大量可复用的运动效果，因此这个收集器会把
 //! 它们转换成与可见图层一致的动画运行时表示。
 

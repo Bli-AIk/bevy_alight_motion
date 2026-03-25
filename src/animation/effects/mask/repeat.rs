@@ -1,9 +1,9 @@
-//! This file evaluates repeat-related mask uniforms.
+//! Evaluates repeat-related mask uniforms.
 //! Mask layers can themselves carry repeat and linear-repeat animation data, so
 //! the logic here extracts those values and writes the expanded mask-repeat state
 //! that the unified shader expects.
 //!
-//! 这个文件负责求值与重复相关的遮罩 uniform。遮罩图层本身也可能带有 repeat 和
+//! 负责求值与重复相关的遮罩 uniform。遮罩图层本身也可能带有 repeat 和
 //! linear repeat 动画，因此这里会提取这些值，并写出统一 shader 所需的扩展遮罩
 //! 重复状态。
 

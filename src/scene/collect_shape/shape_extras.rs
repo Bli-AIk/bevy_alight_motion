@@ -1,9 +1,9 @@
-//! This file extracts shape-type-specific extra parameters.
+//! Extracts shape-type-specific extra parameters.
 //! Many Alight Motion shapes share a common frame but need different auxiliary
 //! values such as star radii, pie angles, or polygon counts; this helper converts
 //! those authored properties into packed vectors for runtime use.
 //!
-//! 这个文件负责提取不同形状类型所需的额外参数。很多 Alight Motion 形状共享一套
+//! 负责提取不同形状类型所需的额外参数。很多 Alight Motion 形状共享一套
 //! 基本框架，但又需要 star 半径、pie 角度、多边形边数等附加值；这里会把这些作者侧
 //! 属性转换成运行时可直接消费的打包向量。
 

@@ -1,9 +1,9 @@
-//! This file computes the geometric parameters for animated masks.
+//! Computes the geometric parameters for animated masks.
 //! Given a mask entry and the currently spawned mask layer, it resolves center,
 //! half-size, rotation, blend, and stretch data so the shader-side masking path
 //! can mirror the source project faithfully.
 //!
-//! 这个文件负责计算动画遮罩的几何参数。它会根据 mask entry 和当前已生成的遮罩图层，
+//! 负责计算动画遮罩的几何参数。它会根据 mask entry 和当前已生成的遮罩图层，
 //! 求出中心、半尺寸、旋转、混合和拉伸信息，让 shader 端的遮罩路径能够尽量忠实地
 //! 还原源项目的表现。
 

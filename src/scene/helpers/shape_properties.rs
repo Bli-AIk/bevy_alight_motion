@@ -1,9 +1,9 @@
-//! This file parses custom shape property values from layer property lists.
+//! Parses custom shape property values from layer property lists.
 //! It offers typed accessors for float and vec2 properties, including animated
 //! variants, so shape collectors can read author-defined parameters without
 //! duplicating low-level property scanning code.
 //!
-//! 这个文件负责从图层属性列表里解析自定义形状属性。它提供 float 和 vec2 属性的
+//! 负责从图层属性列表里解析自定义形状属性。它提供 float 和 vec2 属性的
 //! 带类型访问器，以及对应的动画版本，让形状收集器无需重复书写底层属性扫描逻辑。
 
 use crate::schema::{AmAnimatedFloat, AmAnimatedVec2, AmKeyframe, AmProperty};

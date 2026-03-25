@@ -1,12 +1,14 @@
 //! Computes stretch-effect uniforms for SDF parents.
+//!
 //! 计算 SDF 父级图层的拉伸效果 uniform。
 //!
 //! Stretch on SDF-backed layers depends on the authored angle, smoothness, offsets, and the live
-//! world-space size of the parent shape. This file translates those animated properties into the
+//! world-space size of the parent shape. The module translates those animated properties into the
 //! normalized parameters expected by the SDF material so stretch is rendered in shader space rather
 //! than by deforming geometry on the CPU.
+//!
 //! 基于 SDF 的图层拉伸效果既依赖作者设置的角度、平滑度、偏移，也依赖父级形状当前的世界空间尺寸。
-//! 这个文件把这些动画属性换算成 SDF 材质需要的归一化参数，让拉伸在 shader 空间里完成，而不是
+//! 该模块会把这些动画属性换算成 SDF 材质需要的归一化参数，让拉伸在 shader 空间里完成，而不是
 //! 通过 CPU 直接改几何体。
 
 use bevy::prelude::*;

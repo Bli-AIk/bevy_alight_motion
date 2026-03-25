@@ -1,9 +1,9 @@
-//! This file implements the basic repeat effect for unified visuals.
+//! Implements the basic repeat effect for unified visuals.
 //! Compared with the linear and radial variants, this path focuses on the simple
 //! accumulated offset/rotation/scale repeat that Alight Motion applies to many
 //! layers by default.
 //!
-//! 这个文件实现统一材质视觉对象的基础 repeat 效果。和 linear、radial 变体相比，
+//! 实现统一材质视觉对象的基础 repeat 效果。和 linear、radial 变体相比，
 //! 这里主要处理 Alight Motion 默认那种简单的累计位移、旋转和缩放重复逻辑。
 
 use bevy::prelude::*;

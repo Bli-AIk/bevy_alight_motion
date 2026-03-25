@@ -1,11 +1,13 @@
 //! Systems that implement the frame-rate benchmark mode for the example player.
+//!
 //! 为示例播放器实现帧率基准模式的系统集合。
 //!
 //! The example player can run in a non-interactive benchmark mode that warms up the scene, samples
-//! frame times, and decides pass/warn/fail thresholds. This file owns that state machine and the
+//! frame times, and decides pass/warn/fail thresholds. That state machine and the
 //! reporting logic around it.
+//!
 //! 示例播放器支持一种非交互式基准模式：先预热场景，再采样帧耗时，并给出通过 / 警告 / 失败结论。
-//! 这个文件负责这套状态机以及围绕它的报告输出逻辑。
+//! 负责这套状态机以及围绕它的报告输出逻辑。
 
 use super::*;
 use bevy::app::AppExit;
