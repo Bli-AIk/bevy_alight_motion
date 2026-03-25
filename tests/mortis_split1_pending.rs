@@ -27,7 +27,11 @@ fn load_scene_from_amproj(path: impl AsRef<Path>) -> AmScene {
     panic!("no xml found in amproj");
 }
 
+// Temporary: this regression check depends on a private USER_mortis fixture that
+// is not available in CI. Re-enable it in the default test suite once the
+// fixture is committed or replaced with a public repro asset.
 #[test]
+#[ignore = "requires private USER_mortis fixture that is unavailable in CI"]
 fn inspect_mortis_split1_nested_embed_pending_layers() {
     let scene = load_scene_from_amproj(common::fixture_path(
         "assets/projects/private/USER_mortis/revenge/split1.amproj",
