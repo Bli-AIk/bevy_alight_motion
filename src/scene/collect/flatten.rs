@@ -339,6 +339,12 @@ mod tests {
         containing_embed_id: u64,
         label: &str,
     ) -> PendingLayer {
+        let animated = AmAnimated {
+            has_parent: parent != 0,
+            parent_layer_id: parent,
+            ..Default::default()
+        };
+
         PendingLayer {
             id,
             label: label.to_string(),
@@ -346,7 +352,7 @@ mod tests {
             start_time: 0,
             end_time: 0,
             transform: Transform::default(),
-            animated: AmAnimated::default(),
+            animated,
             spec: AmLayerSpec::Null,
             z_index: 0.0,
             children: Vec::new(),
