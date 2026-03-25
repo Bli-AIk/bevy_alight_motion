@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-25T06:41:36.242410+08:00",
+  "timestamp": "2026-03-25T08:20:03.901147+08:00",
   "summary": {
     "passed": 185,
     "warnings": 0,
@@ -789,7 +789,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
       "status": "fail",
-      "avg_similarity": 0.8972
+      "avg_similarity": 0.8615
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
       "status": "pass"
