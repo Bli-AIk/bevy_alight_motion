@@ -1,11 +1,14 @@
+mod common;
+
 use bevy::prelude::Handle;
 use bevy_alight_motion::loader::FontMetrics;
 use bevy_alight_motion::scene::{AmLayerSpec, AmSceneConfig, collect_pending_layers};
 use bevy_alight_motion::schema::AmScene;
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
+use std::path::Path;
 
-fn load_scene_from_amproj(path: &str) -> AmScene {
+fn load_scene_from_amproj(path: impl AsRef<Path>) -> AmScene {
     let bytes = std::fs::read(path).expect("failed to read amproj");
     let cursor = Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor).expect("failed to open amproj zip");
@@ -26,7 +29,9 @@ fn load_scene_from_amproj(path: &str) -> AmScene {
 
 #[test]
 fn inspect_mortis_split1_nested_embed_pending_layers() {
-    let scene = load_scene_from_amproj("assets/projects/private/USER_mortis/revenge/split1.amproj");
+    let scene = load_scene_from_amproj(common::fixture_path(
+        "assets/projects/private/USER_mortis/revenge/split1.amproj",
+    ));
     let config = AmSceneConfig {
         canvas_width: scene.width as f32,
         canvas_height: scene.height as f32,
