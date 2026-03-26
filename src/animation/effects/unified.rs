@@ -16,16 +16,35 @@ use self::effects::{
 };
 use self::mesh::{update_base_mesh, update_blur_mesh, update_stretch_mesh};
 use super::unified_support::{compute_ancestor_scale, trace_parenthelper_unified_state};
-use crate::animation::components::{AmAnimated, AmPlayback};
+use crate::animation::components::{AmAnimated, AmPlayback, AmUnifiedMeshState};
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
+
+fn force_white_tint_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_FORCE_WHITE_TINT_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
+fn trace_unified_color_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_UNIFIED_COLOR_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
 
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
 /// It is designed for the RTT architecture where effects are stackable.
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
-    mut commands: Commands,
-    query: Query<(
+    mut query: Query<(
         Entity,
         &AmAnimated,
         &crate::scene::AmLayerMarker,
@@ -33,6 +52,7 @@ pub fn animate_unified_effect_system(
         &Transform,
         &GlobalTransform,
         &bevy::mesh::Mesh2d,
+        &mut AmUnifiedMeshState,
         Option<&crate::animation::components::AmUnifiedUsesTransformScale>,
         Option<&crate::scene::AmEmbedContentMarker>,
         Option<&Visibility>,
@@ -63,12 +83,13 @@ pub fn animate_unified_effect_system(
         transform,
         global_transform,
         mesh2d,
+        mut mesh_state,
         unified_transform_scale,
         _embed_marker,
         visibility,
         render_layers,
         child_of,
-    ) in query.iter()
+    ) in query.iter_mut()
     {
         if unified_transform_scale.is_some() {
             continue;
@@ -227,6 +248,24 @@ pub fn animate_unified_effect_system(
             continue;
         };
 
+        if trace_unified_color_enabled(animated.layer_id) {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][pre-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
+                animated.layer_id,
+                marker.label,
+                layer_time,
+                material.uniform_data.color,
+                material.uniform_data.replace_color_flags,
+                material.uniform_data.threshold_params
+            );
+        }
+
+        if force_white_tint_enabled(animated.layer_id) {
+            material.uniform_data.color.x = 1.0;
+            material.uniform_data.color.y = 1.0;
+            material.uniform_data.color.z = 1.0;
+        }
+
         if std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
             && (marker.label == "长方形 1" || marker.label == "长方形 2")
         {
@@ -296,6 +335,7 @@ pub fn animate_unified_effect_system(
             orig_width,
             orig_height,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
         );
 
@@ -313,6 +353,7 @@ pub fn animate_unified_effect_system(
             orig_height,
             global_transform,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
         );
 
@@ -332,6 +373,7 @@ pub fn animate_unified_effect_system(
             orig_width,
             orig_height,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
         );
 
@@ -362,9 +404,8 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
         );
 
         super::repeat::process_linear_repeat_effect(
@@ -373,9 +414,8 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
         );
 
         super::repeat::process_radial_repeat_effect(
@@ -384,9 +424,20 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
         );
+
+        if trace_unified_color_enabled(animated.layer_id) {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][post-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
+                animated.layer_id,
+                marker.label,
+                layer_time,
+                material.uniform_data.color,
+                material.uniform_data.replace_color_flags,
+                material.uniform_data.threshold_params
+            );
+        }
     }
 }

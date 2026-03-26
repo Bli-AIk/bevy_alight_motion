@@ -20,7 +20,7 @@
 *.sln.DotSettings.user
 *.user
 
-AGENTS.md
+AGENTS.md*
 GEMINI.md
 agent_*.md
 ai_check.sh

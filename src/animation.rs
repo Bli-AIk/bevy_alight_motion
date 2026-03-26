@@ -62,6 +62,7 @@ pub use interpolation::{
 };
 
 // Internal re-exports for other modules in this crate
+pub(crate) use components::AmUnifiedMeshState;
 
 #[cfg(test)]
 mod tests {

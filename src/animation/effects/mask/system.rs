@@ -17,6 +17,16 @@ use super::embed::apply_embed_mask_uv;
 use super::repeat::set_mask_repeat_uniforms;
 use super::trace::trace_mask_once;
 
+fn mask_disabled_for_layer(layer_id: u64) -> bool {
+    std::env::var_os("AM_DISABLE_MASK_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 pub fn update_unified_mask_system(
     playback: Res<AmPlayback>,
     query: Query<(
@@ -45,6 +55,23 @@ pub fn update_unified_mask_system(
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
+
+        if mask_disabled_for_layer(marker.id) {
+            material.uniform_data.effect_flags.x = 0.0;
+            material.uniform_data.mask2_flags.x = 0.0;
+            material.uniform_data.mask2_flags.y = 0.0;
+            material.uniform_data.mask2_flags.z = 0.0;
+            material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+            material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+            material.mask_texture = None;
+            bevy::log::warn!(
+                "[MaskTrace] layer_id={} mask disabled by AM_DISABLE_MASK_IDS",
+                marker.id
+            );
+            continue;
+        }
 
         trace_mask_once(format!("active-layer:{}", marker.id), || {
             let masks = active_masks

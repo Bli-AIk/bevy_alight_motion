@@ -42,7 +42,7 @@ pub(super) fn create_anchored_rectangle_with_blur(
     blur_expansion: f32,
 ) -> Handle<Mesh> {
     if blur_expansion > 0.001 {
-        bevy::log::warn!(
+        bevy::log::trace!(
             "[MESH] create_anchored_rectangle_with_blur: size=({:.1},{:.1}) expansion={:.2}",
             width,
             height,

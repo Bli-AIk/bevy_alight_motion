@@ -129,6 +129,7 @@ struct UnifiedEffectUniform {
     mask1_rr_params3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
     mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
     mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
+    source_flags: vec4<f32>,           // (sampled_from_rtt, 0, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1493,80 +1494,72 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
     let feather = uniforms.replace_color_params.y;
     let effect_alpha = uniforms.replace_color_params.z;
     let lock_luminance = uniforms.replace_color_flags.y > 0.5;
-
-    // Uniform colors are in sRGB space (from XML). Process in sRGB to match AM.
-    let old_color = uniforms.replace_old_color;  // sRGB RGBA
-    let new_color = uniforms.replace_new_color;  // sRGB RGBA
-
-    // Convert texture from linear to sRGB (AM works in sRGB on mobile)
-    let tex_srgb = vec4<f32>(linear_to_srgb(input_color.rgb), input_color.a);
-
-    // Un-premultiply alpha (AM: srcColor = texColor.rgb / texColor.a)
-    var src_color: vec3<f32>;
-    if tex_srgb.a > 0.0001 {
-        src_color = tex_srgb.rgb / tex_srgb.a;
-    } else {
+    let input_alpha = input_color.a;
+    if input_alpha <= 0.0001 {
         return input_color;
     }
 
-    // RGB→YUV using AM's matrix
-    let old_rgb_norm = old_color.rgb / max(old_color.a, 0.001);
-    let new_rgb_norm = new_color.rgb / max(new_color.a, 0.001);
-
-    let old_yuv = vec3<f32>(
-        dot(old_color.rgb, vec3<f32>(0.299, 0.587, 0.114)),
-        dot(old_color.rgb, vec3<f32>(-0.14713, -0.28886, 0.436)),
-        dot(old_color.rgb, vec3<f32>(0.615, -0.51499, -0.10001))
+    // Replace-color should operate on straight RGB. Intrinsic/group RTT inputs can arrive with
+    // RGB already attenuated by alpha, so detect that case and un-premultiply before matching.
+    let max_input = max(max(input_color.r, input_color.g), input_color.b);
+    let looks_premultiplied = input_alpha > 0.001 && max_input <= input_alpha + 0.001;
+    let input_rgb_linear = clamp(
+        select(input_color.rgb, input_color.rgb / input_alpha, looks_premultiplied),
+        vec3<f32>(0.0),
+        vec3<f32>(1.0),
     );
-    let src_yuv = vec3<f32>(
-        dot(src_color, vec3<f32>(0.299, 0.587, 0.114)),
-        dot(src_color, vec3<f32>(-0.14713, -0.28886, 0.436)),
-        dot(src_color, vec3<f32>(0.615, -0.51499, -0.10001))
+    let src_color = linear_to_srgb(input_rgb_linear);
+    let tex_color = vec4<f32>(src_color * input_alpha, input_alpha);
+    let old_color = uniforms.replace_old_color;
+    let new_color = uniforms.replace_new_color;
+
+    let rgb2yuv = mat3x3<f32>(
+        vec3<f32>(0.299, -0.14713, 0.615),
+        vec3<f32>(0.587, -0.28886, -0.51499),
+        vec3<f32>(0.114, 0.436, -0.10001),
+    );
+    let yuv2rgb = mat3x3<f32>(
+        vec3<f32>(1.0, 1.0, 1.0),
+        vec3<f32>(0.0, -0.39465, 2.03211),
+        vec3<f32>(1.13983, -0.58060, 0.0),
     );
 
-    // Weighted YUV distance (AM: Y×0.5, UV×4.0)
-    var diff_yuv = abs(old_yuv - src_yuv);
+    let old_color_yuv = old_color.rgb * rgb2yuv;
+    let src_color_yuv = src_color * rgb2yuv;
+    var diff_yuv = abs(old_color_yuv - src_color_yuv);
     diff_yuv.x *= 0.5;
     diff_yuv.y *= 4.0;
     diff_yuv.z *= 4.0;
-    let diff = length(diff_yuv);
+    let distance = length(diff_yuv);
 
-    // AM's smoothstep with reversed edges: p=1 when close match, p=0 when far
-    // GLSL allows smoothstep(high, low, x) but WGSL requires low < high,
-    // so we use 1.0 - smoothstep(low, high, x) to get the reversed behavior.
     let eff_feather = max(feather, 0.0005);
-    let b = max(threshold - eff_feather, 0.0);
-    let a = min(threshold + eff_feather, 4.0);
-    let low_edge = min(b, a - 0.0005);
-    let p = 1.0 - smoothstep(low_edge, a, diff);
+    let low = max(threshold - eff_feather, 0.0);
+    let high = min(threshold + eff_feather, 4.0);
+    let low_edge = min(low, high - 0.0005);
+    var replace_factor = 1.0 - smoothstep(low_edge, high, distance);
+    if feather <= 0.001 {
+        replace_factor = select(0.0, 1.0, distance <= threshold);
+    }
+    replace_factor *= new_color.a * effect_alpha;
 
-    // Compute adjusted new color
-    var new_color_adj: vec3<f32>;
+    var new_color_adj = new_color.rgb / max(new_color.a, 0.001);
     if lock_luminance {
-        // Keep source luminance, use new chrominance
-        let new_yuv = vec3<f32>(
-            dot(new_rgb_norm, vec3<f32>(0.299, 0.587, 0.114)),
-            dot(new_rgb_norm, vec3<f32>(-0.14713, -0.28886, 0.436)),
-            dot(new_rgb_norm, vec3<f32>(0.615, -0.51499, -0.10001))
-        );
-        let adj_yuv = vec3<f32>(src_yuv.x, new_yuv.y, new_yuv.z);
-        new_color_adj = vec3<f32>(
-            dot(adj_yuv, vec3<f32>(1.0, 0.0, 1.13983)),
-            dot(adj_yuv, vec3<f32>(1.0, -0.39465, -0.58060)),
-            dot(adj_yuv, vec3<f32>(1.0, 2.03211, 0.0))
-        );
+        var new_color_yuv = new_color_adj * rgb2yuv;
+        new_color_yuv.x = src_color_yuv.x;
+        new_color_adj = new_color_yuv * yuv2rgb;
     } else {
-        // Additive color shift (AM: srcColor - oldColor + newColor)
-        new_color_adj = src_color - old_rgb_norm + new_rgb_norm;
+        new_color_adj = src_color - (old_color.rgb / max(old_color.a, 0.001)) + new_color_adj;
     }
 
-    // Final blend (AM formula): mix with newcolor.a * alpha
-    let blended = mix(src_color, new_color_adj, p);
-    let result_premul = vec4<f32>(blended, 1.0) * tex_srgb.a;
-    let final_srgb = mix(tex_srgb, result_premul, new_color.a * effect_alpha);
+    let replaced = mix(src_color, new_color_adj, replace_factor);
+    let final_srgb = mix(tex_color, vec4<f32>(replaced, 1.0) * input_alpha, replace_factor);
 
-    // Convert back to linear
-    return vec4<f32>(srgb_to_linear(final_srgb.rgb), final_srgb.a);
+    if final_srgb.a > 0.001 {
+        let straight_linear = srgb_to_linear(final_srgb.rgb / final_srgb.a);
+        return vec4<f32>(straight_linear * final_srgb.a, final_srgb.a);
+    }
+
+    return vec4<f32>(0.0);
 }
 
 // ChromaKey (chroma keying) effect / 色度键效果
@@ -2390,7 +2383,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             }
         }
         
-        // Convert back to linear
+        // Convert back to premultiplied linear color for downstream repeat compositing.
         if acc_srgb.a > 0.001 {
             tex_color = vec4<f32>(pow(acc_srgb.rgb / acc_srgb.a, rp_gamma) * acc_srgb.a, acc_srgb.a);
         } else {
@@ -2554,7 +2547,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             }
         }
         
-        // Convert back to linear
+        // Convert back to premultiplied linear color for downstream repeat compositing.
         if acc_lr_srgb.a > 0.001 {
             tex_color = vec4<f32>(pow(acc_lr_srgb.rgb / acc_lr_srgb.a, lr_gamma) * acc_lr_srgb.a, acc_lr_srgb.a);
         } else {
@@ -3082,7 +3075,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
     // Gamma-encode alpha so that the linear-space alpha blend approximates AM's sRGB result.
     // For fully opaque content over black: linear_to_srgb(srgb_to_linear(opacity)) = opacity.
-    if final_color.a > 0.001 && final_color.a < 0.999 {
+    let source_is_rtt = uniforms.source_flags.x > 0.5;
+    if !source_is_rtt && final_color.a > 0.001 && final_color.a < 0.999 {
         final_color.a = select(
             pow((final_color.a + 0.055) / 1.055, 2.4),
             final_color.a / 12.92,
@@ -3100,6 +3094,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if rgb_split_mode_raw >= -0.5 {
         // RGB split: scale RGB by layer opacity (preserves additive fringe behavior)
         final_color = vec4<f32>(final_color.rgb * uniforms.color.a, final_color.a);
+    } else if source_is_rtt {
+        // RTT sources already arrive as premultiplied linear color from the previous pass.
+        // Re-premultiplying or re-gamma-correcting alpha would darken nested composites.
+        final_color = final_color;
     } else {
         // Standard: premultiply rgb by alpha
         final_color = vec4<f32>(final_color.rgb * final_color.a, final_color.a);

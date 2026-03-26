@@ -28,6 +28,8 @@ pub fn evaluate_render_strategy_system(
         Without<RenderStrategy>,
     >,
 ) {
+    let trace_strategy = std::env::var_os("AM_RTT_STRATEGY_TRACE").is_some();
+
     for (entity, needs_eval, group_fill, embed_mask, force_hidden) in query.iter() {
         let needs_fill = group_fill.is_some();
         let is_mask = embed_mask.is_some();
@@ -40,14 +42,16 @@ pub fn evaluate_render_strategy_system(
             RenderStrategy::Direct
         };
 
-        bevy::log::warn!(
-            "[Strategy-DBG] Embed {:?} → {:?} (fill={}, mask={}, force_composite={})",
-            entity,
-            strategy,
-            needs_fill,
-            is_mask,
-            needs_eval.requires_composite,
-        );
+        if trace_strategy {
+            bevy::log::warn!(
+                "[Strategy-DBG] Embed {:?} → {:?} (fill={}, mask={}, force_composite={})",
+                entity,
+                strategy,
+                needs_fill,
+                is_mask,
+                needs_eval.requires_composite,
+            );
+        }
 
         commands
             .entity(entity)

@@ -567,9 +567,10 @@ pub fn comparison_loop(
 
             // DON'T set time immediately - store it as pending to be applied in next frame's First schedule
             // This ensures lifecycle_system won't run with new time in this frame's Update schedule
-            // AM uses integer millisecond times via frameStartTimeFromFrameNumber which does
-            // integer division: (frame * 100000) / fphs. Floor to match AM's truncation.
-            let time_ms = (time_sec * 1000.0).floor();
+            // Comparison samples should align to the exported frame timestamp, not always the
+            // truncated frame-start millisecond. Rounding avoids systematically sampling a little
+            // too early on borderline layers (for example 16.67ms becoming 16ms).
+            let time_ms = (time_sec * 1000.0).round();
             state.pending_time_ms = Some(time_ms);
 
             // Debug: log time setting for frame 30
@@ -624,11 +625,16 @@ pub fn comparison_loop(
                 if state.settle_stable_frames >= wait_frames {
                     state.settle_signature = None;
                     state.settle_stable_frames = 0;
+                    let default_prime_captures = if cfg!(feature = "headless-render") {
+                        2
+                    } else {
+                        1
+                    };
                     state.prime_capture_requests_remaining =
                         std::env::var("COMPARISON_PRIME_CAPTURES")
                             .ok()
                             .and_then(|s| s.parse::<u32>().ok())
-                            .unwrap_or(1);
+                            .unwrap_or(default_prime_captures);
                     state.stage = TestStage::PrimingCapture;
                 }
             }

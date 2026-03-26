@@ -16,9 +16,8 @@ pub(crate) fn process_radial_repeat_effect(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
-    entity: Entity,
+    mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
-    commands: &mut Commands,
 ) {
     let has_radial_repeat = animated.radial_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -113,7 +112,6 @@ pub(crate) fn process_radial_repeat_effect(
             [max_x, max_y, 0.0],
             [min_x, max_y, 0.0],
         ];
-        let normals = vec![[0.0, 0.0, 1.0]; 4];
         let uvs = vec![
             [uv_min_x, uv_at_bottom],
             [uv_max_x, uv_at_bottom],
@@ -122,20 +120,7 @@ pub(crate) fn process_radial_repeat_effect(
         ];
         let indices = vec![0u32, 1, 2, 0, 2, 3];
 
-        let mut new_mesh = Mesh::new(
-            bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD
-                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-        );
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-        new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-        let new_mesh_handle = meshes.add(new_mesh);
-        commands
-            .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
+        super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
     } else {
         material.uniform_data.radial_repeat_params1 = Vec4::ZERO;
         material.uniform_data.radial_repeat_params2 = Vec4::new(360.0, 1.0, 0.0, 1.0);

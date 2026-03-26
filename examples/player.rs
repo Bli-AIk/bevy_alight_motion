@@ -226,7 +226,7 @@ fn main() {
         .init_resource::<DebugOverlaySettings>()
         .init_resource::<MaskDebugSettings>()
         .add_plugins(AlightMotionPlugin)
-        .add_systems(Startup, setup);
+        .add_systems(Startup, (setup, configure_initial_playback));
 
     // Headless: use FixedSize since there's no window to query
     #[cfg(feature = "headless-render")]
@@ -353,6 +353,18 @@ fn trace_comparison_debug_counts_system(
         capturing.iter().len(),
         captured.iter().len()
     );
+}
+
+fn configure_initial_playback(mut playback: ResMut<AmPlayback>) {
+    if let Ok(value) = std::env::var("AM_START_TIME_MS")
+        && let Ok(time_ms) = value.parse::<f32>()
+    {
+        playback.current_time_ms = time_ms.max(0.0);
+    }
+
+    if std::env::var_os("AM_START_PAUSED").is_some() {
+        playback.playing = false;
+    }
 }
 
 /// Resource to store the project file path.

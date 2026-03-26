@@ -142,9 +142,14 @@ pub(super) fn compute_ancestor_scale(
 pub(super) fn update_quad_mesh(
     meshes: &mut Assets<Mesh>,
     mesh_handle: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     bounds: [f32; 4],
     uv_rect: [f32; 4],
 ) {
+    if mesh_state.matches(bounds, uv_rect) {
+        return;
+    }
+
     let [min_x, max_x, min_y, max_y] = bounds;
     let [uv_left, uv_right, uv_top, uv_bottom] = uv_rect;
 
@@ -172,4 +177,5 @@ pub(super) fn update_quad_mesh(
         ],
     );
     mesh.insert_indices(bevy::mesh::Indices::U32(vec![0u32, 1, 2, 0, 2, 3]));
+    mesh_state.store(bounds, uv_rect);
 }

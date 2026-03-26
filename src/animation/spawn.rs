@@ -17,6 +17,16 @@ use crate::sdf_material::SdfMaterial;
 use super::helpers::is_descendant_of;
 use super::spawn_entity::spawn_layer_entity;
 
+fn trace_lifecycle_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_LIFECYCLE_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 /// Count total layers including nested ones.
 ///
 /// 计算图层总数（包括嵌套图层）。
@@ -133,6 +143,22 @@ pub(crate) fn process_pending_layers(
         let should_be_active = own_time_active && ancestors_active;
 
         let is_spawned = pending.spawned_entities.contains_key(&layer.id);
+
+        if trace_lifecycle_enabled(layer.id) {
+            bevy::log::warn!(
+                "[LifecycleTrace] id={} label='{}' parent={} global={:.1} local={:.1} range={}..{} own_active={} ancestors_active={} spawned={}",
+                layer.id,
+                layer.label,
+                layer.parent,
+                global_time,
+                local_time,
+                layer.start_time,
+                layer.end_time,
+                own_time_active,
+                ancestors_active,
+                is_spawned,
+            );
+        }
 
         // Debug: log layer status (only first 5 frames and first 10 layers)
         static mut DEBUG_FRAME: u32 = 0;
@@ -258,10 +284,11 @@ pub(crate) fn process_pending_layers(
         count_spawn_depth(layer_id, &pending.layers, &spawning_ids, &mut visited)
     });
 
-    // DEBUG: Log spawn order for 空 layers
-    if to_spawn
-        .iter()
-        .any(|&idx| pending.layers[idx].label.contains("空"))
+    let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
+    if trace_spawn_order
+        && to_spawn
+            .iter()
+            .any(|&idx| pending.layers[idx].label.contains("空"))
     {
         bevy::log::info!("[SPAWN_ORDER] Spawning {} layers:", to_spawn.len());
         for &idx in &to_spawn {
@@ -356,8 +383,10 @@ pub(crate) fn process_pending_layers(
             actual_parent
         );
 
-        // DEBUG: Print transform info for parent-child analysis
-        if layer.label.contains("空") || layer.label.contains("Image_1699715690143") {
+        let trace_debug_transform = std::env::var_os("AM_DEBUG_TRANSFORM_TRACE").is_some();
+        if trace_debug_transform
+            && (layer.label.contains("空") || layer.label.contains("Image_1699715690143"))
+        {
             bevy::log::info!(
                 "[DEBUG_TRANSFORM] '{}' (id={}, parent={}): local_pos=({:.1},{:.1}), rot={:.1}°, scale=({:.2},{:.2}), has_parent={}",
                 layer.label,

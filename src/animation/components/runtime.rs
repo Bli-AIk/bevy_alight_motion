@@ -75,6 +75,50 @@ pub struct EchoAlphaConfig {
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AmUnifiedUsesTransformScale;
 
+/// Last mesh bounds written by unified-effect mesh maintenance.
+///
+/// Unified effect layers often recompute their quad every frame, but many of
+/// them are visually static for long stretches. Caching the last bounds/UV rect
+/// lets us skip redundant mesh writes without changing rendering behavior.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct AmUnifiedMeshState {
+    pub bounds: [f32; 4],
+    pub uv_rect: [f32; 4],
+    pub initialized: bool,
+}
+
+impl Default for AmUnifiedMeshState {
+    fn default() -> Self {
+        Self {
+            bounds: [0.0; 4],
+            uv_rect: [0.0; 4],
+            initialized: false,
+        }
+    }
+}
+
+impl AmUnifiedMeshState {
+    const EPSILON: f32 = 0.0005;
+
+    pub fn matches(&self, bounds: [f32; 4], uv_rect: [f32; 4]) -> bool {
+        self.initialized
+            && approx_rect_eq(self.bounds, bounds)
+            && approx_rect_eq(self.uv_rect, uv_rect)
+    }
+
+    pub fn store(&mut self, bounds: [f32; 4], uv_rect: [f32; 4]) {
+        self.bounds = bounds;
+        self.uv_rect = uv_rect;
+        self.initialized = true;
+    }
+}
+
+fn approx_rect_eq(lhs: [f32; 4], rhs: [f32; 4]) -> bool {
+    lhs.into_iter()
+        .zip(rhs)
+        .all(|(left, right)| (left - right).abs() <= AmUnifiedMeshState::EPSILON)
+}
+
 impl EchoAlphaConfig {
     pub fn evaluate(&self, global_time: f32) -> f32 {
         let parent_local = (global_time - self.parent_time_offset) * self.parent_speed;

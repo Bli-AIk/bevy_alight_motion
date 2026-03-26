@@ -85,6 +85,7 @@ pub(super) fn handle_image_visual(
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
 

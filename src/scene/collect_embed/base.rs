@@ -149,7 +149,7 @@ pub(super) fn collect_embed_base(
     }
 
     let embed_replace = extract_replace_color_effect(&embed.effects);
-    if embed_replace.old_color != Vec4::ZERO {
+    if embed.fill_type != "intrinsic" && embed_replace.old_color != Vec4::ZERO {
         for child in &mut children {
             if child.animated.replace_old_color == Vec4::ZERO {
                 child.animated.replace_old_color = embed_replace.old_color;

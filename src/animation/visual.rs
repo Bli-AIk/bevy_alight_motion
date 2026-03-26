@@ -24,6 +24,16 @@ use self::text::handle_text_visual;
 use super::sdf_spawn::spawn_sdf_visual;
 use super::visual_helpers::trace_visual_path_once;
 
+fn trace_unified_color_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_UNIFIED_COLOR_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 #[expect(clippy::too_many_arguments)] // reason: visual setup requires many GPU resource handles
 pub(crate) fn add_visual_components(
     commands: &mut Commands,
@@ -179,11 +189,23 @@ pub(crate) fn add_visual_components(
             height,
             anchor,
         } => {
+            if trace_unified_color_enabled(id) {
+                bevy::log::warn!(
+                    "[UnifiedColorTrace][spawn-dispatch] id={} label='{}' is_media={} image_uri='{}' fill_color_present={} needs_any_effect={}",
+                    id,
+                    label,
+                    is_media,
+                    image_uri,
+                    fill_color.is_some(),
+                    needs_any_effect
+                );
+            }
             handle_sprite_shape_visual(
                 commands,
                 meshes,
                 unified_materials,
                 entity,
+                id,
                 image_uri,
                 *is_media,
                 fill_color,

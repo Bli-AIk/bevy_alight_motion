@@ -13,6 +13,62 @@ use crate::loader::AmProject;
 use crate::plugin::resources::AmProjectResolution;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
 
+fn trace_replace_pending_layers(layers: &[crate::scene::PendingLayer]) {
+    fn visit(layers: &[crate::scene::PendingLayer]) {
+        for layer in layers {
+            if layer.animated.replace_old_color != Vec4::ZERO
+                || layer.animated.replace_new_color.value.is_some()
+                || !layer.animated.replace_new_color.keyframes.is_empty()
+            {
+                bevy::log::warn!(
+                    "[PendingReplaceTrace] id={} label='{}' old={:?} new_static={:?}",
+                    layer.id,
+                    layer.label,
+                    layer.animated.replace_old_color,
+                    layer.animated.replace_new_color.value,
+                );
+            }
+            visit(&layer.children);
+        }
+    }
+
+    visit(layers);
+}
+
+fn trace_pending_subtree(layers: &[crate::scene::PendingLayer], root_id: u64) {
+    fn print_layer(layer: &crate::scene::PendingLayer, depth: usize) {
+        let indent = "  ".repeat(depth);
+        bevy::log::warn!(
+            "[PendingSubtree] {}id={} label='{}' parent={} range={}..{} children={}",
+            indent,
+            layer.id,
+            layer.label,
+            layer.parent,
+            layer.start_time,
+            layer.end_time,
+            layer.children.len(),
+        );
+        for child in &layer.children {
+            print_layer(child, depth + 1);
+        }
+    }
+
+    fn visit(layers: &[crate::scene::PendingLayer], root_id: u64) -> bool {
+        for layer in layers {
+            if layer.id == root_id {
+                print_layer(layer, 0);
+                return true;
+            }
+            if visit(&layer.children, root_id) {
+                return true;
+            }
+        }
+        false
+    }
+
+    let _ = visit(layers, root_id);
+}
+
 pub(super) fn spawn_loaded_projects_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut AmProjectRoot, &mut Transform)>,
@@ -68,6 +124,16 @@ pub(super) fn spawn_loaded_projects_system(
             &project.font_metrics,
             &config,
         );
+
+        if std::env::var_os("AM_TRACE_PENDING_REPLACE").is_some() {
+            trace_replace_pending_layers(&pending_layers);
+        }
+        if let Some(root_id) = std::env::var("AM_TRACE_PENDING_SUBTREE_ID")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+        {
+            trace_pending_subtree(&pending_layers, root_id);
+        }
 
         bevy::log::info!(
             "Prepared {} pending layers for lazy spawning",

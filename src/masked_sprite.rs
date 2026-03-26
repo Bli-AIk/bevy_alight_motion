@@ -257,6 +257,8 @@ pub struct UnifiedEffectUniform {
     pub mask1_rr_params4: Vec4,
     /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
     pub mask1_rr_params5: Vec4,
+    /// Source flags: (sampled_from_rtt, 0, 0, 0)
+    pub source_flags: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -588,6 +590,7 @@ impl Default for UnifiedEffectUniform {
             mask1_rr_params3: Vec4::ZERO,
             mask1_rr_params4: Vec4::ZERO,
             mask1_rr_params5: Vec4::ZERO,
+            source_flags: Vec4::ZERO,
         }
     }
 }

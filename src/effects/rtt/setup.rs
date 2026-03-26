@@ -21,9 +21,19 @@ use super::{
 #[derive(Component)]
 pub(crate) struct PendingGroupFillTextureRefresh(u8);
 
+fn trace_rtt_setup_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_RTT_SETUP_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 fn composite_camera_order(
     embed_entity: Entity,
-    render_layer: u8,
+    render_layer: usize,
     parent_query: &Query<&ChildOf>,
     layer_spec_query: &Query<&crate::scene::AmLayerSpec>,
 ) -> isize {
@@ -51,6 +61,10 @@ fn composite_camera_order(
     } else {
         -((embed_depth + 1) * 100 + render_layer as isize)
     }
+}
+
+fn dynamic_render_layer(layer: usize) -> RenderLayers {
+    RenderLayers::from_layers(&[layer])
 }
 
 fn insert_group_fill_debug_sprite(
@@ -143,10 +157,7 @@ pub fn setup_embed_scene_rtt_system(
         query.iter()
     {
         let Some(render_layer) = layer_pool.allocate() else {
-            bevy::log::warn!(
-                "No available render layers for embedScene {:?}. Max 31 concurrent embedScenes supported.",
-                entity
-            );
+            bevy::log::warn!("No available render layer for embedScene {:?}.", entity);
             continue;
         };
 
@@ -157,8 +168,6 @@ pub fn setup_embed_scene_rtt_system(
             None,
         );
         let render_texture_handle = images.add(render_texture);
-        let render_layer_usize = render_layer as usize;
-
         let global_scale = embed_global.to_scale_rotation_translation().0;
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();
         let effective_height = needs_rtt.scene_height * global_scale.y.abs();
@@ -210,7 +219,7 @@ pub fn setup_embed_scene_rtt_system(
                     far: EMBED_RTT_CAMERA_FAR,
                     ..OrthographicProjection::default_2d()
                 }),
-                RenderLayers::layer(render_layer_usize),
+                dynamic_render_layer(render_layer),
                 initial_camera_transform,
             ))
             .id();
@@ -222,7 +231,7 @@ pub fn setup_embed_scene_rtt_system(
         let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
             if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
-                RenderLayers::layer(parent_rtt.render_layer as usize)
+                dynamic_render_layer(parent_rtt.render_layer)
             } else {
                 RenderLayers::layer(0)
             }
@@ -334,6 +343,23 @@ pub fn setup_embed_scene_rtt_system(
                 || animated.rgb_split_enabled
                 || animated.chromakey_enabled;
 
+            let trace_replace_setup = std::env::var_os("AM_TRACE_RTT_SETUP_REPLACE").is_some()
+                && has_replace_color;
+            if trace_rtt_setup_enabled(animated.layer_id) || trace_replace_setup {
+                bevy::log::warn!(
+                    "[RTT-SetupTrace] layer={} render_layer={} replace_old={:?} replace_new_static={:?} has_replace={} needs_unified={} has_pixelate={} has_threshold={} has_solidcolor={}",
+                    animated.layer_id,
+                    render_layer,
+                    animated.replace_old_color,
+                    animated.replace_new_color.value,
+                    has_replace_color,
+                    needs_unified,
+                    has_pixelate,
+                    has_threshold,
+                    has_solidcolor,
+                );
+            }
+
             if needs_unified {
                 let width = needs_rtt.scene_width;
                 let height = needs_rtt.scene_height;
@@ -341,6 +367,7 @@ pub fn setup_embed_scene_rtt_system(
                     uniform_data: crate::masked_sprite::UnifiedEffectUniform {
                         color: Vec4::new(1.0, 1.0, 1.0, 1.0),
                         original_size: Vec4::new(width, height, width, height),
+                        source_flags: Vec4::new(1.0, 0.0, 0.0, 0.0),
                         ..default()
                     },
                     texture: Some(render_texture_handle),
@@ -352,6 +379,7 @@ pub fn setup_embed_scene_rtt_system(
                     Mesh2d(mesh),
                     MeshMaterial2d(material),
                     crate::masked_sprite::UnifiedEffectMarker,
+                    crate::animation::AmUnifiedMeshState::default(),
                 ));
             } else {
                 commands.entity(entity).insert(Sprite {
@@ -417,7 +445,7 @@ pub fn fix_nested_embed_render_layers_system(
         let Ok(parent_rtt) = embed_rtt_query.get(parent) else {
             continue;
         };
-        let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
+        let expected_layer = dynamic_render_layer(parent_rtt.render_layer);
         if *current_layers != expected_layer {
             if trace_renderlayers {
                 bevy::log::warn!(

@@ -14,6 +14,16 @@ use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 
 use super::super::unified_support::{trace_stretch_once, update_quad_mesh};
 
+fn trace_unified_mesh_layer(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_EFFECT_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 pub(super) fn update_blur_mesh(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
@@ -21,6 +31,7 @@ pub(super) fn update_blur_mesh(
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
 ) {
     let has_blur =
@@ -46,6 +57,7 @@ pub(super) fn update_blur_mesh(
             update_quad_mesh(
                 meshes,
                 mesh2d,
+                mesh_state,
                 [min_x, max_x, min_y, max_y],
                 [
                     -uv_expand_x,
@@ -76,6 +88,7 @@ pub(super) fn update_stretch_mesh(
     orig_height: f32,
     global_transform: &GlobalTransform,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
 ) {
     if has_stretch {
@@ -195,6 +208,7 @@ pub(super) fn update_stretch_mesh(
         update_quad_mesh(
             meshes,
             mesh2d,
+            mesh_state,
             [-half_nw, half_nw, -half_nh, half_nh],
             [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
         );
@@ -215,9 +229,11 @@ pub(super) fn update_base_mesh(
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
 ) {
     if !has_stretch && !has_blur {
+        let trace_layer = trace_unified_mesh_layer(animated.layer_id);
         let (s2_expand_x, s2_expand_y, s2_uv_min_x, s2_uv_min_y) =
             if has_stretch2 && !animated.stretch2_content_only && (s2_scale - 1.0).abs() > 0.001 {
                 let cos_a = s2_angle_rad.cos();
@@ -307,16 +323,32 @@ pub(super) fn update_base_mesh(
         );
         let uv_exp_x = total_expansion / orig_width;
         let uv_exp_y = total_expansion / orig_height;
+        let bounds = [lx, rx, by, ty];
+        let uv_rect = [
+            s2_uv_min_x - uv_exp_x,
+            (s2_uv_min_x + s2_expand_x) + uv_exp_x,
+            (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
+            (1.0 - s2_uv_min_y) + uv_exp_y,
+        ];
+        if trace_layer {
+            bevy::log::warn!(
+                "[UnifiedMeshTrace] layer={} orig=({:.1},{:.1}) anchor_offset=({:.1},{:.1}) total_expansion={:.3} bounds={:?} uv_rect={:?}",
+                animated.layer_id,
+                orig_width,
+                orig_height,
+                animated.anchor_offset.x,
+                animated.anchor_offset.y,
+                total_expansion,
+                bounds,
+                uv_rect
+            );
+        }
         update_quad_mesh(
             meshes,
             mesh2d,
-            [lx, rx, by, ty],
-            [
-                s2_uv_min_x - uv_exp_x,
-                (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-                (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
-                (1.0 - s2_uv_min_y) + uv_exp_y,
-            ],
+            mesh_state,
+            bounds,
+            uv_rect,
         );
     }
 }

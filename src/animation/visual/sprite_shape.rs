@@ -20,12 +20,29 @@ use super::super::visual_helpers::{create_stretch_bounds_mesh, extract_fill_colo
 use super::material::create_unified_material;
 use super::mesh::create_anchored_rectangle_with_blur;
 
+fn force_plain_sprite_for_label(label: &str) -> bool {
+    std::env::var_os("AM_FORCE_PLAIN_SPRITE_LABELS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|labels| labels.split(',').any(|value| value.trim() == label))
+}
+
+fn trace_unified_color_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_UNIFIED_COLOR_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 #[expect(clippy::too_many_arguments)] // reason: sprite-shape visuals require effect/resource fan-in
 pub(super) fn handle_sprite_shape_visual(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
     entity: Entity,
+    layer_id: u64,
     image_uri: &str,
     is_media: bool,
     fill_color: &Option<crate::schema::AmFillColor>,
@@ -113,6 +130,24 @@ pub(super) fn handle_sprite_shape_visual(
         return;
     }
 
+    if let Some(handle) = media_handle.filter(|_| force_plain_sprite_for_label(label)) {
+        commands.entity(entity).insert((
+            Sprite {
+                image: handle.clone(),
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(base_width, base_height)),
+                ..default()
+            },
+            *anchor,
+            AmVisualSpawned,
+        ));
+        bevy::log::warn!(
+            "[VisualDebug] forcing plain sprite path for '{}' via AM_FORCE_PLAIN_SPRITE_LABELS",
+            label
+        );
+        return;
+    }
+
     if let Some(handle) = media_handle.filter(|_| needs_any_effect) {
         let scaled_width = base_width * initial_scale.0.abs();
         let scaled_height = base_height * initial_scale.1.abs();
@@ -191,10 +226,24 @@ pub(super) fn handle_sprite_shape_visual(
             replace_color_params,
         );
 
+        if trace_unified_color_enabled(layer_id)
+            && let Some(material_ref) = unified_materials.get(&material)
+        {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][spawn-media] id={} label='{}' color={:?} replace_flags={:?} threshold={:?}",
+                layer_id,
+                label,
+                material_ref.uniform_data.color,
+                material_ref.uniform_data.replace_color_flags,
+                material_ref.uniform_data.threshold_params
+            );
+        }
+
         commands.entity(entity).insert((
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
         if unified_uses_transform_scale {
@@ -307,10 +356,24 @@ pub(super) fn handle_sprite_shape_visual(
             replace_color_params,
         );
 
+        if trace_unified_color_enabled(layer_id)
+            && let Some(material_ref) = unified_materials.get(&material)
+        {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][spawn-fill] id={} label='{}' color={:?} replace_flags={:?} threshold={:?}",
+                layer_id,
+                label,
+                material_ref.uniform_data.color,
+                material_ref.uniform_data.replace_color_flags,
+                material_ref.uniform_data.threshold_params
+            );
+        }
+
         commands.entity(entity).insert((
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
         if unified_uses_transform_scale {

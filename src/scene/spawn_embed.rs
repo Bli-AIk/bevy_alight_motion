@@ -102,6 +102,7 @@ pub(crate) fn spawn_embed_scene(
     let mirror_effect = extract_mirror_effect(&embed.effects);
     let lift_effect = extract_lift_effect(&embed.effects);
     let rays_effect = extract_rays_effect(&embed.effects);
+    let replace_color = extract_replace_color_effect(&embed.effects);
 
     let transform = Transform {
         translation: Vec3::new(tx, ty, z),
@@ -213,12 +214,12 @@ pub(crate) fn spawn_embed_scene(
                 rays_blend: rays_effect.blend,
                 rays_quality: rays_effect.quality,
                 rays_has_effect: rays_effect.has_effect,
-                replace_old_color: Vec4::ZERO,
-                replace_new_color: crate::schema::AmAnimatedColor::default(),
-                replace_threshold: AmAnimatedFloat::default(),
-                replace_feather: AmAnimatedFloat::default(),
-                replace_alpha: AmAnimatedFloat::default(),
-                replace_lock_luminance: false,
+                replace_old_color: replace_color.old_color,
+                replace_new_color: replace_color.new_color,
+                replace_threshold: replace_color.threshold,
+                replace_feather: replace_color.feather,
+                replace_alpha: replace_color.alpha,
+                replace_lock_luminance: replace_color.lock_luminance,
                 repeat_count: AmAnimatedFloat::default(),
                 repeat_offset: AmAnimatedVec2::default(),
                 repeat_angle: AmAnimatedFloat::default(),

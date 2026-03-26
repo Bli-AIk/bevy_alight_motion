@@ -14,16 +14,51 @@ use crate::animation::interpolation::{interpolate_color, interpolate_float, inte
 
 use super::java_random::compute_java_random_state_packed;
 
+fn linear_repeat_trace_enabled(layer_id: u64) -> bool {
+    if std::env::var_os("AM_TRACE_LINEAR_REPEAT_ALL").is_some() {
+        return true;
+    }
+    std::env::var_os("AM_TRACE_LINEAR_REPEAT_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 pub(crate) fn process_linear_repeat_effect(
     animated: &AmAnimated,
     layer_time: f32,
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
-    entity: Entity,
+    mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
-    commands: &mut Commands,
 ) {
+    let trace_enabled = linear_repeat_trace_enabled(animated.layer_id);
+    if std::env::var_os("AM_DISABLE_LINEAR_REPEAT").is_some() {
+        if trace_enabled {
+            bevy::log::warn!(
+                "[LinearRepeatTrace] layer={} disabled by AM_DISABLE_LINEAR_REPEAT",
+                animated.layer_id
+            );
+        }
+        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        return;
+    }
+
     let has_linear_repeat = animated.linear_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
             .linear_repeat_count
@@ -145,6 +180,66 @@ pub(crate) fn process_linear_repeat_effect(
             (false, 0.0, [0.0, 0.0], [0.0, 0.0], 0.0, 1.0)
         };
 
+    if trace_enabled {
+        let progress = calc_linear_repeat_progress(
+            0,
+            count_rounded.max(1.0) as i32,
+            start,
+            end,
+            phase,
+            overlap,
+            animated.linear_repeat_shape,
+            animated.linear_repeat_invert,
+            ease_in,
+            ease_out,
+        );
+        let progress2 = has_lr2.then(|| {
+            calc_linear_repeat_progress(
+                0,
+                count2_rounded.max(1.0) as i32,
+                material.uniform_data.linear_repeat2_params3.x,
+                material.uniform_data.linear_repeat2_params3.y,
+                material.uniform_data.linear_repeat2_params3.z,
+                material.uniform_data.linear_repeat2_params3.w,
+                if let Some(ref lr2) = animated.linear_repeat2 {
+                    lr2.shape
+                } else {
+                    0
+                },
+                if let Some(ref lr2) = animated.linear_repeat2 {
+                    lr2.invert
+                } else {
+                    false
+                },
+                material.uniform_data.linear_repeat2_params4.x,
+                material.uniform_data.linear_repeat2_params4.y,
+            )
+        });
+        bevy::log::warn!(
+            "[LinearRepeatTrace] layer={} layer_time={:.6} orig=({:.2},{:.2}) count={:.3}->{:.0} pos=({:.2},{:.2}) off=({:.2},{:.2}) angle={:.2} scale={:.3} alpha={:.3} start={:.3} end={:.3} phase={:.3} overlap={:.3} p0=({:.3},{:.3}) lr2={:?}",
+            animated.layer_id,
+            layer_time,
+            orig_width,
+            orig_height,
+            count,
+            count_rounded,
+            position[0],
+            position[1],
+            offset[0],
+            offset[1],
+            angle,
+            scale,
+            alpha,
+            start,
+            end,
+            phase,
+            overlap,
+            progress.0,
+            progress.1,
+            progress2,
+        );
+    }
+
     let n = count_rounded as i32;
     let angle_rad = angle.to_radians();
     let mut min_x = -orig_width / 2.0;
@@ -259,7 +354,6 @@ pub(crate) fn process_linear_repeat_effect(
         [max_x, max_y, 0.0],
         [min_x, max_y, 0.0],
     ];
-    let normals = vec![[0.0, 0.0, 1.0]; 4];
     let uvs = vec![
         [uv_min_x, uv_at_bottom],
         [uv_max_x, uv_at_bottom],
@@ -268,19 +362,7 @@ pub(crate) fn process_linear_repeat_effect(
     ];
     let indices = vec![0u32, 1, 2, 0, 2, 3];
 
-    let mut new_mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
-        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-    );
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-    let new_mesh_handle = meshes.add(new_mesh);
-    commands
-        .entity(entity)
-        .insert(bevy::mesh::Mesh2d(new_mesh_handle));
+    super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
 }
 
 #[expect(dead_code)] // reason: kept as a CPU parity helper while SDF linear-repeat copy displacement is still partial

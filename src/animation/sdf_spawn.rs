@@ -169,24 +169,27 @@ pub fn spawn_sdf_visual(
     let fill_linear = fill.to_linear();
 
     let shape_type_f32 = sdf_shape_type.to_f32();
+    let trace_sdf_spawn = std::env::var_os("AM_SDF_SPAWN_TRACE").is_some();
 
-    bevy::log::warn!(
-        "[SDF_SPAWN] '{}': shape_type={:?}({}), half=({:.1},{:.1}), frame_half={:.1}, extra=({:.1},{:.1},{:.1},{:.1}), fill=({:.3},{:.3},{:.3},{:.3})",
-        marker.label,
-        sdf_shape_type,
-        shape_type_f32,
-        target_half_width,
-        target_half_height,
-        frame_half,
-        shape_extra.x,
-        shape_extra.y,
-        shape_extra.z,
-        shape_extra.w,
-        fill_linear.red,
-        fill_linear.green,
-        fill_linear.blue,
-        fill_linear.alpha
-    );
+    if trace_sdf_spawn {
+        bevy::log::warn!(
+            "[SDF_SPAWN] '{}': shape_type={:?}({}), half=({:.1},{:.1}), frame_half={:.1}, extra=({:.1},{:.1},{:.1},{:.1}), fill=({:.3},{:.3},{:.3},{:.3})",
+            marker.label,
+            sdf_shape_type,
+            shape_type_f32,
+            target_half_width,
+            target_half_height,
+            frame_half,
+            shape_extra.x,
+            shape_extra.y,
+            shape_extra.z,
+            shape_extra.w,
+            fill_linear.red,
+            fill_linear.green,
+            fill_linear.blue,
+            fill_linear.alpha
+        );
+    }
 
     // Create SDF material - with or without mask
     // Use first active mask at current playback time
@@ -198,17 +201,19 @@ pub fn spawn_sdf_visual(
         // Scale mask center and half_size by fit_scale for world coordinate space
         let scaled_center = mask.center * fit_scale;
         let scaled_half_size = mask.half_size * fit_scale;
-        bevy::log::info!(
-            "[SDF_SPAWN] '{}': Creating material with mask center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.2}, original_center=({:.1},{:.1})",
-            marker.label,
-            scaled_center.x,
-            scaled_center.y,
-            scaled_half_size.x,
-            scaled_half_size.y,
-            fit_scale,
-            mask.center.x,
-            mask.center.y
-        );
+        if trace_sdf_spawn {
+            bevy::log::info!(
+                "[SDF_SPAWN] '{}': Creating material with mask center=({:.1},{:.1}), half_size=({:.1},{:.1}), fit_scale={:.2}, original_center=({:.1},{:.1})",
+                marker.label,
+                scaled_center.x,
+                scaled_center.y,
+                scaled_half_size.x,
+                scaled_half_size.y,
+                fit_scale,
+                mask.center.x,
+                mask.center.y
+            );
+        }
         let mut mat = SdfMaterial::new_with_mask_and_frame_half(
             sdf_shape_type,
             target_half_width,

@@ -45,6 +45,7 @@ pub enum AmBlendingMode {
 impl AmBlendingMode {
     pub fn parse_am(s: &str) -> Self {
         match s {
+            "" => Self::Normal,
             "normal" => Self::Normal,
             "multiply" => Self::Multiply,
             "darken" => Self::Darken,

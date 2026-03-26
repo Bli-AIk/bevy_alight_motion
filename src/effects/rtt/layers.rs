@@ -14,6 +14,10 @@ use bevy::prelude::*;
 
 use super::{EmbedSceneRtt, RenderStrategy, propagate_to_descendants};
 
+fn dynamic_render_layer(layer: usize) -> RenderLayers {
+    RenderLayers::from_layers(&[layer])
+}
+
 pub fn propagate_render_layers_system(
     mut commands: Commands,
     composite_embed_query: Query<(Entity, &EmbedSceneRtt)>,
@@ -27,7 +31,7 @@ pub fn propagate_render_layers_system(
 ) {
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
 
-    let composite_layers: HashMap<Entity, u8> = composite_embed_query
+    let composite_layers: HashMap<Entity, usize> = composite_embed_query
         .iter()
         .map(|(entity, rtt)| (entity, rtt.render_layer))
         .collect();
@@ -42,7 +46,7 @@ pub fn propagate_render_layers_system(
 
     for (content_entity, marker, current_layers, current_visibility) in content_query.iter() {
         let target_layer = if let Some(&rtt_layer) = composite_layers.get(&marker.embed_entity) {
-            RenderLayers::layer(rtt_layer as usize)
+            dynamic_render_layer(rtt_layer)
         } else if direct_embeds.contains(&marker.embed_entity) {
             RenderLayers::layer(0)
         } else {
@@ -103,7 +107,7 @@ pub fn propagate_render_layers_to_children_system(
             continue;
         };
 
-        let target_layer = RenderLayers::layer(rtt.render_layer as usize);
+        let target_layer = dynamic_render_layer(rtt.render_layer);
         total_updates += propagate_to_descendants(
             &mut commands,
             embed_entity,

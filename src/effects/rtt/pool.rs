@@ -10,46 +10,56 @@ use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub struct EmbedSceneRenderLayerPool {
-    used_layers: u32,
-    waiting_count: u32,
+    used_layers: Vec<u64>,
 }
 
 impl EmbedSceneRenderLayerPool {
-    pub fn acquire(&mut self) -> Option<u8> {
-        for i in 0..31 {
-            if (self.used_layers & (1 << i)) == 0 {
-                self.used_layers |= 1 << i;
-                return Some(i + 1);
+    pub fn acquire(&mut self) -> Option<usize> {
+        for (block_index, block) in self.used_layers.iter_mut().enumerate() {
+            if *block != u64::MAX {
+                let bit_index = block.trailing_ones() as usize;
+                *block |= 1u64 << bit_index;
+                return Some(block_index * 64 + bit_index + 1);
             }
         }
-        self.waiting_count += 1;
-        None
+
+        self.used_layers.push(1u64);
+        Some(self.used_layers.len().saturating_sub(1) * 64 + 1)
     }
 
-    pub fn allocate(&mut self) -> Option<u8> {
+    pub fn allocate(&mut self) -> Option<usize> {
         self.acquire()
     }
 
-    pub fn release(&mut self, layer: u8) {
-        if (1..=31).contains(&layer) {
-            self.used_layers &= !(1 << (layer - 1));
-            if self.waiting_count > 0 {
-                self.waiting_count -= 1;
-            }
+    pub fn release(&mut self, layer: usize) {
+        if layer == 0 {
+            return;
+        }
+
+        let layer_index = layer - 1;
+        let block_index = layer_index / 64;
+        let bit_index = layer_index % 64;
+        let Some(block) = self.used_layers.get_mut(block_index) else {
+            return;
+        };
+        *block &= !(1u64 << bit_index);
+
+        while matches!(self.used_layers.last(), Some(&0)) {
+            self.used_layers.pop();
         }
     }
 
     #[allow(dead_code)]
     pub fn used_count(&self) -> u32 {
-        self.used_layers.count_ones()
+        self.used_layers.iter().map(|block| block.count_ones()).sum()
     }
 
     #[allow(dead_code)]
     pub fn available_count(&self) -> u32 {
-        31 - self.used_layers.count_ones()
+        u32::MAX.saturating_sub(self.used_count())
     }
 
     pub fn is_exhausted(&self) -> bool {
-        self.used_layers == 0x7FFF_FFFF
+        false
     }
 }

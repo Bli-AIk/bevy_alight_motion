@@ -13,7 +13,7 @@ use bevy::prelude::*;
 pub struct EmbedSceneRtt {
     pub render_texture: Handle<Image>,
     pub camera_entity: Entity,
-    pub render_layer: u8,
+    pub render_layer: usize,
     pub scene_width: f32,
     pub scene_height: f32,
     pub dynamic_resolution: bool,
@@ -22,7 +22,7 @@ pub struct EmbedSceneRtt {
 #[derive(Component)]
 pub struct EmbedSceneRttCamera {
     pub embed_entity: Entity,
-    pub render_layer: u8,
+    pub render_layer: usize,
 }
 
 #[derive(Component, Debug, Clone)]
