@@ -44,6 +44,7 @@ pub mod effects_registry;
 pub mod error;
 pub mod gaussian_blur;
 pub mod group_fill;
+pub mod image_comparison;
 pub mod loader;
 pub mod masked_sprite;
 pub mod plugin;
