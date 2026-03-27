@@ -343,8 +343,8 @@ pub fn setup_embed_scene_rtt_system(
                 || animated.rgb_split_enabled
                 || animated.chromakey_enabled;
 
-            let trace_replace_setup = std::env::var_os("AM_TRACE_RTT_SETUP_REPLACE").is_some()
-                && has_replace_color;
+            let trace_replace_setup =
+                std::env::var_os("AM_TRACE_RTT_SETUP_REPLACE").is_some() && has_replace_color;
             if trace_rtt_setup_enabled(animated.layer_id) || trace_replace_setup {
                 bevy::log::warn!(
                     "[RTT-SetupTrace] layer={} render_layer={} replace_old={:?} replace_new_static={:?} has_replace={} needs_unified={} has_pixelate={} has_threshold={} has_solidcolor={}",

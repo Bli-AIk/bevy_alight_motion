@@ -388,10 +388,7 @@ pub(super) fn update_replace_color(
             );
         }
     } else if trace_layer {
-        bevy::log::warn!(
-            "[UnifiedTrace] layer={} replace skipped",
-            animated.layer_id
-        );
+        bevy::log::warn!("[UnifiedTrace] layer={} replace skipped", animated.layer_id);
     }
 }
 

@@ -51,7 +51,10 @@ impl EmbedSceneRenderLayerPool {
 
     #[allow(dead_code)]
     pub fn used_count(&self) -> u32 {
-        self.used_layers.iter().map(|block| block.count_ones()).sum()
+        self.used_layers
+            .iter()
+            .map(|block| block.count_ones())
+            .sum()
     }
 
     #[allow(dead_code)]

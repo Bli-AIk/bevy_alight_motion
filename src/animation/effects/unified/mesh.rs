@@ -343,12 +343,6 @@ pub(super) fn update_base_mesh(
                 uv_rect
             );
         }
-        update_quad_mesh(
-            meshes,
-            mesh2d,
-            mesh_state,
-            bounds,
-            uv_rect,
-        );
+        update_quad_mesh(meshes, mesh2d, mesh_state, bounds, uv_rect);
     }
 }
