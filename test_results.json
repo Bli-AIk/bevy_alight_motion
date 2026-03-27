@@ -1,18 +1,17 @@
 {
-  "timestamp": "2026-03-26T13:05:00.234274+08:00",
+  "timestamp": "2026-03-27T12:37:33.885112+08:00",
   "summary": {
-    "passed": 180,
+    "passed": 182,
     "warnings": 0,
     "skipped": 5,
-    "failed": 84
+    "failed": 82
   },
   "results": {
     "basic/bezier/bezier": {
       "status": "pass"
     },
     "basic/bezier/ex": {
-      "status": "fail",
-      "avg_similarity": 0.9741
+      "status": "pass"
     },
     "basic/blend/color-mask/test": {
       "status": "pass"
@@ -64,7 +63,7 @@
     },
     "basic/group/cutoff": {
       "status": "fail",
-      "avg_similarity": 0.9557
+      "avg_similarity": 0.9568
     },
     "basic/group/fill/basic": {
       "status": "pass"
@@ -88,7 +87,7 @@
       "status": "pass"
     },
     "basic/group/multi-level/ex2": {
-      "status": "fail"
+      "status": "pass"
     },
     "basic/group/resolution/basic": {
       "status": "pass"
@@ -149,7 +148,7 @@
     },
     "basic/text/basic": {
       "status": "fail",
-      "avg_similarity": 0.6929
+      "avg_similarity": 0.6849
     },
     "basic/text/template": {
       "status": "pass"
