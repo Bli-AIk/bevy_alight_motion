@@ -47,7 +47,6 @@ pub(super) fn build_plugin(app: &mut App) {
         .init_asset_loader::<AlightMotionLoader>()
         .init_resource::<AmPlayback>()
         .init_resource::<AmProjectResolution>()
-        .init_resource::<crate::effects::LiftCompositeState>()
         .add_systems(Startup, setup_white_pixel_system)
         .add_systems(Startup, load_system_fonts_for_fallback)
         .add_systems(Update, trace_asset_counts_system);
@@ -90,13 +89,23 @@ fn register_lifecycle_systems(app: &mut App) {
             crate::effects::sync_new_sdf_child_render_layers_system,
             crate::effects::propagate_render_layers_to_children_system,
             crate::effects::refresh_group_fill_material_texture_system,
-            ApplyDeferred,
-            crate::effects::setup_lift_composite_system,
-            crate::effects::propagate_lift_render_layers_system,
-            crate::effects::update_lift_comp_material_system,
         )
             .chain()
             .in_set(AlightMotionSystemSet::Lifecycle),
+    );
+
+    app.add_systems(
+        Update,
+        (
+            crate::effects::setup_lift_composite_system,
+            ApplyDeferred,
+            crate::effects::propagate_lift_render_layers_system,
+            crate::effects::update_lift_comp_material_system,
+            crate::effects::cleanup_lift_composite_system,
+        )
+            .chain()
+            .in_set(AlightMotionSystemSet::Lifecycle)
+            .after(crate::effects::refresh_group_fill_material_texture_system),
     );
 }
 
