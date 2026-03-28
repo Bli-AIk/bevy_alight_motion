@@ -89,6 +89,47 @@ pub fn compare_images(
     rendered_image: &image::RgbaImage,
     reference_image: &image::RgbaImage,
 ) -> (ImageComparisonResult, image::RgbaImage) {
+    let dimensions_match = rendered_image.dimensions() == reference_image.dimensions();
+    let raw_match = dimensions_match && rendered_image.as_raw() == reference_image.as_raw();
+    let trace_raw = std::env::var_os("AM_COMPARE_RAW_TRACE").is_some();
+
+    if trace_raw {
+        let differing_bytes = if dimensions_match {
+            rendered_image
+                .as_raw()
+                .iter()
+                .zip(reference_image.as_raw().iter())
+                .filter(|(left, right)| left != right)
+                .count()
+        } else {
+            usize::MAX
+        };
+        println!(
+            "[COMPARE RAW] size_rendered={:?} size_reference={:?} raw_match={} differing_bytes={}",
+            rendered_image.dimensions(),
+            reference_image.dimensions(),
+            raw_match,
+            differing_bytes
+        );
+    }
+
+    if raw_match {
+        let (width, height) = rendered_image.dimensions();
+        return (
+            ImageComparisonResult {
+                global_similarity: 1.0,
+                content_similarity: 1.0,
+                pixel_match_rate: 1.0,
+                content_mask_f1: 1.0,
+                content_bbox_iou: 1.0,
+                content_size_similarity: 1.0,
+                content_center_similarity: 1.0,
+                differing_pixels: 0,
+            },
+            image::RgbaImage::new(width, height),
+        );
+    }
+
     let width = rendered_image.width().min(reference_image.width());
     let height = rendered_image.height().min(reference_image.height());
 
@@ -105,6 +146,11 @@ pub fn compare_images(
     let mut overlapping_content_pixels: u64 = 0;
     let mut rendered_bounds: Option<ContentBounds> = None;
     let mut reference_bounds: Option<ContentBounds> = None;
+    let mut differing_alpha_pixels: u64 = 0;
+    let mut differing_same_alpha_pixels: u64 = 0;
+    let mut differing_visible_pixels: u64 = 0;
+    let mut differing_fully_transparent_pixels: u64 = 0;
+    let mut diff_samples: Vec<(u32, u32, [u8; 4], [u8; 4])> = Vec::new();
 
     const MATCH_THRESHOLD: u64 = 10;
 
@@ -170,6 +216,19 @@ pub fn compare_images(
                 matching_pixels += 1;
             } else {
                 differing_pixels += 1;
+                if alpha_diff > 0 {
+                    differing_alpha_pixels += 1;
+                } else {
+                    differing_same_alpha_pixels += 1;
+                }
+                if rendered_pixel[3] == 0 && reference_pixel[3] == 0 {
+                    differing_fully_transparent_pixels += 1;
+                } else {
+                    differing_visible_pixels += 1;
+                }
+                if trace_raw && diff_samples.len() < 5 {
+                    diff_samples.push((x, y, rendered_pixel.0, reference_pixel.0));
+                }
             }
 
             if pixel_diff > MATCH_THRESHOLD {
@@ -201,6 +260,23 @@ pub fn compare_images(
     let content_bbox_iou = compute_bbox_iou(rendered_bounds, reference_bounds);
     let content_size_similarity = compute_size_similarity(rendered_bounds, reference_bounds);
     let content_center_similarity = compute_center_similarity(rendered_bounds, reference_bounds);
+
+    if trace_raw && differing_pixels > 0 {
+        println!(
+            "[COMPARE RAW] differing_pixels={} alpha_diff_pixels={} same_alpha_rgb_diff_pixels={} visible_diff_pixels={} transparent_diff_pixels={}",
+            differing_pixels,
+            differing_alpha_pixels,
+            differing_same_alpha_pixels,
+            differing_visible_pixels,
+            differing_fully_transparent_pixels
+        );
+        for (x, y, rendered, reference) in diff_samples {
+            println!(
+                "[COMPARE RAW] sample x={} y={} rendered={:?} reference={:?}",
+                x, y, rendered, reference
+            );
+        }
+    }
 
     (
         ImageComparisonResult {

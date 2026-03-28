@@ -8,6 +8,7 @@ mod spawn;
 pub use effects::{AmBlendingMode, AmMaskEntry, AmMaskInfo, AmPaletteMapParams};
 pub use identity::{
     AmElement, AmElementType, AmEntitySpawned, AmForceHidden, AmLayerMarker, AmLayerName,
+    AmPerspectiveNull, AmPerspectiveParent,
 };
 pub use project::{
     AmEmbedContent, AmEmbedContentMarker, AmEmbedContentsContainer, AmLayersContainer,

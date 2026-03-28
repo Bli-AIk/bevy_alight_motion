@@ -46,7 +46,8 @@ struct UnifiedEffectUniform {
     linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
     linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
-    linear_repeat_params5: vec4<f32>,  // (random_order, seed, 0, 0)
+    linear_repeat_params5: vec4<f32>,  // (random_order, seed_lo, seed_hi, stretch_before_repeat)
+    linear_repeat_source_size: vec4<f32>, // (source_width, source_height, 0, 0)
     linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
     // Second linear repeat effect (for stacked/dual effects)
     linear_repeat2_params1: vec4<f32>,
@@ -129,7 +130,7 @@ struct UnifiedEffectUniform {
     mask1_rr_params3: vec4<f32>,       // (alpha, offset_x, offset_y, 0)
     mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
     mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
-    source_flags: vec4<f32>,           // (sampled_from_rtt, 0, 0, 0)
+    source_flags: vec4<f32>,           // (sampled_from_offscreen, premultiplied_alpha, source_kind, base_alpha)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -1499,12 +1500,16 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
         return input_color;
     }
 
-    // Replace-color should operate on straight RGB. Intrinsic/group RTT inputs can arrive with
-    // RGB already attenuated by alpha, so detect that case and un-premultiply before matching.
-    let max_input = max(max(input_color.r, input_color.g), input_color.b);
-    let looks_premultiplied = input_alpha > 0.001 && max_input <= input_alpha + 0.001;
+    // Replace-color should operate on straight RGB. Runtime source_flags already encode whether
+    // the sampled texture came from a premultiplied RTT, so rely on that contract instead of
+    // guessing from color magnitudes.
+    let source_has_premultiplied_alpha = uniforms.source_flags.y > 0.5;
     let input_rgb_linear = clamp(
-        select(input_color.rgb, input_color.rgb / input_alpha, looks_premultiplied),
+        select(
+            input_color.rgb,
+            input_color.rgb / input_alpha,
+            source_has_premultiplied_alpha && input_alpha > 0.001,
+        ),
         vec3<f32>(0.0),
         vec3<f32>(1.0),
     );
@@ -1536,11 +1541,10 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
     let low = max(threshold - eff_feather, 0.0);
     let high = min(threshold + eff_feather, 4.0);
     let low_edge = min(low, high - 0.0005);
-    var replace_factor = 1.0 - smoothstep(low_edge, high, distance);
+    var match_factor = 1.0 - smoothstep(low_edge, high, distance);
     if feather <= 0.001 {
-        replace_factor = select(0.0, 1.0, distance <= threshold);
+        match_factor = select(0.0, 1.0, distance <= threshold);
     }
-    replace_factor *= new_color.a * effect_alpha;
 
     var new_color_adj = new_color.rgb / max(new_color.a, 0.001);
     if lock_luminance {
@@ -1551,8 +1555,12 @@ fn apply_replace_color(input_color: vec4<f32>) -> vec4<f32> {
         new_color_adj = src_color - (old_color.rgb / max(old_color.a, 0.001)) + new_color_adj;
     }
 
-    let replaced = mix(src_color, new_color_adj, replace_factor);
-    let final_srgb = mix(tex_color, vec4<f32>(replaced, 1.0) * input_alpha, replace_factor);
+    // AM uses two separate blends:
+    // 1. inner mix(srcColor, newColorAdjRGB, p) for color matching
+    // 2. outer mix(texColor, replacedColor * texColor.a, newcolor.a * alpha) for effect amount
+    let replaced = mix(src_color, new_color_adj, match_factor);
+    let effect_mix = new_color.a * effect_alpha;
+    let final_srgb = mix(tex_color, vec4<f32>(replaced, 1.0) * input_alpha, effect_mix);
 
     if final_srgb.a > 0.001 {
         let straight_linear = srgb_to_linear(final_srgb.rgb / final_srgb.a);
@@ -2092,6 +2100,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_random_order = uniforms.linear_repeat_params5.x > 0.5;
     let linear_repeat_rng_lo = bitcast<u32>(uniforms.linear_repeat_params5.y);
     let linear_repeat_rng_hi = bitcast<u32>(uniforms.linear_repeat_params5.z);
+    let linear_repeat_after_stretch_segment = uniforms.linear_repeat_params5.w > 0.5;
+    let linear_repeat_source_size = max(uniforms.linear_repeat_source_size.xy, vec2<f32>(1.0));
     // Linear repeat activation states:
     // - count < 0: effect not activated, render original
     // - count == 0: effect activated but count=0, render nothing (hide)
@@ -2167,8 +2177,22 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let pixelate_vignette = uniforms.pixelate_params2.x;
     let pixelate_threshold = uniforms.pixelate_params2.y;
     let pixelate_saturation = uniforms.pixelate_params2.z;
+    let exposure_enabled = uniforms.exposure_gamma_params.w > 0.5;
+    let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
+    let chromakey_enabled = uniforms.chromakey_key_color.a > 0.5;
+    let grid_enabled = uniforms.grid_flags.x > 0.5;
+    let content_base_alpha = clamp(uniforms.source_flags.w, 0.0, 1.0);
+    let remaining_layer_alpha = select(
+        0.0,
+        clamp(uniforms.color.a / max(content_base_alpha, 0.0001), 0.0, 1.0),
+        content_base_alpha > 0.0,
+    );
+    let content_color_prepass_needed = pixelate_enabled
+        || exposure_enabled
+        || threshold_enabled;
     
     var sample_uv = mesh.uv;
+    var repeat_space_uv = sample_uv;
     var stretch_edge_alpha: f32 = 1.0;
     
     // Discard fragments in expansion area when no expansion-capable effect is active
@@ -2240,6 +2264,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             }
         }
     }
+    repeat_space_uv = sample_uv;
     
     // Apply stretch segment effect (after pixelate snap).
     // sample_uv is the pixelate-snapped screen position (or mesh.uv if no pixelate).
@@ -2310,6 +2335,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Sample texture - with or without blur, with or without repeat
     var tex_color: vec4<f32>;
     var linear_repeat_color_applied = false; // Flag to skip final uniforms.color multiplication
+    var content_color_preapplied = false;
     
     if repeat_enabled {
         // Repeat effect: render multiple copies composited in paint order.
@@ -2394,9 +2420,21 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // pixel_coord is Y-down (matching AM convention), no Y-flips needed.
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
+        let linear_repeat_width = select(
+            orig_width,
+            linear_repeat_source_size.x,
+            linear_repeat_after_stretch_segment,
+        );
+        let linear_repeat_height = select(
+            orig_height,
+            linear_repeat_source_size.y,
+            linear_repeat_after_stretch_segment,
+        );
         
         let center = vec2<f32>(0.5, 0.5);
-        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        let pixel_coord = (
+            select(sample_uv, repeat_space_uv, linear_repeat_after_stretch_segment) - center
+        ) * vec2<f32>(linear_repeat_width, linear_repeat_height);
         
         // AM composites in sRGB space; accumulate in sRGB premultiplied alpha
         let lr_gamma = vec3<f32>(2.2);
@@ -2482,12 +2520,41 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 }
                 tc = tc / copy_scale1;
                 
-                let half_w = orig_width * 0.5;
-                let half_h = orig_height * 0.5;
+                let half_w = linear_repeat_width * 0.5;
+                let half_h = linear_repeat_height * 0.5;
                 
                 if tc.x >= -half_w && tc.x <= half_w &&
                    tc.y >= -half_h && tc.y <= half_h {
-                    let copy_uv = tc / vec2<f32>(orig_width, orig_height) + center;
+                    var copy_uv = tc / vec2<f32>(linear_repeat_width, linear_repeat_height) + center;
+                    if linear_repeat_after_stretch_segment && stretch_enabled {
+                        let seg2_stretch = uniforms.stretch_seg2_params.y;
+                        let has_seg2 = abs(seg2_stretch) > 0.001;
+                        if has_seg2 {
+                            copy_uv = apply_stretch_segment_gen(
+                                copy_uv,
+                                uniforms.stretch_seg2_params,
+                                linear_repeat_width,
+                                linear_repeat_height,
+                            );
+                            copy_uv = apply_stretch_segment_gen(
+                                copy_uv,
+                                uniforms.stretch_params,
+                                orig_width,
+                                orig_height,
+                            );
+                        } else {
+                            copy_uv = apply_stretch_segment_gen(
+                                copy_uv,
+                                uniforms.stretch_params,
+                                linear_repeat_width,
+                                linear_repeat_height,
+                            );
+                        }
+                        if copy_uv.x < 0.0 || copy_uv.x > 1.0 || copy_uv.y < 0.0 || copy_uv.y > 1.0 {
+                            continue;
+                        }
+                        copy_uv = clamp(copy_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+                    }
                     var copy_color: vec4<f32>;
                     if blur_enabled && uniforms.blur_params.x > 0.5 {
                         copy_color = apply_blur(copy_uv);
@@ -2828,6 +2895,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
         tex_color = mix(tex_color, mirror_result, mirror_alpha);
     }
+
+    // Only effects that explicitly operate on the current layer alpha should see the authored
+    // layer color/opacity as part of their input. Broader effect chains such as replace-color on
+    // RTT/lift content must keep consuming the post-composite texture instead of a pre-tinted copy.
+    if content_color_prepass_needed && !linear_repeat_color_applied && !lift_skip_color_tint {
+        tex_color = tex_color * vec4<f32>(uniforms.color.rgb, content_base_alpha);
+        content_color_preapplied = true;
+    }
     
     // Apply pixelate post-effects (AM algorithm: threshold on alpha, saturation boost, cubic vignette)
     if pixelate_enabled {
@@ -2857,7 +2932,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply exposure/gamma effect if enabled
     // AM shader: rgb += offset*a; rgb = pow(rgb, 1/gamma); rgb *= pow(2, exposure)
     // AM processes in sRGB space (not linear)
-    let exposure_enabled = uniforms.exposure_gamma_params.w > 0.5;
     if exposure_enabled {
         let exposure_val = uniforms.exposure_gamma_params.x;
         let gamma_val = uniforms.exposure_gamma_params.y;
@@ -2878,7 +2952,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     // Apply threshold effect if enabled (convert to black & white based on brightness threshold)
     // AM works in sRGB space, so we convert linear→sRGB before processing
-    let threshold_enabled = uniforms.replace_color_flags.z > 0.5;
     if threshold_enabled {
         let threshold_value = uniforms.threshold_params.x;
         let threshold_feather = uniforms.threshold_params.y;
@@ -2918,7 +2991,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Apply chromakey effect if enabled / 色度键效果
-    let chromakey_enabled = uniforms.chromakey_key_color.a > 0.5;
     if chromakey_enabled {
         tex_color = apply_chromakey(tex_color);
     }
@@ -2932,7 +3004,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     
     // Apply grid effect if enabled (AM grid2 algorithm)
-    let grid_enabled = uniforms.grid_flags.x > 0.5;
     if grid_enabled {
         let grid_punchout = uniforms.grid_flags.y > 0.5;
         let grid_screen_space = uniforms.grid_flags.z > 0.5;
@@ -3018,6 +3089,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if linear_repeat_color_applied || lift_skip_color_tint {
         // Just apply the alpha from uniforms.color, not the RGB
         final_color = vec4<f32>(tex_color.rgb, tex_color.a * uniforms.color.a);
+    } else if content_color_preapplied {
+        final_color = vec4<f32>(tex_color.rgb, tex_color.a * remaining_layer_alpha);
     } else {
         final_color = tex_color * uniforms.color;
     }
@@ -3075,8 +3148,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // AM composites opacity in sRGB space; Bevy's hardware blend is in linear space.
     // Gamma-encode alpha so that the linear-space alpha blend approximates AM's sRGB result.
     // For fully opaque content over black: linear_to_srgb(srgb_to_linear(opacity)) = opacity.
-    let source_is_rtt = uniforms.source_flags.x > 0.5;
-    if !source_is_rtt && final_color.a > 0.001 && final_color.a < 0.999 {
+    let source_has_premultiplied_alpha = uniforms.source_flags.y > 0.5;
+    if !source_has_premultiplied_alpha && final_color.a > 0.001 && final_color.a < 0.999 {
         final_color.a = select(
             pow((final_color.a + 0.055) / 1.055, 2.4),
             final_color.a / 12.92,
@@ -3094,7 +3167,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     if rgb_split_mode_raw >= -0.5 {
         // RGB split: scale RGB by layer opacity (preserves additive fringe behavior)
         final_color = vec4<f32>(final_color.rgb * uniforms.color.a, final_color.a);
-    } else if source_is_rtt {
+    } else if source_has_premultiplied_alpha {
         // RTT sources already arrive as premultiplied linear color from the previous pass.
         // Re-premultiplying or re-gamma-correcting alpha would darken nested composites.
         final_color = final_color;

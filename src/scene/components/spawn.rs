@@ -108,6 +108,7 @@ pub struct PendingLayer {
     pub id: u64,
     pub label: String,
     pub parent: u64,
+    pub is_perspective_null: bool,
     pub start_time: i32,
     pub end_time: i32,
     pub transform: Transform,
@@ -123,8 +124,7 @@ pub struct PendingLayer {
     pub from_deeply_nested_scene: bool,
     pub echo_runtime: Option<crate::animation::AmEchoRuntime>,
     pub group_fill: Option<crate::effects::AmGroupFill>,
-    pub embed_requires_composite: bool,
-    pub embed_dynamic_resolution: bool,
+    pub embed_render_plan: Option<crate::effects::EmbedSceneRenderPlan>,
     pub embed_inner_total_time: Option<f32>,
     pub hidden: bool,
 }

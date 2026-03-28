@@ -44,6 +44,7 @@ pub(crate) fn collect_camera(
         id: camera.id,
         label: camera.label.clone(),
         parent: camera.parent,
+        is_perspective_null: false,
         start_time: camera.start_time,
         end_time: camera.end_time,
         transform,
@@ -88,8 +89,7 @@ pub(crate) fn collect_camera(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: camera.hidden,
     })

@@ -47,6 +47,8 @@ pub use components::{
     AmMaskInfo,
     AmPaletteMapParams,
     AmPendingLayers,
+    AmPerspectiveNull,
+    AmPerspectiveParent,
     AmProjectBundle,
     AmProjectRoot,
     AmRttCamerasContainer,

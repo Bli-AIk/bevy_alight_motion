@@ -37,6 +37,7 @@ pub(crate) fn process_linear_repeat_effect(
     meshes: &mut Assets<Mesh>,
 ) {
     let trace_enabled = linear_repeat_trace_enabled(animated.layer_id);
+    let linear_repeat_after_stretch_segment = animated.linear_repeat_after_stretch_segment;
     if std::env::var_os("AM_DISABLE_LINEAR_REPEAT").is_some() {
         if trace_enabled {
             bevy::log::warn!(
@@ -49,6 +50,7 @@ pub(crate) fn process_linear_repeat_effect(
         material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
         material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
         material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
@@ -71,6 +73,7 @@ pub(crate) fn process_linear_repeat_effect(
         material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
         material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
         material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
@@ -123,10 +126,36 @@ pub(crate) fn process_linear_repeat_effect(
     material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
         let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
         let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
-        Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+        Vec4::new(
+            1.0,
+            state_lo_bits,
+            state_hi_bits,
+            linear_repeat_after_stretch_segment as u32 as f32,
+        )
     } else {
-        Vec4::ZERO
+        Vec4::new(
+            0.0,
+            0.0,
+            0.0,
+            linear_repeat_after_stretch_segment as u32 as f32,
+        )
     };
+    let linear_repeat_source_width = if linear_repeat_after_stretch_segment {
+        material.uniform_data.original_size.z.max(1.0)
+    } else {
+        orig_width
+    };
+    let linear_repeat_source_height = if linear_repeat_after_stretch_segment {
+        material.uniform_data.original_size.w.max(1.0)
+    } else {
+        orig_height
+    };
+    material.uniform_data.linear_repeat_source_size = Vec4::new(
+        linear_repeat_source_width,
+        linear_repeat_source_height,
+        0.0,
+        0.0,
+    );
     material.uniform_data.linear_repeat_fill_color = fill_color;
 
     let (has_lr2, count2_rounded, position2, offset2, angle2, scale2) =
@@ -216,11 +245,13 @@ pub(crate) fn process_linear_repeat_effect(
             )
         });
         bevy::log::warn!(
-            "[LinearRepeatTrace] layer={} layer_time={:.6} orig=({:.2},{:.2}) count={:.3}->{:.0} pos=({:.2},{:.2}) off=({:.2},{:.2}) angle={:.2} scale={:.3} alpha={:.3} start={:.3} end={:.3} phase={:.3} overlap={:.3} p0=({:.3},{:.3}) lr2={:?}",
+            "[LinearRepeatTrace] layer={} layer_time={:.6} orig=({:.2},{:.2}) repeat_source=({:.2},{:.2}) count={:.3}->{:.0} pos=({:.2},{:.2}) off=({:.2},{:.2}) angle={:.2} scale={:.3} alpha={:.3} start={:.3} end={:.3} phase={:.3} overlap={:.3} stretch_before_repeat={} p0=({:.3},{:.3}) lr2={:?}",
             animated.layer_id,
             layer_time,
             orig_width,
             orig_height,
+            linear_repeat_source_width,
+            linear_repeat_source_height,
             count,
             count_rounded,
             position[0],
@@ -234,6 +265,7 @@ pub(crate) fn process_linear_repeat_effect(
             end,
             phase,
             overlap,
+            linear_repeat_after_stretch_segment,
             progress.0,
             progress.1,
             progress2,
@@ -242,10 +274,10 @@ pub(crate) fn process_linear_repeat_effect(
 
     let n = count_rounded as i32;
     let angle_rad = angle.to_radians();
-    let mut min_x = -orig_width / 2.0;
-    let mut max_x = orig_width / 2.0;
-    let mut min_y = -orig_height / 2.0;
-    let mut max_y = orig_height / 2.0;
+    let mut min_x = -linear_repeat_source_width / 2.0;
+    let mut max_x = linear_repeat_source_width / 2.0;
+    let mut min_y = -linear_repeat_source_height / 2.0;
+    let mut max_y = linear_repeat_source_height / 2.0;
     let interp_progress = 1.0;
 
     let compute_displacement = |idx: i32, count: i32, pos: [f32; 2], off: [f32; 2]| -> (f32, f32) {
@@ -304,8 +336,8 @@ pub(crate) fn process_linear_repeat_effect(
             let total_scale = cum_scale1 * cum_scale2;
             let total_angle = cum_angle1 + cum_angle2;
 
-            let half_w = orig_width / 2.0 * total_scale;
-            let half_h = orig_height / 2.0 * total_scale;
+            let half_w = linear_repeat_source_width / 2.0 * total_scale;
+            let half_h = linear_repeat_source_height / 2.0 * total_scale;
             let corners = [
                 (-half_w, -half_h),
                 (half_w, -half_h),
@@ -343,10 +375,15 @@ pub(crate) fn process_linear_repeat_effect(
     let new_height = max_y - min_y;
     material.uniform_data.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
 
-    let uv_min_x = min_x / orig_width + 0.5;
-    let uv_max_x = max_x / orig_width + 0.5;
-    let uv_at_bottom = 0.5 - min_y / orig_height;
-    let uv_at_top = 0.5 - max_y / orig_height;
+    // Keep repeat-space UVs in the same coordinate basis that the shader uses for
+    // `pixel_coord`. When repeat follows stretchsegment, that basis is the stretched
+    // source extent rather than the original media rect.
+    let repeat_uv_width = linear_repeat_source_width.max(1.0);
+    let repeat_uv_height = linear_repeat_source_height.max(1.0);
+    let uv_min_x = min_x / repeat_uv_width + 0.5;
+    let uv_max_x = max_x / repeat_uv_width + 0.5;
+    let uv_at_bottom = 0.5 - min_y / repeat_uv_height;
+    let uv_at_top = 0.5 - max_y / repeat_uv_height;
 
     let vertices = vec![
         [min_x, min_y, 0.0],
@@ -365,7 +402,6 @@ pub(crate) fn process_linear_repeat_effect(
     super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
 }
 
-#[expect(dead_code)] // reason: kept as a CPU parity helper while SDF linear-repeat copy displacement is still partial
 fn calc_linear_repeat_progress(
     index: i32,
     count: i32,

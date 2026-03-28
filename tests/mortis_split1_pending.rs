@@ -66,6 +66,10 @@ fn inspect_mortis_split1_nested_embed_pending_layers() {
                 layer.start_time,
                 layer.end_time,
                 matches!(layer.spec, AmLayerSpec::EmbedScene),
+                layer.animated.time_offset,
+                layer.animated.lifecycle_offset,
+                layer.animated.speed_multiplier,
+                layer.animated.retime.clone(),
             )
         })
         .collect::<Vec<_>>();
@@ -78,9 +82,35 @@ fn inspect_mortis_split1_nested_embed_pending_layers() {
     );
 
     println!("\n=== split1 interesting pending layers ===");
-    for (id, label, parent, containing_embed_id, start_time, end_time, is_embed) in &interesting {
+    for (
+        id,
+        label,
+        parent,
+        containing_embed_id,
+        start_time,
+        end_time,
+        is_embed,
+        time_offset,
+        lifecycle_offset,
+        speed_multiplier,
+        retime,
+    ) in &interesting
+    {
+        let retime_summary = retime
+            .as_ref()
+            .map(|info| {
+                format!(
+                    "{:?}@start={} container={} nested={} speed={}",
+                    info.mode,
+                    info.embed_global_start,
+                    info.container_duration_ms,
+                    info.nested_total_time_ms,
+                    info.embed_speed
+                )
+            })
+            .unwrap_or_else(|| "None".to_string());
         println!(
-            "id={id} label='{label}' parent={parent} containing_embed_id={containing_embed_id} time={start_time}..{end_time} embed={is_embed}"
+            "id={id} label='{label}' parent={parent} containing_embed_id={containing_embed_id} time={start_time}..{end_time} embed={is_embed} time_offset={time_offset} lifecycle_offset={lifecycle_offset} speed={speed_multiplier} retime={retime_summary}"
         );
     }
 

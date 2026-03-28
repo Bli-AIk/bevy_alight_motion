@@ -54,8 +54,10 @@ pub(crate) fn spawn_embed_scene(
     sx *= config.repeat_scale_factor;
     sy *= config.repeat_scale_factor;
 
-    // Apply pivot compensation for initial position (uses modified rotation/scale)
-    let (comp_x, comp_y) = calculate_pivot_compensation(pivot, (sx, sy), rotation, has_parent);
+    // Keep embed spawn compensation aligned with collection/runtime math so RTT setup does not
+    // bootstrap from a different transform basis than the later animation systems.
+    let (comp_x, comp_y) =
+        calculate_embed_position_compensation(pivot, (sx, sy), rotation, has_parent);
     tx += comp_x;
     ty += comp_y;
 
@@ -112,6 +114,10 @@ pub(crate) fn spawn_embed_scene(
 
     // Create entity name for inspector identification
     let entity_name = format!("Embed[{}]: {}", embed.id, embed.label);
+    let render_plan = crate::effects::EmbedSceneRenderPlan::new(
+        embed.fill_type == "intrinsic",
+        embed.scene.precompose == "dynamicResolution",
+    );
 
     let entity = commands
         .spawn((
@@ -248,6 +254,7 @@ pub(crate) fn spawn_embed_scene(
                 linear_repeat_invert: false,
                 linear_repeat_random_order: false,
                 linear_repeat_seed: AmAnimatedFloat::default(),
+                linear_repeat_after_stretch_segment: false,
                 linear_repeat2: None,
                 // Radial repeat effect (defaults for embed scene)
                 radial_repeat_count: AmAnimatedFloat::default(),
@@ -378,8 +385,7 @@ pub(crate) fn spawn_embed_scene(
                 scene_width: embed.scene.width as f32,
                 scene_height: embed.scene.height as f32,
                 has_scale_animation: !embed.transform.scale.keyframes.is_empty(),
-                requires_composite: embed.fill_type == "intrinsic",
-                dynamic_resolution: embed.scene.precompose == "dynamicResolution",
+                render_plan,
             },
             transform,
             GlobalTransform::default(),
@@ -444,98 +450,7 @@ pub(crate) fn spawn_embed_scene(
         );
     }
 
-    // Recursively spawn nested scene with accumulated time offset
-    // The nested scene's layers use times relative to the embed's start_time
-    //
-    // Calculate the internal time offset for the embedded scene.
-    // When the parent timeline reaches startTime, the embedded scene should be at inTime.
-    //
-    // The formula for local_time in the animation system is:
-    //   local_time = (global_time - time_offset) * speed_multiplier
-    //
-    // When global_time = embed.start_time, we want local_time = inTime:
-    //   inTime = (embed.start_time - time_offset) * speed
-    //   time_offset = embed.start_time - inTime / speed
-    //
-    // Note: This handles the case where speed != 1.0, which affects internal time flow.
-    //
-    // Nested scenes use smaller z_spacing to keep all children within
-    // the parent's z-range (between parent and next sibling)
-    // Using /100 instead of /1000 for better numerical precision
-    let in_time = embed.in_time.unwrap_or(0) as f32;
-    let effective_speed = config.speed_multiplier * embed.speed;
-
-    // embed.start_time is relative to PARENT's internal time, not global time.
-    // When parent's internal time = embed.start_time, child should start.
-    // Parent internal time = (global_time - parent_time_offset) * parent_speed
-    // global_start = parent_time_offset + embed.start_time / parent_speed
-    let global_start = if config.speed_multiplier > 0.0 {
-        config.time_offset + embed.start_time as f32 / config.speed_multiplier
-    } else {
-        config.time_offset + embed.start_time as f32
-    };
-    let time_offset_with_in_time = if effective_speed > 0.0 {
-        global_start - in_time / effective_speed
-    } else {
-        global_start
-    };
-    // Lifecycle offset also needs to account for parent speed
-    let lifecycle_offset_with_in_time = global_start - in_time;
-    let nested_z_spacing = config.z_spacing / 100.0;
-
-    // Parse retime mode (same as collect path)
-    let retime_mode = crate::animation::RetimeMode::parse(&embed.scene.retime);
-    let retime_info = if retime_mode != crate::animation::RetimeMode::Off {
-        let container_duration = (embed.end_time - embed.start_time) as f32;
-        let nested_total = embed.scene.total_time as f32;
-        Some(crate::animation::AmRetimeInfo {
-            mode: retime_mode,
-            embed_global_start: global_start,
-            container_duration_ms: container_duration,
-            nested_total_time_ms: nested_total,
-            embed_speed: effective_speed,
-            comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
-        })
-    } else {
-        config.retime.clone()
-    };
-
-    // Calculate nested render fps (same as collect path)
-    let element_duration = (embed.end_time - embed.start_time) as f64;
-    let inner_total_time = embed.scene.total_time as f64;
-    let x_z = if inner_total_time > 0.0 {
-        (element_duration / inner_total_time).max(1.0).ceil() as u32
-    } else {
-        1
-    };
-    let coerce_at_least = if effective_speed < 0.99999 {
-        (1.0 / effective_speed.max(1e-6)).round().max(1.0) as u32
-    } else {
-        1
-    };
-    let parent_fphs = (config.render_fps * 100.0) as u32;
-    let nested_fphs = (parent_fphs * x_z * coerce_at_least * 16).min(192000);
-    let nested_render_fps = nested_fphs as f32 / 100.0;
-
-    let nested_config = AmSceneConfig {
-        canvas_width: embed.scene.width as f32,
-        canvas_height: embed.scene.height as f32,
-        time_offset: time_offset_with_in_time,
-        lifecycle_offset: lifecycle_offset_with_in_time as i32,
-        z_spacing: nested_z_spacing,
-        nesting_depth: config.nesting_depth + 1,
-        speed_multiplier: effective_speed,
-        scene_fps: embed.scene.fps as f32,
-        scene_total_time: embed.scene.total_time as f32,
-        retime: retime_info,
-        render_fps: nested_render_fps,
-        // Reset repeat spatial transforms — they apply only to THIS embed, not children
-        repeat_offset: Vec2::ZERO,
-        repeat_rotation_deg: 0.0,
-        repeat_scale_factor: 1.0,
-        comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
-        ..config.clone()
-    };
+    let timing = build_embed_scene_timing_plan(embed, config);
 
     spawn_scene(
         commands,
@@ -547,7 +462,7 @@ pub(crate) fn spawn_embed_scene(
         white_pixel,
         sdf_shaders,
         entity,
-        &nested_config,
+        &timing.nested_config,
     );
 
     entity

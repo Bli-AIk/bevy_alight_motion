@@ -141,6 +141,7 @@ pub struct AmAnimated {
     pub linear_repeat_invert: bool,
     pub linear_repeat_random_order: bool,
     pub linear_repeat_seed: AmAnimatedFloat,
+    pub linear_repeat_after_stretch_segment: bool,
     pub linear_repeat2: Option<Box<crate::scene::effects::LinearRepeatParams>>,
     pub radial_repeat_count: AmAnimatedFloat,
     pub radial_repeat_radius: AmAnimatedFloat,

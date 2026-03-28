@@ -8,13 +8,15 @@ use bevy::prelude::*;
 
 mod effects;
 mod mesh;
+mod post_effects;
 
 use self::effects::{
-    update_blend, update_chromakey, update_exposure, update_grid, update_lift, update_mirror,
-    update_palette, update_pixelate, update_rays, update_replace_color, update_rgb_split,
-    update_solidcolor, update_stretch2_uniform, update_threshold, update_wavewarp2, update_wipe,
+    update_blend, update_chromakey, update_exposure, update_lift, update_mirror, update_palette,
+    update_rays, update_rgb_split, update_solidcolor, update_stretch2_uniform, update_wavewarp2,
+    update_wipe,
 };
 use self::mesh::{update_base_mesh, update_blur_mesh, update_stretch_mesh};
+use self::post_effects::{update_grid, update_pixelate, update_replace_color, update_threshold};
 use super::unified_support::{compute_ancestor_scale, trace_parenthelper_unified_state};
 use crate::animation::components::{AmAnimated, AmPlayback, AmUnifiedMeshState};
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
@@ -201,9 +203,10 @@ pub fn animate_unified_effect_system(
         // display size is determined by embed's transform scale and main scene's fit_scale.
         // Applying inv_fit_scale here would incorrectly enlarge the content.
 
-        // Get transform rotation angle for effect compensation
-        // In Bevy, rotation is stored as Quat, extract Z rotation
-        let (_, _, transform_rotation_rad) = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
+        // Stretch operates in screen space, so nested/embed content needs the composed
+        // world rotation instead of only the layer's local transform rotation.
+        let (_, global_rotation, _) = global_transform.to_scale_rotation_translation();
+        let transform_rotation_rad = global_rotation.to_euler(bevy::math::EulerRot::ZYX).0;
 
         // Calculate "world-space" dimensions for stretch calculations
         // When element is rotated, its local width/height swap in world space

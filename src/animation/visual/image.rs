@@ -14,6 +14,7 @@ use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 
 use super::material::create_unified_material;
@@ -79,6 +80,7 @@ pub(super) fn handle_image_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
 
         commands.entity(entity).insert((

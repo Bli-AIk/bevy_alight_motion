@@ -56,6 +56,7 @@ pub(crate) fn collect_embed_scene(
         id: embed.id,
         label: embed.label.clone(),
         parent: embed.parent,
+        is_perspective_null: false,
         start_time: embed.start_time,
         end_time: embed.end_time,
         transform: base.transform,
@@ -192,6 +193,7 @@ pub(crate) fn collect_embed_scene(
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
             linear_repeat_seed: AmAnimatedFloat::default(),
+            linear_repeat_after_stretch_segment: false,
             linear_repeat2: None,
             radial_repeat_count: AmAnimatedFloat::default(),
             radial_repeat_radius: AmAnimatedFloat::default(),
@@ -318,8 +320,10 @@ pub(crate) fn collect_embed_scene(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill,
-        embed_requires_composite: embed.fill_type == "intrinsic",
-        embed_dynamic_resolution: embed.scene.precompose == "dynamicResolution",
+        embed_render_plan: Some(crate::effects::EmbedSceneRenderPlan::new(
+            embed.fill_type == "intrinsic",
+            embed.scene.precompose == "dynamicResolution",
+        )),
         embed_inner_total_time: None,
         hidden: embed.hidden,
     }

@@ -41,6 +41,7 @@ pub(super) fn spawn_layer_entity(
     fonts: &HashMap<String, Handle<Font>>,
     white_pixel: Option<&Handle<Image>>,
     parent_entity: Entity,
+    perspective_parent: Option<crate::scene::AmPerspectiveParent>,
     _embed_contents_container: Option<Entity>,
     inv_fit_scale: f32,
     embed_owner_id: u64,
@@ -117,6 +118,15 @@ pub(super) fn spawn_layer_entity(
         commands.entity(entity).insert(crate::scene::AmForceHidden);
     }
 
+    if layer.is_perspective_null {
+        commands
+            .entity(entity)
+            .insert(crate::scene::AmPerspectiveNull);
+    }
+    if let Some(perspective_parent) = perspective_parent {
+        commands.entity(entity).insert(perspective_parent);
+    }
+
     // Add mask info component if this layer is affected by a mask
     if let Some(mask_info) = &layer.mask_info {
         commands.entity(entity).insert(mask_info.clone());
@@ -147,14 +157,14 @@ pub(super) fn spawn_layer_entity(
     // Add EmbedScene strategy evaluation marker
     if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
         let (scene_w, scene_h) = layer.embed_scene_size.unwrap_or((1280.0, 960.0));
+        let render_plan = layer.embed_render_plan.unwrap_or_default();
         commands
             .entity(entity)
             .insert(crate::effects::NeedsStrategyEvaluation {
                 scene_width: scene_w,
                 scene_height: scene_h,
                 has_scale_animation: !layer.animated.scale.keyframes.is_empty(),
-                requires_composite: layer.embed_requires_composite,
-                dynamic_resolution: layer.embed_dynamic_resolution,
+                render_plan,
             });
         // Mark as mask embed if blending is mask/exclude
         if layer.blending_mode == AmBlendingMode::Mask

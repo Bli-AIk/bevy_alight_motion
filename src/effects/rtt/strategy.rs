@@ -34,7 +34,7 @@ pub fn evaluate_render_strategy_system(
         let needs_fill = group_fill.is_some();
         let is_mask = embed_mask.is_some();
 
-        let strategy = if needs_eval.requires_composite || needs_fill || is_mask {
+        let strategy = if needs_eval.render_plan.requires_composite || needs_fill || is_mask {
             RenderStrategy::Composite
         } else if needs_eval.has_scale_animation {
             RenderStrategy::Stencil
@@ -49,7 +49,7 @@ pub fn evaluate_render_strategy_system(
                 strategy,
                 needs_fill,
                 is_mask,
-                needs_eval.requires_composite,
+                needs_eval.render_plan.requires_composite,
             );
         }
 
@@ -75,7 +75,7 @@ pub fn evaluate_render_strategy_system(
             commands.entity(entity).insert(NeedsEmbedSceneRtt {
                 scene_width: needs_eval.scene_width,
                 scene_height: needs_eval.scene_height,
-                dynamic_resolution: needs_eval.dynamic_resolution,
+                render_plan: needs_eval.render_plan,
             });
         }
 

@@ -13,6 +13,7 @@ use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 
 use super::super::components::AmUnifiedUsesTransformScale;
@@ -224,6 +225,7 @@ pub(super) fn handle_sprite_shape_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
 
         if trace_unified_color_enabled(layer_id)
@@ -354,6 +356,7 @@ pub(super) fn handle_sprite_shape_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
 
         if trace_unified_color_enabled(layer_id)

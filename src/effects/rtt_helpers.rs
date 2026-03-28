@@ -109,13 +109,19 @@ pub(super) fn transformed_rect_edge_lengths(rect: EmbedVisibleRect, affine: Affi
     )
 }
 
-pub(super) fn compute_embed_visible_rect(
-    rtt: &EmbedSceneRtt,
+pub(super) fn compute_scene_visible_rect(
+    scene_width: f32,
+    scene_height: f32,
+    dynamic_resolution: bool,
     embed_global: &GlobalTransform,
     animated: &crate::animation::AmAnimated,
 ) -> EmbedVisibleRect {
-    let full_rect = scene_local_rect(rtt.scene_width, rtt.scene_height);
-    if !rtt.dynamic_resolution {
+    let full_rect = scene_local_rect(scene_width, scene_height);
+    if std::env::var_os("AM_DISABLE_DYNAMIC_RESOLUTION_CROP").is_some() {
+        return full_rect;
+    }
+
+    if !dynamic_resolution {
         return full_rect;
     }
 
@@ -136,6 +142,20 @@ pub(super) fn compute_embed_visible_rect(
     } else {
         visible_local
     }
+}
+
+pub(super) fn compute_embed_visible_rect(
+    rtt: &EmbedSceneRtt,
+    embed_global: &GlobalTransform,
+    animated: &crate::animation::AmAnimated,
+) -> EmbedVisibleRect {
+    compute_scene_visible_rect(
+        rtt.scene_width,
+        rtt.scene_height,
+        rtt.dynamic_resolution,
+        embed_global,
+        animated,
+    )
 }
 
 fn write_rect_mesh(mesh: &mut Mesh, rect: EmbedVisibleRect) {
@@ -209,9 +229,13 @@ pub(super) fn sync_dynamic_resolution_sprite(
     texture_size: Vec2,
 ) {
     sprite.custom_size = Some(visible_size);
-    let sprite_rect = rtt
-        .dynamic_resolution
-        .then(|| rect_pixel_bounds(visible_rect, full_rect, texture_size));
+    let texture_matches_visible = (texture_size.x - visible_size.x).abs() <= 0.5
+        && (texture_size.y - visible_size.y).abs() <= 0.5;
+    let sprite_rect = if rtt.dynamic_resolution && !texture_matches_visible {
+        Some(rect_pixel_bounds(visible_rect, full_rect, texture_size))
+    } else {
+        None
+    };
     sprite.rect = sprite_rect;
 
     let custom_anchor = Anchor(Vec2::new(
@@ -231,12 +255,13 @@ pub(super) fn sync_dynamic_resolution_mesh(
     rtt: &EmbedSceneRtt,
     visible_rect: EmbedVisibleRect,
     full_rect: EmbedVisibleRect,
+    texture_matches_visible: bool,
 ) {
     let Some(mesh) = meshes.get_mut(&mesh2d.0) else {
         return;
     };
 
-    if rtt.dynamic_resolution {
+    if rtt.dynamic_resolution && !texture_matches_visible {
         write_rect_mesh_with_uv(mesh, visible_rect, rect_uv_bounds(visible_rect, full_rect));
     } else {
         write_rect_mesh(mesh, visible_rect);

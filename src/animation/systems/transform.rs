@@ -8,6 +8,7 @@
 //! 以及 SDF 与统一材质视觉对象所需的特殊逻辑。
 
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use crate::animation::components::{
     AmAnimated, AmPlayback, AmSdfShapeParent, AmUnifiedUsesTransformScale,
@@ -22,6 +23,169 @@ use super::shared::{
     apply_oscillate, compute_normalized_frame_delta, invert_transform_component,
     resolve_unwrapped_rotation_deg,
 };
+
+#[derive(Clone, Copy, Debug)]
+struct PerspectiveParentState {
+    base_location: Vec2,
+    pivot: Vec2,
+    rotation_deg: f32,
+    scale: Vec2,
+    z: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AnimatedSpatialState {
+    translation: Vec2,
+    rotation_deg: f32,
+    pivot_x: f32,
+    pivot_y: f32,
+    pivot_comp_scale: Vec2,
+    effective_scale: Vec2,
+    z: f32,
+    has_parent: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PendingPerspectiveNullState {
+    entity: Entity,
+    parent_entity: Option<Entity>,
+    child_state: AnimatedSpatialState,
+}
+
+fn embed_like_pivot_compensation(
+    pivot_x: f32,
+    pivot_y: f32,
+    scale: [f32; 2],
+    rotation_deg_bevy: f32,
+    has_parent: bool,
+) -> (f32, f32) {
+    let pivot_bevy_y = if has_parent { pivot_y } else { -pivot_y };
+    let scaled_offset_x = -pivot_x * scale[0];
+    let scaled_offset_y = -pivot_bevy_y * scale[1];
+    let rotation_rad = (-rotation_deg_bevy).to_radians();
+    let rotated_offset_x =
+        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+    let rotated_offset_y =
+        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+    (pivot_x + rotated_offset_x, pivot_bevy_y + rotated_offset_y)
+}
+
+fn trace_position_enabled(layer_id: u64, label: &str) -> bool {
+    let trace_id_match = std::env::var_os("AM_TRACE_POS_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        });
+    let trace_label_match = std::env::var_os("AM_TRACE_POS_LABELS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|labels| {
+            labels
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .any(|value| value == label)
+        });
+    trace_id_match || trace_label_match
+}
+
+fn world_space_pivot(pivot_x: f32, pivot_y: f32) -> Vec2 {
+    Vec2::new(pivot_x, -pivot_y)
+}
+
+fn rotate_vec2(vec: Vec2, rotation_deg: f32) -> Vec2 {
+    let rotation_rad = rotation_deg.to_radians();
+    let (sin, cos) = rotation_rad.sin_cos();
+    Vec2::new(vec.x * cos - vec.y * sin, vec.x * sin + vec.y * cos)
+}
+
+fn translation_without_pivot_compensation(
+    translation: Vec2,
+    pivot_x: f32,
+    pivot_y: f32,
+    scale: Vec2,
+    rotation_deg: f32,
+    has_parent: bool,
+) -> Vec2 {
+    let (comp_x, comp_y) = embed_like_pivot_compensation(
+        pivot_x,
+        pivot_y,
+        [scale.x, scale.y],
+        rotation_deg,
+        has_parent,
+    );
+    translation - Vec2::new(comp_x, comp_y)
+}
+
+fn apply_perspective_parenting(
+    parent_state: PerspectiveParentState,
+    child_state: AnimatedSpatialState,
+) -> (Vec2, f32, Vec2, f32) {
+    let child_base_location = translation_without_pivot_compensation(
+        child_state.translation,
+        child_state.pivot_x,
+        child_state.pivot_y,
+        child_state.pivot_comp_scale,
+        child_state.rotation_deg,
+        child_state.has_parent,
+    );
+    let child_world_pivot = world_space_pivot(child_state.pivot_x, child_state.pivot_y);
+    let parent_scaled_delta = Vec2::new(
+        parent_state.scale.x * ((child_base_location + child_world_pivot) - parent_state.pivot).x,
+        parent_state.scale.y * ((child_base_location + child_world_pivot) - parent_state.pivot).y,
+    );
+    let combined_base_location = parent_state.base_location
+        + rotate_vec2(parent_scaled_delta, parent_state.rotation_deg)
+        - child_world_pivot
+        + parent_state.pivot;
+    let combined_rotation_deg = parent_state.rotation_deg + child_state.rotation_deg;
+    let combined_scale = Vec2::new(
+        parent_state.scale.x * child_state.effective_scale.x,
+        parent_state.scale.y * child_state.effective_scale.y,
+    );
+    let (comp_x, comp_y) = embed_like_pivot_compensation(
+        child_state.pivot_x,
+        child_state.pivot_y,
+        [combined_scale.x, combined_scale.y],
+        combined_rotation_deg,
+        false,
+    );
+    (
+        combined_base_location + Vec2::new(comp_x, comp_y),
+        combined_rotation_deg,
+        combined_scale,
+        parent_state.z + child_state.z,
+    )
+}
+
+fn perspective_parent_state_from_world_transform(
+    world_translation: Vec2,
+    pivot_x: f32,
+    pivot_y: f32,
+    pivot_comp_scale: Vec2,
+    rotation_deg: f32,
+    scale: Vec2,
+    z: f32,
+) -> PerspectiveParentState {
+    let base_location = translation_without_pivot_compensation(
+        world_translation,
+        pivot_x,
+        pivot_y,
+        pivot_comp_scale,
+        rotation_deg,
+        false,
+    );
+
+    PerspectiveParentState {
+        base_location,
+        pivot: world_space_pivot(pivot_x, pivot_y),
+        rotation_deg,
+        scale,
+        z,
+    }
+}
 
 fn apply_sdf_linear_repeat(
     sdf_parent: Option<&AmSdfShapeParent>,
@@ -68,24 +232,25 @@ fn apply_pivot_offset(
         *bx += pivot_x;
         *by -= pivot_y;
     } else if matches!(layer_spec, AmLayerSpec::EmbedScene | AmLayerSpec::Null) {
-        let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
-        let rotation_rad = (-rotation_deg + animated.repeat_rotation_offset_deg).to_radians();
-        let pivot_bevy_y = -pivot_y;
-        let scaled_offset_x = -pivot_x * current_scale[0];
-        let scaled_offset_y = -pivot_bevy_y * current_scale[1];
-        let rotated_offset_x =
-            scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-        let rotated_offset_y =
-            scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-
-        *bx += rotated_offset_x + pivot_x;
-        *by += rotated_offset_y + pivot_bevy_y;
+        let authored_rotation_deg =
+            interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+        let bevy_rotation_deg = -authored_rotation_deg + animated.repeat_rotation_offset_deg;
+        let (comp_x, comp_y) = embed_like_pivot_compensation(
+            pivot_x,
+            pivot_y,
+            current_scale,
+            bevy_rotation_deg,
+            animated.has_parent,
+        );
+        *bx += comp_x;
+        *by += comp_y;
     }
 }
 
 pub fn animate_transform_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
+        Entity,
         &AmAnimated,
         &mut Transform,
         &AmLayerMarker,
@@ -94,6 +259,9 @@ pub fn animate_transform_system(
         Option<&crate::masked_sprite::UnifiedEffectMarker>,
         Option<&AmUnifiedUsesTransformScale>,
         Option<&crate::scene::AmEmbedContentMarker>,
+        Option<&crate::scene::AmPerspectiveParent>,
+        Option<&crate::scene::AmPerspectiveNull>,
+        Option<&ChildOf>,
     )>,
 ) {
     if playback.force_stopped {
@@ -101,16 +269,23 @@ pub fn animate_transform_system(
     }
 
     let global_time = playback.current_time_ms;
+    let mut perspective_parents = HashMap::new();
+    let mut pending_perspective_nulls = Vec::new();
+    let mut spatial_states = HashMap::new();
 
     for (
+        entity,
         animated,
         mut transform,
-        _marker,
+        marker,
         layer_spec,
         sdf_parent,
         effect_marker,
         unified_transform_scale,
         embed_content_marker,
+        perspective_parent,
+        perspective_null,
+        child_of,
     ) in query.iter_mut()
     {
         let local_time = animated.calc_local_time(global_time);
@@ -204,10 +379,11 @@ pub fn animate_transform_system(
                 )
             };
 
-            if animated.layer_id == 347000343 {
+            if trace_position_enabled(animated.layer_id, &marker.label) {
                 trace!(
-                    "[PosCalc] layer={} is_embed_content={} speed_mul={:.2} time_offset={} | global_time={:.1} local_time={:.1} layer_time={:.4} | AM_loc=({:.2},{:.2}) canvas=({:.0},{:.0}) has_parent={} | bevy=({:.2},{:.2})",
+                    "[PosCalc] layer={} label='{}' is_embed_content={} speed_mul={:.2} time_offset={} | global_time={:.1} local_time={:.1} layer_time={:.4} | AM_loc=({:.2},{:.2}) canvas=({:.0},{:.0}) has_parent={} | bevy=({:.2},{:.2}) scale=({:.3},{:.3})",
                     animated.layer_id,
+                    marker.label,
                     embed_content_marker.is_some(),
                     animated.speed_multiplier,
                     animated.time_offset,
@@ -220,14 +396,16 @@ pub fn animate_transform_system(
                     animated.canvas_height,
                     animated.has_parent,
                     bx,
-                    by
+                    by,
+                    actual_scale[0],
+                    actual_scale[1],
                 );
             }
 
             apply_pivot_offset(
                 animated,
                 layer_time,
-                layer_spec,
+                &layer_spec,
                 sdf_parent,
                 current_scale,
                 &mut bx,
@@ -303,5 +481,257 @@ pub fn animate_transform_system(
                 1.0,
             );
         }
+
+        let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
+        let pivot_comp_scale = Vec2::new(current_scale[0], current_scale[1]);
+        let effective_scale = Vec2::new(
+            actual_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
+            actual_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
+        );
+        let child_state = AnimatedSpatialState {
+            translation: transform.translation.truncate(),
+            rotation_deg: final_rotation,
+            pivot_x: pivot[0],
+            pivot_y: pivot[1],
+            pivot_comp_scale,
+            effective_scale,
+            z: transform.translation.z,
+            has_parent: animated.has_parent,
+        };
+        spatial_states.insert(entity, child_state);
+
+        if perspective_null.is_some() {
+            pending_perspective_nulls.push(PendingPerspectiveNullState {
+                entity,
+                parent_entity: perspective_parent
+                    .map(|parent| parent.entity)
+                    .or_else(|| child_of.map(|parent| parent.parent())),
+                child_state,
+            });
+        }
+    }
+
+    while !pending_perspective_nulls.is_empty() {
+        let mut unresolved = Vec::new();
+        let mut resolved_this_round = 0_usize;
+
+        for pending in pending_perspective_nulls.drain(..) {
+            let resolved_state = match pending.parent_entity {
+                Some(parent_entity) => {
+                    perspective_parents
+                        .get(&parent_entity)
+                        .copied()
+                        .map(|parent_state| {
+                            let (
+                                combined_translation,
+                                combined_rotation_deg,
+                                combined_scale,
+                                combined_z,
+                            ) = apply_perspective_parenting(parent_state, pending.child_state);
+                            perspective_parent_state_from_world_transform(
+                                combined_translation,
+                                pending.child_state.pivot_x,
+                                pending.child_state.pivot_y,
+                                combined_scale,
+                                combined_rotation_deg,
+                                combined_scale,
+                                combined_z,
+                            )
+                        })
+                }
+                None => Some(perspective_parent_state_from_world_transform(
+                    pending.child_state.translation,
+                    pending.child_state.pivot_x,
+                    pending.child_state.pivot_y,
+                    pending.child_state.pivot_comp_scale,
+                    pending.child_state.rotation_deg,
+                    pending.child_state.effective_scale,
+                    pending.child_state.z,
+                )),
+            };
+
+            if let Some(state) = resolved_state {
+                perspective_parents.insert(pending.entity, state);
+                resolved_this_round += 1;
+            } else {
+                unresolved.push(pending);
+            }
+        }
+
+        if resolved_this_round == 0 {
+            for pending in &unresolved {
+                bevy::log::warn!(
+                    "[PerspectiveNull] unresolved perspective parent chain at entity {:?}",
+                    pending.entity
+                );
+            }
+            break;
+        }
+
+        pending_perspective_nulls = unresolved;
+    }
+
+    for (
+        _entity,
+        animated,
+        mut transform,
+        marker,
+        layer_spec,
+        sdf_parent,
+        _effect_marker,
+        _unified_transform_scale,
+        _embed_content_marker,
+        perspective_parent,
+        _perspective_null,
+        _child_of,
+    ) in query.iter_mut()
+    {
+        let Some(parent_entity) = perspective_parent.map(|parent| parent.entity) else {
+            continue;
+        };
+        let Some(parent_state) = perspective_parents.get(&parent_entity).copied() else {
+            continue;
+        };
+        if animated.parenthelper_has_effect
+            || sdf_parent.is_some()
+            || matches!(
+                layer_spec,
+                AmLayerSpec::Camera { .. } | AmLayerSpec::SdfShape { .. }
+            )
+        {
+            continue;
+        }
+        let Some(child_state) = spatial_states.get(&_entity).copied() else {
+            continue;
+        };
+        let (combined_translation, combined_rotation_deg, combined_scale, combined_z) =
+            apply_perspective_parenting(parent_state, child_state);
+
+        if trace_position_enabled(animated.layer_id, &marker.label) {
+            trace!(
+                "[PerspectiveNull] layer={} label='{}' parent_z={:.3} child_local=({:.2},{:.2},{:.3}) -> combined=({:.2},{:.2},{:.3}) rot={:.2} scale=({:.3},{:.3})",
+                animated.layer_id,
+                marker.label,
+                parent_state.z,
+                child_state.translation.x,
+                child_state.translation.y,
+                child_state.z,
+                combined_translation.x,
+                combined_translation.y,
+                combined_z,
+                combined_rotation_deg,
+                combined_scale.x,
+                combined_scale.y,
+            );
+        }
+
+        transform.translation =
+            Vec3::new(combined_translation.x, combined_translation.y, combined_z);
+        transform.rotation = Quat::from_rotation_z(combined_rotation_deg.to_radians());
+        transform.scale = Vec3::new(combined_scale.x, combined_scale.y, 1.0);
+    }
+
+    for (
+        _entity,
+        _animated,
+        mut transform,
+        _marker,
+        _layer_spec,
+        _sdf_parent,
+        _effect_marker,
+        _unified_transform_scale,
+        _embed_content_marker,
+        perspective_parent,
+        perspective_null,
+        _child_of,
+    ) in query.iter_mut()
+    {
+        if perspective_null.is_some() && perspective_parent.is_some() {
+            transform.translation = Vec3::ZERO;
+            transform.rotation = Quat::IDENTITY;
+            transform.scale = Vec3::ONE;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn perspective_parenting_matches_am_root_space_conversion() {
+        let parent_state = PerspectiveParentState {
+            base_location: Vec2::new(48.407_166, 31.243_408),
+            pivot: Vec2::ZERO,
+            rotation_deg: 180.0,
+            scale: Vec2::splat(1.04),
+            z: 0.0,
+        };
+        let child_state = AnimatedSpatialState {
+            translation: Vec2::new(-5.734_375, 569.846_9),
+            rotation_deg: 0.0,
+            pivot_x: -0.361_938,
+            pivot_y: 176.000_98,
+            pivot_comp_scale: Vec2::ONE,
+            effective_scale: Vec2::ONE,
+            z: 0.0,
+            has_parent: true,
+        };
+        let (combined_translation, combined_rotation_deg, combined_scale, _) =
+            apply_perspective_parenting(parent_state, child_state);
+
+        assert!((combined_translation.x - 54.370_916).abs() < 0.001);
+        assert!((combined_translation.y + 561.397_4).abs() < 0.001);
+        assert!((combined_rotation_deg - 180.0).abs() < 0.001);
+        assert!((combined_scale.x - 1.04).abs() < 0.001);
+        assert!((combined_scale.y - 1.04).abs() < 0.001);
+    }
+
+    #[test]
+    fn nested_perspective_parent_state_reconstructs_combined_world_transform() {
+        let parent_state = PerspectiveParentState {
+            base_location: Vec2::new(48.407_166, 31.243_408),
+            pivot: Vec2::ZERO,
+            rotation_deg: 180.0,
+            scale: Vec2::splat(1.04),
+            z: 12.0,
+        };
+        let child_state = AnimatedSpatialState {
+            translation: Vec2::new(-5.734_375, 569.846_9),
+            rotation_deg: 0.0,
+            pivot_x: -0.361_938,
+            pivot_y: 176.000_98,
+            pivot_comp_scale: Vec2::ONE,
+            effective_scale: Vec2::ONE,
+            z: 3.0,
+            has_parent: true,
+        };
+        let (combined_translation, combined_rotation_deg, combined_scale, combined_z) =
+            apply_perspective_parenting(parent_state, child_state);
+        let nested_parent_state = perspective_parent_state_from_world_transform(
+            combined_translation,
+            child_state.pivot_x,
+            child_state.pivot_y,
+            combined_scale,
+            combined_rotation_deg,
+            combined_scale,
+            combined_z,
+        );
+        let (comp_x, comp_y) = embed_like_pivot_compensation(
+            child_state.pivot_x,
+            child_state.pivot_y,
+            [combined_scale.x, combined_scale.y],
+            combined_rotation_deg,
+            false,
+        );
+        let reconstructed_translation =
+            nested_parent_state.base_location + Vec2::new(comp_x, comp_y);
+
+        assert!((nested_parent_state.rotation_deg - combined_rotation_deg).abs() < 0.001);
+        assert!((nested_parent_state.scale.x - combined_scale.x).abs() < 0.001);
+        assert!((nested_parent_state.scale.y - combined_scale.y).abs() < 0.001);
+        assert!((nested_parent_state.z - combined_z).abs() < 0.001);
+        assert!((reconstructed_translation.x - combined_translation.x).abs() < 0.001);
+        assert!((reconstructed_translation.y - combined_translation.y).abs() < 0.001);
     }
 }

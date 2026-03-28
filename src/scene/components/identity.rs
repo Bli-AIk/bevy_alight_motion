@@ -70,3 +70,14 @@ pub struct AmEntitySpawned {
 #[derive(Component, Debug, Clone, Default, Reflect)]
 #[reflect(Component)]
 pub struct AmForceHidden;
+
+#[derive(Component, Debug, Clone, Default, Reflect)]
+#[reflect(Component)]
+pub struct AmPerspectiveNull;
+
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct AmPerspectiveParent {
+    pub entity: Entity,
+    pub layer_id: u64,
+}

@@ -221,6 +221,27 @@ pub(crate) fn extract_linear_repeat_effects(
     (first, second)
 }
 
+/// Returns whether the first `repeat.line` effect appears after a `stretchsegment`.
+///
+/// AM applies repeat to the current scene element state, so when stretchsegment
+/// precedes repeat.line the repeat source should use the stretched mesh bounds.
+pub(crate) fn linear_repeat_after_stretch_segment(effects: &[AmEffect]) -> bool {
+    let mut seen_stretch_segment = false;
+
+    for effect in effects {
+        match effect.id.as_str() {
+            "com.alightcreative.effects.stretchsegment" => {
+                seen_stretch_segment = true;
+            }
+            "com.alightcreative.effects.repeat.line" => {
+                return seen_stretch_segment;
+            }
+            _ => {}
+        }
+    }
+
+    false
+}
 /// Radial Repeat effect parameters.
 /// Arranges copies in a circular pattern around a pivot point.
 #[derive(Debug, Clone, Default)]

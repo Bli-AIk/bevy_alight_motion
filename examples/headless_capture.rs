@@ -37,6 +37,7 @@ pub struct HeadlessCaptureState {
     pub width: u32,
     pub height: u32,
     pub texture_format: TextureFormat,
+    pub last_observed_capture_has_non_black_rgb: bool,
     pub last_capture_has_non_black_rgb: bool,
 }
 
@@ -51,6 +52,7 @@ impl Default for HeadlessCaptureState {
             width: 0,
             height: 0,
             texture_format: TextureFormat::Rgba8UnormSrgb,
+            last_observed_capture_has_non_black_rgb: false,
             last_capture_has_non_black_rgb: false,
         }
     }
@@ -161,6 +163,24 @@ pub fn setup_headless_capture(
     commands.spawn(HeadlessImageCopier::new(render_target, size, render_device));
 }
 
+fn trim_capture_rows(state: &HeadlessCaptureState, data: Vec<u8>) -> Vec<u8> {
+    let row_bytes = state.width as usize * state.texture_format.pixel_size().unwrap();
+    let aligned_row_bytes = RenderDevice::align_copy_bytes_per_row(row_bytes);
+    if row_bytes == aligned_row_bytes {
+        data
+    } else {
+        data.chunks(aligned_row_bytes)
+            .take(state.height as usize)
+            .flat_map(|row| row[..row_bytes.min(row.len())].iter().copied())
+            .collect()
+    }
+}
+
+fn has_non_black_rgb(data: &[u8]) -> bool {
+    data.chunks_exact(4)
+        .any(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+}
+
 fn flush_headless_capture_to_disk(
     receiver: Res<HeadlessCaptureMainReceiver>,
     mut state: ResMut<HeadlessCaptureState>,
@@ -171,16 +191,18 @@ fn flush_headless_capture_to_disk(
 
     let mut latest: Option<Vec<u8>> = None;
     while let Ok((serial, data)) = receiver.try_recv() {
+        let trimmed = trim_capture_rows(&state, data);
+        state.last_observed_capture_has_non_black_rgb = has_non_black_rgb(&trimmed);
         if state.discard_captures > 0 {
             state.discard_captures -= 1;
             continue;
         }
         if state.pending_serial == Some(serial) {
-            latest = Some(data);
+            latest = Some(trimmed);
         }
     }
 
-    let Some(data) = latest else {
+    let Some(trimmed) = latest else {
         return;
     };
 
@@ -188,20 +210,7 @@ fn flush_headless_capture_to_disk(
         return;
     };
     let serial = state.pending_serial.take();
-
-    let row_bytes = state.width as usize * state.texture_format.pixel_size().unwrap();
-    let aligned_row_bytes = RenderDevice::align_copy_bytes_per_row(row_bytes);
-    let trimmed = if row_bytes == aligned_row_bytes {
-        data
-    } else {
-        data.chunks(aligned_row_bytes)
-            .take(state.height as usize)
-            .flat_map(|row| row[..row_bytes.min(row.len())].iter().copied())
-            .collect()
-    };
-    state.last_capture_has_non_black_rgb = trimmed
-        .chunks_exact(4)
-        .any(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0);
+    state.last_capture_has_non_black_rgb = has_non_black_rgb(&trimmed);
 
     let Some(image) = image::RgbaImage::from_raw(state.width, state.height, trimmed) else {
         error!(

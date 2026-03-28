@@ -17,6 +17,25 @@ use super::super::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec3_with_extrapolation,
 };
 
+fn embed_like_pivot_compensation(
+    pivot_x: f32,
+    pivot_y: f32,
+    scale: [f32; 2],
+    rotation_deg_bevy: f32,
+    has_parent: bool,
+) -> (f32, f32) {
+    let pivot_bevy_y = if has_parent { pivot_y } else { -pivot_y };
+    let scaled_offset_x = -pivot_x * scale[0];
+    let scaled_offset_y = -pivot_bevy_y * scale[1];
+    let rotation_rad = (-rotation_deg_bevy).to_radians();
+    let rotated_offset_x =
+        scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
+    let rotated_offset_y =
+        scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
+
+    (pivot_x + rotated_offset_x, pivot_bevy_y + rotated_offset_y)
+}
+
 pub(super) struct SpawnSetup {
     pub(super) layer_time: f32,
     pub(super) transform: Transform,
@@ -79,75 +98,79 @@ pub(super) fn build_spawn_setup(
             actual_scale
         };
 
-    let initial_position = if let Some(loc) =
-        interpolate_vec3_with_extrapolation(&animated.location, layer_time)
-    {
-        let (mut bx, mut by) = if animated.has_parent {
-            (loc[0], -loc[1])
+    let initial_position =
+        if let Some(loc) = interpolate_vec3_with_extrapolation(&animated.location, layer_time) {
+            let (mut bx, mut by) = if animated.has_parent {
+                (loc[0], -loc[1])
+            } else {
+                (
+                    loc[0] - animated.canvas_width / 2.0,
+                    animated.canvas_height / 2.0 - loc[1],
+                )
+            };
+
+            if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
+                let pivot_x = pivot[0];
+                let pivot_y = pivot[1];
+
+                if matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
+                    bx += pivot_x;
+                    by -= pivot_y;
+                } else if matches!(
+                    layer.spec,
+                    crate::scene::AmLayerSpec::EmbedScene | crate::scene::AmLayerSpec::Null
+                ) {
+                    let authored_rotation_deg =
+                        interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
+                    let bevy_rotation_deg =
+                        -authored_rotation_deg + animated.repeat_rotation_offset_deg;
+                    let (comp_x, comp_y) = embed_like_pivot_compensation(
+                        pivot_x,
+                        pivot_y,
+                        current_scale,
+                        bevy_rotation_deg,
+                        animated.has_parent,
+                    );
+                    bx += comp_x;
+                    by += comp_y;
+                }
+            }
+
+            if let Some(mut effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
+                if animated.effect_xinv {
+                    effect_x = -effect_x;
+                }
+                bx += effect_x;
+            }
+            if let Some(mut effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
+                if animated.effect_yinv {
+                    effect_y = -effect_y;
+                }
+                by -= effect_y;
+            }
+            for extra in &animated.extra_transform2 {
+                let ex = interpolate_float(&extra.pos_x, layer_time).unwrap_or(0.0);
+                bx += if extra.xinv { -ex } else { ex };
+                let ey = interpolate_float(&extra.pos_y, layer_time).unwrap_or(0.0);
+                by -= if extra.yinv { -ey } else { ey };
+            }
+
+            if !animated.has_parent {
+                by -= animated.font_y_offset;
+            }
+
+            if !matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
+                bx += animated.anchor_offset.x;
+                by += animated.anchor_offset.y;
+            }
+
+            bx += animated.repeat_position_offset.x;
+            by += animated.repeat_position_offset.y;
+
+            Vec3::new(bx, by, layer.transform.translation.z)
         } else {
-            (
-                loc[0] - animated.canvas_width / 2.0,
-                animated.canvas_height / 2.0 - loc[1],
-            )
+            layer.transform.translation
         };
-
-        if let Some(pivot) = interpolate_vec2(&animated.pivot, layer_time) {
-            let pivot_x = pivot[0];
-            let pivot_y = pivot[1];
-
-            if matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
-                bx += pivot_x;
-                by -= pivot_y;
-            } else if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
-                let rotation_deg = interpolate_float(&animated.rotation, layer_time).unwrap_or(0.0);
-                let rotation_rad = (-rotation_deg).to_radians();
-                let pivot_bevy_y = -pivot_y;
-                let scaled_offset_x = -pivot_x * current_scale[0];
-                let scaled_offset_y = -pivot_bevy_y * current_scale[1];
-                let rotated_offset_x =
-                    scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
-                let rotated_offset_y =
-                    scaled_offset_x * rotation_rad.sin() + scaled_offset_y * rotation_rad.cos();
-                bx += pivot_x + rotated_offset_x;
-                by += pivot_bevy_y + rotated_offset_y;
-            }
-        }
-
-        if let Some(mut effect_x) = interpolate_float(&animated.effect_pos_x, layer_time) {
-            if animated.effect_xinv {
-                effect_x = -effect_x;
-            }
-            bx += effect_x;
-        }
-        if let Some(mut effect_y) = interpolate_float(&animated.effect_pos_y, layer_time) {
-            if animated.effect_yinv {
-                effect_y = -effect_y;
-            }
-            by -= effect_y;
-        }
-        for extra in &animated.extra_transform2 {
-            let ex = interpolate_float(&extra.pos_x, layer_time).unwrap_or(0.0);
-            bx += if extra.xinv { -ex } else { ex };
-            let ey = interpolate_float(&extra.pos_y, layer_time).unwrap_or(0.0);
-            by -= if extra.yinv { -ey } else { ey };
-        }
-
-        if !animated.has_parent {
-            by -= animated.font_y_offset;
-        }
-
-        if !matches!(layer.spec, crate::scene::AmLayerSpec::SdfShape { .. }) {
-            bx += animated.anchor_offset.x;
-            by += animated.anchor_offset.y;
-        }
-
-        bx += animated.repeat_position_offset.x;
-        by += animated.repeat_position_offset.y;
-
-        Vec3::new(bx, by, layer.transform.translation.z)
-    } else {
-        layer.transform.translation
-    };
 
     let initial_rotation = if let Some(rot_deg) = interpolate_float(&animated.rotation, layer_time)
     {

@@ -349,6 +349,7 @@ mod tests {
             id,
             label: label.to_string(),
             parent,
+            is_perspective_null: false,
             start_time: 0,
             end_time: 0,
             transform: Transform::default(),
@@ -364,8 +365,7 @@ mod tests {
             from_deeply_nested_scene: false,
             echo_runtime: None,
             group_fill: None,
-            embed_requires_composite: false,
-            embed_dynamic_resolution: false,
+            embed_render_plan: None,
             embed_inner_total_time: None,
             hidden: false,
         }

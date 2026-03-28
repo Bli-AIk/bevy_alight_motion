@@ -41,6 +41,7 @@ pub(crate) fn spawn_null(
     let repeat_effect = extract_repeat_effect(&null.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&null.effects);
+    let linear_repeat_after_stretch_segment = false;
     let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
     let oscillate_effect = extract_oscillate_effect(&null.effects);
@@ -212,6 +213,7 @@ pub(crate) fn spawn_null(
                 linear_repeat_invert: linear_repeat_effect.invert,
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat_after_stretch_segment,
                 linear_repeat2: linear_repeat_effect2.map(Box::new),
                 // Radial repeat effect
                 radial_repeat_count: radial_repeat_effect.count,

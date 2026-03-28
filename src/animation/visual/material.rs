@@ -12,6 +12,7 @@
 use bevy::asset::Assets;
 use bevy::prelude::*;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams};
 
 use super::super::visual_helpers::compute_initial_mask_params;
@@ -32,6 +33,7 @@ pub(super) fn create_unified_material(
     fit_scale: f32,
     global_time_ms: u64,
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>,
+    texture_source_contract: TextureSourceContract,
 ) -> Handle<crate::masked_sprite::UnifiedEffectMaterial> {
     use crate::masked_sprite::{UnifiedEffectMaterial, UnifiedEffectUniform};
 
@@ -39,6 +41,9 @@ pub(super) fn create_unified_material(
 
     let (initial_effect_flags_x, initial_mask_params, initial_mask2_flags_x, initial_mask2_params) =
         compute_initial_mask_params(mask_info, fit_scale, global_time_ms);
+
+    let mut source_flags = texture_source_contract.to_uniform_flags();
+    source_flags.w = color.alpha;
 
     let mut material = UnifiedEffectMaterial {
         uniform_data: UnifiedEffectUniform {
@@ -49,6 +54,7 @@ pub(super) fn create_unified_material(
             mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
             mask2_params: initial_mask2_params,
             mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
+            source_flags,
             ..default()
         },
         texture: Some(texture),

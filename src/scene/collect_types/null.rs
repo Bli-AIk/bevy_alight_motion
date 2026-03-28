@@ -44,6 +44,7 @@ pub(crate) fn collect_null(
     let repeat_effect = extract_repeat_effect(&null.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&null.effects);
+    let linear_repeat_after_stretch_segment = false;
     let radial_repeat_effect = extract_radial_repeat_effect(&null.effects);
     let swing_effect = extract_swing_effect(&null.effects);
     let oscillate_effect = extract_oscillate_effect(&null.effects);
@@ -72,6 +73,7 @@ pub(crate) fn collect_null(
         id: null.id,
         label: null.label.clone(),
         parent: null.parent,
+        is_perspective_null: null.obj_type == "perspective",
         start_time: null.start_time,
         end_time: null.end_time,
         transform,
@@ -204,6 +206,7 @@ pub(crate) fn collect_null(
             linear_repeat_invert: linear_repeat_effect.invert,
             linear_repeat_random_order: linear_repeat_effect.random_order,
             linear_repeat_seed: linear_repeat_effect.seed,
+            linear_repeat_after_stretch_segment,
             linear_repeat2: linear_repeat_effect2.map(Box::new),
             radial_repeat_count: radial_repeat_effect.count.clone(),
             radial_repeat_radius: radial_repeat_effect.radius.clone(),
@@ -327,8 +330,7 @@ pub(crate) fn collect_null(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: null.hidden,
     })

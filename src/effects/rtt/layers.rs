@@ -89,6 +89,77 @@ pub fn propagate_render_layers_system(
     }
 }
 
+pub fn sync_new_sdf_child_render_layers_system(
+    mut commands: Commands,
+    new_sdf_query: Query<
+        (
+            Entity,
+            &ChildOf,
+            Option<&RenderLayers>,
+            Option<&Visibility>,
+            Option<&crate::scene::AmEmbedContentMarker>,
+        ),
+        Added<MeshMaterial2d<crate::sdf_material::SdfMaterial>>,
+    >,
+    parent_query: Query<(
+        Option<&RenderLayers>,
+        Option<&Visibility>,
+        Option<&crate::scene::AmEmbedContentMarker>,
+    )>,
+    force_hidden_query: Query<(), With<crate::scene::AmForceHidden>>,
+) {
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
+
+    for (entity, child_of, current_layers, current_visibility, current_marker) in
+        new_sdf_query.iter()
+    {
+        let parent = child_of.parent();
+        let Ok((parent_layers, parent_visibility, parent_marker)) = parent_query.get(parent) else {
+            continue;
+        };
+
+        let mut entity_commands = commands.entity(entity);
+        let mut updated = false;
+
+        if let Some(parent_layers) = parent_layers
+            && current_layers != Some(parent_layers)
+        {
+            entity_commands.insert(parent_layers.clone());
+            updated = true;
+        }
+
+        let should_force_hidden = parent_visibility
+            .is_some_and(|visibility| *visibility == Visibility::Hidden)
+            || force_hidden_query.get(entity).is_ok();
+        if should_force_hidden {
+            if current_visibility != Some(&Visibility::Hidden) {
+                entity_commands.insert(Visibility::Hidden);
+                updated = true;
+            }
+        } else if current_visibility == Some(&Visibility::Hidden) {
+            entity_commands.insert(Visibility::Inherited);
+            updated = true;
+        }
+
+        if let Some(parent_marker) = parent_marker
+            && current_marker.is_none()
+        {
+            entity_commands.insert(parent_marker.clone());
+            updated = true;
+        }
+
+        if trace_renderlayers && updated {
+            bevy::log::warn!(
+                "[RenderLayers:SdfChildSync] child={:?} parent={:?} layers={:?} marker_embed={:?}",
+                entity,
+                parent,
+                parent_layers,
+                parent_marker.map(|marker| marker.embed_entity),
+            );
+        }
+    }
+}
+
 pub fn propagate_render_layers_to_children_system(
     mut commands: Commands,
     composite_embed_query: Query<(Entity, &EmbedSceneRtt)>,

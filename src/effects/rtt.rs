@@ -35,16 +35,19 @@ pub(super) const EMBED_RTT_CAMERA_FAR: f32 = 2000.0;
 pub use cleanup::{cleanup_embed_content_system, cleanup_embed_scene_rtt_system};
 pub use clipping::apply_embed_bounds_clipping_system;
 pub use components::{
-    AmEmbedMask, EmbedSceneBounds, EmbedSceneRtt, EmbedSceneRttCamera, NeedsEmbedSceneRtt,
-    NeedsStrategyEvaluation,
+    AmEmbedMask, EmbedSceneBounds, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
+    NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
 };
-pub use layers::{propagate_render_layers_system, propagate_render_layers_to_children_system};
+pub use layers::{
+    propagate_render_layers_system, propagate_render_layers_to_children_system,
+    sync_new_sdf_child_render_layers_system,
+};
 pub use plugin::EffectRenderPlugin;
 pub use pool::EmbedSceneRenderLayerPool;
 pub(crate) use setup::refresh_group_fill_material_texture_system;
 pub use setup::{fix_nested_embed_render_layers_system, setup_embed_scene_rtt_system};
 pub use strategy::evaluate_render_strategy_system;
-pub use sync::sync_rtt_camera_position_system;
+pub use sync::{sync_rtt_camera_position_system, sync_rtt_capture_root_system};
 
 pub(super) use super::rtt_helpers::{
     compute_embed_visible_rect, propagate_to_descendants, resize_render_texture, scene_local_rect,

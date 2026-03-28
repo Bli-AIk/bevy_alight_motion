@@ -311,8 +311,37 @@ pub(crate) fn process_pending_layers(
     for idx in to_spawn {
         let layer = &pending.layers[idx];
 
-        // Determine parent for this entity
-        let actual_parent = if layer.parent != 0 {
+        let perspective_parent_layer = pending
+            .layers
+            .iter()
+            .find(|candidate| candidate.id == layer.parent)
+            .filter(|parent_layer| parent_layer.is_perspective_null);
+        // AM's generic layer-parenting applies ordinary parent transforms at sample time.
+        // Only embedded scenes need flattening here so RTT/composite ownership stays sane.
+        let flatten_under_perspective_parent = perspective_parent_layer.is_some()
+            && matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene);
+        let perspective_parent =
+            if flatten_under_perspective_parent {
+                pending
+                    .spawned_entities
+                    .get(&layer.parent)
+                    .copied()
+                    .map(|entity| crate::scene::AmPerspectiveParent {
+                        entity,
+                        layer_id: layer.parent,
+                    })
+            } else {
+                None
+            };
+
+        // Determine Bevy hierarchy parent for this entity.
+        // Embedded scenes under perspective nulls stay detached so RTT/composite
+        // systems do not treat them as ordinary nested embeds. Plain layers and
+        // perspective-null chains keep the normal ECS hierarchy so Bevy parenting
+        // matches AM's default layer-parenting semantics more closely.
+        let actual_parent = if perspective_parent.is_some() {
+            parent_entity
+        } else if layer.parent != 0 {
             match pending.spawned_entities.get(&layer.parent) {
                 Some(&e) => e,
                 None => {
@@ -362,6 +391,7 @@ pub(crate) fn process_pending_layers(
             fonts,
             white_pixel,
             actual_parent,
+            perspective_parent,
             pending.embed_contents_container,
             pending.inv_fit_scale,
             resolved_embed_owner_id,

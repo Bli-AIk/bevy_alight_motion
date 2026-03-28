@@ -95,8 +95,11 @@ pub struct UnifiedEffectUniform {
     /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
     pub linear_repeat_params4: Vec4,
 
-    /// Linear repeat params5: (random_order, seed, 0, 0)
+    /// Linear repeat params5: (random_order, seed_lo, seed_hi, stretch_before_repeat)
     pub linear_repeat_params5: Vec4,
+
+    /// Linear repeat source size: (source_width, source_height, 0, 0)
+    pub linear_repeat_source_size: Vec4,
 
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
@@ -257,7 +260,7 @@ pub struct UnifiedEffectUniform {
     pub mask1_rr_params4: Vec4,
     /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
     pub mask1_rr_params5: Vec4,
-    /// Source flags: (sampled_from_rtt, 0, 0, 0)
+    /// Source flags: (sampled_from_offscreen, premultiplied_alpha, source_kind, 0)
     pub source_flags: Vec4,
 }
 
@@ -529,6 +532,7 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
             linear_repeat_params5: Vec4::ZERO,
+            linear_repeat_source_size: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             linear_repeat2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
             linear_repeat2_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
@@ -590,7 +594,7 @@ impl Default for UnifiedEffectUniform {
             mask1_rr_params3: Vec4::ZERO,
             mask1_rr_params4: Vec4::ZERO,
             mask1_rr_params5: Vec4::ZERO,
-            source_flags: Vec4::ZERO,
+            source_flags: crate::effects::TextureSourceContract::default().to_uniform_flags(),
         }
     }
 }

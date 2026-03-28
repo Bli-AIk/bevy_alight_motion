@@ -1,17 +1,18 @@
 {
-  "timestamp": "2026-03-27T12:37:33.885112+08:00",
+  "timestamp": "2026-03-28T07:26:33.652126+00:00",
   "summary": {
-    "passed": 182,
+    "passed": 175,
     "warnings": 0,
     "skipped": 5,
-    "failed": 82
+    "failed": 89
   },
   "results": {
     "basic/bezier/bezier": {
       "status": "pass"
     },
     "basic/bezier/ex": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9741
     },
     "basic/blend/color-mask/test": {
       "status": "pass"
@@ -41,16 +42,19 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color": {
-      "status": "pass"
+      "status": "fail"
     },
     "basic/fill/nested_solid_color_parent_child": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.6234
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.5842
     },
     "basic/fill/nested_solid_color_parent_child_simp_plus": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.5841
     },
     "basic/fill/nested_solid_color_split": {
       "status": "pass"
@@ -63,7 +67,7 @@
     },
     "basic/group/cutoff": {
       "status": "fail",
-      "avg_similarity": 0.9568
+      "avg_similarity": 0.9557
     },
     "basic/group/fill/basic": {
       "status": "pass"
@@ -87,7 +91,7 @@
       "status": "pass"
     },
     "basic/group/multi-level/ex2": {
-      "status": "pass"
+      "status": "fail"
     },
     "basic/group/resolution/basic": {
       "status": "pass"
@@ -148,7 +152,7 @@
     },
     "basic/text/basic": {
       "status": "fail",
-      "avg_similarity": 0.6849
+      "avg_similarity": 0.6929
     },
     "basic/text/template": {
       "status": "pass"
@@ -182,7 +186,7 @@
     },
     "effects/enlarge-bg/replace-color-layer/test": {
       "status": "fail",
-      "avg_similarity": 0.8551
+      "avg_similarity": 0.8518
     },
     "effects/enlarge-bg/replace-color/test": {
       "status": "fail",
@@ -327,7 +331,8 @@
       "status": "pass"
     },
     "effects/pixelate/basic": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9796
     },
     "effects/pixelate/bone": {
       "status": "fail"
@@ -703,15 +708,13 @@
     },
     "private/USER_chen_pi/distrust/6_ex": {
       "status": "fail",
-      "avg_similarity": 0.9773
+      "avg_similarity": 0.9609
     },
     "private/USER_chen_pi/distrust/6_ex1": {
-      "status": "fail",
-      "avg_similarity": 0.8013
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/6_ex2": {
-      "status": "fail",
-      "avg_similarity": 0.7806
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/6_soul": {
       "status": "pass"
@@ -746,11 +749,11 @@
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_nomask": {
       "status": "fail",
-      "avg_similarity": 0.5075
+      "avg_similarity": 0.4146
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_norepeat": {
       "status": "fail",
-      "avg_similarity": 0.8615
+      "avg_similarity": 0.8666
     },
     "private/USER_hong_jiao/test": {
       "status": "fail",
@@ -783,7 +786,7 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
-      "avg_similarity": 0.9333
+      "avg_similarity": 0.9856
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
       "status": "fail",
@@ -833,26 +836,22 @@
       "status": "pass"
     },
     "private/USER_mortis/revenge": {
-      "status": "fail",
-      "avg_similarity": 0.8591
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split1": {
-      "status": "fail",
-      "avg_similarity": 0.9662
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split2": {
-      "status": "pass"
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split3": {
-      "status": "pass"
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split4": {
-      "status": "fail",
-      "avg_similarity": 0.5384
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split5": {
-      "status": "fail",
-      "avg_similarity": 0.4636
+      "status": "fail"
     },
     "private/USER_mortis/sans": {
       "status": "skip"

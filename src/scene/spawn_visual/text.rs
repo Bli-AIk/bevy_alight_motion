@@ -233,6 +233,7 @@ pub(crate) fn spawn_text(
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
             linear_repeat_seed: AmAnimatedFloat::default(),
+            linear_repeat_after_stretch_segment: false,
             linear_repeat2: None,
             radial_repeat_count: AmAnimatedFloat::default(),
             radial_repeat_radius: AmAnimatedFloat::default(),

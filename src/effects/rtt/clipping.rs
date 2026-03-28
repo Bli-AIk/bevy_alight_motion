@@ -22,6 +22,10 @@ pub fn apply_embed_bounds_clipping_system(
     playback: Res<crate::animation::AmPlayback>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
 ) {
+    if std::env::var_os("AM_DISABLE_EMBED_BOUNDS_CLIP").is_some() {
+        return;
+    }
+
     let global_time = playback.current_time_ms as u64;
 
     for (entity, marker, material_handle, mask_info) in content_query.iter() {

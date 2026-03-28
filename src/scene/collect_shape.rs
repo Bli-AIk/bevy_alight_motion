@@ -66,6 +66,7 @@ pub(crate) fn collect_shape(
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&shape.effects);
+    let linear_repeat_after_stretch_segment = linear_repeat_after_stretch_segment(&shape.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let oscillate_effect = extract_oscillate_effect(&shape.effects);
@@ -191,6 +192,7 @@ pub(crate) fn collect_shape(
         id: shape.id,
         label: shape.label.clone(),
         parent: shape.parent,
+        is_perspective_null: false,
         start_time: shape.start_time,
         end_time: shape.end_time,
         transform,
@@ -337,6 +339,7 @@ pub(crate) fn collect_shape(
             linear_repeat_invert: linear_repeat_effect.invert,
             linear_repeat_random_order: linear_repeat_effect.random_order,
             linear_repeat_seed: linear_repeat_effect.seed,
+            linear_repeat_after_stretch_segment,
             linear_repeat2: linear_repeat_effect2.map(Box::new),
             // Radial repeat effect
             radial_repeat_count: radial_repeat_effect.count.clone(),
@@ -478,8 +481,7 @@ pub(crate) fn collect_shape(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: shape.hidden,
     })
