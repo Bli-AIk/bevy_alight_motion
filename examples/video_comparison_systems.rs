@@ -559,20 +559,13 @@ pub fn comparison_loop(
             }
 
             // Calculate time for this frame
-            // Sample the center of each exported video frame by default.
-            // Keep explicit config/env offsets as authoritative overrides.
+            // Respect the configured frame offset verbatim.
             // Note: We add 1 to current_frame because we skipped the first reference frame
             // So current_frame=0 now corresponds to frame_000002.png which is at t = 1/fps
             let frame_offset: f32 = std::env::var("FRAME_OFFSET")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or_else(|| {
-                    if state.frame_offset.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        state.frame_offset
-                    }
-                });
+                .unwrap_or(state.frame_offset);
             let time_sec = (state.current_frame as f32 + 1.0 + frame_offset) / state.fps;
             playback.playing = false; // Ensure paused
 
