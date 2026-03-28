@@ -31,11 +31,13 @@ use std::sync::{Arc, Mutex};
 pub struct HeadlessCaptureState {
     pub pending_path: Option<PathBuf>,
     pub pending_serial: Option<u64>,
+    pub completed_serial: Option<u64>,
     pub next_serial: u64,
     pub discard_captures: u32,
     pub width: u32,
     pub height: u32,
     pub texture_format: TextureFormat,
+    pub last_capture_has_non_black_rgb: bool,
 }
 
 impl Default for HeadlessCaptureState {
@@ -43,11 +45,13 @@ impl Default for HeadlessCaptureState {
         Self {
             pending_path: None,
             pending_serial: None,
+            completed_serial: None,
             next_serial: 1,
             discard_captures: 0,
             width: 0,
             height: 0,
             texture_format: TextureFormat::Rgba8UnormSrgb,
+            last_capture_has_non_black_rgb: false,
         }
     }
 }
@@ -183,7 +187,7 @@ fn flush_headless_capture_to_disk(
     let Some(path) = state.pending_path.take() else {
         return;
     };
-    state.pending_serial = None;
+    let serial = state.pending_serial.take();
 
     let row_bytes = state.width as usize * state.texture_format.pixel_size().unwrap();
     let aligned_row_bytes = RenderDevice::align_copy_bytes_per_row(row_bytes);
@@ -195,6 +199,9 @@ fn flush_headless_capture_to_disk(
             .flat_map(|row| row[..row_bytes.min(row.len())].iter().copied())
             .collect()
     };
+    state.last_capture_has_non_black_rgb = trimmed
+        .chunks_exact(4)
+        .any(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0);
 
     let Some(image) = image::RgbaImage::from_raw(state.width, state.height, trimmed) else {
         error!(
@@ -209,7 +216,10 @@ fn flush_headless_capture_to_disk(
             "Failed to save headless comparison shot {}: {err}",
             path.display()
         );
+        return;
     }
+
+    state.completed_serial = serial;
 }
 
 fn extract_headless_image_copiers(

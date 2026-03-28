@@ -45,6 +45,8 @@ pub struct ComparisonState {
     pub settle_signature: Option<(usize, usize, usize)>,
     pub settle_stable_frames: u32,
     pub prime_capture_requests_remaining: u32,
+    pub expected_capture_serial: Option<u64>,
+    pub black_retry_captures_remaining: u32,
 }
 
 #[derive(PartialEq, Debug)]
@@ -87,6 +89,8 @@ impl Default for ComparisonState {
             settle_signature: None,
             settle_stable_frames: 0,
             prime_capture_requests_remaining: 0,
+            expected_capture_serial: None,
+            black_retry_captures_remaining: 0,
         }
     }
 }
@@ -415,9 +419,9 @@ fn request_headless_capture(
     headless_capture_query: &Query<&headless_capture::HeadlessImageCopier>,
     headless_capture_state: &mut headless_capture::HeadlessCaptureState,
     pending_path: Option<PathBuf>,
-) -> bool {
+) -> Option<u64> {
     let Ok(image_copier) = headless_capture_query.single() else {
-        return false;
+        return None;
     };
 
     let serial = headless_capture_state.next_serial;
@@ -427,9 +431,10 @@ fn request_headless_capture(
     if let Some(path) = pending_path {
         headless_capture_state.pending_serial = Some(serial);
         headless_capture_state.pending_path = Some(path);
+        headless_capture_state.completed_serial = None;
     }
 
-    true
+    Some(serial)
 }
 
 #[cfg(feature = "headless-render")]
@@ -446,7 +451,7 @@ fn continue_priming_capture(
     let can_request_capture = headless_capture_state.pending_path.is_none()
         && headless_capture_state.discard_captures == 0;
     if can_request_capture
-        && request_headless_capture(headless_capture_query, headless_capture_state, None)
+        && request_headless_capture(headless_capture_query, headless_capture_state, None).is_some()
     {
         headless_capture_state.discard_captures =
             headless_capture_state.discard_captures.saturating_add(1);
@@ -636,11 +641,21 @@ pub fn comparison_loop(
                     } else {
                         1
                     };
+                    let default_black_retry_captures = if cfg!(feature = "headless-render") {
+                        2
+                    } else {
+                        0
+                    };
                     state.prime_capture_requests_remaining =
                         std::env::var("COMPARISON_PRIME_CAPTURES")
                             .ok()
                             .and_then(|s| s.parse::<u32>().ok())
                             .unwrap_or(default_prime_captures);
+                    state.black_retry_captures_remaining =
+                        std::env::var("COMPARISON_BLACK_RETRY_CAPTURES")
+                            .ok()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(default_black_retry_captures);
                     state.stage = TestStage::PrimingCapture;
                 }
             }
@@ -673,13 +688,18 @@ pub fn comparison_loop(
             // Trigger screenshot
             #[cfg(feature = "headless-render")]
             {
-                if headless_capture_state.pending_path.is_none()
-                    && request_headless_capture(
+                if headless_capture_state.pending_path.is_none() {
+                    match request_headless_capture(
                         &headless_capture_query,
                         &mut headless_capture_state,
                         Some(shot_path),
-                    )
-                {}
+                    ) {
+                        Some(serial) => {
+                            state.expected_capture_serial = Some(serial);
+                        }
+                        None => return,
+                    }
+                }
             }
             #[cfg(not(feature = "headless-render"))]
             commands
@@ -691,17 +711,51 @@ pub fn comparison_loop(
         }
 
         TestStage::WaitingForScreenshot => {
-            state.wait_frames += 1;
-            if state.wait_frames < 1 {
-                return;
+            #[cfg(feature = "headless-render")]
+            {
+                let Some(expected_serial) = state.expected_capture_serial else {
+                    return;
+                };
+                if headless_capture_state.completed_serial != Some(expected_serial) {
+                    return;
+                }
+                if !headless_capture_state.last_capture_has_non_black_rgb
+                    && state.black_retry_captures_remaining > 0
+                {
+                    state.black_retry_captures_remaining -= 1;
+                    state.prime_capture_requests_remaining = 1;
+                    state.expected_capture_serial = None;
+                    println!(
+                        "[COMPARISON] Retrying black headless capture for frame {} (remaining retries: {})",
+                        state.current_frame, state.black_retry_captures_remaining
+                    );
+                    state.stage = TestStage::PrimingCapture;
+                    return;
+                }
+                state.stage = TestStage::Comparing;
             }
 
-            state.stage = TestStage::Comparing;
+            #[cfg(not(feature = "headless-render"))]
+            {
+                state.wait_frames += 1;
+                if state.wait_frames < 1 {
+                    return;
+                }
+
+                state.stage = TestStage::Comparing;
+            }
         }
 
         TestStage::Comparing => {
             let frame_idx = state.current_frame;
             let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
+
+            #[cfg(feature = "headless-render")]
+            if let Some(expected_serial) = state.expected_capture_serial
+                && headless_capture_state.completed_serial != Some(expected_serial)
+            {
+                return;
+            }
 
             if !shot_path.exists() {
                 return;
@@ -712,7 +766,7 @@ pub fn comparison_loop(
                 Err(_) => return,
             };
 
-            let ref_path = &state.frame_paths[frame_idx];
+            let ref_path = state.frame_paths[frame_idx].clone();
 
             // Debug: log actual paths being compared for frame 30 and copy ref frame
             if frame_idx.is_multiple_of(5) {
@@ -724,12 +778,23 @@ pub fn comparison_loop(
                 );
                 // Copy reference frame to report dir for inspection
                 let ref_copy_path = state.report_dir.join(format!("ref_{:06}.png", frame_idx));
-                let _ = std::fs::copy(ref_path, &ref_copy_path);
+                let _ = std::fs::copy(&ref_path, &ref_copy_path);
             }
 
-            let ref_img = image::open(ref_path)
+            let ref_img = image::open(&ref_path)
                 .expect("Failed to open ref image")
                 .to_rgba8();
+
+            if std::env::var_os("AM_COMPARISON_TRACE_IMAGES").is_some() {
+                let cmp_shot_path = state
+                    .report_dir
+                    .join(format!("cmp_shot_{:06}.png", frame_idx));
+                let cmp_ref_path = state
+                    .report_dir
+                    .join(format!("cmp_ref_{:06}.png", frame_idx));
+                let _ = shot_img.save(&cmp_shot_path);
+                let _ = ref_img.save(&cmp_ref_path);
+            }
 
             // Compare
             let (result, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
@@ -741,8 +806,10 @@ pub fn comparison_loop(
             // Check against configured frame threshold
             let threshold = state.frame_threshold;
 
-            // Save diff if similarity < threshold
+            // Save complete failure artifacts so remote GPU mismatches are debuggable offline.
             if similarity < threshold {
+                let ref_copy_path = state.report_dir.join(format!("ref_{:06}.png", frame_idx));
+                let _ = std::fs::copy(&ref_path, &ref_copy_path);
                 let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                 diff_img.save(diff_path).unwrap();
                 println!(
@@ -768,6 +835,7 @@ pub fn comparison_loop(
             // Clean up shot to save space? Keep it for now.
 
             state.current_frame += 1;
+            state.expected_capture_serial = None;
             state.stage = TestStage::SettingTime;
         }
 
