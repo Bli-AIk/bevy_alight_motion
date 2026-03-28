@@ -430,7 +430,12 @@ import os
 import sys
 
 data = json.loads(os.environ["JSON_INPUT"])
-actual = data.get("actual_status", "")
+actual = (
+    data.get("actual_status")
+    or data.get("cur_state")
+    or data.get("intended_status")
+    or ""
+)
 message = (data.get("status_msg") or "").strip()
 
 if message:
