@@ -48,6 +48,21 @@ fn sign_axis(value: f32) -> f32 {
     if value.is_sign_negative() { -1.0 } else { 1.0 }
 }
 
+fn projection_size_for_rtt_camera(
+    parent_camera_to_embed: bool,
+    visible_size: Vec2,
+    effective_size: Vec2,
+) -> Vec2 {
+    let use_visible_projection = (parent_camera_to_embed
+        && parented_camera_uses_local_projection())
+        || (!parent_camera_to_embed && unparented_camera_uses_full_scale());
+    if use_visible_projection {
+        visible_size
+    } else {
+        effective_size
+    }
+}
+
 pub fn sync_rtt_capture_root_system(
     mut commands: Commands,
     embed_query: Query<
@@ -209,14 +224,11 @@ pub fn sync_rtt_camera_position_system(
             }
 
             if let Projection::Orthographic(ref mut ortho) = *projection {
-                let projection_size = if (parent_camera_to_embed
-                    && parented_camera_uses_local_projection())
-                    || (!parent_camera_to_embed && unparented_camera_uses_full_scale())
-                {
-                    visible_size
-                } else {
-                    effective_size
-                };
+                let projection_size = projection_size_for_rtt_camera(
+                    parent_camera_to_embed,
+                    visible_size,
+                    effective_size,
+                );
                 ortho.scaling_mode = bevy::camera::ScalingMode::Fixed {
                     width: projection_size.x.max(1.0),
                     height: projection_size.y.max(1.0),

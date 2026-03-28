@@ -25,6 +25,7 @@ mod layers;
 mod plugin;
 mod pool;
 mod setup;
+mod setup_helpers;
 mod strategy;
 mod sync;
 

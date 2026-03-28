@@ -80,6 +80,19 @@ impl ContentBounds {
     }
 }
 
+fn record_diff_sample(
+    trace_raw: bool,
+    diff_samples: &mut Vec<(u32, u32, [u8; 4], [u8; 4])>,
+    x: u32,
+    y: u32,
+    rendered_pixel: image::Rgba<u8>,
+    reference_pixel: image::Rgba<u8>,
+) {
+    if trace_raw && diff_samples.len() < 5 {
+        diff_samples.push((x, y, rendered_pixel.0, reference_pixel.0));
+    }
+}
+
 /// Compare two RGBA images and return similarity metrics plus a diff image.
 ///
 /// `rendered_image` is usually the freshly rendered output, and
@@ -216,19 +229,20 @@ pub fn compare_images(
                 matching_pixels += 1;
             } else {
                 differing_pixels += 1;
-                if alpha_diff > 0 {
-                    differing_alpha_pixels += 1;
-                } else {
-                    differing_same_alpha_pixels += 1;
-                }
-                if rendered_pixel[3] == 0 && reference_pixel[3] == 0 {
-                    differing_fully_transparent_pixels += 1;
-                } else {
-                    differing_visible_pixels += 1;
-                }
-                if trace_raw && diff_samples.len() < 5 {
-                    diff_samples.push((x, y, rendered_pixel.0, reference_pixel.0));
-                }
+                differing_alpha_pixels += u64::from(alpha_diff > 0);
+                differing_same_alpha_pixels += u64::from(alpha_diff == 0);
+
+                let fully_transparent = rendered_pixel[3] == 0 && reference_pixel[3] == 0;
+                differing_fully_transparent_pixels += u64::from(fully_transparent);
+                differing_visible_pixels += u64::from(!fully_transparent);
+                record_diff_sample(
+                    trace_raw,
+                    &mut diff_samples,
+                    x,
+                    y,
+                    *rendered_pixel,
+                    *reference_pixel,
+                );
             }
 
             if pixel_diff > MATCH_THRESHOLD {

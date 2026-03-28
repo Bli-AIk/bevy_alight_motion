@@ -10,153 +10,19 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureFormat;
 
+use super::setup_helpers::{
+    PendingGroupFillTextureRefresh, composite_camera_order, dynamic_render_layer,
+    flatten_parented_rtt_to_world_enabled, insert_group_fill_debug_sprite, insert_group_fill_mesh,
+    mirrored_capture_root_enabled, parented_camera_uses_local_projection,
+    plain_rtt_uses_straight_alpha, selected_embed_rtt_format, sign_axis, trace_group_fill_mode,
+    trace_rtt_setup_enabled, unparented_camera_uses_full_scale,
+};
 use super::{
     AmEmbedMask, AmGroupFill, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR, EMBED_RTT_CAMERA_Z,
     EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
     GroupFillType, NeedsEmbedSceneRtt,
 };
-
-#[derive(Component)]
-pub(crate) struct PendingGroupFillTextureRefresh(u8);
-
-fn trace_rtt_setup_enabled(layer_id: u64) -> bool {
-    std::env::var_os("AM_TRACE_RTT_SETUP_IDS")
-        .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
-            ids.split(',')
-                .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
-        })
-}
-
-fn composite_camera_order(
-    embed_entity: Entity,
-    render_layer: usize,
-    parent_query: &Query<&ChildOf>,
-    layer_spec_query: &Query<&crate::scene::AmLayerSpec>,
-) -> isize {
-    let mut embed_depth = 0_isize;
-    let mut current = embed_entity;
-
-    while let Ok(child_of) = parent_query.get(current) {
-        let parent = child_of.parent();
-        if layer_spec_query
-            .get(parent)
-            .is_ok_and(|spec| matches!(spec, crate::scene::AmLayerSpec::EmbedScene))
-        {
-            embed_depth += 1;
-        }
-        current = parent;
-    }
-
-    // Bevy renders smaller camera orders first.
-    // Top-level composite embeds already work with plain `-render_layer`.
-    // The ordering bug appears when a composite embed is nested inside another composite:
-    // those child RTT cameras must render before their composite ancestors even if the layer
-    // pool reuses a smaller render_layer number.
-    if embed_depth == 0 {
-        -(render_layer as isize)
-    } else {
-        -((embed_depth + 1) * 100 + render_layer as isize)
-    }
-}
-
-fn dynamic_render_layer(layer: usize) -> RenderLayers {
-    RenderLayers::from_layers(&[layer])
-}
-
-fn selected_embed_rtt_format() -> TextureFormat {
-    match std::env::var("AM_EMBED_RTT_FORMAT").ok().as_deref() {
-        Some("rgba8unorm") => TextureFormat::Rgba8Unorm,
-        Some("bgra8unormsrgb") => TextureFormat::Bgra8UnormSrgb,
-        Some("bgra8unorm") => TextureFormat::Bgra8Unorm,
-        _ => TextureFormat::Rgba8UnormSrgb,
-    }
-}
-
-fn parented_camera_uses_local_projection() -> bool {
-    std::env::var_os("AM_PARENT_RTT_LOCAL_PROJECTION").is_some()
-}
-
-fn unparented_camera_uses_full_scale() -> bool {
-    std::env::var_os("AM_RTT_CAMERA_FULL_SCALE").is_some()
-}
-
-fn mirrored_capture_root_enabled() -> bool {
-    std::env::var_os("AM_DISABLE_MIRRORED_RTT_CAPTURE_ROOT").is_none()
-}
-
-fn flatten_parented_rtt_to_world_enabled() -> bool {
-    std::env::var_os("AM_FLATTEN_PARENTED_RTT_TO_WORLD").is_some()
-}
-
-fn plain_rtt_uses_straight_alpha() -> bool {
-    std::env::var_os("AM_PLAIN_RTT_STRAIGHT_ALPHA").is_some()
-}
-
-fn sign_axis(value: f32) -> f32 {
-    if value.is_sign_negative() { -1.0 } else { 1.0 }
-}
-
-fn insert_group_fill_debug_sprite(
-    commands: &mut Commands,
-    entity: Entity,
-    render_texture_handle: Handle<Image>,
-    scene_width: f32,
-    scene_height: f32,
-) {
-    commands.entity(entity).insert(Sprite {
-        image: render_texture_handle,
-        custom_size: Some(Vec2::new(scene_width, scene_height)),
-        ..default()
-    });
-}
-
-fn insert_group_fill_mesh(
-    commands: &mut Commands,
-    fill: &AmGroupFill,
-    entity: Entity,
-    render_texture_handle: Handle<Image>,
-    scene_width: f32,
-    scene_height: f32,
-    fill_materials: &mut Assets<crate::group_fill::GroupFillMaterial>,
-    meshes: &mut Assets<Mesh>,
-) {
-    use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
-
-    let uniform = match &fill.fill_type {
-        GroupFillType::Color => GroupFillUniform {
-            fill_color: fill.fill_color,
-            gradient_config: Vec4::ZERO,
-            ..default()
-        },
-        GroupFillType::Gradient {
-            gradient_type,
-            start_color,
-            end_color,
-            points,
-        } => GroupFillUniform {
-            fill_color: Vec4::ONE,
-            gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
-            gradient_start_color: *start_color,
-            gradient_end_color: *end_color,
-            gradient_points: *points,
-        },
-        GroupFillType::None => unreachable!(),
-    };
-    let material = fill_materials.add(GroupFillMaterial {
-        uniform_data: uniform,
-        texture: Some(render_texture_handle),
-    });
-    let mesh = meshes.add(Rectangle::new(scene_width, scene_height));
-    commands.entity(entity).insert((
-        Mesh2d(mesh),
-        MeshMaterial2d(material),
-        PendingGroupFillTextureRefresh(8),
-    ));
-}
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -258,9 +124,9 @@ pub fn setup_embed_scene_rtt_system(
             }
 
             if let Some(children) = children {
-                for child in children.iter() {
-                    commands.entity(capture_root_entity).add_child(child);
-                }
+                commands
+                    .entity(capture_root_entity)
+                    .add_children(children.as_ref());
             }
 
             Some(capture_root_entity)
@@ -395,14 +261,13 @@ pub fn setup_embed_scene_rtt_system(
             );
         } else if let Some(fill) = group_fill.filter(|fill| fill.fill_type != GroupFillType::None) {
             if debug_show_fill_rtt {
-                if trace_renderlayers {
-                    bevy::log::warn!(
-                        "[RTT-GroupFill] embed={:?} render_layer={} mode=debug-sprite fill_type={:?}",
-                        entity,
-                        render_layer,
-                        fill.fill_type,
-                    );
-                }
+                trace_group_fill_mode(
+                    trace_renderlayers,
+                    entity,
+                    render_layer,
+                    "debug-sprite",
+                    &fill.fill_type,
+                );
                 insert_group_fill_debug_sprite(
                     &mut commands,
                     entity,
@@ -411,14 +276,13 @@ pub fn setup_embed_scene_rtt_system(
                     needs_rtt.scene_height,
                 );
             } else {
-                if trace_renderlayers {
-                    bevy::log::warn!(
-                        "[RTT-GroupFill] embed={:?} render_layer={} mode=mesh fill_type={:?}",
-                        entity,
-                        render_layer,
-                        fill.fill_type,
-                    );
-                }
+                trace_group_fill_mode(
+                    trace_renderlayers,
+                    entity,
+                    render_layer,
+                    "mesh",
+                    &fill.fill_type,
+                );
                 insert_group_fill_mesh(
                     &mut commands,
                     fill,

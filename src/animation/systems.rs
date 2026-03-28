@@ -8,6 +8,7 @@ mod playback;
 mod shared;
 mod size;
 mod transform;
+mod transform_perspective;
 
 pub use camera::animate_am_camera_system;
 pub use debug::debug_layer_global_z_system;

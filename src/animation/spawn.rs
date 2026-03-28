@@ -320,19 +320,18 @@ pub(crate) fn process_pending_layers(
         // Only embedded scenes need flattening here so RTT/composite ownership stays sane.
         let flatten_under_perspective_parent = perspective_parent_layer.is_some()
             && matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene);
-        let perspective_parent =
-            if flatten_under_perspective_parent {
-                pending
-                    .spawned_entities
-                    .get(&layer.parent)
-                    .copied()
-                    .map(|entity| crate::scene::AmPerspectiveParent {
-                        entity,
-                        layer_id: layer.parent,
-                    })
-            } else {
-                None
-            };
+        let perspective_parent = if flatten_under_perspective_parent {
+            pending
+                .spawned_entities
+                .get(&layer.parent)
+                .copied()
+                .map(|entity| crate::scene::AmPerspectiveParent {
+                    entity,
+                    layer_id: layer.parent,
+                })
+        } else {
+            None
+        };
 
         // Determine Bevy hierarchy parent for this entity.
         // Embedded scenes under perspective nulls stay detached so RTT/composite

@@ -66,7 +66,7 @@ pub fn debug_layer_global_z_system(
     if let Some(ids) = traced_layer_ids() {
         let time_key = playback.current_time_ms.round() as i32;
         for (entity, marker, transform, global_transform, child_of) in query.iter() {
-            if !ids.iter().any(|id| *id == marker.id) {
+            if !ids.contains(&marker.id) {
                 continue;
             }
             let (global_scale, _, global_translation) =
@@ -97,7 +97,7 @@ pub fn debug_layer_global_z_system(
             let Ok((_, marker, _, _, _)) = query.get(camera.embed_entity) else {
                 continue;
             };
-            if !ids.iter().any(|id| *id == marker.id) {
+            if !ids.contains(&marker.id) {
                 continue;
             }
             let (global_scale, _, global_translation) =
