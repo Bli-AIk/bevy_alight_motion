@@ -642,7 +642,9 @@ pub fn comparison_loop(
                         1
                     };
                     let default_black_retry_captures = if cfg!(feature = "headless-render") {
-                        2
+                        // Remote Vulkan/NVIDIA headless runs can return a few transient all-black
+                        // captures even after the scene graph has otherwise settled.
+                        6
                     } else {
                         0
                     };
