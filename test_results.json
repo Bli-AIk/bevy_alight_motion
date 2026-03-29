@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-29T01:02:29.540602+00:00",
+  "timestamp": "2026-03-29T02:11:49.903389+00:00",
   "summary": {
-    "passed": 176,
+    "passed": 178,
     "warnings": 0,
     "skipped": 5,
-    "failed": 88
+    "failed": 86
   },
   "results": {
     "basic/bezier/bezier": {
@@ -706,8 +706,7 @@
       "avg_similarity": 0.9556
     },
     "private/USER_chen_pi/distrust/6_ex": {
-      "status": "fail",
-      "avg_similarity": 0.9609
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/6_ex1": {
       "status": "pass"
@@ -728,8 +727,7 @@
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/9": {
-      "status": "fail",
-      "avg_similarity": 0.9677
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/9_ex": {
       "status": "pass"
