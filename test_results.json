@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-29T12:23:00.224503+08:00",
+  "timestamp": "2026-03-29T08:51:24.506963+00:00",
   "summary": {
-    "passed": 167,
+    "passed": 170,
     "warnings": 0,
     "skipped": 5,
-    "failed": 97
+    "failed": 94
   },
   "results": {
     "basic/bezier/bezier": {
@@ -41,24 +41,21 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color": {
-      "status": "fail",
-      "avg_similarity": 0.828
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child": {
       "status": "fail",
-      "avg_similarity": 0.5951
+      "avg_similarity": 0.8015
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
-      "status": "fail",
-      "avg_similarity": 0.7261
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child_simp_plus": {
       "status": "fail",
-      "avg_similarity": 0.7726
+      "avg_similarity": 0.9228
     },
     "basic/fill/nested_solid_color_split": {
-      "status": "fail",
-      "avg_similarity": 0.9481
+      "status": "pass"
     },
     "basic/frame/frame": {
       "status": "pass"
@@ -68,7 +65,7 @@
     },
     "basic/group/cutoff": {
       "status": "fail",
-      "avg_similarity": 0.9071
+      "avg_similarity": 0.9072
     },
     "basic/group/fill/basic": {
       "status": "pass"

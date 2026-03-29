@@ -270,15 +270,22 @@ pub fn sync_rtt_camera_position_system(
                     texture_size,
                 );
             } else if let Some(mesh2d) = mesh2d {
-                let texture_matches_visible = (texture_size.x - visible_size.x).abs() <= 0.5
-                    && (texture_size.y - visible_size.y).abs() <= 0.5;
+                // Group-fill embeds keep the texture at full resolution, so the mesh
+                // must also stay at full extent. Cropping it to visible_rect would
+                // shift the mesh center away from (0,0) without any Anchor to
+                // compensate (unlike the Sprite path), causing position errors.
+                let mesh_rect =
+                    [visible_rect, full_rect][keep_full_resolution_for_group_fill as usize];
+                let mesh_sz = Vec2::new(mesh_rect.width(), mesh_rect.height());
+                let tex_match = (texture_size.x - mesh_sz.x).abs() <= 0.5
+                    && (texture_size.y - mesh_sz.y).abs() <= 0.5;
                 sync_dynamic_resolution_mesh(
                     &mut meshes,
                     mesh2d,
                     rtt,
-                    visible_rect,
+                    mesh_rect,
                     full_rect,
-                    texture_matches_visible,
+                    tex_match,
                 );
             }
         }

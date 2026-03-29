@@ -43,7 +43,15 @@ pub(super) fn embed_like_pivot_compensation(
     let pivot_bevy_y = if has_parent { pivot_y } else { -pivot_y };
     let scaled_offset_x = -pivot_x * scale[0];
     let scaled_offset_y = -pivot_bevy_y * scale[1];
-    let rotation_rad = (-rotation_deg_bevy).to_radians();
+    // Non-parented embeds use Bevy Y-up coords (pivot_y negated above), so the
+    // rotation must stay in Bevy convention (rotation_deg_bevy used directly).
+    // Parented embeds keep AM's Y direction for the pivot, requiring the original
+    // AM angle (-rotation_deg_bevy).
+    let rotation_rad = if has_parent {
+        (-rotation_deg_bevy).to_radians()
+    } else {
+        rotation_deg_bevy.to_radians()
+    };
     let rotated_offset_x =
         scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
     let rotated_offset_y =

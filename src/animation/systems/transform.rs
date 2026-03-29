@@ -55,6 +55,17 @@ pub fn animate_transform_system(
     let mut pending_perspective_nulls = Vec::new();
     let mut spatial_states = HashMap::new();
 
+    // Collect perspective-null entity IDs so the child_of fallback below only
+    // fires when the Bevy parent is itself a perspective null.  Without this
+    // gate, root-level perspective nulls whose ChildOf points at the scene-root
+    // entity (which is *not* a perspective null) would never resolve.
+    let perspective_null_entities: std::collections::HashSet<Entity> = query
+        .iter()
+        .filter_map(|(entity, _, _, _, _, _, _, _, _, _, perspective_null, _)| {
+            perspective_null.is_some().then_some(entity)
+        })
+        .collect();
+
     for (
         entity,
         animated,
@@ -285,9 +296,11 @@ pub fn animate_transform_system(
         if perspective_null.is_some() {
             pending_perspective_nulls.push(PendingPerspectiveNullState {
                 entity,
-                parent_entity: perspective_parent
-                    .map(|parent| parent.entity)
-                    .or_else(|| child_of.map(|parent| parent.parent())),
+                parent_entity: perspective_parent.map(|parent| parent.entity).or_else(|| {
+                    child_of
+                        .map(|parent| parent.parent())
+                        .filter(|p| perspective_null_entities.contains(p))
+                }),
                 child_state,
             });
         }

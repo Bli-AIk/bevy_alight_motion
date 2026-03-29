@@ -47,7 +47,7 @@ pub fn setup_embed_scene_rtt_system(
     >,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
-    _pending_embed_rtt_query: Query<(), With<NeedsEmbedSceneRtt>>,
+    pending_embed_rtt_query: Query<(), With<NeedsEmbedSceneRtt>>,
     layer_spec_query: Query<&crate::scene::AmLayerSpec>,
 ) {
     let debug_show_fill_rtt = std::env::var_os("AM_GROUP_FILL_DEBUG_SHOW_RTT").is_some();
@@ -66,6 +66,17 @@ pub fn setup_embed_scene_rtt_system(
         children,
     ) in query.iter()
     {
+        // Defer nested embeds whose parent embed is still pending RTT setup.
+        // Commands are deferred, so a parent processed in this same iteration won't
+        // have EmbedSceneRtt yet. The child will be picked up in the next frame once
+        // the parent's EmbedSceneRtt is committed.
+        if let Ok(child_of) = parent_query.get(entity) {
+            let parent = child_of.parent();
+            if pending_embed_rtt_query.get(parent).is_ok() {
+                continue;
+            }
+        }
+
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!("No available render layer for embedScene {:?}.", entity);
             continue;

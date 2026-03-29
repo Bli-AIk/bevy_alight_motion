@@ -85,20 +85,34 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         color = mix(fill.gradient_start_color, fill.gradient_end_color, t);
     }
 
-    // AM blending: result = (src * dst.a + dst * (1-src.a) * vec4(1,1,1,dst.a))
-    // For opaque fill (color.a=1): result = color.rgb * dst.a (pure fill silhouette)
-    // For semi-transparent fill: children colors show through proportionally.
+    // AM compositing: fill rendered over children using premultiplied-over blend
+    // (GL_ONE, GL_ONE_MINUS_SRC_ALPHA).
     //
-    // Gradient colors are stored in sRGB space (AM interpolates in sRGB).
-    // Convert to linear for Bevy's linear pipeline output.
+    // Source = premultiplied fill color × RTT alpha (RTT alpha acts as mask):
+    //   src.rgb = fill.rgb × fill.a × dst_a
+    //   src.a   = fill.a × dst_a
+    //
+    // Result (premultiplied):
+    //   result.rgb = src.rgb + dst.rgb × (1 − src.a)
+    //   result.a   = src.a  + dst_a   × (1 − src.a)
+    //
+    // Gradient colors stored in sRGB; convert to linear for Bevy's linear pipeline.
     var linear_rgb: vec3<f32>;
     if grad_type > 0 {
         linear_rgb = srgb_to_linear3(color.rgb);
     } else {
         linear_rgb = color.rgb; // Solid fills already in linear
     }
-    let children_rgb = tex.rgb / max(dst_a, 0.001);
-    let blended_rgb = mix(children_rgb, linear_rgb, color.a);
-    // Output non-premultiplied; AlphaMode2d::Blend (SrcAlpha) handles premultiplication.
-    return vec4(blended_rgb, dst_a);
+
+    let fill_a = color.a;
+    let src_a = fill_a * dst_a;
+    let one_minus_src_a = 1.0 - src_a;
+
+    // Premultiplied result of compositing fill over children
+    let result_premul_rgb = linear_rgb * src_a + tex.rgb * one_minus_src_a;
+    let result_a = src_a + dst_a * one_minus_src_a;
+
+    // Convert to straight alpha for AlphaMode2d::Blend output
+    let result_rgb = result_premul_rgb / max(result_a, 0.001);
+    return vec4(result_rgb, result_a);
 }

@@ -16,18 +16,29 @@ if [ "$need_packages" -eq 1 ]; then
     fi
 
     apt-get update
+    # libasound2 was renamed libasound2t64 in Ubuntu 24.04+
+    alsa_pkg="libasound2"
+    if ! apt-cache show libasound2 >/dev/null 2>&1; then
+        alsa_pkg="libasound2t64"
+    fi
     apt-get install -y --no-install-recommends \
         bc \
         ca-certificates \
         ffmpeg \
-        libasound2 \
+        "$alsa_pkg" \
         libgl1 \
         libvulkan1 \
         libudev1 \
         mesa-vulkan-drivers \
         python3 \
+        python3-pip \
         rsync \
         vulkan-tools
 fi
+
+# Ensure tomli is available for Python < 3.11 (Ubuntu 22.04 ships 3.10)
+python3 -c "import tomllib" 2>/dev/null || python3 -c "import tomli" 2>/dev/null || \
+    pip3 install --quiet --break-system-packages tomli 2>/dev/null || \
+    pip3 install --quiet tomli 2>/dev/null || true
 
 mkdir -p /workspace
