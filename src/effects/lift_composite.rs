@@ -173,7 +173,9 @@ pub(crate) fn setup_lift_composite_system(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
+                // Keep blend backgrounds in linear high precision. Difference/exclusion/divide
+                // amplify tiny encode/decode and 8-bit rounding drift across drivers.
+                format: TextureFormat::Rgba16Float,
                 usage: TextureUsages::TEXTURE_BINDING
                     | TextureUsages::COPY_DST
                     | TextureUsages::RENDER_ATTACHMENT,
