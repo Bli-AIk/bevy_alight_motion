@@ -81,7 +81,20 @@ pub fn animate_transform_system(
         child_of,
     ) in query.iter_mut()
     {
-        let local_time = animated.calc_local_time(global_time);
+        let mut local_time = animated.calc_local_time(global_time);
+
+        // Embed content entities need a half-frame offset to align with AM's
+        // internal timing (video frame centres vs edges).
+        let is_embed_content = embed_content_marker.is_some();
+        if is_embed_content && animated.speed_multiplier != 0.0 {
+            let fps = if animated.scene_fps > 0.0 {
+                animated.scene_fps
+            } else {
+                30.0
+            };
+            local_time += 500.0 / fps;
+        }
+
         if !animated.is_active(local_time) {
             continue;
         }
