@@ -218,6 +218,7 @@ pub(super) fn update_stretch_mesh(
 }
 
 pub(super) fn update_base_mesh(
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_stretch: bool,
@@ -234,7 +235,7 @@ pub(super) fn update_base_mesh(
 ) {
     if !has_stretch && !has_blur {
         let trace_layer = trace_unified_mesh_layer(animated.layer_id);
-        let (s2_expand_x, s2_expand_y, s2_uv_min_x, s2_uv_min_y) =
+        let (s2_uv_expand_x, s2_uv_expand_y, s2_uv_min_x, s2_uv_min_y) =
             if has_stretch2 && !animated.stretch2_content_only && (s2_scale - 1.0).abs() > 0.001 {
                 let cos_a = s2_angle_rad.cos();
                 let sin_a = s2_angle_rad.sin();
@@ -258,8 +259,14 @@ pub(super) fn update_base_mesh(
                 (1.0, 1.0, 0.0, 0.0)
             };
 
-        let half_w = orig_width / 2.0 * s2_expand_x;
-        let half_h = orig_height / 2.0 * s2_expand_y;
+        // AM's stretch2 grows the visible footprint more aggressively than the raw UV bbox.
+        // Keep UV remap conservative, but give the mesh twice the overflow so late-frame bars
+        // are not clipped back to the unstretched thickness.
+        let s2_mesh_expand_x = 1.0 + (s2_uv_expand_x - 1.0) * 2.0;
+        let s2_mesh_expand_y = 1.0 + (s2_uv_expand_y - 1.0) * 2.0;
+
+        let half_w = orig_width / 2.0 * s2_mesh_expand_x;
+        let half_h = orig_height / 2.0 * s2_mesh_expand_y;
 
         let orig_size = interpolate_vec2(&animated.size, 0.0).unwrap_or([100.0, 100.0]);
         let orig_w = orig_size[0].abs().max(1.0);
@@ -324,10 +331,12 @@ pub(super) fn update_base_mesh(
         let uv_exp_x = total_expansion / orig_width;
         let uv_exp_y = total_expansion / orig_height;
         let bounds = [lx, rx, by, ty];
+        let mesh_width = rx - lx;
+        let mesh_height = ty - by;
         let uv_rect = [
             s2_uv_min_x - uv_exp_x,
-            (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-            (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
+            (s2_uv_min_x + s2_uv_expand_x) + uv_exp_x,
+            (1.0 - s2_uv_min_y) - s2_uv_expand_y - uv_exp_y,
             (1.0 - s2_uv_min_y) + uv_exp_y,
         ];
         if trace_layer {
@@ -343,6 +352,8 @@ pub(super) fn update_base_mesh(
                 uv_rect
             );
         }
+        material.uniform_data.original_size =
+            Vec4::new(orig_width, orig_height, mesh_width, mesh_height);
         update_quad_mesh(meshes, mesh2d, mesh_state, bounds, uv_rect);
     }
 }

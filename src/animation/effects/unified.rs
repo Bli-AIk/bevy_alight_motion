@@ -365,6 +365,7 @@ pub fn animate_unified_effect_system(
         // This applies to BOTH regular content AND embed content.
         // Bounds clipping (if needed) is handled separately by apply_embed_bounds_clipping_system.
         update_base_mesh(
+            material,
             animated,
             layer_time,
             has_stretch,
