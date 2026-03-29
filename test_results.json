@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-29T14:41:17.361099+00:00",
+  "timestamp": "2026-03-29T15:10:57.382476+00:00",
   "summary": {
-    "passed": 171,
+    "passed": 172,
     "warnings": 0,
     "skipped": 5,
-    "failed": 93
+    "failed": 92
   },
   "results": {
     "basic/bezier/bezier": {
@@ -83,8 +83,7 @@
       "status": "pass"
     },
     "basic/group/multi-level/basic": {
-      "status": "fail",
-      "avg_similarity": 0.5651
+      "status": "pass"
     },
     "basic/group/multi-level/ex": {
       "status": "fail",
