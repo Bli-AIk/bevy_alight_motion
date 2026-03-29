@@ -142,7 +142,12 @@ pub fn animate_transform_system(
         actual_scale[0] *= combined_posz;
         actual_scale[1] *= combined_posz;
 
-        let unified_scale_baked = effect_marker.is_some() && unified_transform_scale.is_none();
+        // Embed entities use UnifiedEffectMaterial for RTT display but their mesh
+        // is managed by the RTT sync system, not the unified animation system.
+        // Scale must come from Transform (not baked into mesh) so exclude embeds.
+        let is_embed = matches!(layer_spec, AmLayerSpec::EmbedScene);
+        let unified_scale_baked =
+            effect_marker.is_some() && unified_transform_scale.is_none() && !is_embed;
         let current_scale = if sdf_parent.is_some() || unified_scale_baked {
             [1.0_f32, 1.0_f32]
         } else {
@@ -260,6 +265,13 @@ pub fn animate_transform_system(
         transform.rotation = Quat::from_rotation_z(final_rotation.to_radians());
 
         if sdf_parent.is_none() && effect_marker.is_none() {
+            transform.scale = Vec3::new(
+                current_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
+                current_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
+                1.0,
+            );
+        } else if is_embed {
+            // Embed RTT mesh is managed by sync system; apply actual scale via Transform.
             transform.scale = Vec3::new(
                 current_scale[0] * oscillate_z_zoom * animated.repeat_scale_factor,
                 current_scale[1] * oscillate_z_zoom * animated.repeat_scale_factor,
