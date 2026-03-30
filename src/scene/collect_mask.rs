@@ -475,7 +475,7 @@ pub(crate) fn lift_masks_to_composite_embeds(layers: &mut [PendingLayer]) {
             }
         }
         bevy::log::debug!(
-            "[MASK] Lifted {} mask(s) to Composite embed '{}' (id={})",
+            "[MASK-LIFT] Lifted {} mask(s) to Composite embed '{}' (id={})",
             info.masks.len(),
             layer.label,
             layer.id

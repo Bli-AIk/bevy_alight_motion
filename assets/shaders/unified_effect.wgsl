@@ -131,6 +131,8 @@ struct UnifiedEffectUniform {
     mask1_rr_params4: vec4<f32>,       // (start, end, phase, overlap)
     mask1_rr_params5: vec4<f32>,       // (ease_in, ease_out, shape_invert_alt, seed+random)
     source_flags: vec4<f32>,           // (sampled_from_offscreen, premultiplied_alpha, source_kind, base_alpha)
+    embed_clip_params: vec4<f32>,      // (center_x, center_y, half_width, half_height) — independent embed bounds clip
+    embed_clip_rotation: vec4<f32>,    // (rotation_z, 0, 0, 0)
 }
 
 @group(2) @binding(0) var<uniform> uniforms: UnifiedEffectUniform;
@@ -3081,6 +3083,23 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let world_pos = mesh.world_position.xy;
         mask_factor = apply_masks_blend(world_pos);
         if mask_factor < 0.005 {
+            discard;
+        }
+    }
+
+    // Apply embed bounds clip (independent of mask system).
+    // Active when half_width > 0.  Uses a simple rectangle test with rotation.
+    let ec = uniforms.embed_clip_params;
+    if ec.z > 0.0 {
+        let ec_world = mesh.world_position.xy - ec.xy;
+        let ec_rot = uniforms.embed_clip_rotation.x;
+        let ec_cos = cos(-ec_rot);
+        let ec_sin = sin(-ec_rot);
+        let ec_local = vec2<f32>(
+            ec_world.x * ec_cos - ec_world.y * ec_sin,
+            ec_world.x * ec_sin + ec_world.y * ec_cos,
+        );
+        if abs(ec_local.x) > ec.z || abs(ec_local.y) > ec.w {
             discard;
         }
     }

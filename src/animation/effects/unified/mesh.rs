@@ -153,6 +153,7 @@ pub(super) fn update_stretch_mesh(
         let local_new_h = new_height / layer_scale.y;
 
         let global_scale = global_transform.to_scale_rotation_translation().0;
+        let _ = global_scale;
         trace_stretch_once(animated.layer_id, || {
             format!(
                 "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) screen_mesh=({:.2},{:.2}) local_mesh=({:.2},{:.2}) layer_scale=({:.4},{:.4}) angle={:.2} stretch={:.2}",

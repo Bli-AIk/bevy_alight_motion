@@ -262,6 +262,13 @@ pub struct UnifiedEffectUniform {
     pub mask1_rr_params5: Vec4,
     /// Source flags: (sampled_from_offscreen, premultiplied_alpha, source_kind, 0)
     pub source_flags: Vec4,
+    /// Embed bounds clip: (center_x, center_y, half_width, half_height)
+    /// Applied independently of mask evaluation so stretched content inside embeds
+    /// is clipped even when a real mask is also active.  Disabled when half_width ≤ 0.
+    pub embed_clip_params: Vec4,
+    /// Embed clip rotation (radians) stored separately to keep embed_clip_params a
+    /// simple AABB-like rect.  Only the z-rotation component is used.
+    pub embed_clip_rotation: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -599,6 +606,8 @@ impl Default for UnifiedEffectUniform {
             mask1_rr_params4: Vec4::ZERO,
             mask1_rr_params5: Vec4::ZERO,
             source_flags: crate::effects::TextureSourceContract::default().to_uniform_flags(),
+            embed_clip_params: Vec4::ZERO,
+            embed_clip_rotation: Vec4::ZERO,
         }
     }
 }

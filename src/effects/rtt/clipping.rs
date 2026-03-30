@@ -45,10 +45,6 @@ pub fn apply_embed_bounds_clipping_system(
             .map(|info| !info.get_active_masks(global_time).is_empty())
             .unwrap_or(false);
 
-        if has_active_mask {
-            continue;
-        }
-
         let (embed_scale, embed_rotation, embed_pos) = embed_gt.to_scale_rotation_translation();
         let half_width = bounds.width * 0.5 * embed_scale.x.abs();
         let half_height = bounds.height * 0.5 * embed_scale.y.abs();
@@ -56,10 +52,20 @@ pub fn apply_embed_bounds_clipping_system(
         let center_y = embed_pos.y;
         let rotation_z = embed_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
 
-        material.uniform_data.effect_flags.x = 1.0;
-        material.uniform_data.mask_params = Vec4::new(center_x, center_y, half_width, half_height);
-        material.uniform_data.mask_blend = Vec4::new(1.0, 1.0, 0.0, 0.0);
-        material.uniform_data.mask2_flags.y = rotation_z;
+        if has_active_mask {
+            // Entity has a real mask — write embed bounds into the dedicated
+            // embed_clip uniform so both mask AND embed clipping apply.
+            material.uniform_data.embed_clip_params =
+                Vec4::new(center_x, center_y, half_width, half_height);
+            material.uniform_data.embed_clip_rotation = Vec4::new(rotation_z, 0.0, 0.0, 0.0);
+        } else {
+            // No real mask — use the original mask_params path for embed clipping.
+            material.uniform_data.effect_flags.x = 1.0;
+            material.uniform_data.mask_params =
+                Vec4::new(center_x, center_y, half_width, half_height);
+            material.uniform_data.mask_blend = Vec4::new(1.0, 1.0, 0.0, 0.0);
+            material.uniform_data.mask2_flags.y = rotation_z;
+        }
 
         bevy::log::trace!(
             "[EmbedClip] Content {:?} clipped to embed bounds: center=({:.1},{:.1}), half=({:.1},{:.1}), rot={:.3}, embed_scale=({:.3},{:.3})",
