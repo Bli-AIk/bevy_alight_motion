@@ -367,6 +367,10 @@ impl UnifiedEffectMaterial {
         self.uniform_data.effect_flags.y = if enabled { 1.0 } else { 0.0 };
     }
 
+    pub fn is_stretch_enabled(&self) -> bool {
+        self.uniform_data.effect_flags.z != 0.0
+    }
+
     pub fn set_stretch_enabled(&mut self, enabled: bool) {
         self.uniform_data.effect_flags.z = if enabled { 1.0 } else { 0.0 };
     }

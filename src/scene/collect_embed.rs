@@ -86,7 +86,10 @@ pub(crate) fn collect_embed_scene(
             effect_ainv: embed_transform2.ainv,
             extra_transform2: embed_extra_transform2,
             font_y_offset: 0.0,
-            size: AmAnimatedVec2::default(),
+            size: AmAnimatedVec2 {
+                value: Some([embed.scene.width as f32, embed.scene.height as f32]),
+                keyframes: vec![],
+            },
             anchor_offset: Vec2::ZERO,
             wipe_start: AmAnimatedFloat::default(),
             wipe_end: AmAnimatedFloat {

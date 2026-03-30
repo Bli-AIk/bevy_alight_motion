@@ -266,7 +266,15 @@ pub fn sync_rtt_camera_position_system(
             let keep_full_resolution_for_group_fill =
                 keep_full_resolution_for_group_fill(group_fill);
 
-            if !disable_resize && !keep_full_resolution_for_group_fill {
+            // Stretch-enabled embeds: the unified effect system (Update) already
+            // expanded the mesh and set original_size for the stretch shader.
+            // The sync must NOT overwrite those values, nor downscale the render
+            // texture — the shader needs the full-resolution RTT content.
+            let stretch_active = unified_material_handle
+                .and_then(|h| unified_materials.get(&h.0))
+                .is_some_and(|m| m.is_stretch_enabled());
+
+            if !disable_resize && !keep_full_resolution_for_group_fill && !stretch_active {
                 resize_render_texture(&mut images, &rtt.render_texture, new_extent);
             }
             let texture_size = images
@@ -292,7 +300,7 @@ pub fn sync_rtt_camera_position_system(
                     local_center,
                     texture_size,
                 );
-            } else if let Some(mesh2d) = mesh2d {
+            } else if let Some(mesh2d) = mesh2d.filter(|_| !stretch_active) {
                 // Group-fill embeds keep the texture at full resolution, so the mesh
                 // must also stay at full extent. Cropping it to visible_rect would
                 // shift the mesh center away from (0,0) without any Anchor to
