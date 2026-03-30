@@ -51,6 +51,10 @@ pub(crate) fn collect_embed_scene(
     let exposure_gamma_effect = extract_exposure_gamma_effect(&embed.effects);
     let chromakey_effect = extract_chromakey_effect(&embed.effects);
     let replace_color = extract_replace_color_effect(&embed.effects);
+    let all_stretch_segments = extract_all_stretch_segment_effects(&embed.effects);
+    let stretch_segment = all_stretch_segments.first().cloned().unwrap_or_default();
+    let stretch_segment2 = all_stretch_segments.get(1).cloned().unwrap_or_default();
+    let stretch2_effect = extract_stretch2_effect(&embed.effects);
 
     PendingLayer {
         id: embed.id,
@@ -98,14 +102,14 @@ pub(crate) fn collect_embed_scene(
             },
             wipe_angle: AmAnimatedFloat::default(),
             wipe_feather: AmAnimatedFloat::default(),
-            stretch_angle: AmAnimatedFloat::default(),
-            stretch_amount: AmAnimatedFloat::default(),
-            stretch_offset: AmAnimatedFloat::default(),
-            stretch_smooth: AmAnimatedFloat::default(),
-            stretch_seg2_angle: AmAnimatedFloat::default(),
-            stretch_seg2_amount: AmAnimatedFloat::default(),
-            stretch_seg2_offset: AmAnimatedFloat::default(),
-            stretch_seg2_smooth: AmAnimatedFloat::default(),
+            stretch_angle: stretch_segment.angle,
+            stretch_amount: stretch_segment.stretch,
+            stretch_offset: stretch_segment.offset,
+            stretch_smooth: stretch_segment.smooth,
+            stretch_seg2_angle: stretch_segment2.angle,
+            stretch_seg2_amount: stretch_segment2.stretch,
+            stretch_seg2_offset: stretch_segment2.offset,
+            stretch_seg2_smooth: stretch_segment2.smooth,
             blur_strength: AmAnimatedFloat::default(),
             speed_multiplier: config.speed_multiplier,
             element_speed: 1.0,
@@ -128,9 +132,9 @@ pub(crate) fn collect_embed_scene(
             parenthelper_auto_rotate: 0,
             parenthelper_radius_adjust: AmAnimatedFloat::default(),
             parenthelper_has_effect: false,
-            stretch2_scale: AmAnimatedFloat::default(),
-            stretch2_angle: AmAnimatedFloat::default(),
-            stretch2_content_only: false,
+            stretch2_scale: stretch2_effect.scale,
+            stretch2_angle: stretch2_effect.angle,
+            stretch2_content_only: stretch2_effect.content_only,
             wavewarp2_phase: wavewarp2_effect.phase,
             wavewarp2_a1d: wavewarp2_effect.a1d,
             wavewarp2_m1: wavewarp2_effect.m1,
