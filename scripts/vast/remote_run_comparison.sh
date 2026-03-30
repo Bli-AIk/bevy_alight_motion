@@ -171,6 +171,25 @@ if command -v vulkaninfo >/dev/null 2>&1; then
     } | tee -a "$log_file"
 fi
 
+# Abort if no discrete/NVIDIA GPU is detected (only llvmpipe/CPU present).
+# Running on software rendering wastes Vast.ai budget and produces unreliable results.
+if command -v vulkaninfo >/dev/null 2>&1; then
+    gpu_devices="$(vulkaninfo --summary 2>&1 | grep -i 'deviceName' || true)"
+    has_hw_gpu=0
+    while IFS= read -r line; do
+        case "$line" in
+            *llvmpipe*|*lavapipe*|*swiftshader*|*SwiftShader*) ;;
+            *deviceName*) has_hw_gpu=1 ;;
+        esac
+    done <<< "$gpu_devices"
+    if [ -n "$gpu_devices" ] && [ "$has_hw_gpu" -eq 0 ]; then
+        echo "[remote] FATAL: No hardware GPU detected by Vulkan. Only software renderers found:" | tee -a "$log_file"
+        echo "$gpu_devices" | tee -a "$log_file"
+        echo "[remote] Aborting to avoid wasting Vast.ai budget on software rendering." | tee -a "$log_file"
+        exit 78
+    fi
+fi
+
 if [ "$skip_render_probe" -ne 1 ]; then
     probe_cmd=("$player_bin" "$pattern")
     if [ "$headless" -eq 1 ]; then

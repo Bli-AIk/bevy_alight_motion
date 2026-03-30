@@ -60,6 +60,7 @@ pub fn animate_unified_effect_system(
         Option<&Visibility>,
         Option<&bevy::camera::visibility::RenderLayers>,
         Option<&ChildOf>,
+        Option<&crate::effects::EmbedSceneRtt>,
     )>,
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
@@ -91,6 +92,7 @@ pub fn animate_unified_effect_system(
         visibility,
         render_layers,
         child_of,
+        embed_rtt,
     ) in query.iter_mut()
     {
         if unified_transform_scale.is_some() {
@@ -197,6 +199,17 @@ pub fn animate_unified_effect_system(
         }
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0) * ancestor_scale[0].abs();
         let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0) * ancestor_scale[1].abs();
+
+        // Embed entities use RTT scene dimensions as their base size.
+        // The unified system must NOT bake embed scale into mesh geometry because:
+        // 1. RTT sync (PostUpdate) manages the mesh at scene dimensions
+        // 2. Scale is applied via Transform.scale by the transform system
+        // Mixing both would produce a double-scaled result.
+        let (orig_width, orig_height) = if let Some(rtt) = embed_rtt {
+            (rtt.scene_width, rtt.scene_height)
+        } else {
+            (orig_width, orig_height)
+        };
 
         // NOTE: inv_fit_scale is NOT applied to RTT content dimensions
         // RTT content renders at scene's internal resolution, and the final
@@ -331,55 +344,56 @@ pub fn animate_unified_effect_system(
 
         let has_blur =
             animated.blur_strength.value.is_some() || !animated.blur_strength.keyframes.is_empty();
-        update_blur_mesh(
-            material,
-            animated,
-            layer_time,
-            orig_width,
-            orig_height,
-            mesh2d,
-            &mut mesh_state,
-            &mut meshes,
-        );
 
-        update_stretch_mesh(
-            material,
-            animated,
-            layer_time,
-            has_stretch,
-            has_stretch_seg2,
-            transform_rotation_rad,
-            sprite_size,
-            scale,
-            ancestor_scale,
-            orig_width,
-            orig_height,
-            global_transform,
-            mesh2d,
-            &mut mesh_state,
-            &mut meshes,
-        );
+        // Skip mesh geometry updates for embed entities. RTT sync (PostUpdate)
+        // manages their mesh at scene dimensions; writing here would conflict.
+        if embed_rtt.is_none() {
+            update_blur_mesh(
+                material,
+                animated,
+                layer_time,
+                orig_width,
+                orig_height,
+                mesh2d,
+                &mut mesh_state,
+                &mut meshes,
+            );
 
-        // For effect sprites without blur/stretch, still need to update mesh size
-        // when scale/size animation changes. This ensures content scales correctly.
-        // This applies to BOTH regular content AND embed content.
-        // Bounds clipping (if needed) is handled separately by apply_embed_bounds_clipping_system.
-        update_base_mesh(
-            material,
-            animated,
-            layer_time,
-            has_stretch,
-            has_blur,
-            has_pixelate,
-            has_stretch2,
-            s2_scale,
-            s2_angle_rad,
-            orig_width,
-            orig_height,
-            mesh2d,
-            &mut mesh_state,
-            &mut meshes,
-        );
+            update_stretch_mesh(
+                material,
+                animated,
+                layer_time,
+                has_stretch,
+                has_stretch_seg2,
+                transform_rotation_rad,
+                sprite_size,
+                scale,
+                ancestor_scale,
+                orig_width,
+                orig_height,
+                global_transform,
+                mesh2d,
+                &mut mesh_state,
+                &mut meshes,
+            );
+
+            update_base_mesh(
+                material,
+                animated,
+                layer_time,
+                has_stretch,
+                has_blur,
+                has_pixelate,
+                has_stretch2,
+                s2_scale,
+                s2_angle_rad,
+                orig_width,
+                orig_height,
+                mesh2d,
+                &mut mesh_state,
+                &mut meshes,
+            );
+        }
 
         // Update palette map alpha if present
         let has_palette =
