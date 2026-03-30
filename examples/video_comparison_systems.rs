@@ -523,6 +523,18 @@ pub fn comparison_loop(
         .ok()
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(default_initial_wait_frames);
+    let default_prime_captures: u32 = if cfg!(feature = "headless-render") {
+        2
+    } else {
+        1
+    };
+    let default_black_retry_captures: u32 = if cfg!(feature = "headless-render") {
+        // Remote Vulkan/NVIDIA headless runs can return a few transient all-black
+        // captures even after the scene graph has otherwise settled.
+        6
+    } else {
+        0
+    };
 
     match state.stage {
         TestStage::Initializing => {} // Handled in setup
@@ -629,18 +641,6 @@ pub fn comparison_loop(
                 if state.settle_stable_frames >= wait_frames {
                     state.settle_signature = None;
                     state.settle_stable_frames = 0;
-                    let default_prime_captures = if cfg!(feature = "headless-render") {
-                        2
-                    } else {
-                        1
-                    };
-                    let default_black_retry_captures = if cfg!(feature = "headless-render") {
-                        // Remote Vulkan/NVIDIA headless runs can return a few transient all-black
-                        // captures even after the scene graph has otherwise settled.
-                        6
-                    } else {
-                        0
-                    };
                     state.prime_capture_requests_remaining =
                         std::env::var("COMPARISON_PRIME_CAPTURES")
                             .ok()
@@ -689,9 +689,7 @@ pub fn comparison_loop(
                         &mut headless_capture_state,
                         Some(shot_path),
                     ) {
-                        Some(serial) => {
-                            state.expected_capture_serial = Some(serial);
-                        }
+                        Some(serial) => state.expected_capture_serial = Some(serial),
                         None => return,
                     }
                 }
