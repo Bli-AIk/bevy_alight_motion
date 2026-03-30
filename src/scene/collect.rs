@@ -20,7 +20,7 @@ use self::embed::collect_embed_layer;
 use self::flatten::flatten_pending_layers;
 use super::collect_camera::*;
 use super::collect_image::*;
-use super::collect_mask::apply_mask_to_children;
+use super::collect_mask::{apply_mask_to_children, lift_masks_to_composite_embeds};
 use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
@@ -55,6 +55,7 @@ pub fn collect_pending_layers(
 
     let mut flattened = flatten_pending_layers(pending_layers, config.nesting_depth);
     apply_mask_to_children(&mut flattened);
+    lift_masks_to_composite_embeds(&mut flattened);
 
     bevy::log::trace!(
         "Collected {} pending layers (after flatten)",

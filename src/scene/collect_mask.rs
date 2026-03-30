@@ -397,6 +397,92 @@ fn propagate_masks_to_nested_children(children: &mut [PendingLayer], masks: &[Am
     }
 }
 
+/// Lift masks from shapes inside Composite embeds to the embed entity.
+///
+/// In Alight Motion, masks clip the embed's composite output (the RTT
+/// texture displayed by the embed's quad), not individual layers inside
+/// the RTT. After inner-scene mask collection assigns masks to shapes,
+/// this pass moves those masks up to the Composite embed so the shader
+/// evaluates the mask on the display quad instead.
+///
+/// AM 中蒙版裁剪 embed 的合成输出（RTT 纹理），而非 RTT 内部的
+/// 单独图层。此函数将内部场景分配给形状的蒙版提升到 Composite embed
+/// 实体上，使 shader 在显示四边形上评估蒙版。
+pub(crate) fn lift_masks_to_composite_embeds(layers: &mut [PendingLayer]) {
+    let composite_embed_ids: std::collections::HashSet<u64> = layers
+        .iter()
+        .filter(|l| {
+            l.embed_render_plan
+                .as_ref()
+                .is_some_and(|p| p.requires_composite)
+        })
+        .map(|l| l.id)
+        .collect();
+
+    if composite_embed_ids.is_empty() {
+        return;
+    }
+
+    // Collect masks from children of Composite embeds to lift to the embed.
+    let mut masks_to_lift: std::collections::HashMap<u64, Vec<AmMaskEntry>> =
+        std::collections::HashMap::new();
+
+    for layer in layers.iter() {
+        if layer.mask_info.is_none() {
+            continue;
+        }
+        let embed_id = if layer.parent != 0 && composite_embed_ids.contains(&layer.parent) {
+            Some(layer.parent)
+        } else if layer.containing_embed_id != 0
+            && composite_embed_ids.contains(&layer.containing_embed_id)
+        {
+            Some(layer.containing_embed_id)
+        } else {
+            None
+        };
+        if let Some(eid) = embed_id {
+            let masks = &layer.mask_info.as_ref().unwrap().masks;
+            masks_to_lift.entry(eid).or_default().extend(masks.clone());
+        }
+    }
+
+    // Strip masks from children of Composite embeds.
+    for layer in layers.iter_mut() {
+        let in_composite = (layer.parent != 0 && composite_embed_ids.contains(&layer.parent))
+            || (layer.containing_embed_id != 0
+                && composite_embed_ids.contains(&layer.containing_embed_id));
+        if in_composite && layer.mask_info.is_some() {
+            layer.mask_info = None;
+        }
+    }
+
+    // Assign the lifted masks to the Composite embed entities.
+    for layer in layers.iter_mut() {
+        let Some(mut masks) = masks_to_lift.remove(&layer.id) else {
+            continue;
+        };
+        masks.dedup_by_key(|m| m.mask_layer_id);
+        let info = layer
+            .mask_info
+            .get_or_insert_with(|| AmMaskInfo { masks: Vec::new() });
+        for m in masks {
+            if !info
+                .masks
+                .iter()
+                .any(|e| e.mask_layer_id == m.mask_layer_id)
+            {
+                info.masks.push(m);
+            }
+        }
+        bevy::log::debug!(
+            "[MASK] Lifted {} mask(s) to Composite embed '{}' (id={})",
+            info.masks.len(),
+            layer.label,
+            layer.id
+        );
+    }
+}
+
 /// Extract mask geometry info from a layer's transform and spec.
 /// For animated scales (like SDF shapes), we need to get the scale at t=0 from the animation data.
 pub(crate) fn extract_mask_info_from_layer(layer: &PendingLayer) -> Option<AmMaskEntry> {
