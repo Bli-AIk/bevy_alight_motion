@@ -51,7 +51,8 @@ pub use strategy::evaluate_render_strategy_system;
 pub use sync::{sync_rtt_camera_position_system, sync_rtt_capture_root_system};
 
 pub(super) use super::rtt_helpers::{
-    compute_embed_visible_rect, propagate_to_descendants, resize_render_texture, scene_local_rect,
-    sync_dynamic_resolution_mesh, sync_dynamic_resolution_sprite, transformed_rect_edge_lengths,
+    EmbedVisibleRect, compute_embed_visible_rect, propagate_to_descendants, resize_render_texture,
+    scene_local_rect, sync_dynamic_resolution_mesh, sync_dynamic_resolution_sprite,
+    transformed_rect_edge_lengths,
 };
 pub(super) use super::types::*;

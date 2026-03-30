@@ -48,6 +48,26 @@ fn sign_axis(value: f32) -> f32 {
     if value.is_sign_negative() { -1.0 } else { 1.0 }
 }
 
+/// After RTT sync overwrites the Mesh2d geometry, re-synchronize the material's
+/// `original_size` so the shader sees dimensions that match the actual mesh.
+/// Without this, the unified effect system's scale-baked values would persist
+/// and cause sampling artefacts in the GPU shader.
+fn sync_embed_material_original_size(
+    unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
+    mat_handle: Option<&MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>,
+    rtt: &EmbedSceneRtt,
+    mesh_rect: super::EmbedVisibleRect,
+) {
+    let Some(mat_handle) = mat_handle else { return };
+    let Some(material) = unified_materials.get_mut(&mat_handle.0) else {
+        return;
+    };
+    let mesh_w = mesh_rect.width();
+    let mesh_h = mesh_rect.height();
+    material.uniform_data.original_size =
+        Vec4::new(rtt.scene_width, rtt.scene_height, mesh_w, mesh_h);
+}
+
 fn projection_size_for_rtt_camera(
     parent_camera_to_embed: bool,
     visible_size: Vec2,
@@ -131,6 +151,7 @@ pub fn sync_rtt_camera_position_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut embed_query: Query<(
         Entity,
         &EmbedSceneRtt,
@@ -141,6 +162,7 @@ pub fn sync_rtt_camera_position_system(
         Option<&mut Sprite>,
         Option<&mut Anchor>,
         Option<&Mesh2d>,
+        Option<&MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>,
     )>,
     mut camera_query: Query<(
         &EmbedSceneRttCamera,
@@ -165,6 +187,7 @@ pub fn sync_rtt_camera_position_system(
             sprite,
             anchor,
             mesh2d,
+            unified_material_handle,
         )) = embed_query.get_mut(camera_marker.embed_entity)
         {
             let full_rect = scene_local_rect(rtt.scene_width, rtt.scene_height);
@@ -286,6 +309,12 @@ pub fn sync_rtt_camera_position_system(
                     mesh_rect,
                     full_rect,
                     tex_match,
+                );
+                sync_embed_material_original_size(
+                    &mut unified_materials,
+                    unified_material_handle,
+                    rtt,
+                    mesh_rect,
                 );
             }
         }
