@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-30T04:17:40.660726+00:00",
+  "timestamp": "2026-03-30T14:45:06.284363+08:00",
   "summary": {
-    "passed": 174,
+    "passed": 179,
     "warnings": 0,
     "skipped": 5,
-    "failed": 90
+    "failed": 85
   },
   "results": {
     "basic/bezier/bezier": {
@@ -41,24 +41,19 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color": {
-      "status": "fail",
-      "avg_similarity": 0.6884
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child": {
-      "status": "fail",
-      "avg_similarity": 0.6714
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
-      "status": "fail",
-      "avg_similarity": 0.5842
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child_simp_plus": {
-      "status": "fail",
-      "avg_similarity": 0.5841
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_split": {
-      "status": "fail",
-      "avg_similarity": 0.9786
+      "status": "pass"
     },
     "basic/frame/frame": {
       "status": "pass"
