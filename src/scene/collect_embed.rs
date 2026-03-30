@@ -70,6 +70,7 @@ pub(crate) fn collect_embed_scene(
             pivot: embed.transform.pivot.clone(),
             rotation: embed.transform.rotation.clone(),
             scale: embed.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: embed.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,

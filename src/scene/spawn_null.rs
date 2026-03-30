@@ -93,6 +93,7 @@ pub(crate) fn spawn_null(
                 pivot: null.transform.pivot.clone(),
                 rotation: null.transform.rotation.clone(),
                 scale: null.transform.scale.clone(),
+                scale_baked_into_mesh: false,
                 opacity: null.transform.opacity.clone(),
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,

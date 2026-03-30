@@ -106,6 +106,7 @@ pub(crate) fn spawn_image(
                 pivot: image.transform.pivot.clone(),
                 rotation: image.transform.rotation.clone(),
                 scale: image.transform.scale.clone(),
+                scale_baked_into_mesh: false,
                 opacity: image.transform.opacity.clone(),
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,

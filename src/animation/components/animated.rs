@@ -30,6 +30,9 @@ pub struct AmAnimated {
     pub pivot: AmAnimatedVec2,
     pub rotation: AmAnimatedFloat,
     pub scale: AmAnimatedVec2,
+    /// When true, the animated scale is baked into mesh/SDF dimensions (Transform.scale=1).
+    /// When false, the animated scale is in Transform.scale (images, non-SDF shapes).
+    pub scale_baked_into_mesh: bool,
     pub opacity: AmAnimatedFloat,
     pub canvas_width: f32,
     pub canvas_height: f32,

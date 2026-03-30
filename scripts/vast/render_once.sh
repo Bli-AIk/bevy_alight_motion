@@ -35,6 +35,8 @@ Options:
   --ssh-public-key <path>    Local public key attached to the instance.
   --ssh-wait-secs <n>        SSH readiness timeout. Default: 600
   --remote-env <KEY=VAL>     Export one environment variable for the remote comparison run.
+  --concurrent-tag <tag>     Unique tag for concurrent runs. Each tag gets its own managed instance
+                             file so multiple render_once.sh can run in parallel without conflict.
   --dry-run                  Prepare bundle and resolve offer, but do not create/run the instance.
   -h, --help                 Show this message.
 EOF
@@ -779,6 +781,7 @@ ssh_common=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/
 onstart_file="${script_dir}/render_onstart.sh"
 ssh_public_key_path="/root/.ssh/id_ed25519.pub"
 remote_env=()
+concurrent_tag=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -890,6 +893,10 @@ while [ $# -gt 0 ]; do
             remote_env+=("${2:-}")
             shift 2
             ;;
+        --concurrent-tag)
+            concurrent_tag="${2:-}"
+            shift 2
+            ;;
         --dry-run)
             dry_run=1
             shift
@@ -928,7 +935,11 @@ if [ -n "$onstart_file" ]; then
     onstart_file="$(cd "$(dirname "$onstart_file")" && pwd)/$(basename "$onstart_file")"
 fi
 
-managed_instance_file="/root/.cache/vastai/bevy_alight_motion_managed_instance"
+if [ -n "$concurrent_tag" ]; then
+    managed_instance_file="/root/.cache/vastai/bevy_alight_motion_managed_instance_${concurrent_tag}"
+else
+    managed_instance_file="/root/.cache/vastai/bevy_alight_motion_managed_instance"
+fi
 
 trap 'cleanup $?' EXIT
 trap 'handle_signal HUP' HUP

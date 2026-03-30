@@ -206,6 +206,7 @@ pub(crate) fn collect_shape(
             pivot: shape.transform.pivot.clone(),
             rotation: shape.transform.rotation.clone(),
             scale: shape.transform.scale.clone(),
+            scale_baked_into_mesh: needs_sdf,
             opacity: shape.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,

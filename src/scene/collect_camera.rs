@@ -58,6 +58,7 @@ pub(crate) fn collect_camera(
             pivot: camera.transform.pivot.clone(),
             rotation: camera.transform.rotation.clone(),
             scale: camera.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: camera.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,

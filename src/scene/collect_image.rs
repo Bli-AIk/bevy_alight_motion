@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 
 use crate::animation::AmAnimated;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
+use crate::schema::AmAnimatedFloat;
 
 use super::components::*;
 use super::effects::*;
@@ -57,6 +57,7 @@ pub(crate) fn collect_image(
     let exposure_gamma_effect = extract_exposure_gamma_effect(&image.effects);
     let chromakey_effect = extract_chromakey_effect(&image.effects);
     let (width, height) = get_shape_size(&image.properties, "", &image.fill_type);
+    let size_animation = get_shape_size_animation(&image.properties, "");
 
     // Calculate anchor and position compensation
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -86,6 +87,7 @@ pub(crate) fn collect_image(
             pivot: image.transform.pivot.clone(),
             rotation: image.transform.rotation.clone(),
             scale: image.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: image.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
@@ -101,7 +103,7 @@ pub(crate) fn collect_image(
             effect_ainv: false,
             extra_transform2: vec![],
             font_y_offset: 0.0,
-            size: AmAnimatedVec2::default(),
+            size: size_animation,
             anchor_offset: Vec2::new(comp_x, comp_y),
             wipe_start: wipe_effect.start,
             wipe_end: wipe_effect.end,

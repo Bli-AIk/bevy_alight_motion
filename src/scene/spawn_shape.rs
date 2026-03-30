@@ -148,12 +148,7 @@ pub(crate) fn spawn_shape(
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or({
-                // Fall back: AM's default stroke size for path-stroke is 4.0
-                // (from KeyableEdgeDecoration.NO_STROKE template)
-                // end-size is a separate attribute (end cap size multiplier), not stroke width
-                4.0
-            });
+            .unwrap_or(4.0); // AM's default stroke size (KeyableEdgeDecoration.NO_STROKE)
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -261,12 +256,10 @@ pub(crate) fn spawn_shape(
         }
     };
 
-    // Spawn the layer entity without visual components (they'll be added by lifecycle system)
-    // For SDF shapes, anchor_offset moves parent from center to pivot point
-    // For SpriteShape, use the computed compensation
+    // For SDF shapes, anchor_offset moves parent from center to pivot point;
+    // for SpriteShape, use the computed compensation
     let anchor_offset = if needs_sdf {
-        // SDF parent needs to be offset from center to pivot point
-        Vec2::new(pivot_x, -pivot_y)
+        Vec2::new(pivot_x, -pivot_y) // SDF: offset from center to pivot
     } else {
         Vec2::new(comp_x, comp_y)
     };
@@ -300,6 +293,7 @@ pub(crate) fn spawn_shape(
                 pivot: shape.transform.pivot.clone(),
                 rotation: shape.transform.rotation.clone(),
                 scale: shape.transform.scale.clone(),
+                scale_baked_into_mesh: needs_sdf,
                 opacity: shape.transform.opacity.clone(),
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,
