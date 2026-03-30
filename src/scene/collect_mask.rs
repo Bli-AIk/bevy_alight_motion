@@ -261,12 +261,29 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         }
     }
 
-    // NOTE: We propagate masks to ALL children for shader-based clipping.
-    // According to user feedback, masks should treat the entire group as a whole,
-    // clipping pixels at the shader level rather than hiding entire elements.
-    // This means all child elements will have mask info for the shader to use,
-    // but we do NOT use visibility-based hiding (apply_mask_clipping_system is disabled
-    // for child layers).
+    // NOTE: We propagate masks to children for shader-based clipping.
+    // Masks treat the entire group as a whole, clipping pixels at the shader
+    // level rather than hiding entire elements.
+    //
+    // IMPORTANT: Masks must NOT propagate through Composite (RTT) embed
+    // boundaries. In Alight Motion, a mask clips the embed's composite
+    // output (display quad) in the parent's coordinate space, NOT the
+    // individual layers rendered inside the embed's RTT. Propagating
+    // masks into RTT content would evaluate them in the wrong coordinate
+    // space (global vs RTT-local), causing incorrect clipping.
+
+    // Build set of layer IDs that are Composite-strategy embeds.
+    // These embeds render to their own texture; masks should clip
+    // the display quad, not penetrate into the RTT content.
+    let composite_embed_ids: std::collections::HashSet<u64> = layers
+        .iter()
+        .filter(|l| {
+            l.embed_render_plan
+                .as_ref()
+                .is_some_and(|p| p.requires_composite)
+        })
+        .map(|l| l.id)
+        .collect();
 
     // Build map of layer_id -> masks
     let mut layer_masks: std::collections::HashMap<u64, Vec<AmMaskEntry>> =
@@ -277,7 +294,8 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
         }
     }
 
-    // Propagate to children at the current level
+    // Propagate to children at the current level.
+    // Stop propagation at Composite embed boundaries.
     loop {
         let mut changes = false;
         for layer in layers.iter_mut() {
@@ -289,14 +307,19 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
             if layer.mask_info.is_some() {
                 continue; // Already has masks
             }
-            // Check if this layer's parent or containing embed has masks
-            let source_masks = if layer.parent != 0 {
-                layer_masks.get(&layer.parent).cloned()
+            // Check if this layer's parent or containing embed has masks.
+            // Do NOT inherit masks from a Composite embed parent — the
+            // mask clips the embed's display quad, not its RTT content.
+            let source_id = if layer.parent != 0 {
+                Some(layer.parent)
             } else if layer.containing_embed_id != 0 {
-                layer_masks.get(&layer.containing_embed_id).cloned()
+                Some(layer.containing_embed_id)
             } else {
                 None
             };
+            let source_masks = source_id
+                .filter(|id| !composite_embed_ids.contains(id))
+                .and_then(|id| layer_masks.get(&id).cloned());
             if let Some(masks) = source_masks {
                 layer.mask_info = Some(AmMaskInfo {
                     masks: masks.clone(),
@@ -322,14 +345,20 @@ pub(crate) fn apply_mask_to_children(layers: &mut [PendingLayer]) {
     }
 
     // Propagate masks recursively into nested children (embed sub-trees).
-    // When a Direct-strategy embed has a mask, its nested children (collected
-    // by collect_embed_scene) also need the mask so individual shapes are clipped.
+    // Only propagate for non-Composite embeds (Direct strategy) where
+    // children render in the parent's camera and need shader-based clipping.
     for layer in layers.iter_mut() {
         if let Some(ref info) = layer.mask_info
             && !layer.children.is_empty()
         {
-            let masks = info.masks.clone();
-            propagate_masks_to_nested_children(&mut layer.children, &masks);
+            let is_composite = layer
+                .embed_render_plan
+                .as_ref()
+                .is_some_and(|p| p.requires_composite);
+            if !is_composite {
+                let masks = info.masks.clone();
+                propagate_masks_to_nested_children(&mut layer.children, &masks);
+            }
         }
     }
 }
