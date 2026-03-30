@@ -23,13 +23,31 @@ pub(crate) fn build_embed_scene_timing_plan(
     config: &AmSceneConfig,
 ) -> EmbedSceneTimingPlan {
     let in_time = embed.in_time.unwrap_or(0) as f32;
-    let effective_speed = config.speed_multiplier * embed.speed;
+
+    // When outTime < inTime the parent→nested mapping is reversed.  Derive
+    // the effective speed from the outTime ratio so that children see negative
+    // elapsed time and become invisible after the first frame.
+    // For forward playback (outTime >= inTime or absent) keep the declared
+    // speed attribute to avoid subtle timing shifts from minor outTime trims.
+    let inner_speed = match embed.out_time {
+        Some(out_time) if (out_time as f32) < in_time => {
+            let parent_dur = (embed.end_time - embed.start_time) as f32;
+            if parent_dur.abs() > f32::EPSILON {
+                (out_time as f32 - in_time) / parent_dur
+            } else {
+                embed.speed
+            }
+        }
+        _ => embed.speed,
+    };
+    let effective_speed = config.speed_multiplier * inner_speed;
+
     let global_start = if config.speed_multiplier > 0.0 {
         config.time_offset + embed.start_time as f32 / config.speed_multiplier
     } else {
         config.time_offset + embed.start_time as f32
     };
-    let nested_time_offset = if effective_speed > 0.0 {
+    let nested_time_offset = if effective_speed.abs() > f32::EPSILON {
         global_start - in_time / effective_speed
     } else {
         global_start
@@ -105,8 +123,8 @@ fn calculate_nested_render_fps(
     } else {
         1
     };
-    let speed_factor = if effective_speed < 0.99999 {
-        (1.0 / effective_speed.max(1e-6)).round().max(1.0) as u32
+    let speed_factor = if effective_speed.abs() < 0.99999 {
+        (1.0 / effective_speed.abs().max(1e-6)).round().max(1.0) as u32
     } else {
         1
     };
