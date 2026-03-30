@@ -114,6 +114,24 @@ pub(super) fn collect_embed_layer(
     config: &AmSceneConfig,
     z: f32,
 ) {
+    // In AM, outTime specifies the nested-scene time at the end of the layer's
+    // parent-timeline range.  When outTime <= inTime the effective playback
+    // direction is reversed (or zero-length), so nested content is never
+    // visible.  Skip collection entirely for these layers.
+    let in_time = embed.in_time.unwrap_or(0);
+    if let Some(out_time) = embed.out_time
+        && out_time <= in_time
+    {
+        bevy::log::trace!(
+            "  Skipping embed '{}' (id={}): outTime({}) <= inTime({}) — invisible",
+            embed.label,
+            embed.id,
+            out_time,
+            in_time,
+        );
+        return;
+    }
+
     let echokf = effects::extract_echokf_effect(&embed.effects);
     let max_count = echokf.max_count();
 
