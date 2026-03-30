@@ -3080,8 +3080,57 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply mask blend factor if any mask is enabled
     var mask_factor = 1.0;
     if mask_enabled {
-        let world_pos = mesh.world_position.xy;
-        mask_factor = apply_masks_blend(world_pos);
+        // When stretch is active, evaluate the mask at the PRE-STRETCH world
+        // position.  AM applies the mask before the stretch distortion, so
+        // content that was outside the mask boundary before stretch should
+        // remain invisible even if the stretch expansion pushes it into the
+        // mask's world-space footprint.
+        var mask_eval_pos = mesh.world_position.xy;
+        if stretch_enabled {
+            let mesh_w = uniforms.original_size.z;
+            let mesh_h = uniforms.original_size.w;
+            let orig_w  = uniforms.original_size.x;
+            let orig_h  = uniforms.original_size.y;
+            let rot     = uniforms.mesh_offset.x;
+            let cr      = cos(rot);
+            let sr      = sin(rot);
+
+            // Recover entity center from current fragment's world pos + UV.
+            let cur_lx = (mesh.uv.x - 0.5) * mesh_w;
+            let cur_ly = (0.5 - mesh.uv.y) * mesh_h;
+            let cx = mesh.world_position.x - (cur_lx * cr - cur_ly * sr);
+            let cy = mesh.world_position.y - (cur_lx * sr + cur_ly * cr);
+
+            // Compute the stretch source UV (where this pixel comes from in
+            // the original, un-stretched content).
+            var source_uv = mesh.uv;
+            let seg2_stretch = uniforms.stretch_seg2_params.y;
+            let has_seg2 = abs(seg2_stretch) > 0.001;
+            if has_seg2 {
+                source_uv = apply_stretch_segment_gen(
+                    source_uv, uniforms.stretch_seg2_params,
+                    mesh_w, mesh_h,
+                );
+                source_uv = apply_stretch_segment_gen(
+                    source_uv, uniforms.stretch_params,
+                    orig_w, orig_h,
+                );
+            } else {
+                source_uv = apply_stretch_segment_gen(
+                    source_uv, uniforms.stretch_params,
+                    mesh_w, mesh_h,
+                );
+            }
+
+            // Map the source UV back to the original mesh's world position.
+            let o_lx = (source_uv.x - 0.5) * orig_w;
+            let o_ly = (0.5 - source_uv.y) * orig_h;
+            mask_eval_pos = vec2<f32>(
+                cx + o_lx * cr - o_ly * sr,
+                cy + o_lx * sr + o_ly * cr,
+            );
+        }
+        mask_factor = apply_masks_blend(mask_eval_pos);
         if mask_factor < 0.005 {
             discard;
         }
