@@ -47,6 +47,7 @@ pub struct ComparisonState {
     pub prime_capture_requests_remaining: u32,
     pub expected_capture_serial: Option<u64>,
     pub black_retry_captures_remaining: u32,
+    pub skipped_first_frame: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -91,6 +92,7 @@ impl Default for ComparisonState {
             prime_capture_requests_remaining: 0,
             expected_capture_serial: None,
             black_retry_captures_remaining: 0,
+            skipped_first_frame: false,
         }
     }
 }
@@ -300,8 +302,10 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
     // For ultra-short videos with only 1 frame, keep it to have something to compare.
     if frame_paths.len() > 1 {
         frame_paths.remove(0);
+        state.skipped_first_frame = true;
         println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
     } else if frame_paths.len() == 1 {
+        state.skipped_first_frame = false;
         println!("[COMPARISON] Only 1 reference frame available, keeping it (ultra-short video)");
     }
 
@@ -571,14 +575,16 @@ pub fn comparison_loop(
             }
 
             // Calculate time for this frame
-            // Respect the configured frame offset verbatim.
-            // Note: We add 1 to current_frame because we skipped the first reference frame
-            // So current_frame=0 now corresponds to frame_000002.png which is at t = 1/fps
+            // When the first reference frame was skipped (multi-frame videos), add 1 so
+            // current_frame=0 maps to frame_000002 at t = 1/fps.
+            // For single-frame videos where we kept frame_000001, do NOT add 1
+            // so current_frame=0 maps to frame_000001 at t = 0.
             let frame_offset: f32 = std::env::var("FRAME_OFFSET")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(state.frame_offset);
-            let time_sec = (state.current_frame as f32 + 1.0 + frame_offset) / state.fps;
+            let skip_adjust = if state.skipped_first_frame { 1.0 } else { 0.0 };
+            let time_sec = (state.current_frame as f32 + skip_adjust + frame_offset) / state.fps;
             playback.playing = false; // Ensure paused
 
             // DON'T set time immediately - store it as pending to be applied in next frame's First schedule

@@ -64,7 +64,8 @@ pub fn animate_unified_effect_system(
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
-    _embed_gt_query: Query<&GlobalTransform>,
+    embed_gt_query: Query<&GlobalTransform>,
+    embed_rtt_query: Query<(), With<crate::effects::EmbedSceneRtt>>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -205,13 +206,28 @@ pub fn animate_unified_effect_system(
 
         // Stretch operates in screen space, so nested/embed content needs the composed
         // world rotation instead of only the layer's local transform rotation.
+        // However, RTT embed content is captured by a camera rotated to the embed's
+        // global rotation, so the stretch "screen space" is the RTT camera view.
+        // Subtract the embed's rotation to get the shape's rotation relative to the
+        // RTT camera, preventing the embed rotation from distorting the stretch.
         let (_, global_rotation, _) = global_transform.to_scale_rotation_translation();
-        let transform_rotation_rad = global_rotation.to_euler(bevy::math::EulerRot::ZYX).0;
+        let embed_rotation = _embed_marker
+            .filter(|m| embed_rtt_query.contains(m.embed_entity))
+            .and_then(|m| embed_gt_query.get(m.embed_entity).ok())
+            .map(|gt| gt.to_scale_rotation_translation().1);
+        let effective_rotation = match embed_rotation {
+            Some(er) => {
+                (er.inverse() * global_rotation)
+                    .to_euler(bevy::math::EulerRot::ZYX)
+                    .0
+            }
+            None => global_rotation.to_euler(bevy::math::EulerRot::ZYX).0,
+        };
 
         // Calculate "world-space" dimensions for stretch calculations
         // When element is rotated, its local width/height swap in world space
-        let rot_cos = transform_rotation_rad.cos().abs();
-        let rot_sin = transform_rotation_rad.sin().abs();
+        let rot_cos = effective_rotation.cos().abs();
+        let rot_sin = effective_rotation.sin().abs();
         let _world_width = orig_width * rot_cos + orig_height * rot_sin;
         let world_height = orig_width * rot_sin + orig_height * rot_cos;
         let _ = world_height; // Reserved for future use
@@ -349,7 +365,7 @@ pub fn animate_unified_effect_system(
             layer_time,
             has_stretch,
             has_stretch_seg2,
-            transform_rotation_rad,
+            effective_rotation,
             sprite_size,
             scale,
             ancestor_scale,
