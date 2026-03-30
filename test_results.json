@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-30T17:39:46.128722+08:00",
+  "timestamp": "2026-03-30T18:10:06.128164+08:00",
   "summary": {
-    "passed": 182,
+    "passed": 188,
     "warnings": 0,
     "skipped": 5,
-    "failed": 82
+    "failed": 76
   },
   "results": {
     "basic/bezier/bezier": {
@@ -751,15 +751,15 @@
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_nomask": {
       "status": "fail",
-      "avg_similarity": 0.4146
+      "avg_similarity": 0.5718
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_norepeat": {
       "status": "fail",
-      "avg_similarity": 0.8666
+      "avg_similarity": 0.8922
     },
     "private/USER_hong_jiao/test": {
       "status": "fail",
-      "avg_similarity": 0.9564
+      "avg_similarity": 0.9326
     },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
@@ -780,19 +780,18 @@
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3": {
-      "status": "fail",
-      "avg_similarity": 0.701
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/diag_parent_only": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
-      "avg_similarity": 0.9856
+      "avg_similarity": 0.9937
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
       "status": "fail",
-      "avg_similarity": 0.8615
+      "avg_similarity": 0.8965
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
       "status": "pass"
@@ -804,35 +803,30 @@
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2": {
-      "status": "fail",
-      "avg_similarity": 0.9512
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2_frame_only": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2_hide_bottom": {
-      "status": "fail",
-      "avg_similarity": 0.9483
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2_noframe": {
-      "status": "fail",
-      "avg_similarity": 0.8332
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target2_noframe_mask_hidden": {
-      "status": "fail",
-      "avg_similarity": 0.8354
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target3": {
-      "status": "fail",
-      "avg_similarity": 0.9491
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.8082
+      "avg_similarity": 0.899
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
       "status": "fail",
-      "avg_similarity": 0.6305
+      "avg_similarity": 0.6457
     },
     "private/USER_little_black/test0": {
       "status": "pass"
