@@ -359,6 +359,17 @@ pub fn animate_unified_effect_system(
             &mut meshes,
         );
 
+        // For SDF layers (scale baked into mesh), Transform.scale ≈ 1 so local = screen.
+        // For non-SDF layers (images, rects), Transform.scale = animated_scale so local ≠ screen.
+        let layer_scale = if animated.scale_baked_into_mesh {
+            Vec2::ONE
+        } else {
+            Vec2::new(
+                transform.scale.x.abs().max(0.001),
+                transform.scale.y.abs().max(0.001),
+            )
+        };
+
         update_stretch_mesh(
             material,
             animated,
@@ -371,6 +382,7 @@ pub fn animate_unified_effect_system(
             ancestor_scale,
             orig_width,
             orig_height,
+            layer_scale,
             global_transform,
             mesh2d,
             &mut mesh_state,

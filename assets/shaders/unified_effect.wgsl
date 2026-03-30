@@ -81,7 +81,7 @@ struct UnifiedEffectUniform {
     stretch2_params: vec4<f32>,        // (scale, angle_radians, content_only, 0)
     // Solidcolor effect
     solid_color_params: vec4<f32>,     // (r, g, b, blend_mode)
-    solid_color_alpha: vec4<f32>,      // (alpha, 0, 0, 0)
+    solid_color_alpha: vec4<f32>,      // (alpha, layer_scale_x, layer_scale_y, 0)
     // Second stretch segment effect
     stretch_seg2_params: vec4<f32>,    // (angle_radians, stretch_px, offset_px, smooth_width)
     // Mask1 stretch-segment params (for stretched masks)
@@ -325,18 +325,28 @@ fn apply_stretch_segment_gen(
     let transform_rot = uniforms.mesh_offset.x;
     let axis_sign = decode_axis_sign(uniforms.mesh_offset.y);
 
+    // Layer scale: converts mesh-local pixels to screen pixels.
+    // For SDF layers (scale baked into mesh): (1, 1) — local = screen.
+    // For non-SDF layers (images, rects): Transform.scale.xy — local ≠ screen.
+    let layer_scale = vec2<f32>(
+        max(abs(uniforms.solid_color_alpha.y), 0.001),
+        max(abs(uniforms.solid_color_alpha.z), 0.001),
+    );
+
     // Convert mesh UV to pixel coords (layer-local, relative to center).
     // Y is flipped: UV.y=0 is top (Bevy), but AM's scene-norm has +Y = up (OpenGL).
     let local_px_x = (uv.x - 0.5) * in_width * axis_sign.x;
     let local_px_y = (0.5 - uv.y) * in_height * axis_sign.y;
 
-    // Rotate local coords to screen space using Bevy's transform rotation.
+    // Scale from local to screen pixels, then rotate to screen space.
     // AM's stretch formula operates in screen-normalized space, which is anisotropic
     // (scene_width != scene_height). Rotating the angle alone doesn't account for this.
+    let scaled_px_x = local_px_x * layer_scale.x;
+    let scaled_px_y = local_px_y * layer_scale.y;
     let cos_r = cos(transform_rot);
     let sin_r = sin(transform_rot);
-    let screen_px_x = local_px_x * cos_r - local_px_y * sin_r;
-    let screen_px_y = local_px_x * sin_r + local_px_y * cos_r;
+    let screen_px_x = scaled_px_x * cos_r - scaled_px_y * sin_r;
+    let screen_px_y = scaled_px_x * sin_r + scaled_px_y * cos_r;
 
     // Convert to scene-normalized coords (matching AM's st = acScreenNorm - acLayerCenterNorm)
     let st = vec2<f32>(screen_px_x / scene_width, screen_px_y / scene_height);
@@ -358,9 +368,11 @@ fn apply_stretch_segment_gen(
     let disp_screen_px_x = displaced_norm.x * scene_width;
     let disp_screen_px_y = displaced_norm.y * scene_height;
 
-    // Rotate back to local space (inverse rotation: rotate by -transform_rot)
-    let disp_local_px_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
-    let disp_local_px_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
+    // Inverse rotation (screen → scaled-local), then divide by layer_scale to get local
+    let disp_scaled_x = disp_screen_px_x * cos_r + disp_screen_px_y * sin_r;
+    let disp_scaled_y = -disp_screen_px_x * sin_r + disp_screen_px_y * cos_r;
+    let disp_local_px_x = disp_scaled_x / layer_scale.x;
+    let disp_local_px_y = disp_scaled_y / layer_scale.y;
 
     // Convert to original-image UV (Y flipped back: positive scene-norm → UV < 0.5)
     let disp_uv_px_x = disp_local_px_x * axis_sign.x;

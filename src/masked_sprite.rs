@@ -98,7 +98,7 @@ pub struct UnifiedEffectUniform {
     /// Linear repeat params5: (random_order, seed_lo, seed_hi, stretch_before_repeat)
     pub linear_repeat_params5: Vec4,
 
-    /// Linear repeat source size: (source_width, source_height, 0, 0)
+    /// Linear repeat source size: (source_width, source_height, layer_scale_x, layer_scale_y)
     pub linear_repeat_source_size: Vec4,
 
     /// Linear repeat fill color (r, g, b, a)
@@ -176,7 +176,7 @@ pub struct UnifiedEffectUniform {
     /// Solidcolor params: (r, g, b, blend_mode)
     pub solid_color_params: Vec4,
 
-    /// Solidcolor alpha: (alpha, 0, 0, 0)
+    /// Solidcolor alpha: (alpha, layer_scale_x, layer_scale_y, 0)
     pub solid_color_alpha: Vec4,
 
     /// Second stretch segment params: (angle_rad, stretch_px, offset_px, smooth)

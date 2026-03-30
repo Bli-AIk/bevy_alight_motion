@@ -86,6 +86,7 @@ pub(super) fn update_stretch_mesh(
     ancestor_scale: [f32; 2],
     orig_width: f32,
     orig_height: f32,
+    layer_scale: Vec2,
     global_transform: &GlobalTransform,
     mesh2d: &bevy::mesh::Mesh2d,
     mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
@@ -142,10 +143,19 @@ pub(super) fn update_stretch_mesh(
         let new_width = orig_width + 2.0 * total_dx;
         let new_height = orig_height + 2.0 * total_dy;
 
+        // Convert screen-space dimensions to local-space for mesh vertices and shader.
+        // For SDF layers (layer_scale=1,1): no change.
+        // For non-SDF layers: mesh must be larger in local space so that
+        // mesh_local * Transform.scale covers the correct screen area.
+        let local_orig_w = orig_width / layer_scale.x;
+        let local_orig_h = orig_height / layer_scale.y;
+        let local_new_w = new_width / layer_scale.x;
+        let local_new_h = new_height / layer_scale.y;
+
         let global_scale = global_transform.to_scale_rotation_translation().0;
         trace_stretch_once(animated.layer_id, || {
             format!(
-                "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) mesh=({:.2},{:.2}) angle={:.2} stretch={:.2}",
+                "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) screen_mesh=({:.2},{:.2}) local_mesh=({:.2},{:.2}) layer_scale=({:.4},{:.4}) angle={:.2} stretch={:.2}",
                 animated.layer_id,
                 animated.parent_layer_id,
                 scene_width,
@@ -162,14 +172,18 @@ pub(super) fn update_stretch_mesh(
                 orig_height,
                 new_width,
                 new_height,
+                local_new_w,
+                local_new_h,
+                layer_scale.x,
+                layer_scale.y,
                 angle_deg,
                 stretch_raw,
             )
         });
 
         let aa_pad: f32 = 4.0;
-        let half_nw = new_width / 2.0 + aa_pad;
-        let half_nh = new_height / 2.0 + aa_pad;
+        let half_nw = local_new_w / 2.0 + aa_pad;
+        let half_nh = local_new_h / 2.0 + aa_pad;
 
         if stretch_raw > 0.1 {
             bevy::log::trace!(
@@ -178,15 +192,15 @@ pub(super) fn update_stretch_mesh(
                 scene_width,
                 scene_height,
                 adj_stretch,
-                new_width,
-                new_height,
+                local_new_w,
+                local_new_h,
             );
         }
 
         material.uniform_data.stretch_params =
             Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
         material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, new_width, new_height);
+            Vec4::new(local_orig_w, local_orig_h, local_new_w, local_new_h);
         let stretch_sign_code =
             (if scale[0] < 0.0 { 1.0 } else { 0.0 }) + (if scale[1] < 0.0 { 2.0 } else { 0.0 });
         material.uniform_data.mesh_offset = Vec4::new(
@@ -195,6 +209,9 @@ pub(super) fn update_stretch_mesh(
             scene_width,
             scene_height,
         );
+        // Store layer_scale in solid_color_alpha.yz for the shader's local↔screen conversion
+        material.uniform_data.solid_color_alpha.y = layer_scale.x;
+        material.uniform_data.solid_color_alpha.z = layer_scale.y;
 
         if has_stretch_seg2 {
             material.uniform_data.stretch_seg2_params =
@@ -203,8 +220,8 @@ pub(super) fn update_stretch_mesh(
             material.uniform_data.stretch_seg2_params = Vec4::ZERO;
         }
 
-        let u_pad = aa_pad / new_width;
-        let v_pad = aa_pad / new_height;
+        let u_pad = aa_pad / local_new_w;
+        let v_pad = aa_pad / local_new_h;
         update_quad_mesh(
             meshes,
             mesh2d,
@@ -214,6 +231,9 @@ pub(super) fn update_stretch_mesh(
         );
     } else {
         material.set_stretch_enabled(false);
+        // Default layer_scale for non-stretch layers
+        material.uniform_data.solid_color_alpha.y = 1.0;
+        material.uniform_data.solid_color_alpha.z = 1.0;
     }
 }
 
