@@ -50,11 +50,11 @@ pub fn animate_sdf_stretch_system(
         let offset_raw = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
         let smooth_raw = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
 
-        let adj_stretch = stretch_raw / 500.0;
-        let offset_norm = offset_raw / 1000.0;
-
         let scene_width = animated.canvas_width;
         let scene_height = animated.canvas_height;
+
+        let adj_stretch = stretch_raw / 500.0;
+        let offset_norm = offset_raw / 1000.0;
 
         let (_, quat, _) = global_transform.to_scale_rotation_translation();
         let transform_rot = quat.to_euler(bevy::math::EulerRot::ZYX).0;

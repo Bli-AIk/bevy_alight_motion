@@ -75,6 +75,7 @@ fn register_lifecycle_systems(app: &mut App) {
         Update,
         (
             spawn_loaded_projects_system,
+            ApplyDeferred,
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,
