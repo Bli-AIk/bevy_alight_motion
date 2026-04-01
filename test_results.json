@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-01T16:21:53.934818+08:00",
+  "timestamp": "2026-04-01T23:42:25.299252+00:00",
   "summary": {
     "passed": 188,
     "warnings": 0,
-    "skipped": 5,
-    "failed": 96
+    "skipped": 0,
+    "failed": 97
   },
   "results": {
     "basic/bezier/bezier": {
@@ -14,7 +14,8 @@
       "status": "pass"
     },
     "basic/blend/color-mask/test": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9801
     },
     "basic/blend/contrast/test": {
       "status": "pass"
@@ -44,8 +45,7 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child": {
-      "status": "fail",
-      "avg_similarity": 0.8001
+      "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
       "status": "pass"
@@ -148,10 +148,11 @@
     },
     "basic/text/basic": {
       "status": "fail",
-      "avg_similarity": 0.6849
+      "avg_similarity": 0.5065
     },
     "basic/text/template": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.3166
     },
     "basic/tween/bounce": {
       "status": "pass"
@@ -896,6 +897,9 @@
     "private/USER_mortis/revenge/split10": {
       "status": "pass"
     },
+    "private/USER_mortis/revenge/split1_nogroup": {
+      "status": "pass"
+    },
     "private/USER_mortis/revenge/split2": {
       "status": "pass"
     },
@@ -908,11 +912,11 @@
     },
     "private/USER_mortis/revenge/split5": {
       "status": "fail",
-      "avg_similarity": 0.3866
+      "avg_similarity": 0.6716
     },
     "private/USER_mortis/revenge/split6": {
       "status": "fail",
-      "avg_similarity": 0.3843
+      "avg_similarity": 0.5831
     },
     "private/USER_mortis/revenge/split7": {
       "status": "pass"

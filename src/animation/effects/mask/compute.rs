@@ -159,8 +159,16 @@ pub(super) fn compute_mask_params(
                 corrected_pos,
             )
         } else {
-            let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
-            let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
+            // For root-level masks, the entity's GlobalTransform.scale already
+            // contains the animation scale (animate_transform_system bakes it
+            // into Transform.scale for SDF/sprite parent entities).  The
+            // interpolated `scale_x`/`scale_y` are the same animation values,
+            // so multiplying both would double-apply the scale.  Use only the
+            // sign from GlobalTransform to preserve flip direction.
+            let sign_x = mask_global_scale.x.signum();
+            let sign_y = mask_global_scale.y.signum();
+            let scaled_offset_x = -pivot_x * scale_x * sign_x;
+            let scaled_offset_y = pivot_y * scale_y * sign_y;
             let rotated_offset_x =
                 scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
             let rotated_offset_y =
