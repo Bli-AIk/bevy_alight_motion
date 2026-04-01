@@ -62,11 +62,17 @@ pub(super) fn spawn_layer_entity(
     //
     // Note: embed content that WAS using containing_embed_id for spatial decoupling
     // now uses Bevy parent-child hierarchy for RenderLayers propagation.
-    let initial_visibility = if layer.hidden {
-        Visibility::Hidden
-    } else {
-        Visibility::Inherited
-    };
+    // In Alight Motion, hiding a layer hides only that layer—its children remain visible.
+    // Bevy's Visibility::Hidden cascades to all descendants. For null layers (no visual
+    // content), cascade is harmful: a hidden perspective-null parent would make all its
+    // children invisible to the RTT camera. We only set Hidden on layers that carry
+    // visual content (shapes, images, text) where cascading is harmless.
+    let initial_visibility =
+        if layer.hidden && !matches!(layer.spec, crate::scene::AmLayerSpec::Null) {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
 
     // Determine element type based on layer spec
     // 根据图层规格确定元素类型

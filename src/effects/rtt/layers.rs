@@ -179,7 +179,7 @@ pub fn propagate_render_layers_to_children_system(
         };
 
         let target_layer = dynamic_render_layer(rtt.render_layer);
-        total_updates += propagate_to_descendants(
+        let updates = propagate_to_descendants(
             &mut commands,
             embed_entity,
             children,
@@ -190,6 +190,7 @@ pub fn propagate_render_layers_to_children_system(
             &force_hidden_query,
             &non_embed_query,
         );
+        total_updates += updates;
     }
 
     let layer_0 = RenderLayers::layer(0);

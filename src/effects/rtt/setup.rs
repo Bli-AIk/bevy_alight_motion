@@ -24,6 +24,52 @@ use super::{
     GroupFillType, NeedsEmbedSceneRtt,
 };
 
+/// Count how many pending-RTT ancestors an entity has, used to sort embeds
+/// so parents are processed before children within a single frame.
+///
+/// 计算实体有多少个待处理 RTT 的祖先，用于排序使父级先于子级处理。
+fn embed_pending_depth(
+    entity: Entity,
+    parent_query: &Query<&ChildOf>,
+    pending_query: &Query<(), With<NeedsEmbedSceneRtt>>,
+) -> u32 {
+    let mut depth = 0;
+    let mut current = entity;
+    while let Ok(child_of) = parent_query.get(current) {
+        current = child_of.parent();
+        if pending_query.get(current).is_ok() {
+            depth += 1;
+        }
+    }
+    depth
+}
+
+/// Walk up the Bevy hierarchy to find the nearest ancestor embed's render
+/// layer. Checks both committed `EmbedSceneRtt` and the local
+/// `processed_layers` map for parents processed earlier in the same frame.
+///
+/// 沿 Bevy 层级向上查找最近的 embed 祖先 render layer，
+/// 同时检查本帧已处理但尚未 commit 的父级。
+fn ancestor_embed_render_layer(
+    entity: Entity,
+    parent_query: &Query<&ChildOf>,
+    embed_rtt_query: &Query<&EmbedSceneRtt>,
+    processed_layers: &std::collections::HashMap<Entity, usize>,
+) -> RenderLayers {
+    let mut current = entity;
+    while let Ok(child_of) = parent_query.get(current) {
+        let ancestor = child_of.parent();
+        if let Ok(ancestor_rtt) = embed_rtt_query.get(ancestor) {
+            return dynamic_render_layer(ancestor_rtt.render_layer);
+        }
+        if let Some(&ancestor_layer) = processed_layers.get(&ancestor) {
+            return dynamic_render_layer(ancestor_layer);
+        }
+        current = ancestor;
+    }
+    RenderLayers::layer(0)
+}
+
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -55,27 +101,43 @@ pub fn setup_embed_scene_rtt_system(
     let parent_cameras_to_embed = std::env::var_os("AM_PARENT_RTT_CAMERA_TO_EMBED").is_some();
     let render_texture_format = selected_embed_rtt_format();
 
-    for (
-        entity,
-        needs_rtt,
-        embed_transform,
-        embed_global,
-        group_fill,
-        animated,
-        embed_mask,
-        children,
-    ) in query.iter()
-    {
-        // Defer nested embeds whose parent embed is still pending RTT setup.
-        // Commands are deferred, so a parent processed in this same iteration won't
-        // have EmbedSceneRtt yet. The child will be picked up in the next frame once
-        // the parent's EmbedSceneRtt is committed.
+    // Sort entities by nesting depth (parent before child) so all levels can be
+    // set up in a single pass within one frame instead of deferring child embeds.
+    // 按嵌套深度排序（父先子后），在单帧内一次遍历完成所有层级的 RTT 设置。
+    let mut entities_with_depth: Vec<(Entity, u32)> = query
+        .iter()
+        .map(|(e, ..)| {
+            let depth = embed_pending_depth(e, &parent_query, &pending_embed_rtt_query);
+            (e, depth)
+        })
+        .collect();
+    entities_with_depth.sort_by_key(|&(_, depth)| depth);
+    let mut processed_layers = std::collections::HashMap::<Entity, usize>::new();
+
+    for (entity, _depth) in entities_with_depth {
+        // Skip if parent is still pending AND wasn't processed in this pass.
         if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
-            if pending_embed_rtt_query.get(parent).is_ok() {
+            let parent_pending = pending_embed_rtt_query.get(parent).is_ok();
+            let parent_processed = processed_layers.contains_key(&parent);
+            if parent_pending && !parent_processed {
                 continue;
             }
         }
+
+        let Ok((
+            _,
+            needs_rtt,
+            embed_transform,
+            embed_global,
+            group_fill,
+            animated,
+            embed_mask,
+            children,
+        )) = query.get(entity)
+        else {
+            continue;
+        };
 
         let Some(render_layer) = layer_pool.allocate() else {
             bevy::log::warn!("No available render layer for embedScene {:?}.", entity);
@@ -220,16 +282,8 @@ pub fn setup_embed_scene_rtt_system(
             commands.entity(entity).add_child(camera_entity);
         }
 
-        let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
-            let parent = child_of.parent();
-            if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
-                dynamic_render_layer(parent_rtt.render_layer)
-            } else {
-                RenderLayers::layer(0)
-            }
-        } else {
-            RenderLayers::layer(0)
-        };
+        let sprite_render_layer =
+            ancestor_embed_render_layer(entity, &parent_query, &embed_rtt_query, &processed_layers);
 
         if trace_renderlayers {
             bevy::log::warn!(
@@ -414,6 +468,8 @@ pub fn setup_embed_scene_rtt_system(
             needs_rtt.scene_width,
             needs_rtt.scene_height
         );
+
+        processed_layers.insert(entity, render_layer);
     }
 }
 
