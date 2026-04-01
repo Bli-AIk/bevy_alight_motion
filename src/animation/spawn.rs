@@ -316,20 +316,10 @@ pub(crate) fn process_pending_layers(
             .iter()
             .find(|candidate| candidate.id == layer.parent)
             .filter(|parent_layer| parent_layer.is_perspective_null);
-        // Detach children of perspective nulls and give them AmPerspectiveParent so the
-        // perspective-parent transform system applies the combined transform directly.
-        // Relying on Bevy's parent-child GlobalTransform propagation alone is insufficient
-        // because the RTT camera captures content at local embed coordinates — the hierarchy
-        // offset from the null would not be compensated by the camera.
-        //
-        // SdfShape and Camera are excluded because animate_transform_system's perspective-
-        // parent pass explicitly skips those types; they must stay in the Bevy hierarchy.
+        // AM's generic layer-parenting applies ordinary parent transforms at sample time.
+        // Only embedded scenes need flattening here so RTT/composite ownership stays sane.
         let flatten_under_perspective_parent = perspective_parent_layer.is_some()
-            && !matches!(
-                layer.spec,
-                crate::scene::AmLayerSpec::SdfShape { .. }
-                    | crate::scene::AmLayerSpec::Camera { .. }
-            );
+            && matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene);
         let perspective_parent = if flatten_under_perspective_parent {
             pending
                 .spawned_entities
@@ -344,9 +334,10 @@ pub(crate) fn process_pending_layers(
         };
 
         // Determine Bevy hierarchy parent for this entity.
-        // Children of perspective nulls that receive AmPerspectiveParent are detached
-        // from the null and parented to the embed root so the perspective-parent system
-        // owns their transform instead of Bevy's hierarchy propagation.
+        // Embedded scenes under perspective nulls stay detached so RTT/composite
+        // systems do not treat them as ordinary nested embeds. Plain layers and
+        // perspective-null chains keep the normal ECS hierarchy so Bevy parenting
+        // matches AM's default layer-parenting semantics more closely.
         let actual_parent = if perspective_parent.is_some() {
             parent_entity
         } else if layer.parent != 0 {
