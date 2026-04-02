@@ -180,11 +180,21 @@ fn rect_pixel_bounds(
     texture_size: Vec2,
 ) -> Rect {
     let [uv_left, uv_right, uv_top, uv_bottom] = rect_uv_bounds(rect, full_rect);
+    // Round to integer pixel boundaries so that nested RTT sprites sample at
+    // exact pixel positions.  Without rounding, fractional sprite-rect coords
+    // cause sub-pixel interpolation that compounds across nesting levels
+    // (≈3 px shift per level in 4-level revenge embeds).
     Rect {
         // Sprite::rect expects top-origin pixel coordinates. rect_uv_bounds() already
         // returns top-origin V values, so applying `1.0 - uv` here would flip Y twice.
-        min: Vec2::new(uv_left * texture_size.x, uv_top * texture_size.y),
-        max: Vec2::new(uv_right * texture_size.x, uv_bottom * texture_size.y),
+        min: Vec2::new(
+            (uv_left * texture_size.x).round(),
+            (uv_top * texture_size.y).round(),
+        ),
+        max: Vec2::new(
+            (uv_right * texture_size.x).round(),
+            (uv_bottom * texture_size.y).round(),
+        ),
     }
 }
 

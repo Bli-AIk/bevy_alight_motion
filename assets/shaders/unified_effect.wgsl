@@ -2221,31 +2221,82 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     
     
-    // Apply pixelate effect FIRST (before stretch) to match AM's sequential render pipeline.
-    // In AM, pixelate runs AFTER stretch as a separate render pass, sampling the stretch
-    // output at grid-snapped screen positions.  In our single-pass shader, the equivalent
-    // UV lookup is:  original[ stretch_inv( pixelate_snap(P) ) ]
-    // i.e. snap the SCREEN position first, then apply stretch displacement.
-    // Using original_size.zw (= mesh dimensions, which include stretch expansion when active)
-    // ensures correct UV↔pixel mapping for the current mesh geometry.
+    // ============================================================
+    // Effect composition order: STRETCH first, then PIXELATE
+    // ============================================================
+    // AM processes effects as separate render passes in XML order.
+    // For shapes with [pixelate2, stretchsegment]:
+    //   Pass 1 (pixelate): FBO1[P] = original[snap(P)]
+    //   Pass 2 (stretch):  output[P] = FBO1[displace(P)] = original[snap(displace(P))]
+    //
+    // In our single-pass shader, UV transforms compose in reverse pass order:
+    //   sample_uv = snap(displace(mesh.uv))
+    // So we apply stretch displacement FIRST, then pixelate snap.
+
+    // Step 1: Apply stretch segment effect.
+    // Converts mesh.uv (expanded display space) → content UV (0..1 = original content).
+    if stretch_enabled {
+        let seg2_stretch = uniforms.stretch_seg2_params.y;
+        let has_seg2 = abs(seg2_stretch) > 0.001;
+
+        if has_seg2 {
+            sample_uv = apply_stretch_segment_gen(
+                sample_uv,
+                uniforms.stretch_seg2_params,
+                uniforms.original_size.z, uniforms.original_size.w,
+            );
+            sample_uv = apply_stretch_segment_gen(
+                sample_uv,
+                uniforms.stretch_params,
+                uniforms.original_size.x, uniforms.original_size.y,
+            );
+        } else {
+            sample_uv = apply_stretch_segment(sample_uv);
+        }
+        
+        // Soft edge AA at stretch boundaries
+        let fw = fwidth(sample_uv);
+        let aa_half = fw * 2.0;
+        stretch_edge_alpha = smoothstep(-aa_half.x, aa_half.x, sample_uv.x)
+                           * smoothstep(-aa_half.x, aa_half.x, 1.0 - sample_uv.x)
+                           * smoothstep(-aa_half.y, aa_half.y, sample_uv.y)
+                           * smoothstep(-aa_half.y, aa_half.y, 1.0 - sample_uv.y);
+        if stretch_edge_alpha < 0.001 {
+            discard;
+        }
+        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+            discard;
+        }
+        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    }
+    repeat_space_uv = sample_uv;
+    
+    // Step 2: Apply pixelate effect (after stretch displacement).
+    // When stretch is active, sample_uv is in content UV space (0..1 = original content).
+    // When stretch is inactive, sample_uv is mesh.uv in expanded display space.
+    // We use the appropriate pixel dimensions for UV↔pixel conversion in each case.
     var pixelate_dist_center = 0.0;
     if pixelate_enabled {
-        let display_size = vec2<f32>(uniforms.original_size.z, uniforms.original_size.w);
         let content_size = max(vec2<f32>(uniforms.original_size.x, uniforms.original_size.y), vec2<f32>(1.0));
+        let display_size = vec2<f32>(uniforms.original_size.z, uniforms.original_size.w);
+        // When stretch is active, UV is in content space → use content dimensions.
+        // When stretch is inactive, UV is in display space → use display dimensions.
+        var pixel_dim = display_size;
+        var expansion_ratio = display_size / content_size;
+        if stretch_enabled {
+            pixel_dim = content_size;
+            expansion_ratio = vec2<f32>(1.0, 1.0);
+        }
         let scene_scale = max(vec2<f32>(uniforms.pixelate_flags.z, uniforms.pixelate_flags.w), vec2<f32>(0.001));
 
-        // Cell size in dp (display) coordinates.
-        // AM defines pixelate cells in SCENE pixel space (acScreenSize = sceneSize).
-        // Our dp coords use display_size (mesh dims incl. expansion), so we must:
-        //  1. Divide by scene_scale to convert from scene pixels to layer pixels
-        //  2. Multiply by display_size/content_size to convert from layer pixels to dp units
+        // Cell size in pixel coordinates (content or display, matching pixel_dim)
         let size_vec = vec2<f32>(
             pixelate_size * pixelate_stretch.x,
             pixelate_size * pixelate_stretch.y
-        ) / scene_scale * display_size / content_size;
+        ) / scene_scale * expansion_ratio;
 
-        // Position in dp units relative to center
-        let dp = (mesh.uv - vec2<f32>(0.5)) * display_size;
+        // Position in pixel units relative to center
+        let dp = (sample_uv - vec2<f32>(0.5)) * pixel_dim;
 
         // Convert to AM's coordinate convention (Y negated: GL Y-up → WebGPU Y-down)
         var st_am = vec2<f32>(dp.x, -dp.y);
@@ -2274,63 +2325,21 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // Distance from pixel center (for vignette)
         pixelate_dist_center = smoothstep(0.0, 1.0, length((pos_in_pixel / size_vec) - vec2<f32>(0.5)));
 
-        // Snap to cell center in AM coords, then convert back to UV
+        // Snap to cell center, convert back to UV
         let snapped_am = st_am - pos_in_pixel + size_vec * 0.5;
         let snapped_dp = vec2<f32>(snapped_am.x, -snapped_am.y);
-        sample_uv = snapped_dp / display_size + vec2<f32>(0.5);
+        sample_uv = snapped_dp / pixel_dim + vec2<f32>(0.5);
 
-        // Discard out-of-bounds only when no stretch follows (stretch has its own bounds check)
         if !stretch_enabled {
             if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
                 discard;
             }
         }
-    }
-    repeat_space_uv = sample_uv;
-    
-    // Apply stretch segment effect (after pixelate snap).
-    // sample_uv is the pixelate-snapped screen position (or mesh.uv if no pixelate).
-    // Stretch computes displacement at this snapped position, matching AM's pipeline:
-    //   AM: original[ stretch1( stretch2( pixelate_snap(P) ) ) ]
-    if stretch_enabled {
-        let seg2_stretch = uniforms.stretch_seg2_params.y;
-        let has_seg2 = abs(seg2_stretch) > 0.001;
-
-        if has_seg2 {
-            // Dual stretch: apply seg2 at (snapped) screen position, then seg1 at result.
-            sample_uv = apply_stretch_segment_gen(
-                sample_uv,
-                uniforms.stretch_seg2_params,
-                uniforms.original_size.z, uniforms.original_size.w,
-            );
-            sample_uv = apply_stretch_segment_gen(
-                sample_uv,
-                uniforms.stretch_params,
-                uniforms.original_size.x, uniforms.original_size.y,
-            );
-        } else {
-            // Single stretch
-            sample_uv = apply_stretch_segment(sample_uv);
+        // When stretch is active, pixelate grid snapping near edges may push UV
+        // slightly outside [0, 1]. Clamp to match AM's texture edge clamping.
+        if stretch_enabled {
+            sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
         }
-        
-        // Soft edge AA at stretch boundaries using screen-space derivatives.
-        // AM renders shapes via NanoVG SDF with feather-based smoothstep centered on the edge.
-        // We approximate by fading alpha symmetrically around UV boundary [0,1]:
-        // smoothstep(-aa, +aa, uv) = 0.5 at uv=0 (shape edge), fading both inward and outward.
-        let fw = fwidth(sample_uv);
-        let aa_half = fw * 2.0;
-        stretch_edge_alpha = smoothstep(-aa_half.x, aa_half.x, sample_uv.x)
-                           * smoothstep(-aa_half.x, aa_half.x, 1.0 - sample_uv.x)
-                           * smoothstep(-aa_half.y, aa_half.y, sample_uv.y)
-                           * smoothstep(-aa_half.y, aa_half.y, 1.0 - sample_uv.y);
-        if stretch_edge_alpha < 0.001 {
-            discard;
-        }
-        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
-            discard;
-        }
-        // Clamp to valid range for texture sampling
-        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     }
     
     // Apply stretch2 effect (directional stretch)

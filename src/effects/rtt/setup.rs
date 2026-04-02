@@ -145,8 +145,8 @@ pub fn setup_embed_scene_rtt_system(
         };
 
         let render_texture = Image::new_target_texture(
-            needs_rtt.scene_width.max(1.0) as u32,
-            needs_rtt.scene_height.max(1.0) as u32,
+            needs_rtt.scene_width.max(1.0).ceil() as u32,
+            needs_rtt.scene_height.max(1.0).ceil() as u32,
             render_texture_format,
             None,
         );
