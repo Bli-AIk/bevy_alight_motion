@@ -23,6 +23,16 @@ use super::components::{AmAnimated, AmPlayback, AmUnifiedUsesTransformScale};
 use super::interpolation::{interpolate_float, interpolate_vec2};
 use super::systems::{compute_normalized_frame_delta, resolve_unwrapped_rotation_deg};
 
+/// Per-frame map of entities whose parent hierarchy applies a scale not reflected in
+/// Transform.scale (i.e. baked-scale shapes under a perspective null).
+///
+/// Populated by [`apply_parenthelper_system`] and consumed by the unified effect system
+/// to compensate ancestor_scale and layer_scale.
+#[derive(Resource, Default, Debug)]
+pub struct ParenthelperScaleContributions {
+    pub map: HashMap<Entity, Vec2>,
+}
+
 fn trace_parenthelper_once(key: impl Into<String>, message: impl FnOnce() -> String) {
     if std::env::var_os("AM_PARENTHELPER_TRACE").is_none() {
         return;
@@ -274,6 +284,7 @@ fn resolve_parenthelper_world(
 )]
 pub fn apply_parenthelper_system(
     playback: Res<AmPlayback>,
+    mut scale_contributions: ResMut<ParenthelperScaleContributions>,
     mut queries: ParamSet<(
         Query<(
             Entity,
@@ -294,6 +305,7 @@ pub fn apply_parenthelper_system(
         )>,
     )>,
 ) {
+    scale_contributions.map.clear();
     if playback.force_stopped {
         return;
     }
@@ -437,5 +449,17 @@ pub fn apply_parenthelper_system(
         transform.rotation = Quat::from_rotation_z(corrected.rotation_deg.to_radians());
         transform.scale.x = corrected.applied_scale.x;
         transform.scale.y = corrected.applied_scale.y;
+
+        // For baked-scale shapes the parenthelper preserves Transform.scale ≈ (1,1),
+        // but the parent's scale still affects the visual through Bevy's transform
+        // propagation. Record it so the unified effect system can compensate.
+        if snapshot.scale_baked_in_mesh
+            && ((parent_world.applied_scale.x - 1.0).abs() > 0.001
+                || (parent_world.applied_scale.y - 1.0).abs() > 0.001)
+        {
+            scale_contributions
+                .map
+                .insert(entity, parent_world.applied_scale);
+        }
     }
 }

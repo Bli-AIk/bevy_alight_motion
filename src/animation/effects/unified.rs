@@ -46,6 +46,7 @@ fn trace_unified_color_enabled(layer_id: u64) -> bool {
 /// It is designed for the RTT architecture where effects are stackable.
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
+    parent_scale_map: Res<crate::animation::parenthelper::ParenthelperScaleContributions>,
     mut query: Query<(
         Entity,
         &AmAnimated,
@@ -63,6 +64,7 @@ pub fn animate_unified_effect_system(
     )>,
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
+    null_query: Query<(), With<crate::scene::AmPerspectiveNull>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
     embed_gt_query: Query<&GlobalTransform>,
     embed_rtt_query: Query<(), With<crate::effects::EmbedSceneRtt>>,
@@ -70,6 +72,7 @@ pub fn animate_unified_effect_system(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let global_time = playback.current_time_ms;
+
     // Get the FitWindow root scale (uniform scaling applied to project root entity).
     let root_scale = root_query
         .iter()
@@ -184,6 +187,7 @@ pub fn animate_unified_effect_system(
             entity,
             &parent_animated_query,
             &effect_marker_query,
+            &null_query,
             global_time,
         );
         if animated.parenthelper_has_effect {
@@ -196,6 +200,20 @@ pub fn animate_unified_effect_system(
             ancestor_scale[0] = 1.0 + (ancestor_scale[0] - 1.0) * parenthelper_scale_factor;
             ancestor_scale[1] = 1.0 + (ancestor_scale[1] - 1.0) * parenthelper_scale_factor;
         }
+
+        // If the parenthelper system recorded a parent scale contribution for this entity
+        // (baked-scale shape under a perspective null), fold it into ancestor_scale so that
+        // orig_width reflects the visual size, and into layer_scale so the shader correctly
+        // converts between mesh-local and canvas pixels.
+        let parent_scale_contrib = parent_scale_map.map.get(&entity).copied();
+
+        // Include the parent null's scale contribution in ancestor_scale for orig_width.
+        // This ensures orig_width = sprite_size × animated_scale × null_scale (visual size).
+        if let Some(ps) = parent_scale_contrib {
+            ancestor_scale[0] *= ps.x;
+            ancestor_scale[1] *= ps.y;
+        }
+
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0) * ancestor_scale[0].abs();
         let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0) * ancestor_scale[1].abs();
 
@@ -361,7 +379,10 @@ pub fn animate_unified_effect_system(
 
         // For SDF layers (scale baked into mesh), Transform.scale ≈ 1 so local = screen.
         // For non-SDF layers (images, rects), Transform.scale = animated_scale so local ≠ screen.
-        let layer_scale = if animated.scale_baked_into_mesh {
+        // When a baked-scale shape sits under a perspective null, its GlobalTransform includes
+        // the null's scale but Transform.scale remains ≈ 1. Use the parent contribution to
+        // give the shader the correct local↔screen conversion.
+        let mut layer_scale = if animated.scale_baked_into_mesh {
             Vec2::ONE
         } else {
             Vec2::new(
@@ -369,6 +390,10 @@ pub fn animate_unified_effect_system(
                 transform.scale.y.abs().max(0.001),
             )
         };
+        if let Some(ps) = parent_scale_contrib {
+            layer_scale.x *= ps.x.abs().max(0.001);
+            layer_scale.y *= ps.y.abs().max(0.001);
+        }
 
         update_stretch_mesh(
             material,

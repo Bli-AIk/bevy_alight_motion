@@ -110,6 +110,7 @@ pub(super) fn compute_ancestor_scale(
     entity: Entity,
     parent_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_check: &Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
+    null_check: &Query<(), With<crate::scene::AmPerspectiveNull>>,
     global_time: f32,
 ) -> [f32; 2] {
     let mut acc_scale = [1.0f32, 1.0f32];
@@ -121,7 +122,9 @@ pub(super) fn compute_ancestor_scale(
 
     let mut current = parent_entity;
     while let Ok((animated, child_of_ref)) = parent_query.get(current) {
-        if effect_check.contains(current) {
+        let is_effect = effect_check.contains(current);
+        let is_null = null_check.contains(current);
+        if is_effect || is_null {
             let local_time = animated.calc_local_time(global_time);
             let layer_time = animated.calc_layer_time(local_time);
             let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
