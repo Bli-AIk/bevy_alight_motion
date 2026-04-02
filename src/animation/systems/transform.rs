@@ -380,7 +380,15 @@ pub fn animate_transform_system(
         let Some(parent_state) = perspective_parents.get(&parent_entity).copied() else {
             continue;
         };
-        if animated.parenthelper_has_effect
+        // A parenthelper with all-default modes (Normal scale, Normal rotation,
+        // no auto-rotate) is functionally a no-op for inheritance customisation;
+        // let perspective parenting handle the entity so the pivot-relative
+        // transform formula is applied correctly.
+        let parenthelper_overrides_perspective = animated.parenthelper_has_effect
+            && (animated.parenthelper_scale_mode != 0
+                || animated.parenthelper_rotate_mode != 0
+                || animated.parenthelper_auto_rotate != 0);
+        if parenthelper_overrides_perspective
             || sdf_parent.is_some()
             || matches!(
                 layer_spec,

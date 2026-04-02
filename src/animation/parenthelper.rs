@@ -268,6 +268,10 @@ fn resolve_parenthelper_world(
 
 /// Apply parenthelper effect by compensating local transforms against the current parent world
 /// transform. This runs after base animation has produced the normal local Transform.
+#[expect(
+    clippy::type_complexity,
+    reason = "Bevy ParamSet queries are inherently complex"
+)]
 pub fn apply_parenthelper_system(
     playback: Res<AmPlayback>,
     mut queries: ParamSet<(
@@ -281,7 +285,13 @@ pub fn apply_parenthelper_system(
             Option<&AmUnifiedUsesTransformScale>,
             Option<&ChildOf>,
         )>,
-        Query<(Entity, &AmAnimated, &AmLayerMarker, &mut Transform)>,
+        Query<(
+            Entity,
+            &AmAnimated,
+            &AmLayerMarker,
+            &mut Transform,
+            Option<&crate::scene::AmPerspectiveParent>,
+        )>,
     )>,
 ) {
     if playback.force_stopped {
@@ -367,8 +377,17 @@ pub fn apply_parenthelper_system(
     }
 
     let mut world_cache = HashMap::new();
-    for (entity, animated, marker, mut transform) in queries.p1().iter_mut() {
+    for (entity, animated, marker, mut transform, perspective_parent) in queries.p1().iter_mut() {
         if !animated.parenthelper_has_effect || !animated.has_parent {
+            continue;
+        }
+        // Skip entities whose no-op parenthelper defers to perspective parenting
+        // (matching the gate in animate_transform_system).
+        if perspective_parent.is_some()
+            && animated.parenthelper_scale_mode == 0
+            && animated.parenthelper_rotate_mode == 0
+            && animated.parenthelper_auto_rotate == 0
+        {
             continue;
         }
         let Some(snapshot) = snapshots.get(&entity).copied() else {

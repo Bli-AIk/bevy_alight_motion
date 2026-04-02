@@ -2229,14 +2229,20 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     var pixelate_dist_center = 0.0;
     if pixelate_enabled {
         let display_size = vec2<f32>(uniforms.original_size.z, uniforms.original_size.w);
+        let content_size = max(vec2<f32>(uniforms.original_size.x, uniforms.original_size.y), vec2<f32>(1.0));
+        let scene_scale = max(vec2<f32>(uniforms.pixelate_flags.z, uniforms.pixelate_flags.w), vec2<f32>(0.001));
 
-        // Cell size in layer pixels (= inner-scene pixels for 1:1 layers)
+        // Cell size in dp (display) coordinates.
+        // AM defines pixelate cells in SCENE pixel space (acScreenSize = sceneSize).
+        // Our dp coords use display_size (mesh dims incl. expansion), so we must:
+        //  1. Divide by scene_scale to convert from scene pixels to layer pixels
+        //  2. Multiply by display_size/content_size to convert from layer pixels to dp units
         let size_vec = vec2<f32>(
             pixelate_size * pixelate_stretch.x,
             pixelate_size * pixelate_stretch.y
-        );
+        ) / scene_scale * display_size / content_size;
 
-        // Position in pixels relative to center (mesh.uv = screen position)
+        // Position in dp units relative to center
         let dp = (mesh.uv - vec2<f32>(0.5)) * display_size;
 
         // Convert to AM's coordinate convention (Y negated: GL Y-up → WebGPU Y-down)
