@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-02T11:53:51.106787+00:00",
+  "timestamp": "2026-04-02T15:22:24.893596+00:00",
   "summary": {
-    "passed": 194,
+    "passed": 195,
     "warnings": 0,
     "skipped": 5,
-    "failed": 94
+    "failed": 93
   },
   "results": {
     "basic/bezier/bezier": {
@@ -912,8 +912,7 @@
       "avg_similarity": 0.6748
     },
     "private/USER_mortis/revenge/split5_sub1": {
-      "status": "fail",
-      "avg_similarity": 0.9369
+      "status": "pass"
     },
     "private/USER_mortis/revenge/split5_sub2": {
       "status": "pass"
