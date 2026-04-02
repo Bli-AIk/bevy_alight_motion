@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-04-01T23:42:25.299252+00:00",
+  "timestamp": "2026-04-02T04:30:25.143712+00:00",
   "summary": {
     "passed": 188,
     "warnings": 0,
-    "skipped": 0,
+    "skipped": 5,
     "failed": 97
   },
   "results": {
@@ -330,20 +330,19 @@
       "status": "pass"
     },
     "effects/pixelate/basic": {
-      "status": "fail",
-      "avg_similarity": 0.8981
+      "status": "pass"
     },
     "effects/pixelate/bone": {
       "status": "fail",
-      "avg_similarity": 0.2768
+      "avg_similarity": 0.3274
     },
     "effects/pixelate/bone_single": {
       "status": "fail",
-      "avg_similarity": 0.9664
+      "avg_similarity": 0.9973
     },
     "effects/pixelate/sprite": {
       "status": "fail",
-      "avg_similarity": 0.7941
+      "avg_similarity": 0.8042
     },
     "effects/radial-repeat/basic": {
       "status": "pass"
@@ -892,7 +891,8 @@
       "status": "fail"
     },
     "private/USER_mortis/revenge/split1": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.9454
     },
     "private/USER_mortis/revenge/split10": {
       "status": "pass"
@@ -923,7 +923,7 @@
     },
     "private/USER_mortis/revenge/split8": {
       "status": "fail",
-      "avg_similarity": 0.9217
+      "avg_similarity": 0.9366
     },
     "private/USER_mortis/revenge/split9": {
       "status": "fail",
