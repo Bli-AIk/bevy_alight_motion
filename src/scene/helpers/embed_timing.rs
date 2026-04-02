@@ -77,12 +77,26 @@ fn build_retime_info(
     global_start: f32,
     effective_speed: f32,
 ) -> Option<AmRetimeInfo> {
+    let container_duration = (embed.end_time - embed.start_time) as f32;
+    let nested_total = embed.scene.total_time as f32;
+
     if retime_mode == RetimeMode::Off {
+        // AM's retime="off" plays the inner timeline at natural speed and
+        // freezes at the last frame when inner time exceeds totalTime.
+        // Treat it as Freeze so the lifecycle system keeps shapes alive.
+        if container_duration > nested_total {
+            return Some(AmRetimeInfo {
+                mode: RetimeMode::Freeze,
+                embed_global_start: global_start,
+                container_duration_ms: container_duration,
+                nested_total_time_ms: nested_total,
+                embed_speed: effective_speed,
+                comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
+            });
+        }
         return config.retime.clone();
     }
 
-    let container_duration = (embed.end_time - embed.start_time) as f32;
-    let nested_total = embed.scene.total_time as f32;
     Some(AmRetimeInfo {
         mode: retime_mode,
         embed_global_start: global_start,
