@@ -137,6 +137,9 @@ pub struct UnifiedEffectUniform {
     /// Radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed)
     pub radial_repeat_params5: Vec4,
 
+    /// Radial repeat params6: (pivot_x, pivot_y, 0, 0)
+    pub radial_repeat_params6: Vec4,
+
     /// Radial repeat fill color (r, g, b, a)
     pub radial_repeat_fill_color: Vec4,
 
@@ -556,6 +559,7 @@ impl Default for UnifiedEffectUniform {
             radial_repeat_params3: Vec4::new(1.0, 0.0, 0.0, 0.0),
             radial_repeat_params4: Vec4::new(0.0, 1.0, 0.0, 0.0),
             radial_repeat_params5: Vec4::ZERO,
+            radial_repeat_params6: Vec4::ZERO,
             radial_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,

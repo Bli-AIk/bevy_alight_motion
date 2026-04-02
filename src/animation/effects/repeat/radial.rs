@@ -84,12 +84,20 @@ pub(crate) fn process_radial_repeat_effect(
         );
         material.uniform_data.radial_repeat_fill_color = fill_color;
 
+        // Element pivot for rotation correction: AM's `rotatedBy` applies
+        // the spread rotation around the element's pivot, so the inverse
+        // transform must account for the pivot offset.
+        let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
+        material.uniform_data.radial_repeat_params6 = Vec4::new(pivot[0], pivot[1], 0.0, 0.0);
+
+        let pivot_mag = (pivot[0].powi(2) + pivot[1].powi(2)).sqrt();
         let max_mix = scale.abs().max(1.0);
         let visual_scale = (max_mix * base_scale).abs().max(1.0);
         let max_extent = radius.abs() * max_mix
             + orig_width.max(orig_height) / 2.0 * visual_scale
             + offset[0].abs()
-            + offset[1].abs();
+            + offset[1].abs()
+            + pivot_mag;
         let padding = 20.0;
         let min_x = -max_extent - padding;
         let max_x = max_extent + padding;
@@ -127,6 +135,7 @@ pub(crate) fn process_radial_repeat_effect(
         material.uniform_data.radial_repeat_params3 = Vec4::new(1.0, 0.0, 0.0, 0.0);
         material.uniform_data.radial_repeat_params4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.radial_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params6 = Vec4::ZERO;
         material.uniform_data.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
 }

@@ -62,6 +62,7 @@ struct UnifiedEffectUniform {
     radial_repeat_params3: vec4<f32>,  // (alpha, offset_x, offset_y, blend)
     radial_repeat_params4: vec4<f32>,  // (start, end, phase, overlap)
     radial_repeat_params5: vec4<f32>,  // (ease_in, ease_out, shape_invert_alt, seed+random)
+    radial_repeat_params6: vec4<f32>,  // (pivot_x, pivot_y, 0, 0)
     radial_repeat_fill_color: vec4<f32>,
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
@@ -2174,6 +2175,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let rr_seed_raw = uniforms.radial_repeat_params5.w;
     let rr_random_order = fract(rr_seed_raw) > 0.3;
     let rr_seed = floor(rr_seed_raw);
+    let rr_pivot = vec2<f32>(uniforms.radial_repeat_params6.x, uniforms.radial_repeat_params6.y);
     // Compute Java Random state from seed for radial repeat (approximate, uses f32)
     // For typical integer seeds (0, 1, ...) this is exact
     let rr_am_seed = u32(15234322.0 + 35432882176.0 * rr_seed);
@@ -2642,12 +2644,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         linear_repeat_color_applied = linear_repeat_blend > 0.001 || (lr2_enabled && lr2_blend > 0.001);
     } else if rr_enabled {
-        // Radial repeat: AM's transform chain (TransformKt.transform on Canvas):
-        //   translate(L) translate(P) rotate(rotation) scale(S) translate(-P) rotate(orient) scale(size)
-        // Copy fields: L=elem.L+offset*interp+(0,r), P=(0,-r), rotation=spread,
-        //   S=(mix,mix), orient=orient_param+angle*interp, size=baseScale
-        // Forward: pixel = offset*interp + R(spread)*mix*(R(orbit)*baseScale*p + (0,radius))
-        // Inverse: p = R(-orbit)*(R(-spread)*(pixel-offset*interp)/mix - (0,radius)) / baseScale
+        // Radial repeat: AM uses simple `rotatedBy` (adds spread to rotation field)
+        // with modified pivot Q = P + (0, -radius), where P is the element pivot.
+        // Canvas: translate(L+offset+(0,r)) translate(Q) rotate(spread) scale(mix)
+        //         translate(-Q) rotate(orbit) scale(baseScale)
+        // Forward: pixel = P + offset*interp + R(spread)*mix*(R(orbit)*baseScale*p + (0,r) - P)
+        // Inverse: p = R(-orbit)*(R(-spread)*(pixel - P - offset*interp)/mix - (0,r) + P) / baseScale
         let orig_width = uniforms.original_size.x;
         let orig_height = uniforms.original_size.y;
         let center = vec2<f32>(0.5, 0.5);
@@ -2683,13 +2685,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 continue;
             }
             
-            // Inverse transform (6 steps)
-            var tc = pixel_coord - rr_offset * interp_progress;
+            // Inverse transform: p = R(-orbit)*(R(-spread)*(pixel-P-offset*interp)/mix - (0,r)+P) / baseScale
+            var tc = pixel_coord - rr_pivot - rr_offset * interp_progress;
             let cos_s = cos(-spread);
             let sin_s = sin(-spread);
             tc = vec2<f32>(tc.x * cos_s - tc.y * sin_s, tc.x * sin_s + tc.y * cos_s);
             tc = tc / mix_scale;
-            tc = tc - vec2<f32>(0.0, rr_radius);
+            tc = tc - vec2<f32>(0.0, rr_radius) + rr_pivot;
             let cos_o = cos(-orbit);
             let sin_o = sin(-orbit);
             tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
