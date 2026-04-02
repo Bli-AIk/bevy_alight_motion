@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-02T05:29:36.466485+00:00",
+  "timestamp": "2026-04-02T05:34:29.937227+00:00",
   "summary": {
-    "passed": 189,
+    "passed": 190,
     "warnings": 0,
     "skipped": 5,
-    "failed": 96
+    "failed": 95
   },
   "results": {
     "basic/bezier/bezier": {
@@ -890,8 +890,7 @@
       "status": "fail"
     },
     "private/USER_mortis/revenge/split1": {
-      "status": "fail",
-      "avg_similarity": 0.9609
+      "status": "pass"
     },
     "private/USER_mortis/revenge/split10": {
       "status": "pass"
@@ -907,26 +906,26 @@
     },
     "private/USER_mortis/revenge/split4": {
       "status": "fail",
-      "avg_similarity": 0.519
+      "avg_similarity": 0.7294
     },
     "private/USER_mortis/revenge/split5": {
       "status": "fail",
-      "avg_similarity": 0.6716
+      "avg_similarity": 0.6748
     },
     "private/USER_mortis/revenge/split6": {
       "status": "fail",
-      "avg_similarity": 0.5831
+      "avg_similarity": 0.6874
     },
     "private/USER_mortis/revenge/split7": {
       "status": "pass"
     },
     "private/USER_mortis/revenge/split8": {
       "status": "fail",
-      "avg_similarity": 0.9366
+      "avg_similarity": 0.9471
     },
     "private/USER_mortis/revenge/split9": {
       "status": "fail",
-      "avg_similarity": 0.9095
+      "avg_similarity": 0.9101
     },
     "private/USER_mortis/sans": {
       "status": "skip"
