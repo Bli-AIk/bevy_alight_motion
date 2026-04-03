@@ -57,6 +57,7 @@ pub struct SdfMaterialUniform {
     pub linear_repeat_params3: Vec4,
     pub linear_repeat_params4: Vec4,
     pub linear_repeat_params5: Vec4,
+    pub linear_repeat_perm: Vec4,
     pub stretch_params: Vec4,
     pub stretch_meta: Vec4,
 }
@@ -109,6 +110,7 @@ impl Default for SdfMaterialUniform {
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
             linear_repeat_params5: Vec4::ZERO,
+            linear_repeat_perm: Vec4::ZERO,
             stretch_params: Vec4::ZERO,
             stretch_meta: Vec4::ZERO,
         }

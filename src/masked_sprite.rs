@@ -95,8 +95,13 @@ pub struct UnifiedEffectUniform {
     /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
     pub linear_repeat_params4: Vec4,
 
-    /// Linear repeat params5: (random_order, seed_lo, seed_hi, stretch_before_repeat)
+    /// Linear repeat params5: (random_order, perm_packed0/seed_lo, perm_packed1/seed_hi, stretch_before_repeat)
+    /// random_order: 0.0=off, 2.0=precomputed perm, 1.0=GPU-side shuffle fallback
     pub linear_repeat_params5: Vec4,
+
+    /// Precomputed shuffle permutation for linear repeat (indices packed 4-per-u32
+    /// in 8-bit lanes, supports count ≤ 24).
+    pub linear_repeat_perm: Vec4,
 
     /// Linear repeat source size: (source_width, source_height, layer_scale_x, layer_scale_y)
     pub linear_repeat_source_size: Vec4,
@@ -116,8 +121,11 @@ pub struct UnifiedEffectUniform {
     /// Second linear repeat params4: (ease_in, ease_out, blend, shape_invert_alt)
     pub linear_repeat2_params4: Vec4,
 
-    /// Second linear repeat params5: (random_order, seed, 0, 0)
+    /// Second linear repeat params5: (random_order, perm_packed0/seed_lo, perm_packed1/seed_hi, 0)
     pub linear_repeat2_params5: Vec4,
+
+    /// Precomputed shuffle permutation for second linear repeat.
+    pub linear_repeat2_perm: Vec4,
 
     /// Second linear repeat fill color (r, g, b, a)
     pub linear_repeat2_fill_color: Vec4,
@@ -546,6 +554,7 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
             linear_repeat_params5: Vec4::ZERO,
+            linear_repeat_perm: Vec4::ZERO,
             linear_repeat_source_size: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             linear_repeat2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
@@ -553,6 +562,7 @@ impl Default for UnifiedEffectUniform {
             linear_repeat2_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat2_params4: Vec4::ZERO,
             linear_repeat2_params5: Vec4::ZERO,
+            linear_repeat2_perm: Vec4::ZERO,
             linear_repeat2_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             radial_repeat_params1: Vec4::ZERO,
             radial_repeat_params2: Vec4::new(360.0, 1.0, 0.0, 1.0),
