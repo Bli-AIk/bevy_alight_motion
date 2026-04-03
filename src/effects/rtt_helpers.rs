@@ -283,13 +283,19 @@ pub(super) fn resize_render_texture(
     texture: &Handle<Image>,
     new_extent: Extent3d,
 ) {
-    let Some(image) = images.get_mut(texture) else {
-        return;
-    };
-    if image.texture_descriptor.size == new_extent {
+    // Check size via immutable access first to avoid emitting a spurious
+    // AssetEvent::Modified from get_mut(). Without this guard every active
+    // embed texture is re-extracted by the render pipeline every frame, even
+    // when the size hasn't changed.
+    let needs_resize = images
+        .get(texture)
+        .is_some_and(|img| img.texture_descriptor.size != new_extent);
+    if !needs_resize {
         return;
     }
-    image.resize(new_extent);
+    if let Some(image) = images.get_mut(texture) {
+        image.resize(new_extent);
+    }
 }
 
 pub(super) fn propagate_to_descendants(
