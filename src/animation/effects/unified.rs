@@ -47,6 +47,7 @@ fn trace_unified_color_enabled(layer_id: u64) -> bool {
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
     parent_scale_map: Res<crate::animation::parenthelper::ParenthelperScaleContributions>,
+    disabled_effects: Option<Res<crate::plugin::DisabledEffects>>,
     mut query: Query<(
         Entity,
         &AmAnimated,
@@ -449,6 +450,7 @@ pub fn animate_unified_effect_system(
             global_transform,
             root_scale,
             has_pixelate,
+            disabled_effects.as_deref(),
         );
 
         // Process repeat and linear repeat effects (delegated to repeat module)

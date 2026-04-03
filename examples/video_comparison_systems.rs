@@ -175,7 +175,11 @@ fn default_max_critical_rate() -> f32 {
     0.02
 }
 
-pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<ProjectFile>) {
+pub fn setup_comparison(
+    mut commands: Commands,
+    mut state: ResMut<ComparisonState>,
+    project_file: Res<ProjectFile>,
+) {
     // Prepare report dir
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -249,12 +253,12 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
         state.max_failed_rate = settings.max_failed_rate;
         state.max_critical_rate = settings.max_critical_rate;
 
-        // Set disabled effects env var for the rendering pipeline
+        // Insert disabled effects resource for the rendering pipeline
         if !settings.disabled_effects.is_empty() {
-            let effects_str = settings.disabled_effects.join(",");
-            unsafe {
-                std::env::set_var("AM_DISABLED_EFFECTS", &effects_str);
-            }
+            let effects_str = settings.disabled_effects.join(", ");
+            commands.insert_resource(bevy_alight_motion::plugin::DisabledEffects::new(
+                settings.disabled_effects.iter().cloned(),
+            ));
             println!("[COMPARISON] Disabled effects: {}", effects_str.yellow());
         }
 

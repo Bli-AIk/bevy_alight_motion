@@ -10,7 +10,7 @@ mod startup;
 use bevy::prelude::*;
 
 pub use project_loading::load_am_project;
-pub use resources::{AmProjectResolution, AmWhitePixel};
+pub use resources::{AmProjectResolution, AmWhitePixel, DisabledEffects};
 
 /// System sets for the Alight Motion plugin.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]

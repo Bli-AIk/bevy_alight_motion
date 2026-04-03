@@ -30,6 +30,28 @@ pub enum AmProjectResolution {
     FixedSize(f32, f32),
 }
 
+/// Resource holding effect names that should be skipped at runtime.
+///
+/// Inserted by comparison tooling when `disabled_effects` is configured in
+/// `comparison_config.toml`.  The unified-effect system checks this resource
+/// and bypasses any listed effect (e.g. `"pixelate"`).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct DisabledEffects {
+    names: std::collections::HashSet<String>,
+}
+
+impl DisabledEffects {
+    pub fn new(names: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            names: names.into_iter().collect(),
+        }
+    }
+
+    pub fn contains(&self, effect_name: &str) -> bool {
+        self.names.contains(effect_name)
+    }
+}
+
 /// Resource holding the white pixel texture used for solid color sprites.
 #[derive(Resource)]
 pub struct AmWhitePixel(pub Handle<Image>);

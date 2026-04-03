@@ -60,7 +60,8 @@ pub mod prelude {
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
     pub use crate::plugin::{
-        AlightMotionPlugin, AlightMotionSystemSet, AmProjectResolution, load_am_project,
+        AlightMotionPlugin, AlightMotionSystemSet, AmProjectResolution, DisabledEffects,
+        load_am_project,
     };
     pub use crate::scene::{
         AmElement,
