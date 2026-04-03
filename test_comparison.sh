@@ -637,6 +637,15 @@ run_single_test() {
         fi
     fi
 
+    # Extract frame-test JSON data (for perf_results.json)
+    if [ "$FRAME_TEST" = "true" ]; then
+        local perf_json_line
+        perf_json_line=$(grep '^\[FRAME-TEST-JSON\]' "$log_file" | tail -1 | sed 's/^\[FRAME-TEST-JSON\] //')
+        if [ -n "$perf_json_line" ]; then
+            echo "$perf_json_line" > "$RESULTS_DIR/${flat_name}.perf_json"
+        fi
+    fi
+
     if [ -n "$report_path" ]; then
         echo "   ↳ report: $report_path"
     fi
@@ -645,7 +654,6 @@ run_single_test() {
 # Function to incrementally write a single test result to JSON
 write_result_to_json() {
     local result_file=$1
-    local json_output="${BASE_DIR}/test_results.json"
     local result_key
     if [ "$FRAME_TEST" = "true" ]; then
         result_key="frame_test_results"
@@ -664,7 +672,61 @@ write_result_to_json() {
     fi
     local status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
 
-    python3 << PYEOF
+    # For frame-test mode, check for rich JSON data and write to perf_results.json
+    if [ "$FRAME_TEST" = "true" ]; then
+        local flat_name=$(echo "$name" | tr '/' '_')
+        local perf_json_file="$RESULTS_DIR/${flat_name}.perf_json"
+        local json_output="${BASE_DIR}/perf_results.json"
+
+        python3 << PYEOF
+import json, os
+from datetime import datetime
+
+json_output = "$json_output"
+name = "$name"
+status = "$status_lower"
+perf_json_file = "$perf_json_file"
+
+existing_data = {}
+if os.path.exists(json_output):
+    try:
+        with open(json_output, 'r') as f:
+            existing_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results = existing_data.get("results", {})
+
+# Try to read rich perf data from [FRAME-TEST-JSON] output
+entry = {"status": status}
+if os.path.exists(perf_json_file):
+    try:
+        with open(perf_json_file, 'r') as f:
+            perf_data = json.load(f)
+        entry.update(perf_data)
+        entry["status"] = status  # ensure status from result file takes precedence
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results[name] = entry
+existing_data["results"] = dict(sorted(results.items()))
+
+# Recalculate summary
+passed = sum(1 for r in results.values() if r.get('status') == 'pass')
+failed = sum(1 for r in results.values() if r.get('status') == 'fail')
+warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
+skipped = sum(1 for r in results.values() if r.get('status') in ('skip', 'cancelled'))
+existing_data["summary"] = {"passed": passed, "warnings": warnings, "skipped": skipped, "failed": failed}
+existing_data["timestamp"] = datetime.now().astimezone().isoformat()
+
+with open(json_output, 'w') as f:
+    json.dump(existing_data, f, indent=2)
+PYEOF
+    else
+        # Original behavior for comparison tests — write to test_results.json
+        local json_output="${BASE_DIR}/test_results.json"
+
+        python3 << PYEOF
 import json, os
 from datetime import datetime
 
@@ -673,7 +735,6 @@ result_key = "$result_key"
 name = "$name"
 status = "$status_lower"
 avg_val = "$avg_val"
-frame_test = "$FRAME_TEST" == "true"
 
 existing_data = {}
 if os.path.exists(json_output):
@@ -686,16 +747,13 @@ if os.path.exists(json_output):
 results = existing_data.get(result_key, {})
 entry = {"status": status}
 if avg_val:
-    if frame_test:
-        entry["avg_fps"] = float(avg_val)
-    else:
-        entry["avg_similarity"] = float(avg_val)
+    entry["avg_similarity"] = float(avg_val)
 results[name] = entry
 
 existing_data[result_key] = dict(sorted(results.items()))
 
 # Recalculate summary
-summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
+summary_key = "summary"
 passed = sum(1 for r in results.values() if r.get('status') == 'pass')
 failed = sum(1 for r in results.values() if r.get('status') == 'fail')
 warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
@@ -706,6 +764,7 @@ existing_data["timestamp"] = datetime.now().astimezone().isoformat()
 with open(json_output, 'w') as f:
     json.dump(existing_data, f, indent=2)
 PYEOF
+    fi
 }
 
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
@@ -798,7 +857,11 @@ echo "Skipped:  $SKIPPED_COUNT"
 echo "Failed:   $FAILED_COUNT"
 
 # Generate JSON results file (merge with existing results)
-JSON_OUTPUT="${BASE_DIR}/test_results.json"
+if [ "$FRAME_TEST" = "true" ]; then
+    JSON_OUTPUT="${BASE_DIR}/perf_results.json"
+else
+    JSON_OUTPUT="${BASE_DIR}/test_results.json"
+fi
 
 # Build new results as JSON entries
 NEW_RESULTS=""
@@ -835,11 +898,7 @@ for result_file in "$RESULTS_DIR"/*.result; do
 done
 
 # Determine result key based on test type
-if [ "$FRAME_TEST" = "true" ]; then
-    RESULT_KEY="frame_test_results"
-else
-    RESULT_KEY="results"
-fi
+RESULT_KEY="results"
 
 # Merge with existing results using Python (preserves old results, updates with new)
 python3 << EOF
@@ -849,6 +908,8 @@ from datetime import datetime
 
 json_output = "$JSON_OUTPUT"
 result_key = "$RESULT_KEY"
+frame_test = "$FRAME_TEST" == "true"
+results_dir = "$RESULTS_DIR"
 new_results_json = '''{$NEW_RESULTS}'''
 
 # Parse new results
@@ -856,6 +917,21 @@ try:
     new_results = json.loads(new_results_json) if new_results_json.strip() and new_results_json.strip() != '{}' else {}
 except json.JSONDecodeError:
     new_results = {}
+
+# For frame-test mode, enrich entries with [FRAME-TEST-JSON] data
+if frame_test:
+    for name in list(new_results.keys()):
+        flat_name = name.replace('/', '_')
+        perf_json_path = os.path.join(results_dir, f"{flat_name}.perf_json")
+        if os.path.exists(perf_json_path):
+            try:
+                with open(perf_json_path, 'r') as f:
+                    perf_data = json.load(f)
+                status = new_results[name].get('status', 'fail')
+                new_results[name] = perf_data
+                new_results[name]['status'] = status
+            except (json.JSONDecodeError, IOError):
+                pass
 
 # Load existing data if file exists
 existing_data = {}
@@ -878,12 +954,9 @@ failed = sum(1 for r in merged_results.values() if r.get('status') == 'fail')
 warnings = sum(1 for r in merged_results.values() if r.get('status') == 'warning')
 skipped = sum(1 for r in merged_results.values() if r.get('status') in ('skip', 'cancelled'))
 
-# Build summary key
-summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
-
 # Update existing data with new results (preserving other test types)
 existing_data[result_key] = dict(sorted(merged_results.items()))
-existing_data[summary_key] = {
+existing_data["summary"] = {
     "passed": passed,
     "warnings": warnings,
     "skipped": skipped,

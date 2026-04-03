@@ -211,3 +211,15 @@ warmup_frames = 60
 # Duration in seconds to measure FPS after warmup
 # 预热后测量 FPS 的持续时间（秒）
 measure_duration_secs = 8.0
+
+# Play animation once then exit (instead of looping for measure_duration_secs)
+# 只播放一次动画然后退出（而非循环播放 measure_duration_secs 秒）
+play_once = false
+
+# Stutter detection: a frame is "stutter" if its time > median * stutter_threshold_multiplier
+# 卡顿检测：帧时间 > 中位数 × stutter_threshold_multiplier 则判定为卡顿
+stutter_threshold_multiplier = 2.0
+
+# Maximum allowed stutter rate (ratio of stutter frames to total frames)
+# 最大允许卡顿率（卡顿帧数占总帧数比例）
+max_stutter_rate = 0.05

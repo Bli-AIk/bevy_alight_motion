@@ -31,6 +31,8 @@ pub struct FrameTestState {
     pub frame_times: Vec<f64>,
     pub measurement_elapsed: f64,
     pub project_name: String,
+    pub animation_completed: bool,
+    pub prev_time_ms: f64,
     // Config
     pub pass_fps: f32,
     pub fail_fps: f32,
@@ -39,6 +41,9 @@ pub struct FrameTestState {
     pub min_sample_frames: u32,
     pub warmup_frames: u32,
     pub measure_duration_secs: f32,
+    pub play_once: bool,
+    pub stutter_threshold_multiplier: f32,
+    pub max_stutter_rate: f32,
 }
 
 impl Default for FrameTestState {
@@ -49,6 +54,8 @@ impl Default for FrameTestState {
             frame_times: Vec::new(),
             measurement_elapsed: 0.0,
             project_name: String::new(),
+            animation_completed: false,
+            prev_time_ms: 0.0,
             pass_fps: 120.0,
             fail_fps: 60.0,
             max_below_fail_rate: 0.05,
@@ -56,6 +63,9 @@ impl Default for FrameTestState {
             min_sample_frames: 30,
             warmup_frames: 60,
             measure_duration_secs: 15.0,
+            play_once: false,
+            stutter_threshold_multiplier: 2.0,
+            max_stutter_rate: 0.05,
         }
     }
 }
@@ -76,6 +86,12 @@ struct FrameTestConfig {
     warmup_frames: u32,
     #[serde(default = "default_measure_duration")]
     measure_duration_secs: f32,
+    #[serde(default)]
+    play_once: bool,
+    #[serde(default = "default_stutter_threshold_multiplier")]
+    stutter_threshold_multiplier: f32,
+    #[serde(default = "default_max_stutter_rate")]
+    max_stutter_rate: f32,
 }
 
 fn default_pass_fps() -> f32 {
@@ -99,6 +115,12 @@ fn default_warmup_frames() -> u32 {
 fn default_measure_duration() -> f32 {
     15.0
 }
+fn default_stutter_threshold_multiplier() -> f32 {
+    2.0
+}
+fn default_max_stutter_rate() -> f32 {
+    0.05
+}
 
 #[derive(Deserialize, Debug)]
 struct ConfigFile {
@@ -115,6 +137,11 @@ pub fn setup_frame_test(mut state: ResMut<FrameTestState>, project_file: Res<Pro
         .unwrap_or("unknown")
         .to_string();
     state.project_name = project_name.clone();
+
+    // Environment variable overrides play_once
+    let env_play_once = std::env::var("AM_FRAME_TEST_PLAY_ONCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
 
     // Load config
     let config_content =
@@ -133,17 +160,29 @@ pub fn setup_frame_test(mut state: ResMut<FrameTestState>, project_file: Res<Pro
         state.min_sample_frames = ft.min_sample_frames;
         state.warmup_frames = ft.warmup_frames;
         state.measure_duration_secs = ft.measure_duration_secs;
+        state.play_once = ft.play_once;
+        state.stutter_threshold_multiplier = ft.stutter_threshold_multiplier;
+        state.max_stutter_rate = ft.max_stutter_rate;
+    }
+
+    // Env var overrides config
+    if env_play_once {
+        state.play_once = true;
     }
 
     state.warmup_frames_remaining = state.warmup_frames;
 
+    let mode = if state.play_once { "play-once" } else { "loop" };
     println!(
-        "[FRAME-TEST] Config for '{}': pass_fps={:.0}, fail_fps={:.0}, warmup={}, measure={:.0}s",
+        "[FRAME-TEST] Config for '{}': pass_fps={:.0}, fail_fps={:.0}, warmup={}, \
+         measure={:.0}s, mode={}, stutter_mult={:.1}x",
         project_name,
         state.pass_fps,
         state.fail_fps,
         state.warmup_frames,
-        state.measure_duration_secs
+        state.measure_duration_secs,
+        mode,
+        state.stutter_threshold_multiplier,
     );
 }
 
@@ -156,10 +195,13 @@ pub fn frame_test_loop(
 ) {
     match state.stage {
         FrameTestStage::WaitingForLoad => {
-            // Wait until project is actually loaded (AmProjectRoot.spawned == true)
             let project_loaded = project_query.iter().any(|root| root.spawned);
             if project_loaded {
-                playback.looping = true;
+                if state.play_once {
+                    playback.looping = false;
+                } else {
+                    playback.looping = true;
+                }
                 state.stage = FrameTestStage::Warmup;
                 println!(
                     "[FRAME-TEST] Project loaded (duration={:.1}ms), warming up {} frames...",
@@ -173,10 +215,21 @@ pub fn frame_test_loop(
                 state.warmup_frames_remaining -= 1;
             } else {
                 state.stage = FrameTestStage::Running;
-                println!(
-                    "[FRAME-TEST] Warmup complete, measuring FPS for {:.0}s...",
-                    state.measure_duration_secs
-                );
+                // Reset playback to start for play-once mode
+                if state.play_once {
+                    playback.current_time_ms = 0.0;
+                    playback.playing = true;
+                    state.prev_time_ms = 0.0;
+                }
+                let mode_msg = if state.play_once {
+                    format!(
+                        "measuring FPS for one full animation ({:.0}ms)...",
+                        playback.total_time_ms
+                    )
+                } else {
+                    format!("measuring FPS for {:.0}s...", state.measure_duration_secs)
+                };
+                println!("[FRAME-TEST] Warmup complete, {}", mode_msg);
             }
         }
 
@@ -187,8 +240,29 @@ pub fn frame_test_loop(
                 state.measurement_elapsed += dt;
             }
 
-            // Stop after configured measurement duration
-            if state.measurement_elapsed >= state.measure_duration_secs as f64 {
+            // Check end condition
+            let should_finish = if state.play_once {
+                // Detect animation completion: current_time wrapped back or reached end
+                let current = playback.current_time_ms;
+                let total = playback.total_time_ms;
+                let completed = if total > 0.0 {
+                    // Animation finished when time reaches total or wraps around
+                    current >= total - 1.0
+                        || (current < state.prev_time_ms && state.prev_time_ms > total * 0.5)
+                        || !playback.playing
+                } else {
+                    false
+                };
+                state.prev_time_ms = current;
+                if completed {
+                    state.animation_completed = true;
+                }
+                state.animation_completed
+            } else {
+                state.measurement_elapsed >= state.measure_duration_secs as f64
+            };
+
+            if should_finish {
                 state.stage = FrameTestStage::Finished;
             }
         }
@@ -247,6 +321,12 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
             .red()
             .bold()
         );
+        // Emit JSON line for script parsing
+        println!(
+            "[FRAME-TEST-JSON] {{\"project\":\"{}\",\"status\":\"fail\",\"reason\":\"insufficient_frames\",\
+             \"total_frames\":{}}}",
+            state.project_name, total_frames
+        );
         exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
         return;
     }
@@ -263,13 +343,41 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     let max_dt = state.frame_times.iter().copied().fold(0.0_f64, f64::max);
     let max_fps = 1.0 / min_dt;
     let min_fps = 1.0 / max_dt;
+    let max_frame_time_ms = max_dt * 1000.0;
 
-    // 1% low FPS
+    // Percentile FPS: sort frame times ascending (shortest first → highest FPS)
     let mut sorted = state.frame_times.clone();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let p99_idx = ((total_frames as f64) * 0.99).ceil() as usize;
-    let p99_dt = sorted[p99_idx.min(total_frames - 1)];
-    let p1_fps = 1.0 / p99_dt;
+
+    let percentile = |p: f64| -> f64 {
+        let idx = ((total_frames as f64) * p).ceil() as usize;
+        1.0 / sorted[idx.min(total_frames - 1)]
+    };
+
+    let p95_fps = percentile(0.95);
+    let p99_fps = percentile(0.99);
+    let p1_fps = p99_fps; // 1% low = p99 of frame times
+
+    // Median frame time for stutter detection
+    let median_dt = sorted[total_frames / 2];
+    let stutter_threshold = median_dt * state.stutter_threshold_multiplier as f64;
+    let stutter_count = state
+        .frame_times
+        .iter()
+        .filter(|&&dt| dt > stutter_threshold)
+        .count();
+    let stutter_rate = stutter_count as f64 / total_frames as f64;
+
+    // Find top stutter spikes (for diagnostics)
+    let mut spike_indices: Vec<(usize, f64)> = state
+        .frame_times
+        .iter()
+        .enumerate()
+        .filter(|(_, &dt)| dt > stutter_threshold)
+        .map(|(i, &dt)| (i, dt * 1000.0))
+        .collect();
+    spike_indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    spike_indices.truncate(10);
 
     let below_fail = state
         .frame_times
@@ -286,9 +394,40 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     let below_pass_rate = below_pass as f64 / total_frames as f64;
 
     println!("Total frames sampled: {}", total_frames);
+    println!(
+        "Mode: {}",
+        if state.play_once { "play-once" } else { "loop" }
+    );
     println!("Average FPS: {:.1}", avg_fps);
     println!("Min FPS: {:.1} | Max FPS: {:.1}", min_fps, max_fps);
-    println!("1% Low FPS: {:.1}", p1_fps);
+    println!("1% Low FPS (p99): {:.1}", p1_fps);
+    println!("5% Low FPS (p95): {:.1}", p95_fps);
+    println!("Max frame time: {:.2}ms", max_frame_time_ms);
+    println!(
+        "Median frame time: {:.2}ms ({:.0} FPS)",
+        median_dt * 1000.0,
+        1.0 / median_dt
+    );
+    println!(
+        "Stutter frames (>{:.1}x median = >{:.2}ms): {} ({:.1}%) [max allowed: {:.1}%]",
+        state.stutter_threshold_multiplier,
+        stutter_threshold * 1000.0,
+        stutter_count,
+        stutter_rate * 100.0,
+        state.max_stutter_rate * 100.0,
+    );
+    if !spike_indices.is_empty() {
+        println!("Top stutter spikes:");
+        for (i, (frame_idx, ms)) in spike_indices.iter().enumerate() {
+            println!(
+                "  #{}: frame {} = {:.2}ms ({:.1} FPS)",
+                i + 1,
+                frame_idx,
+                ms,
+                1000.0 / ms
+            );
+        }
+    }
     println!(
         "Frames below {:.0} FPS (fail threshold): {} ({:.1}%) [max allowed: {:.1}%]",
         state.fail_fps,
@@ -306,11 +445,13 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     println!("----------------------------------------");
 
     // Determine result:
-    // FAIL if avg < fail_fps OR too many frames below fail_fps
-    // PASS if avg >= pass_fps AND few frames below pass_fps
+    // FAIL if avg < fail_fps OR too many frames below fail_fps OR stutter rate exceeded
+    // PASS if avg >= pass_fps AND few frames below pass_fps AND stutter OK
     // WARNING otherwise (between fail and pass)
     let fail_rate_exceeded = below_fail_rate > state.max_below_fail_rate as f64;
+    let stutter_exceeded = stutter_rate > state.max_stutter_rate as f64;
 
+    let status;
     if avg_fps < state.fail_fps as f64 || fail_rate_exceeded {
         let reason = if fail_rate_exceeded {
             format!(
@@ -324,9 +465,22 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
             format!("avg {:.1} FPS < {:.0}", avg_fps, state.fail_fps)
         };
         println!("{}", format!("RESULT: FAIL ❌ ({})", reason).red().bold());
+        if stutter_exceeded {
+            println!(
+                "{}",
+                format!(
+                    "  + STUTTER ❌ ({:.1}% > {:.1}%)",
+                    stutter_rate * 100.0,
+                    state.max_stutter_rate * 100.0
+                )
+                .red()
+            );
+        }
+        status = "fail";
         exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
     } else if avg_fps >= state.pass_fps as f64
         && below_pass_rate <= state.max_below_pass_rate as f64
+        && !stutter_exceeded
     {
         println!(
             "{}",
@@ -337,30 +491,71 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
             .green()
             .bold()
         );
+        status = "pass";
         exit.write(AppExit::Success);
     } else {
-        let reason = if avg_fps < state.pass_fps as f64 {
-            format!(
+        let mut reasons = Vec::new();
+        if avg_fps < state.pass_fps as f64 {
+            reasons.push(format!(
                 "avg {:.1} FPS: {:.0} <= fps < {:.0}",
                 avg_fps, state.fail_fps, state.pass_fps
-            )
-        } else {
-            format!(
-                "avg {:.1} FPS but {:.1}% frames below {:.0} FPS (max {:.1}%)",
-                avg_fps,
+            ));
+        }
+        if below_pass_rate > state.max_below_pass_rate as f64 {
+            reasons.push(format!(
+                "{:.1}% frames below {:.0} FPS (max {:.1}%)",
                 below_pass_rate * 100.0,
                 state.pass_fps,
                 state.max_below_pass_rate * 100.0
-            )
-        };
+            ));
+        }
+        if stutter_exceeded {
+            reasons.push(format!(
+                "stutter {:.1}% > {:.1}%",
+                stutter_rate * 100.0,
+                state.max_stutter_rate * 100.0
+            ));
+        }
         println!(
             "{}",
-            format!("RESULT: WARNING ⚠️ ({})", reason).yellow().bold()
+            format!("RESULT: WARNING ⚠️ ({})", reasons.join("; "))
+                .yellow()
+                .bold()
         );
         // Warning is still a pass (exit 0)
+        status = "warning";
         exit.write(AppExit::Success);
     }
     println!("========================================");
+
+    // Emit machine-readable JSON line for script parsing
+    let spikes_json: Vec<String> = spike_indices
+        .iter()
+        .map(|(idx, ms)| format!("{{\"frame\":{},\"ms\":{:.2}}}", idx, ms))
+        .collect();
+    println!(
+        "[FRAME-TEST-JSON] {{\"project\":\"{}\",\"status\":\"{}\",\"total_frames\":{},\
+         \"avg_fps\":{:.1},\"min_fps\":{:.1},\"max_fps\":{:.1},\"p95_fps\":{:.1},\
+         \"p99_fps\":{:.1},\"max_frame_time_ms\":{:.2},\"median_frame_time_ms\":{:.2},\
+         \"stutter_count\":{},\"stutter_rate\":{:.4},\"below_fail_count\":{},\
+         \"below_fail_rate\":{:.4},\"mode\":\"{}\",\"top_spikes\":[{}]}}",
+        state.project_name,
+        status,
+        total_frames,
+        avg_fps,
+        min_fps,
+        max_fps,
+        p95_fps,
+        p99_fps,
+        max_frame_time_ms,
+        median_dt * 1000.0,
+        stutter_count,
+        stutter_rate,
+        below_fail,
+        below_fail_rate,
+        if state.play_once { "play_once" } else { "loop" },
+        spikes_json.join(","),
+    );
 }
 
 /// Display FPS in window title (no UI text overlay to minimize rendering overhead)
