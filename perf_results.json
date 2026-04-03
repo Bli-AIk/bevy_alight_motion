@@ -3,59 +3,59 @@
     "private/USER_mortis/revenge": {
       "project": "private/USER_mortis/revenge",
       "status": "fail",
-      "total_frames": 413,
-      "avg_fps": 51.6,
+      "total_frames": 322,
+      "avg_fps": 40.2,
       "min_fps": 4.0,
-      "max_fps": 138.5,
-      "p95_fps": 28.9,
-      "p99_fps": 9.4,
+      "max_fps": 234.1,
+      "p95_fps": 22.2,
+      "p99_fps": 4.6,
       "max_frame_time_ms": 250.0,
-      "median_frame_time_ms": 16.11,
-      "stutter_count": 20,
-      "stutter_rate": 0.0484,
-      "below_fail_count": 90,
-      "below_fail_rate": 0.2179,
+      "median_frame_time_ms": 16.53,
+      "stutter_count": 24,
+      "stutter_rate": 0.0745,
+      "below_fail_count": 153,
+      "below_fail_rate": 0.4752,
       "mode": "loop",
       "top_spikes": [
         {
-          "frame": 81,
+          "frame": 54,
           "ms": 250.0
         },
         {
-          "frame": 82,
-          "ms": 168.46
+          "frame": 56,
+          "ms": 245.54
         },
         {
-          "frame": 83,
-          "ms": 119.76
+          "frame": 59,
+          "ms": 219.66
         },
         {
-          "frame": 89,
-          "ms": 106.67
+          "frame": 58,
+          "ms": 205.99
         },
         {
-          "frame": 86,
-          "ms": 104.95
+          "frame": 55,
+          "ms": 200.55
         },
         {
-          "frame": 79,
-          "ms": 86.15
+          "frame": 57,
+          "ms": 197.94
         },
         {
-          "frame": 84,
-          "ms": 85.23
+          "frame": 60,
+          "ms": 194.39
         },
         {
-          "frame": 80,
-          "ms": 77.78
+          "frame": 53,
+          "ms": 169.32
         },
         {
-          "frame": 90,
-          "ms": 76.19
+          "frame": 51,
+          "ms": 113.64
         },
         {
-          "frame": 88,
-          "ms": 73.63
+          "frame": 62,
+          "ms": 113.62
         }
       ]
     }
@@ -66,5 +66,5 @@
     "skipped": 0,
     "failed": 1
   },
-  "timestamp": "2026-04-03T13:51:49.504354+00:00"
+  "timestamp": "2026-04-03T15:22:04.365409+00:00"
 }

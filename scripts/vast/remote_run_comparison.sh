@@ -264,31 +264,37 @@ if [ -n "$tracy_capture_pid" ]; then
         if [ -x "$tracy_csvexport_bin" ]; then
             echo "[remote] Running Tracy analysis..." | tee -a "$log_file"
             "$tracy_csvexport_bin" "$tracy_output" 2>/dev/null | python3 -c "
-import sys, csv
-from collections import defaultdict
+import sys, re
 
-reader = csv.DictReader(sys.stdin)
-zones = defaultdict(lambda: {'total_ns': 0, 'count': 0, 'max_ns': 0})
+lines = sys.stdin.readlines()
+# CSV fields: name,src_file,src_line,total_ns,total_perc,counts,mean_ns,min_ns,max_ns,std_ns
+# Names may contain commas (generic types), so parse from the right
+pattern = re.compile(r'^(.*?),(.*?),(\d+),(\d+),([0-9.]+),(\d+),([0-9.]+),(\d+),(\d+),([0-9.]+)$')
 
-for row in reader:
-    name = row.get('name', 'unknown')
-    exec_ns = int(row.get('exec_time_ns', 0))
-    zones[name]['total_ns'] += exec_ns
-    zones[name]['count'] += 1
-    zones[name]['max_ns'] = max(zones[name]['max_ns'], exec_ns)
+zones = []
+for line in lines[1:]:
+    m = pattern.match(line.strip())
+    if not m:
+        continue
+    name = m.group(1)
+    total_ns = int(m.group(4))
+    counts = int(m.group(6))
+    mean_ns = float(m.group(7))
+    max_ns = int(m.group(9))
+    zones.append((name, total_ns, counts, mean_ns, max_ns))
 
-sorted_zones = sorted(zones.items(), key=lambda x: x[1]['total_ns'], reverse=True)
+zones.sort(key=lambda z: z[1], reverse=True)
 
-print(f'Total zones: {sum(z[\"count\"] for z in zones.values())}')
-print(f'Unique zone names: {len(zones)}')
+print(f'Total unique zones: {len(zones)}')
+print(f'Total time: {sum(z[1] for z in zones) / 1_000_000_000:.2f} s')
 print()
-print(f'{\"Zone Name\":<60} {\"Total ms\":>10} {\"Count\":>8} {\"Avg ms\":>10} {\"Max ms\":>10}')
-print('-' * 100)
-for name, data in sorted_zones[:50]:
-    total_ms = data['total_ns'] / 1_000_000
-    avg_ms = total_ms / data['count'] if data['count'] > 0 else 0
-    max_ms = data['max_ns'] / 1_000_000
-    print(f'{name:<60} {total_ms:>10.2f} {data[\"count\"]:>8} {avg_ms:>10.3f} {max_ms:>10.2f}')
+print(f'{\"Zone Name\":<70} {\"Total ms\":>10} {\"Count\":>8} {\"Avg ms\":>10} {\"Max ms\":>10}')
+print('=' * 110)
+for name, total_ns, counts, mean_ns, max_ns in zones[:50]:
+    total_ms = total_ns / 1_000_000
+    avg_ms = mean_ns / 1_000_000
+    max_ms = max_ns / 1_000_000
+    print(f'{name:<70} {total_ms:>10.2f} {counts:>8} {avg_ms:>10.3f} {max_ms:>10.2f}')
 " 2>&1 | tee "${workdir}/tracy_analysis.txt" | tee -a "$log_file"
         fi
     else
