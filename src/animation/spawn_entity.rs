@@ -48,6 +48,7 @@ pub(super) fn spawn_layer_entity(
     has_child_layers: bool,
     spawned_entities: &HashMap<u64, Entity>,
     global_time: f32,
+    prealloc_texture: Option<Handle<Image>>,
 ) -> Entity {
     let entity_name = format!("Layer[{}]: {}", layer.id, layer.label);
     let spawn_setup = build_spawn_setup(layer, global_time, inv_fit_scale, embed_owner_id);
@@ -171,6 +172,7 @@ pub(super) fn spawn_layer_entity(
                 scene_height: scene_h,
                 has_scale_animation: !layer.animated.scale.keyframes.is_empty(),
                 render_plan,
+                prealloc_texture,
             });
         // Mark as mask embed if blending is mask/exclude
         if layer.blending_mode == AmBlendingMode::Mask

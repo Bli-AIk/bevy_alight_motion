@@ -158,13 +158,17 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        let render_texture = Image::new_target_texture(
-            needs_rtt.scene_width.max(1.0).ceil() as u32,
-            needs_rtt.scene_height.max(1.0).ceil() as u32,
-            render_texture_format,
-            None,
-        );
-        let render_texture_handle = images.add(render_texture);
+        let render_texture_handle =
+            if let Some(handle) = needs_rtt.prealloc_texture.clone() {
+                handle
+            } else {
+                images.add(Image::new_target_texture(
+                    needs_rtt.scene_width.max(1.0).ceil() as u32,
+                    needs_rtt.scene_height.max(1.0).ceil() as u32,
+                    render_texture_format,
+                    None,
+                ))
+            };
         let (global_scale, embed_rotation, embed_translation) =
             embed_global.to_scale_rotation_translation();
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();

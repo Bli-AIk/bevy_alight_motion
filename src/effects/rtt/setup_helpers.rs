@@ -48,7 +48,7 @@ pub(super) fn dynamic_render_layer(layer: usize) -> RenderLayers {
     RenderLayers::from_layers(&[layer])
 }
 
-pub(super) fn selected_embed_rtt_format() -> TextureFormat {
+pub(crate) fn selected_embed_rtt_format() -> TextureFormat {
     match std::env::var("AM_EMBED_RTT_FORMAT").ok().as_deref() {
         Some("rgba8unorm") => TextureFormat::Rgba8Unorm,
         Some("bgra8unormsrgb") => TextureFormat::Bgra8UnormSrgb,

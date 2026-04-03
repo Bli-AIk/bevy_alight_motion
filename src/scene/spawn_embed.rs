@@ -394,6 +394,7 @@ pub(crate) fn spawn_embed_scene(
                 scene_height: embed.scene.height as f32,
                 has_scale_animation: !embed.transform.scale.keyframes.is_empty(),
                 render_plan,
+                prealloc_texture: None,
             },
             transform,
             GlobalTransform::default(),

@@ -47,6 +47,8 @@ pub struct AmPendingLayers {
     pub layers_container: Option<Entity>,
     pub embed_contents_container: Option<Entity>,
     pub rtt_cameras_container: Option<Entity>,
+    /// Pre-allocated RTT texture handles, keyed by layer id.
+    pub rtt_texture_cache: HashMap<u64, Handle<Image>>,
 }
 
 #[derive(Component, Debug, Clone, Default)]

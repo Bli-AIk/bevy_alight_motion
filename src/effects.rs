@@ -13,7 +13,7 @@
 
 mod contracts;
 pub(crate) mod lift_composite;
-mod rtt;
+pub(crate) mod rtt;
 mod rtt_helpers;
 mod types;
 

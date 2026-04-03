@@ -76,6 +76,7 @@ pub fn evaluate_render_strategy_system(
                 scene_width: needs_eval.scene_width,
                 scene_height: needs_eval.scene_height,
                 render_plan: needs_eval.render_plan,
+                prealloc_texture: needs_eval.prealloc_texture.clone(),
             });
         }
 
