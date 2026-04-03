@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-03T16:07:23.403858+00:00",
+  "timestamp": "2026-04-03T18:24:19.691380+00:00",
   "summary": {
     "passed": 189,
     "warnings": 0,
@@ -45,7 +45,7 @@
     },
     "basic/fill/nested_solid_color_parent_child": {
       "status": "fail",
-      "avg_similarity": 0.6234
+      "avg_similarity": 0.8001
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
       "status": "pass"
@@ -886,7 +886,8 @@
       "avg_similarity": 0.9394
     },
     "private/USER_mortis/revenge": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.9697
     },
     "private/USER_mortis/revenge/split1": {
       "status": "fail",
