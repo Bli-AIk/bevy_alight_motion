@@ -19,6 +19,16 @@ fn trace_effect_layer_enabled(var_name: &str, layer_id: u64) -> bool {
         })
 }
 
+fn is_effect_globally_disabled(effect_name: &str) -> bool {
+    std::env::var_os("AM_DISABLED_EFFECTS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|names| {
+            names
+                .split(',')
+                .any(|n| n.trim().eq_ignore_ascii_case(effect_name))
+        })
+}
+
 pub(super) fn update_replace_color(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
@@ -172,15 +182,19 @@ pub(super) fn update_pixelate(
     has_pixelate: bool,
 ) {
     let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
-    if trace_effect_layer_enabled("AM_DISABLE_PIXELATE_IDS", animated.layer_id) {
+    if trace_effect_layer_enabled("AM_DISABLE_PIXELATE_IDS", animated.layer_id)
+        || is_effect_globally_disabled("pixelate")
+    {
         material.set_pixelate(false, false, 1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 1.0);
         material.uniform_data.pixelate_flags = Vec4::ZERO;
         material.uniform_data.pixelate_params1 = Vec4::ZERO;
         material.uniform_data.pixelate_params2 = Vec4::ZERO;
-        bevy::log::warn!(
-            "[UnifiedTrace] layer={} pixelate disabled by AM_DISABLE_PIXELATE_IDS",
-            animated.layer_id
-        );
+        if trace_layer {
+            bevy::log::warn!(
+                "[UnifiedTrace] layer={} pixelate disabled by blacklist",
+                animated.layer_id
+            );
+        }
         return;
     }
     if has_pixelate {

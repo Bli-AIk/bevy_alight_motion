@@ -109,7 +109,7 @@ fn default_avg_threshold() -> f32 {
 fn default_frame_threshold() -> f32 {
     0.95
 }
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone)]
 struct ProjectConfig {
     #[serde(default)]
     skip: bool,
@@ -125,10 +125,12 @@ struct ProjectConfig {
     max_failed_rate: f32,
     #[serde(default = "default_max_critical_rate")]
     max_critical_rate: f32,
+    #[serde(default)]
+    disabled_effects: Vec<String>,
 }
 
 // Override config with optional fields for proper inheritance from [default]
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone)]
 struct OverrideConfig {
     #[serde(default)]
     skip: Option<bool>,
@@ -138,6 +140,7 @@ struct OverrideConfig {
     min_frame_similarity: Option<f32>,
     max_failed_rate: Option<f32>,
     max_critical_rate: Option<f32>,
+    disabled_effects: Option<Vec<String>>,
 }
 
 impl OverrideConfig {
@@ -152,6 +155,10 @@ impl OverrideConfig {
                 .unwrap_or(base.min_frame_similarity),
             max_failed_rate: self.max_failed_rate.unwrap_or(base.max_failed_rate),
             max_critical_rate: self.max_critical_rate.unwrap_or(base.max_critical_rate),
+            disabled_effects: self
+                .disabled_effects
+                .clone()
+                .unwrap_or_else(|| base.disabled_effects.clone()),
         }
     }
 }
@@ -241,6 +248,16 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
         state.min_frame_similarity = settings.min_frame_similarity;
         state.max_failed_rate = settings.max_failed_rate;
         state.max_critical_rate = settings.max_critical_rate;
+
+        // Set disabled effects env var for the rendering pipeline
+        if !settings.disabled_effects.is_empty() {
+            let effects_str = settings.disabled_effects.join(",");
+            unsafe {
+                std::env::set_var("AM_DISABLED_EFFECTS", &effects_str);
+            }
+            println!("[COMPARISON] Disabled effects: {}", effects_str.yellow());
+        }
+
         println!(
             "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%, max_critical={:.1}%",
             project_name,

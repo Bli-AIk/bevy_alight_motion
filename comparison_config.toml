@@ -12,6 +12,11 @@ min_frame_similarity = 0.8
 # max_failed_rate: 允许失败帧的最大比例
 max_failed_rate = 0.15
 
+# disabled_effects: 全局禁用的特效列表
+# AM 使用双线性采样（模糊），动画师添加 pixelate 来恢复清晰度；
+# Bevy 默认使用最近邻采样（像素完美），pixelate 多余且导致边缘差异。
+disabled_effects = ["pixelate"]
+
 # =============================================================================
 # Basic tests
 # 基础测试
@@ -103,19 +108,23 @@ avg_threshold = 0.98
 frame_threshold = 0.98
 max_failed_rate = 0
 frame_offset = 0.5
+disabled_effects = []
 
 # 此示例存在严重不匹配的问题，且当前的帧对比算法必须设为0.999才能保证肉眼看不出差别。不能修改这里的阈值
 [overrides."effects/pixelate/bone_single"]
 avg_threshold = 0.9985
 frame_threshold = 0.9985
+disabled_effects = []
 
 [overrides."effects/pixelate/basic"]
 avg_threshold = 0.98
 frame_threshold = 0.98
+disabled_effects = []
 
 [overrides."effects/pixelate/sprite"]
 avg_threshold = 0.98
 frame_threshold = 0.98
+disabled_effects = []
 
 [overrides."private/USER_hong_jiao/test/rect_subdiv_3/target1"]
 avg_threshold = 0.98
