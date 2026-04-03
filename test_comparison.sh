@@ -66,12 +66,14 @@ for arg in "$@"; do
         HEADLESS=true
     elif [ "$arg" == "--single" ]; then
         EXACT_MATCH=true
+    elif [ "$arg" == "--frame-test" ]; then
+        FRAME_TEST=true
     fi
 done
 # Remove flags that can appear anywhere from positional args
 ARGS=()
 for arg in "$@"; do
-    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ]; then
+    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ] && [ "$arg" != "--frame-test" ]; then
         ARGS+=("$arg")
     fi
 done
@@ -93,22 +95,6 @@ fi
 if [ "$1" == "--all" ]; then
     RUN_ALL=true
     shift
-elif [ "$1" == "--frame-test" ]; then
-    FRAME_TEST=true
-    shift
-    # After --frame-test, accept optional filter pattern
-    if [ "$1" == "--all" ]; then
-        RUN_ALL=true
-        shift
-    elif [ -n "$1" ]; then
-        FILTER_PATTERN="$1"
-        FILTER_PATTERN="${FILTER_PATTERN#./}"
-        FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
-        FILTER_PATTERN="${FILTER_PATTERN#projects/}"
-        HAS_EXPLICIT_FILTER=true
-    else
-        FILTER_PATTERN="basic/"
-    fi
 elif [ -n "$1" ]; then
     FILTER_PATTERN="$1"
     # Strip common path prefixes so users can pass paths like
