@@ -43,6 +43,10 @@ pub struct AmRetimeInfo {
     pub nested_total_time_ms: f32,
     pub embed_speed: f32,
     pub comparison_frame_center_bias_ms: f32,
+    /// The embed's `inTime` offset in milliseconds.  For Freeze / Loop / Blank
+    /// this shifts the starting position inside the nested timeline so that
+    /// playback begins at `inTime` rather than 0.
+    pub in_time_ms: f32,
 }
 
 /// Runtime echokf data for dynamically updating echo entities each frame.

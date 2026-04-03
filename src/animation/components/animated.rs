@@ -286,6 +286,10 @@ impl AmAnimated {
         let renderable_total = Self::renderable_nested_total(total, self.scene_fps)
             .max(0.0)
             .min(total);
+        // For Freeze/Loop/Blank the playback starts at `inTime` inside the
+        // nested timeline, not at 0.  Stretch/LoopStretch remap the entire
+        // timeline so inTime is not applicable there.
+        let base_time = embed_elapsed + rt.in_time_ms;
         let nested_time = match rt.mode {
             RetimeMode::Off => return None,
             RetimeMode::Stretch => {
@@ -296,19 +300,19 @@ impl AmAnimated {
                     embed_elapsed
                 }
             }
-            RetimeMode::Freeze => embed_elapsed.min(renderable_total.max(0.0)),
+            RetimeMode::Freeze => base_time.min(renderable_total.max(0.0)),
             RetimeMode::Loop => {
                 let loop_total = renderable_total.max(1.0);
-                embed_elapsed.rem_euclid(loop_total)
+                base_time.rem_euclid(loop_total)
             }
             RetimeMode::LoopStretch => {
                 Self::calc_loop_stretch_time(rt.container_duration_ms, total, embed_elapsed)
             }
             RetimeMode::Blank => {
-                if embed_elapsed > renderable_total.max(0.0) {
+                if base_time > renderable_total.max(0.0) {
                     return Some(-1.0);
                 }
-                embed_elapsed
+                base_time
             }
         };
         if let Some(trace_ids) =
@@ -320,7 +324,7 @@ impl AmAnimated {
                 .any(|id| id == self.layer_id);
             if should_trace {
                 bevy::log::warn!(
-                    "[RetimeTrace] id={} mode={:?} global={:.3} comparison={:.3} bias={:.3} embed_start={:.3} embed_elapsed={:.3} total={:.3} renderable_total={:.3} nested={:.3} scene_fps={:.3}",
+                    "[RetimeTrace] id={} mode={:?} global={:.3} comparison={:.3} bias={:.3} embed_start={:.3} embed_elapsed={:.3} in_time={:.3} base_time={:.3} total={:.3} renderable_total={:.3} nested={:.3} scene_fps={:.3}",
                     self.layer_id,
                     rt.mode,
                     global_time,
@@ -328,6 +332,8 @@ impl AmAnimated {
                     rt.comparison_frame_center_bias_ms,
                     rt.embed_global_start,
                     embed_elapsed,
+                    rt.in_time_ms,
+                    base_time,
                     total,
                     renderable_total,
                     nested_time,

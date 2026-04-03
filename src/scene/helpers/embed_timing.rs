@@ -77,6 +77,7 @@ fn build_retime_info(
     global_start: f32,
     effective_speed: f32,
 ) -> Option<AmRetimeInfo> {
+    let in_time = embed.in_time.unwrap_or(0) as f32;
     let container_duration = (embed.end_time - embed.start_time) as f32;
     let nested_total = embed.scene.total_time as f32;
 
@@ -92,6 +93,7 @@ fn build_retime_info(
                 nested_total_time_ms: nested_total,
                 embed_speed: effective_speed,
                 comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
+                in_time_ms: in_time,
             });
         }
         return config.retime.clone();
@@ -104,6 +106,7 @@ fn build_retime_info(
         nested_total_time_ms: nested_total,
         embed_speed: effective_speed,
         comparison_frame_center_bias_ms: config.comparison_frame_center_bias_ms,
+        in_time_ms: in_time,
     })
 }
 
