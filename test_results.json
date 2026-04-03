@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-03T11:17:41.791933+00:00",
+  "timestamp": "2026-04-03T16:07:23.403858+00:00",
   "summary": {
-    "passed": 191,
+    "passed": 189,
     "warnings": 0,
     "skipped": 5,
-    "failed": 97
+    "failed": 99
   },
   "results": {
     "basic/bezier/bezier": {
@@ -44,7 +44,8 @@
       "status": "pass"
     },
     "basic/fill/nested_solid_color_parent_child": {
-      "status": "pass"
+      "status": "fail",
+      "avg_similarity": 0.6234
     },
     "basic/fill/nested_solid_color_parent_child_simp": {
       "status": "pass"
@@ -143,7 +144,7 @@
       "status": "pass"
     },
     "basic/shape/shape": {
-      "status": "pass"
+      "status": "fail"
     },
     "basic/text/basic": {
       "status": "fail",
@@ -885,8 +886,7 @@
       "avg_similarity": 0.9394
     },
     "private/USER_mortis/revenge": {
-      "status": "fail",
-      "avg_similarity": 0.9697
+      "status": "fail"
     },
     "private/USER_mortis/revenge/split1": {
       "status": "fail",
