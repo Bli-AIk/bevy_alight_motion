@@ -284,6 +284,17 @@ pub(crate) fn process_pending_layers(
         count_spawn_depth(layer_id, &pending.layers, &spawning_ids, &mut visited)
     });
 
+    // Spawn budget: limit how many layers materialise per frame to spread
+    // entity-creation + RTT-setup work and avoid frame-time spikes.
+    // Default 8; override with AM_SPAWN_BUDGET_PER_FRAME (0 = unlimited).
+    let budget: usize = std::env::var("AM_SPAWN_BUDGET_PER_FRAME")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    if budget > 0 && to_spawn.len() > budget {
+        to_spawn.truncate(budget);
+    }
+
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
     if trace_spawn_order
         && to_spawn

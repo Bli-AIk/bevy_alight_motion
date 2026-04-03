@@ -271,6 +271,7 @@ pub fn setup_embed_scene_rtt_system(
                 EmbedSceneRttCamera {
                     embed_entity: entity,
                     render_layer,
+                    last_affine: None,
                 },
                 Camera2d,
                 Camera {

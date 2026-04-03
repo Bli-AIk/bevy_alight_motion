@@ -24,6 +24,10 @@ pub struct EmbedSceneRtt {
 pub struct EmbedSceneRttCamera {
     pub embed_entity: Entity,
     pub render_layer: usize,
+    /// Cached affine from the last sync frame.  When the embed's
+    /// `GlobalTransform` hasn't changed we can skip the expensive
+    /// camera / mesh / material sync entirely.
+    pub last_affine: Option<bevy::math::Mat4>,
 }
 
 #[derive(Component, Debug, Clone)]
