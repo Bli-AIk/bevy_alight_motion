@@ -13,6 +13,8 @@ Options:
   --player-bin <path>      Prebuilt player binary. Defaults to <workdir>/bin/player.
   --single                 Forward --single to test_comparison.sh.
   --frame-test             Run frame-test mode instead of video comparison.
+  --tracy                  Enable Tracy profiling (implies --frame-test).
+                           Starts tracy-capture, runs player, saves .tracy + analysis.
   --no-headless            Do not pass --headless.
   --log-file <path>        Log path. Defaults to logs/remote_comparison_<timestamp>.log
   --max-frames <n>         Export MAX_FRAMES for hypothesis checks.
@@ -34,6 +36,7 @@ workdir=""
 player_bin=""
 single=0
 frame_test=0
+tracy=0
 headless=1
 log_file=""
 max_frames=""
@@ -58,6 +61,11 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --frame-test)
+            frame_test=1
+            shift
+            ;;
+        --tracy)
+            tracy=1
             frame_test=1
             shift
             ;;
@@ -218,8 +226,75 @@ if [ "$skip_render_probe" -ne 1 ]; then
         "${probe_cmd[@]}" 2>&1 | tee -a "$log_file"
 fi
 
+# Start Tracy capture if --tracy is enabled
+tracy_capture_pid=""
+tracy_output=""
+if [ "$tracy" -eq 1 ]; then
+    tracy_capture_bin="${workdir}/bin/tracy-capture"
+    tracy_csvexport_bin="${workdir}/bin/tracy-csvexport"
+    if [ ! -x "$tracy_capture_bin" ]; then
+        echo "[remote] WARNING: tracy-capture not found at $tracy_capture_bin, skipping Tracy capture" | tee -a "$log_file"
+        tracy=0
+    else
+        safe_pattern=$(echo "$pattern" | tr '/' '_')
+        tracy_output="${workdir}/tracy_${safe_pattern}.tracy"
+        echo "[remote] Starting tracy-capture -> $tracy_output" | tee -a "$log_file"
+        "$tracy_capture_bin" -o "$tracy_output" -f &
+        tracy_capture_pid=$!
+        sleep 2
+        echo "[remote] tracy-capture started (pid=$tracy_capture_pid)" | tee -a "$log_file"
+    fi
+fi
+
 "${cmd[@]}" 2>&1 | tee -a "$log_file"
 status=${PIPESTATUS[0]}
+
+# Stop Tracy capture and run analysis
+if [ -n "$tracy_capture_pid" ]; then
+    echo "[remote] Stopping tracy-capture..." | tee -a "$log_file"
+    sleep 2
+    kill -INT "$tracy_capture_pid" 2>/dev/null || true
+    wait "$tracy_capture_pid" 2>/dev/null || true
+
+    if [ -f "$tracy_output" ]; then
+        tracy_size=$(du -h "$tracy_output" | cut -f1)
+        echo "[remote] Tracy capture saved: $tracy_output ($tracy_size)" | tee -a "$log_file"
+
+        # Run analysis with tracy-csvexport
+        if [ -x "$tracy_csvexport_bin" ]; then
+            echo "[remote] Running Tracy analysis..." | tee -a "$log_file"
+            "$tracy_csvexport_bin" "$tracy_output" 2>/dev/null | python3 -c "
+import sys, csv
+from collections import defaultdict
+
+reader = csv.DictReader(sys.stdin)
+zones = defaultdict(lambda: {'total_ns': 0, 'count': 0, 'max_ns': 0})
+
+for row in reader:
+    name = row.get('name', 'unknown')
+    exec_ns = int(row.get('exec_time_ns', 0))
+    zones[name]['total_ns'] += exec_ns
+    zones[name]['count'] += 1
+    zones[name]['max_ns'] = max(zones[name]['max_ns'], exec_ns)
+
+sorted_zones = sorted(zones.items(), key=lambda x: x[1]['total_ns'], reverse=True)
+
+print(f'Total zones: {sum(z[\"count\"] for z in zones.values())}')
+print(f'Unique zone names: {len(zones)}')
+print()
+print(f'{\"Zone Name\":<60} {\"Total ms\":>10} {\"Count\":>8} {\"Avg ms\":>10} {\"Max ms\":>10}')
+print('-' * 100)
+for name, data in sorted_zones[:50]:
+    total_ms = data['total_ns'] / 1_000_000
+    avg_ms = total_ms / data['count'] if data['count'] > 0 else 0
+    max_ms = data['max_ns'] / 1_000_000
+    print(f'{name:<60} {total_ms:>10.2f} {data[\"count\"]:>8} {avg_ms:>10.3f} {max_ms:>10.2f}')
+" 2>&1 | tee "${workdir}/tracy_analysis.txt" | tee -a "$log_file"
+        fi
+    else
+        echo "[remote] WARNING: Tracy capture file not found at $tracy_output" | tee -a "$log_file"
+    fi
+fi
 
 python3 - "$pattern" "$single" <<'PY' | tee -a "$log_file"
 import json

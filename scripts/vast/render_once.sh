@@ -11,6 +11,9 @@ Options:
   --pattern <pattern>        Comparison filter.
   --single                   Forward --single to test_comparison.sh.
   --frame-test               Run frame-test mode instead of video comparison.
+  --tracy                    Enable Tracy profiling (implies --frame-test). Bundles
+                             tracy-capture/tracy-csvexport, captures .tracy file remotely,
+                             and pulls back analysis results.
   --instance-id <id>         Reuse an existing instance.
   --offer-id <id>            Use a specific offer instead of searching.
   --template-hash <hash>     Vast template hash for instance creation.
@@ -244,6 +247,23 @@ prepare_bundle() {
     fi
 
     chmod +x "${bundle_dir}/test_comparison.sh" "${bundle_dir}/scripts/vast/remote_run_comparison.sh"
+
+    # Bundle tracy tools if --tracy mode is enabled
+    if [ "$tracy" -eq 1 ]; then
+        local tracy_capture_bin tracy_csvexport_bin
+        tracy_capture_bin="$(command -v tracy-capture 2>/dev/null || true)"
+        tracy_csvexport_bin="$(command -v tracy-csvexport 2>/dev/null || true)"
+        if [ -z "$tracy_capture_bin" ]; then
+            die "tracy-capture not found in PATH. Install Tracy CLI tools first."
+        fi
+        if [ -z "$tracy_csvexport_bin" ]; then
+            die "tracy-csvexport not found in PATH. Install Tracy CLI tools first."
+        fi
+        cp "$tracy_capture_bin" "${bundle_dir}/bin/tracy-capture"
+        cp "$tracy_csvexport_bin" "${bundle_dir}/bin/tracy-csvexport"
+        chmod +x "${bundle_dir}/bin/tracy-capture" "${bundle_dir}/bin/tracy-csvexport"
+        log "Bundled tracy-capture and tracy-csvexport"
+    fi
 }
 
 default_search_query() {
@@ -560,6 +580,9 @@ run_remote_comparison() {
     if [ "$frame_test" -eq 1 ]; then
         remote_cmd+=(--frame-test)
     fi
+    if [ "$tracy" -eq 1 ]; then
+        remote_cmd+=(--tracy)
+    fi
     # The preflight player probe can create report-dir collisions and wastes GPU wall time.
     remote_cmd+=(--skip-render-probe)
 
@@ -592,6 +615,15 @@ pull_results_back() {
             rsync -az --partial --append-verify \
                 -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
                 "${ssh_user_host}:${remote_root}/perf_results.json" "${pull_dir}/perf_results.json" 2>/dev/null || true
+            # Tracy files (only exist in --tracy mode)
+            if [ "$tracy" -eq 1 ]; then
+                rsync -az --partial --append-verify \
+                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                    "${ssh_user_host}:${remote_root}/tracy_analysis.txt" "${pull_dir}/tracy_analysis.txt" 2>/dev/null || true
+                rsync -az --partial --append-verify \
+                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                    "${ssh_user_host}:${remote_root}/*.tracy" "${pull_dir}/" 2>/dev/null || true
+            fi
 
             if [ "$rsync_ok" = true ]; then
                 break
@@ -608,7 +640,7 @@ pull_results_back() {
 
     if [ ! -d "${pull_dir}/reports" ] && [ ! -f "${pull_dir}/test_results.json" ] && [ ! -f "${pull_dir}/perf_results.json" ]; then
         local remote_cmd
-        remote_cmd="$(quote_remote_command bash -lc "cd \"${remote_root}\" && tar --ignore-failed-read -cf - test_results.json perf_results.json reports logs")"
+        remote_cmd="$(quote_remote_command bash -lc "cd \"${remote_root}\" && tar --ignore-failed-read -cf - test_results.json perf_results.json tracy_analysis.txt *.tracy reports logs")"
         for attempt in 1 2 3; do
             if ssh "${ssh_common[@]}" -p "$ssh_port" "$ssh_user_host" "$remote_cmd" | tar -xf - -C "$pull_dir"; then
                 break
@@ -635,6 +667,17 @@ pull_results_back() {
     if [ -f "${pull_dir}/perf_results.json" ]; then
         cp "${pull_dir}/perf_results.json" "${repo_root}/perf_results.json"
     fi
+    # Copy tracy files if present
+    if [ -f "${pull_dir}/tracy_analysis.txt" ]; then
+        cp "${pull_dir}/tracy_analysis.txt" "${repo_root}/tracy_analysis.txt"
+        log "Tracy analysis saved to tracy_analysis.txt"
+    fi
+    for tracy_file in "${pull_dir}"/*.tracy; do
+        if [ -f "$tracy_file" ]; then
+            cp "$tracy_file" "${repo_root}/$(basename "$tracy_file")"
+            log "Tracy trace saved: $(basename "$tracy_file")"
+        fi
+    done
 
     rm -rf "$pull_dir"
     pull_dir_is_temp=0
@@ -830,6 +873,7 @@ player_bin=""
 build_local=0
 build_features="video-comparison,headless-render"
 frame_test=0
+tracy=0
 vast_bin=""
 vast_retry=3
 watchdog_secs=5400
@@ -862,6 +906,12 @@ while [ $# -gt 0 ]; do
         --frame-test)
             frame_test=1
             build_features="frame-test,headless-render"
+            shift
+            ;;
+        --tracy)
+            tracy=1
+            frame_test=1
+            build_features="debug_tracy,frame-test,headless-render"
             shift
             ;;
         --instance-id)
@@ -1047,5 +1097,10 @@ if [ "$frame_test" -eq 1 ]; then
     summarize_perf_results
 else
     summarize_local_results
+fi
+if [ "$tracy" -eq 1 ] && [ -f "${repo_root}/tracy_analysis.txt" ]; then
+    log "===== Tracy Profiling Analysis ====="
+    cat "${repo_root}/tracy_analysis.txt"
+    log "===== End Tracy Analysis ====="
 fi
 exit "$remote_status"
