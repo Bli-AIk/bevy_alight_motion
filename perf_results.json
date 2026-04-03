@@ -1,0 +1,70 @@
+{
+  "results": {
+    "private/USER_mortis/revenge": {
+      "project": "private/USER_mortis/revenge",
+      "status": "fail",
+      "total_frames": 413,
+      "avg_fps": 51.6,
+      "min_fps": 4.0,
+      "max_fps": 138.5,
+      "p95_fps": 28.9,
+      "p99_fps": 9.4,
+      "max_frame_time_ms": 250.0,
+      "median_frame_time_ms": 16.11,
+      "stutter_count": 20,
+      "stutter_rate": 0.0484,
+      "below_fail_count": 90,
+      "below_fail_rate": 0.2179,
+      "mode": "loop",
+      "top_spikes": [
+        {
+          "frame": 81,
+          "ms": 250.0
+        },
+        {
+          "frame": 82,
+          "ms": 168.46
+        },
+        {
+          "frame": 83,
+          "ms": 119.76
+        },
+        {
+          "frame": 89,
+          "ms": 106.67
+        },
+        {
+          "frame": 86,
+          "ms": 104.95
+        },
+        {
+          "frame": 79,
+          "ms": 86.15
+        },
+        {
+          "frame": 84,
+          "ms": 85.23
+        },
+        {
+          "frame": 80,
+          "ms": 77.78
+        },
+        {
+          "frame": 90,
+          "ms": 76.19
+        },
+        {
+          "frame": 88,
+          "ms": 73.63
+        }
+      ]
+    }
+  },
+  "summary": {
+    "passed": 0,
+    "warnings": 0,
+    "skipped": 0,
+    "failed": 1
+  },
+  "timestamp": "2026-04-03T13:51:49.504354+00:00"
+}
