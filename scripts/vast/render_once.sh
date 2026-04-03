@@ -576,18 +576,24 @@ pull_results_back() {
 
     if remote_supports_rsync; then
         for attempt in 1 2 3; do
-            if rsync -az --partial --append-verify \
+            local rsync_ok=true
+            # reports/ may not exist in frame-test mode
+            rsync -az --partial --append-verify \
                 -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
-                "${ssh_user_host}:${remote_root}/reports/" "${pull_dir}/reports/" \
-                && rsync -az --partial --append-verify \
-                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
-                    "${ssh_user_host}:${remote_root}/logs/" "${pull_dir}/logs/" \
-                && rsync -az --partial --append-verify \
-                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
-                    "${ssh_user_host}:${remote_root}/test_results.json" "${pull_dir}/test_results.json" \
-                && rsync -az --partial --append-verify --ignore-missing-args \
-                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
-                    "${ssh_user_host}:${remote_root}/perf_results.json" "${pull_dir}/perf_results.json" 2>/dev/null; then
+                "${ssh_user_host}:${remote_root}/reports/" "${pull_dir}/reports/" 2>/dev/null || true
+            rsync -az --partial --append-verify \
+                -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                "${ssh_user_host}:${remote_root}/logs/" "${pull_dir}/logs/" 2>/dev/null || rsync_ok=false
+            # test_results.json may not exist in frame-test mode
+            rsync -az --partial --append-verify \
+                -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                "${ssh_user_host}:${remote_root}/test_results.json" "${pull_dir}/test_results.json" 2>/dev/null || true
+            # perf_results.json may not exist in comparison mode
+            rsync -az --partial --append-verify \
+                -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                "${ssh_user_host}:${remote_root}/perf_results.json" "${pull_dir}/perf_results.json" 2>/dev/null || true
+
+            if [ "$rsync_ok" = true ]; then
                 break
             fi
 
@@ -600,7 +606,7 @@ pull_results_back() {
         done
     fi
 
-    if [ ! -d "${pull_dir}/reports" ] && [ ! -f "${pull_dir}/test_results.json" ]; then
+    if [ ! -d "${pull_dir}/reports" ] && [ ! -f "${pull_dir}/test_results.json" ] && [ ! -f "${pull_dir}/perf_results.json" ]; then
         local remote_cmd
         remote_cmd="$(quote_remote_command bash -lc "cd \"${remote_root}\" && tar --ignore-failed-read -cf - test_results.json perf_results.json reports logs")"
         for attempt in 1 2 3; do
