@@ -12,6 +12,7 @@ Options:
   --workdir <dir>          Remote bundle root. Defaults to current directory.
   --player-bin <path>      Prebuilt player binary. Defaults to <workdir>/bin/player.
   --single                 Forward --single to test_comparison.sh.
+  --frame-test             Run frame-test mode instead of video comparison.
   --no-headless            Do not pass --headless.
   --log-file <path>        Log path. Defaults to logs/remote_comparison_<timestamp>.log
   --max-frames <n>         Export MAX_FRAMES for hypothesis checks.
@@ -32,6 +33,7 @@ pattern=""
 workdir=""
 player_bin=""
 single=0
+frame_test=0
 headless=1
 log_file=""
 max_frames=""
@@ -53,6 +55,10 @@ while [ $# -gt 0 ]; do
             ;;
         --single)
             single=1
+            shift
+            ;;
+        --frame-test)
+            frame_test=1
             shift
             ;;
         --no-headless)
@@ -142,6 +148,9 @@ fi
 cmd=(bash ./test_comparison.sh "$pattern")
 if [ "$single" -eq 1 ]; then
     cmd+=(--single)
+fi
+if [ "$frame_test" -eq 1 ]; then
+    cmd+=(--frame-test)
 fi
 if [ "$headless" -eq 1 ]; then
     cmd+=(--headless)

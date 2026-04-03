@@ -10,6 +10,7 @@ Usage:
 Options:
   --pattern <pattern>        Comparison filter.
   --single                   Forward --single to test_comparison.sh.
+  --frame-test               Run frame-test mode instead of video comparison.
   --instance-id <id>         Reuse an existing instance.
   --offer-id <id>            Use a specific offer instead of searching.
   --template-hash <hash>     Vast template hash for instance creation.
@@ -556,6 +557,9 @@ run_remote_comparison() {
     if [ "$exact_match" -eq 1 ]; then
         remote_cmd+=(--single)
     fi
+    if [ "$frame_test" -eq 1 ]; then
+        remote_cmd+=(--frame-test)
+    fi
     # The preflight player probe can create report-dir collisions and wastes GPU wall time.
     remote_cmd+=(--skip-render-probe)
 
@@ -580,7 +584,10 @@ pull_results_back() {
                     "${ssh_user_host}:${remote_root}/logs/" "${pull_dir}/logs/" \
                 && rsync -az --partial --append-verify \
                     -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
-                    "${ssh_user_host}:${remote_root}/test_results.json" "${pull_dir}/test_results.json"; then
+                    "${ssh_user_host}:${remote_root}/test_results.json" "${pull_dir}/test_results.json" \
+                && rsync -az --partial --append-verify --ignore-missing-args \
+                    -e "ssh ${ssh_common[*]} -p ${ssh_port}" \
+                    "${ssh_user_host}:${remote_root}/perf_results.json" "${pull_dir}/perf_results.json" 2>/dev/null; then
                 break
             fi
 
@@ -595,7 +602,7 @@ pull_results_back() {
 
     if [ ! -d "${pull_dir}/reports" ] && [ ! -f "${pull_dir}/test_results.json" ]; then
         local remote_cmd
-        remote_cmd="$(quote_remote_command bash -lc "cd \"${remote_root}\" && tar --ignore-failed-read -cf - test_results.json reports logs")"
+        remote_cmd="$(quote_remote_command bash -lc "cd \"${remote_root}\" && tar --ignore-failed-read -cf - test_results.json perf_results.json reports logs")"
         for attempt in 1 2 3; do
             if ssh "${ssh_common[@]}" -p "$ssh_port" "$ssh_user_host" "$remote_cmd" | tar -xf - -C "$pull_dir"; then
                 break
@@ -618,6 +625,9 @@ pull_results_back() {
     fi
     if [ -f "${pull_dir}/test_results.json" ]; then
         cp "${pull_dir}/test_results.json" "${repo_root}/test_results.json"
+    fi
+    if [ -f "${pull_dir}/perf_results.json" ]; then
+        cp "${pull_dir}/perf_results.json" "${repo_root}/perf_results.json"
     fi
 
     rm -rf "$pull_dir"
@@ -662,6 +672,55 @@ print(
         warning=counts["warning"],
         skip=counts["skip"],
         cancelled=counts["cancelled"],
+        fail=counts["fail"],
+    )
+)
+PY
+}
+
+summarize_perf_results() {
+    python3 - "$repo_root/perf_results.json" "$(normalize_pattern "$pattern")" "$exact_match" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+pattern = sys.argv[2]
+single = sys.argv[3] == "1"
+
+if not path.exists():
+    print("[vast-render] perf_results.json is missing after sync")
+    raise SystemExit(0)
+
+data = json.loads(path.read_text())
+results = data.get("results", {})
+
+if single:
+    matched = {name: info for name, info in results.items() if name == pattern}
+else:
+    matched = {name: info for name, info in results.items() if name.startswith(pattern)}
+
+if not matched:
+    print(f"[vast-render] No perf results matched pattern: {pattern}")
+    raise SystemExit(0)
+
+counts = {"pass": 0, "warning": 0, "fail": 0, "other": 0}
+for name, info in matched.items():
+    status = info.get("status", "other")
+    counts[status if status in counts else "other"] += 1
+    avg_fps = info.get("avg_fps", "?")
+    p99_fps = info.get("p99_fps", "?")
+    stutter = info.get("stutter_count", 0)
+    stutter_rate = info.get("stutter_rate", 0)
+    max_ft = info.get("max_frame_time_ms", "?")
+    mode = info.get("mode", "?")
+    print(f"  {name}: {status} | avg={avg_fps:.1f} p99={p99_fps:.1f} fps | stutters={stutter} ({stutter_rate:.1%}) | max_ft={max_ft:.1f}ms | mode={mode}")
+
+print(
+    "[vast-render] Perf summary matched={matched} pass={pass_} warning={warning} fail={fail}".format(
+        matched=len(matched),
+        pass_=counts["pass"],
+        warning=counts["warning"],
         fail=counts["fail"],
     )
 )
@@ -764,6 +823,7 @@ bundle_dir_is_temp=0
 player_bin=""
 build_local=0
 build_features="video-comparison,headless-render"
+frame_test=0
 vast_bin=""
 vast_retry=3
 watchdog_secs=5400
@@ -791,6 +851,11 @@ while [ $# -gt 0 ]; do
             ;;
         --single)
             exact_match=1
+            shift
+            ;;
+        --frame-test)
+            frame_test=1
+            build_features="frame-test,headless-render"
             shift
             ;;
         --instance-id)
@@ -972,5 +1037,9 @@ else
     remote_status=$?
 fi
 pull_results_back
-summarize_local_results
+if [ "$frame_test" -eq 1 ]; then
+    summarize_perf_results
+else
+    summarize_local_results
+fi
 exit "$remote_status"
