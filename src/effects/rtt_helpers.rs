@@ -283,18 +283,29 @@ pub(super) fn resize_render_texture(
     texture: &Handle<Image>,
     new_extent: Extent3d,
 ) {
-    // Check size via immutable access first to avoid emitting a spurious
-    // AssetEvent::Modified from get_mut(). Without this guard every active
-    // embed texture is re-extracted by the render pipeline every frame, even
-    // when the size hasn't changed.
-    let needs_resize = images
-        .get(texture)
-        .is_some_and(|img| img.texture_descriptor.size != new_extent);
-    if !needs_resize {
+    // Grow-only policy: only resize when the requested extent *exceeds* the
+    // current texture in either dimension.  Shrinking triggers an expensive
+    // AssetEvent::Modified → extract_render_asset → GPU re-upload cycle every
+    // frame when embed transforms are animated.  The sprite / mesh code
+    // already handles oversized textures through sprite.rect / UV sub-rects,
+    // so keeping a larger-than-needed texture is both correct and cheap.
+    let needs_grow = images.get(texture).is_some_and(|img| {
+        let cur = &img.texture_descriptor.size;
+        new_extent.width > cur.width || new_extent.height > cur.height
+    });
+    if !needs_grow {
         return;
     }
     if let Some(image) = images.get_mut(texture) {
-        image.resize(new_extent);
+        // When growing, take the max of each dimension so we never shrink
+        // a dimension that was already large enough.
+        let cur = image.texture_descriptor.size;
+        let merged = Extent3d {
+            width: new_extent.width.max(cur.width),
+            height: new_extent.height.max(cur.height),
+            depth_or_array_layers: 1,
+        };
+        image.resize(merged);
     }
 }
 
