@@ -243,8 +243,8 @@ pub fn frame_test_loop(
             // Check end condition
             let should_finish = if state.play_once {
                 // Detect animation completion: current_time wrapped back or reached end
-                let current = playback.current_time_ms;
-                let total = playback.total_time_ms;
+                let current = playback.current_time_ms as f64;
+                let total = playback.total_time_ms as f64;
                 let completed = if total > 0.0 {
                     // Animation finished when time reaches total or wraps around
                     current >= total - 1.0
@@ -373,8 +373,8 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
         .frame_times
         .iter()
         .enumerate()
-        .filter(|(_, &dt)| dt > stutter_threshold)
-        .map(|(i, &dt)| (i, dt * 1000.0))
+        .filter(|(_, dt)| **dt > stutter_threshold)
+        .map(|(i, dt)| (i, *dt * 1000.0))
         .collect();
     spike_indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     spike_indices.truncate(10);
