@@ -1,10 +1,13 @@
 //! Keeps RTT cameras and render textures synchronized with their embed scenes.
 //! It updates camera placement, projection, dynamic-resolution sizing, and the
 //! matching sprite or mesh representation when an embed scene moves or scales.
+//! Also disables RTT camera rendering for inactive (time-range-exited) embeds
+//! to avoid wasted GPU render passes from entity persistence.
 //!
 //! 负责让 RTT 相机和渲染纹理持续与嵌套场景同步。它会在 embed scene 发生
 //! 位移或缩放时，更新相机位置、投影、动态分辨率尺寸，以及与之配套的 sprite 或 mesh
-//! 表现。
+//! 表现。同时在实体持久化模式下，禁用已退出时间范围的 embed 的 RTT 相机渲染，
+//! 避免浪费 GPU 渲染通道。
 
 use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;
@@ -337,6 +340,32 @@ pub fn sync_rtt_camera_position_system(
                     mesh_rect,
                 );
             }
+        }
+    }
+}
+
+/// Disables RTT cameras whose embed entity is outside its active time range.
+///
+/// With entity persistence, embed entities are never despawned — they stay
+/// alive with alpha=0 when inactive. Without this system the associated RTT
+/// camera would keep rendering empty passes every frame, wasting GPU time.
+pub fn sync_rtt_camera_activity_system(
+    playback: Res<crate::animation::AmPlayback>,
+    embed_query: Query<&crate::animation::AmAnimated, With<EmbedSceneRtt>>,
+    mut camera_query: Query<(&EmbedSceneRttCamera, &mut Camera)>,
+) {
+    if playback.force_stopped {
+        return;
+    }
+    let global_time = playback.current_time_ms;
+
+    for (marker, mut camera) in camera_query.iter_mut() {
+        let should_be_active = embed_query
+            .get(marker.embed_entity)
+            .is_ok_and(|animated| animated.is_active(animated.calc_local_time(global_time)));
+
+        if camera.is_active != should_be_active {
+            camera.is_active = should_be_active;
         }
     }
 }
