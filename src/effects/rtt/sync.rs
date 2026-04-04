@@ -59,19 +59,13 @@ fn sync_embed_material_original_size(
     mesh_rect: super::EmbedVisibleRect,
 ) {
     let Some(mat_handle) = mat_handle else { return };
+    let Some(material) = unified_materials.get_mut(&mat_handle.0) else {
+        return;
+    };
     let mesh_w = mesh_rect.width();
     let mesh_h = mesh_rect.height();
-    let new_size = Vec4::new(rtt.scene_width, rtt.scene_height, mesh_w, mesh_h);
-    // Check via immutable access first to avoid a spurious AssetEvent::Modified.
-    let needs_update = unified_materials
-        .get(&mat_handle.0)
-        .is_some_and(|m| m.uniform_data.original_size != new_size);
-    if !needs_update {
-        return;
-    }
-    if let Some(material) = unified_materials.get_mut(&mat_handle.0) {
-        material.uniform_data.original_size = new_size;
-    }
+    material.uniform_data.original_size =
+        Vec4::new(rtt.scene_width, rtt.scene_height, mesh_w, mesh_h);
 }
 
 fn projection_size_for_rtt_camera(
@@ -171,7 +165,7 @@ pub fn sync_rtt_camera_position_system(
         Option<&MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>>,
     )>,
     mut camera_query: Query<(
-        &mut EmbedSceneRttCamera,
+        &EmbedSceneRttCamera,
         &mut Transform,
         &mut Projection,
         Option<&ChildOf>,
@@ -180,7 +174,7 @@ pub fn sync_rtt_camera_position_system(
     let disable_resize = std::env::var_os("AM_DISABLE_RTT_RESIZE").is_some();
     let parent_cameras_to_embed = std::env::var_os("AM_PARENT_RTT_CAMERA_TO_EMBED").is_some();
 
-    for (mut camera_marker, mut camera_transform, mut projection, camera_parent) in
+    for (camera_marker, mut camera_transform, mut projection, camera_parent) in
         camera_query.iter_mut()
     {
         if let Ok((
@@ -196,12 +190,6 @@ pub fn sync_rtt_camera_position_system(
             unified_material_handle,
         )) = embed_query.get_mut(camera_marker.embed_entity)
         {
-            // Skip the entire sync when the embed's GlobalTransform is unchanged.
-            let current_affine = embed_global.to_matrix();
-            if camera_marker.last_affine == Some(current_affine) {
-                continue;
-            }
-            camera_marker.last_affine = Some(current_affine);
             let full_rect = scene_local_rect(rtt.scene_width, rtt.scene_height);
             let visible_rect = compute_embed_visible_rect(rtt, embed_global, animated);
             let visible_size = Vec2::new(
