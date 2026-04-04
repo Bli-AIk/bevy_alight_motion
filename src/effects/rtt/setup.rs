@@ -21,7 +21,7 @@ use super::setup_helpers::{
 use super::{
     AmEmbedMask, AmGroupFill, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR, EMBED_RTT_CAMERA_Z,
     EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
-    GroupFillType, NeedsEmbedSceneRtt, RttSetupBudget,
+    GroupFillType, NeedsEmbedSceneRtt,
 };
 
 /// Count how many pending-RTT ancestors an entity has, used to sort embeds
@@ -78,7 +78,6 @@ pub fn setup_embed_scene_rtt_system(
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     _color_materials: ResMut<Assets<ColorMaterial>>,
-    rtt_budget: Res<RttSetupBudget>,
     query: Query<
         (
             Entity,
@@ -115,20 +114,7 @@ pub fn setup_embed_scene_rtt_system(
     entities_with_depth.sort_by_key(|&(_, depth)| depth);
     processed_layers.clear();
 
-    let budget = rtt_budget.max_per_frame;
-    let mut processed_count: usize = 0;
-
-    for &(entity, _depth) in &entities_with_depth {
-        // Enforce per-frame budget to spread GPU texture uploads across frames.
-        if budget > 0 && processed_count >= budget {
-            bevy::log::debug!(
-                "[RTT] Budget exhausted ({}/frame). {} embeds deferred.",
-                budget,
-                entities_with_depth.len() - processed_count,
-            );
-            break;
-        }
-
+    for (entity, _depth) in entities_with_depth {
         // Skip if parent is still pending AND wasn't processed in this pass.
         if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
@@ -484,7 +470,6 @@ pub fn setup_embed_scene_rtt_system(
         );
 
         processed_layers.insert(entity, render_layer);
-        processed_count += 1;
     }
 }
 

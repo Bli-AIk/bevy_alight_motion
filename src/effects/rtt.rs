@@ -44,7 +44,7 @@ pub use layers::{
     sync_new_sdf_child_render_layers_system,
 };
 pub use plugin::EffectRenderPlugin;
-pub use pool::{EmbedSceneRenderLayerPool, LiftCompositeBudget, RttSetupBudget};
+pub use pool::EmbedSceneRenderLayerPool;
 pub(crate) use setup::refresh_group_fill_material_texture_system;
 pub use setup::{fix_nested_embed_render_layers_system, setup_embed_scene_rtt_system};
 pub use strategy::evaluate_render_strategy_system;

@@ -14,8 +14,8 @@ use crate::effects::{
 };
 
 use super::{
-    EmbedSceneRenderLayerPool, RttSetupBudget, apply_embed_bounds_clipping_system,
-    cleanup_embed_content_system, cleanup_embed_scene_rtt_system,
+    EmbedSceneRenderLayerPool, apply_embed_bounds_clipping_system, cleanup_embed_content_system,
+    cleanup_embed_scene_rtt_system,
 };
 
 pub struct EffectRenderPlugin;
@@ -23,7 +23,6 @@ pub struct EffectRenderPlugin;
 impl Plugin for EffectRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EmbedSceneRenderLayerPool>()
-            .init_resource::<RttSetupBudget>()
             .add_systems(
                 Update,
                 (
