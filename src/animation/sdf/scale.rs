@@ -100,13 +100,12 @@ pub fn animate_sdf_scale_system(
             let Ok((material_handle, sdf_params, mut transform)) = sdf_query.get_mut(child) else {
                 continue;
             };
-            let Some(mat_ref) = materials.get(&material_handle.0) else {
+            let Some(material) = materials.get_mut(&material_handle.0) else {
                 continue;
             };
-            let mut new_uniform = mat_ref.uniform_data;
 
             update_sdf_child_material(
-                &mut new_uniform,
+                &mut material.uniform_data,
                 sdf_params,
                 &mut transform,
                 own_scale,
@@ -118,11 +117,6 @@ pub fn animate_sdf_scale_system(
                 &shape_pts_anim,
                 disable_ancestor_pivot_comp,
             );
-
-            if new_uniform != mat_ref.uniform_data {
-                let material = materials.get_mut(&material_handle.0).unwrap();
-                material.uniform_data = new_uniform;
-            }
         }
     }
 }

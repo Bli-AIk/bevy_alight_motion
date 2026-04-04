@@ -11,7 +11,7 @@
 use bevy::{prelude::*, render::render_resource::ShaderType};
 
 /// Uniform data for SDF shader - must match the struct in the shader exactly
-#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
+#[derive(Clone, Copy, Debug, ShaderType)]
 pub struct SdfMaterialUniform {
     pub color: Vec4,
     pub params: Vec4,

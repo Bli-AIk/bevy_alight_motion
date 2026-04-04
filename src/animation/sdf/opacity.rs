@@ -56,21 +56,16 @@ pub fn animate_sdf_opacity_system(
                 continue;
             };
 
+            if !animated.is_active(local_time)
+                && let Some(material) = materials.get_mut(&material_handle.0)
+            {
+                *visibility = Visibility::Hidden;
+                material.uniform_data.color.w = 0.0;
+                material.uniform_data.params.w = repack_with_alpha(sdf_params.packed_stroke, 0.0);
+                continue;
+            }
             if !animated.is_active(local_time) {
                 *visibility = Visibility::Hidden;
-                // Only mutate material if values actually differ
-                #[expect(clippy::excessive_nesting)]
-                // reason: guard against spurious GPU re-upload inside inactive-layer branch
-                if let Some(mat_ref) = materials.get(&material_handle.0) {
-                    let zero_packed = repack_with_alpha(sdf_params.packed_stroke, 0.0);
-                    if mat_ref.uniform_data.color.w != 0.0
-                        || mat_ref.uniform_data.params.w != zero_packed
-                    {
-                        let material = materials.get_mut(&material_handle.0).unwrap();
-                        material.uniform_data.color.w = 0.0;
-                        material.uniform_data.params.w = zero_packed;
-                    }
-                }
                 continue;
             }
 
@@ -80,15 +75,14 @@ pub fn animate_sdf_opacity_system(
                 *visibility = Visibility::Inherited;
             }
 
-            let Some(mat_ref) = materials.get(&material_handle.0) else {
+            let Some(material) = materials.get_mut(&material_handle.0) else {
                 continue;
             };
-            let mut new_uniform = mat_ref.uniform_data;
 
             if let Some(fc_srgb) = interpolate_color(&animated.fill_color, layer_time) {
-                new_uniform.color.x = fc_srgb.x.powf(2.2);
-                new_uniform.color.y = fc_srgb.y.powf(2.2);
-                new_uniform.color.z = fc_srgb.z.powf(2.2);
+                material.uniform_data.color.x = fc_srgb.x.powf(2.2);
+                material.uniform_data.color.y = fc_srgb.y.powf(2.2);
+                material.uniform_data.color.z = fc_srgb.z.powf(2.2);
             }
 
             let mut final_alpha = opacity * animated.base_alpha;
@@ -99,11 +93,12 @@ pub fn animate_sdf_opacity_system(
                 1.0
             };
             final_alpha *= echo_mult;
-            new_uniform.color.w = final_alpha.clamp(0.0, 1.0);
+            material.uniform_data.color.w = final_alpha.clamp(0.0, 1.0);
 
             let final_stroke_alpha =
                 (sdf_params.base_stroke_alpha * opacity * echo_mult).clamp(0.0, 1.0);
-            new_uniform.params.w = repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
+            material.uniform_data.params.w =
+                repack_with_alpha(sdf_params.packed_stroke, final_stroke_alpha);
 
             if marker.label.starts_with("Rectangle 1 Copy") {
                 let parent = child_of.map(|c| c.parent());
@@ -116,10 +111,10 @@ pub fn animate_sdf_opacity_system(
                         marker.label,
                         parent,
                         *visibility,
-                        new_uniform.color.w,
+                        material.uniform_data.color.w,
                         child_gt.translation().z,
-                        new_uniform.params.z,
-                        new_uniform.frame_half,
+                        material.uniform_data.params.z,
+                        material.uniform_data.frame_half,
                     )
                 });
             }
@@ -130,7 +125,7 @@ pub fn animate_sdf_opacity_system(
                 let sc_color =
                     interpolate_color(&animated.solid_color, layer_time).unwrap_or(Vec4::ZERO);
                 apply_solidcolor_blend(
-                    &mut new_uniform.color,
+                    &mut material.uniform_data.color,
                     &animated.base_fill_color,
                     sc_color,
                     sc_alpha,
@@ -140,13 +135,7 @@ pub fn animate_sdf_opacity_system(
 
             let pix_thresh =
                 interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.0);
-            new_uniform.gradient_config.y = pix_thresh;
-
-            // Only mutate if changed
-            if new_uniform != mat_ref.uniform_data {
-                let material = materials.get_mut(&material_handle.0).unwrap();
-                material.uniform_data = new_uniform;
-            }
+            material.uniform_data.gradient_config.y = pix_thresh;
         }
     }
 }
