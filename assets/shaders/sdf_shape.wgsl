@@ -56,8 +56,7 @@ struct SdfMaterialUniform {
     linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
     linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, 0, shape_invert_alt)
-    linear_repeat_params5: vec4<f32>,  // (random_mode, seed_lo, seed_hi, 0)
-    linear_repeat_perm: vec4<f32>,    // precomputed permutation data
+    linear_repeat_params5: vec4<f32>,  // (random_order, seed_lo, seed_hi, 0)
     // Stretch segment params
     stretch_params: vec4<f32>,         // (angle_rad, adj_stretch, offset_norm, smooth_raw)
     stretch_meta: vec4<f32>,           // (transform_rotation_rad, 0, scene_width, scene_height)

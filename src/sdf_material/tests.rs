@@ -9,7 +9,7 @@
 
 use super::*;
 
-const SDF_MATERIAL_UNIFORM_MIN_SIZE_BYTES: u64 = 608;
+const SDF_MATERIAL_UNIFORM_MIN_SIZE_BYTES: u64 = 592;
 
 #[test]
 fn test_pack_color() {

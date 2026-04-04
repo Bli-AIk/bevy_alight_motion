@@ -46,8 +46,7 @@ struct UnifiedEffectUniform {
     linear_repeat_params2: vec4<f32>,  // (offset_x, offset_y, scale, alpha)
     linear_repeat_params3: vec4<f32>,  // (start, end, phase, overlap)
     linear_repeat_params4: vec4<f32>,  // (ease_in, ease_out, blend, shape_invert_alt)
-    linear_repeat_params5: vec4<f32>,  // (random_order, perm_packed0/seed_lo, perm_packed1/seed_hi, stretch_before_repeat)
-    linear_repeat_perm: vec4<f32>,    // precomputed shuffle permutation (packed 4-per-u32)
+    linear_repeat_params5: vec4<f32>,  // (random_order, seed_lo, seed_hi, stretch_before_repeat)
     linear_repeat_source_size: vec4<f32>, // (source_width, source_height, 0, 0)
     linear_repeat_fill_color: vec4<f32>, // fill color (r, g, b, a)
     // Second linear repeat effect (for stacked/dual effects)
@@ -56,7 +55,6 @@ struct UnifiedEffectUniform {
     linear_repeat2_params3: vec4<f32>,
     linear_repeat2_params4: vec4<f32>,
     linear_repeat2_params5: vec4<f32>,
-    linear_repeat2_perm: vec4<f32>,
     linear_repeat2_fill_color: vec4<f32>,
     // Radial repeat effect
     radial_repeat_params1: vec4<f32>,  // (count, radius, orientation_deg, startAngle_deg)
@@ -674,14 +672,12 @@ fn compute_mask_with_linear_repeat(
     lr2: vec4<f32>,       // (offset_x, offset_y, scale, alpha)
     lr3: vec4<f32>,       // (start, end, phase, overlap)
     lr4: vec4<f32>,       // (ease_in, ease_out, 0, shape_invert_alt)
-    lr5: vec4<f32>,       // (random_mode, packed0/seed_lo, packed1/seed_hi, 0)
-    lr_perm: vec4<f32>,   // precomputed shuffle permutation
+    lr5: vec4<f32>,       // (random_order, seed_lo, seed_hi, 0)
     lr2_1: vec4<f32>,     // second repeat params1
     lr2_2: vec4<f32>,     // second repeat params2
     lr2_3: vec4<f32>,     // second repeat params3
     lr2_4: vec4<f32>,     // second repeat params4
     lr2_5: vec4<f32>,     // second repeat params5
-    lr2_perm: vec4<f32>,  // second precomputed shuffle permutation
 ) -> f32 {
     if mask_type < 0.5 || mask_params.z > 5000.0 {
         return 1.0;
@@ -722,7 +718,7 @@ fn compute_mask_with_linear_repeat(
     let lr1_sia = i32(lr4.w);
     let lr1_shape = lr1_sia / 100;
     let lr1_invert = ((lr1_sia % 100) / 10) == 1;
-    let lr1_random_mode = lr5.x;
+    let lr1_random = lr5.x > 0.5;
     let lr1_rng_lo = bitcast<u32>(lr5.y);
     let lr1_rng_hi = bitcast<u32>(lr5.z);
 
@@ -743,7 +739,7 @@ fn compute_mask_with_linear_repeat(
     let lr2_sia = i32(lr2_4.w);
     let lr2_shape = lr2_sia / 100;
     let lr2_invert = ((lr2_sia % 100) / 10) == 1;
-    let lr2_random_mode_mask = lr2_5.x;
+    let lr2_random = lr2_5.x > 0.5;
     let lr2_rng_lo_val = bitcast<u32>(lr2_5.y);
     let lr2_rng_hi_val = bitcast<u32>(lr2_5.z);
 
@@ -760,7 +756,7 @@ fn compute_mask_with_linear_repeat(
             let progress2 = calc_linear_repeat_progress(
                 j, lr2_count, lr2_start, lr2_end, lr2_phase, lr2_overlap,
                 lr2_shape, lr2_invert, lr2_ease_in, lr2_ease_out,
-                lr2_random_mode_mask, lr2_rng_lo_val, lr2_rng_hi_val, lr2_perm
+                lr2_random, lr2_rng_lo_val, lr2_rng_hi_val
             );
             let base2 = progress2.x;
             let interp2 = progress2.y;
@@ -777,7 +773,7 @@ fn compute_mask_with_linear_repeat(
             let progress1 = calc_linear_repeat_progress(
                 i, lr1_count, lr1_start, lr1_end, lr1_phase, lr1_overlap,
                 lr1_shape, lr1_invert, lr1_ease_in, lr1_ease_out,
-                lr1_random_mode, lr1_rng_lo, lr1_rng_hi, lr_perm
+                lr1_random, lr1_rng_lo, lr1_rng_hi
             );
             let base1 = progress1.x;
             let interp1 = progress1.y;
@@ -908,7 +904,7 @@ fn compute_mask_with_radial_repeat(
         let progress = calc_linear_repeat_progress(
             i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
             rr_shape, rr_invert, rr_ease_in, rr_ease_out,
-            select(0.0, 1.0, rr_random_order), rr_rng_lo, rr_rng_hi, vec4<f32>(0.0)
+            rr_random_order, rr_rng_lo, rr_rng_hi
         );
         let base_progress = progress.x;
         let interp_progress = progress.y;
@@ -1189,7 +1185,7 @@ fn compute_texture_mask_with_radial_repeat(
         let progress = calc_linear_repeat_progress(
             i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
             rr_shape, rr_invert, rr_ease_in, rr_ease_out,
-            select(0.0, 1.0, rr_random_order), rr_rng_lo, rr_rng_hi, vec4<f32>(0.0)
+            rr_random_order, rr_rng_lo, rr_rng_hi
         );
         let base_progress = progress.x;
         let interp_progress = progress.y;
@@ -1335,13 +1331,11 @@ fn apply_masks_blend(world_pos: vec2<f32>) -> f32 {
                 uniforms.mask1_lr_params3,
                 uniforms.mask1_lr_params4,
                 uniforms.mask1_lr_params5,
-                vec4<f32>(0.0),
                 uniforms.mask1_lr2_params1,
                 uniforms.mask1_lr2_params2,
                 uniforms.mask1_lr2_params3,
                 uniforms.mask1_lr2_params4,
                 uniforms.mask1_lr2_params5,
-                vec4<f32>(0.0),
             );
         } else if has_mask_stretch {
             factor *= compute_ue_mask_blend_factor_stretched(
@@ -1811,30 +1805,6 @@ fn java_random_next_int(state_hi: ptr<function, u32>, state_lo: ptr<function, u3
     return 0u;
 }
 
-// Extract a precomputed permutation index from 6 packed u32 slots
-// (params5.y, params5.z, perm.x, perm.y, perm.z, perm.w).
-// Each u32 holds 4 indices in 8-bit lanes.
-fn get_precomputed_index(
-    original_index: i32,
-    packed0: u32,
-    packed1: u32,
-    perm: vec4<f32>,
-) -> i32 {
-    let slot = original_index / 4;
-    let lane = u32(original_index % 4);
-    var word: u32;
-    switch slot {
-        case 0 { word = packed0; }
-        case 1 { word = packed1; }
-        case 2 { word = bitcast<u32>(perm.x); }
-        case 3 { word = bitcast<u32>(perm.y); }
-        case 4 { word = bitcast<u32>(perm.z); }
-        case 5 { word = bitcast<u32>(perm.w); }
-        default { return original_index; }
-    }
-    return i32((word >> (lane * 8u)) & 0xFFu);
-}
-
 // Fisher-Yates shuffle using pre-computed Java Random initial state.
 // state_lo/state_hi are the initial 48-bit state after seed initialization,
 // passed from CPU via bitcast<u32> on uniform floats.
@@ -1870,18 +1840,16 @@ fn calc_linear_repeat_progress(
     invert: bool,
     ease_in: f32,
     ease_out: f32,
-    random_mode: f32,
-    packed0: u32,
-    packed1: u32,
-    perm_data: vec4<f32>,
+    random_order: bool,
+    rng_state_lo: u32,
+    rng_state_hi: u32
 ) -> vec2<f32> {
+    // Get shuffled index if random_order is enabled
+    // The shuffled index is used for position calculation (base_position)
+    // while original index is used for baseProgress (rendering order)
     var shuffled_index = index;
-    if random_mode > 1.5 {
-        // Precomputed permutation (mode 2.0)
-        shuffled_index = get_precomputed_index(index, packed0, packed1, perm_data);
-    } else if random_mode > 0.5 {
-        // GPU-side Fisher-Yates fallback (mode 1.0)
-        shuffled_index = get_shuffled_index(index, count, packed0, packed1);
+    if random_order {
+        shuffled_index = get_shuffled_index(index, count, rng_state_lo, rng_state_hi);
     }
     
     let fi_shuffled = f32(shuffled_index);
@@ -2144,11 +2112,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let linear_repeat_shape = linear_repeat_shape_invert_alt / 100;
     let linear_repeat_invert = (linear_repeat_shape_invert_alt / 10) % 10 == 1;
     let linear_repeat_color_alt = linear_repeat_shape_invert_alt % 10 == 1;
-    let linear_repeat_random_mode = uniforms.linear_repeat_params5.x;
+    let linear_repeat_random_order = uniforms.linear_repeat_params5.x > 0.5;
     let linear_repeat_rng_lo = bitcast<u32>(uniforms.linear_repeat_params5.y);
     let linear_repeat_rng_hi = bitcast<u32>(uniforms.linear_repeat_params5.z);
     let linear_repeat_after_stretch_segment = uniforms.linear_repeat_params5.w > 0.5;
-    let linear_repeat_perm_data = uniforms.linear_repeat_perm;
     let linear_repeat_source_size = max(uniforms.linear_repeat_source_size.xy, vec2<f32>(1.0));
     // Linear repeat activation states:
     // - count < 0: effect not activated, render original
@@ -2175,10 +2142,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let lr2_shape = lr2_sia / 100;
     let lr2_invert = (lr2_sia / 10) % 10 == 1;
     let lr2_color_alt = lr2_sia % 10 == 1;
-    let lr2_random_mode = uniforms.linear_repeat2_params5.x;
+    let lr2_random_order = uniforms.linear_repeat2_params5.x > 0.5;
     let lr2_rng_lo = bitcast<u32>(uniforms.linear_repeat2_params5.y);
     let lr2_rng_hi = bitcast<u32>(uniforms.linear_repeat2_params5.z);
-    let lr2_perm_data = uniforms.linear_repeat2_perm;
     let lr2_enabled = lr2_count > 0;
     
     // Extract radial repeat effect params
@@ -2520,7 +2486,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 let progress2 = calc_linear_repeat_progress(
                     j, lr2_count, lr2_start, lr2_end, lr2_phase, lr2_overlap,
                     lr2_shape, lr2_invert, lr2_ease_in, lr2_ease_out,
-                    lr2_random_mode, lr2_rng_lo, lr2_rng_hi, lr2_perm_data
+                    lr2_random_order, lr2_rng_lo, lr2_rng_hi
                 );
                 let base2 = progress2.x;
                 interp2 = progress2.y;
@@ -2539,7 +2505,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                     i, total_copies, linear_repeat_start, linear_repeat_end,
                     linear_repeat_phase, linear_repeat_overlap, linear_repeat_shape,
                     linear_repeat_invert, linear_repeat_ease_in, linear_repeat_ease_out,
-                    linear_repeat_random_mode, linear_repeat_rng_lo, linear_repeat_rng_hi, linear_repeat_perm_data
+                    linear_repeat_random_order, linear_repeat_rng_lo, linear_repeat_rng_hi
                 );
                 let base_progress = progress.x;
                 let interp_progress = progress.y;
@@ -2708,7 +2674,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             let progress = calc_linear_repeat_progress(
                 i, rr_count, rr_start, rr_end, rr_phase, rr_overlap,
                 rr_shape, rr_invert, rr_ease_in, rr_ease_out,
-                select(0.0, 1.0, rr_random_order), rr_rng_lo, rr_rng_hi, vec4<f32>(0.0)
+                rr_random_order, rr_rng_lo, rr_rng_hi
             );
             let base_progress = progress.x;
             let interp_progress = progress.y;
