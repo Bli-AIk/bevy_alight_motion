@@ -56,19 +56,29 @@ pub(crate) fn process_pending_layers(
     // We need to collect actions to avoid borrowing issues
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
 
+    // Build O(1) lookup index: layer_id → index in pending.layers
+    let layer_index: std::collections::HashMap<u64, usize> = pending
+        .layers
+        .iter()
+        .enumerate()
+        .map(|(i, l)| (l.id, i))
+        .collect();
+
     // Helper function to check if an ancestor is active (with cycle detection)
     fn is_ancestor_active(
         layer_id: u64,
         layers: &[PendingLayer],
+        layer_index: &std::collections::HashMap<u64, usize>,
         global_time: f32,
         _time_offset: f32,
     ) -> bool {
-        is_ancestor_active_impl(layer_id, layers, global_time, _time_offset, &mut Vec::new())
+        is_ancestor_active_impl(layer_id, layers, layer_index, global_time, _time_offset, &mut Vec::new())
     }
 
     fn is_ancestor_active_impl(
         layer_id: u64,
         layers: &[PendingLayer],
+        layer_index: &std::collections::HashMap<u64, usize>,
         global_time: f32,
         _time_offset: f32,
         visited: &mut Vec<u64>,
@@ -83,7 +93,7 @@ pub(crate) fn process_pending_layers(
         }
         visited.push(layer_id);
 
-        let layer = match layers.iter().find(|l| l.id == layer_id) {
+        let layer = match layer_index.get(&layer_id).map(|&i| &layers[i]) {
             Some(l) => l,
             None => return true, // If not found, assume active (root)
         };
@@ -103,7 +113,7 @@ pub(crate) fn process_pending_layers(
         }
 
         // Check parent's active status
-        let parent = match layers.iter().find(|l| l.id == layer.parent) {
+        let parent = match layer_index.get(&layer.parent).map(|&i| &layers[i]) {
             Some(p) => p,
             None => return true, // Parent not in our list, assume active
         };
@@ -119,7 +129,7 @@ pub(crate) fn process_pending_layers(
         }
 
         // Recursively check grandparent
-        is_ancestor_active_impl(layer.parent, layers, global_time, _time_offset, visited)
+        is_ancestor_active_impl(layer.parent, layers, layer_index, global_time, _time_offset, visited)
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
@@ -136,7 +146,7 @@ pub(crate) fn process_pending_layers(
 
         // Check if all ancestors are active
         let ancestors_active =
-            is_ancestor_active(layer.id, &pending.layers, global_time, time_offset);
+            is_ancestor_active(layer.id, &pending.layers, &layer_index, global_time, time_offset);
 
         let should_be_active = own_time_active && ancestors_active;
 
@@ -204,6 +214,7 @@ pub(crate) fn process_pending_layers(
     fn count_spawn_depth(
         layer_id: u64,
         layers: &[PendingLayer],
+        layer_index: &std::collections::HashMap<u64, usize>,
         spawning_ids: &std::collections::HashSet<u64>,
         visited: &mut std::collections::HashSet<u64>,
     ) -> usize {
@@ -212,7 +223,7 @@ pub(crate) fn process_pending_layers(
         }
         visited.insert(layer_id);
 
-        let layer = match layers.iter().find(|l| l.id == layer_id) {
+        let layer = match layer_index.get(&layer_id).map(|&i| &layers[i]) {
             Some(l) => l,
             None => return 0,
         };
@@ -221,7 +232,7 @@ pub(crate) fn process_pending_layers(
         let parent_depth = if layer.parent == 0 || !spawning_ids.contains(&layer.parent) {
             0
         } else {
-            1 + count_spawn_depth(layer.parent, layers, spawning_ids, visited)
+            1 + count_spawn_depth(layer.parent, layers, layer_index, spawning_ids, visited)
         };
 
         // For embed content, containing_embed_id must also be spawned first
@@ -230,7 +241,7 @@ pub(crate) fn process_pending_layers(
         {
             0
         } else {
-            1 + count_spawn_depth(layer.containing_embed_id, layers, spawning_ids, visited)
+            1 + count_spawn_depth(layer.containing_embed_id, layers, layer_index, spawning_ids, visited)
         };
 
         // Return the maximum depth to ensure all dependencies are spawned first
@@ -241,7 +252,7 @@ pub(crate) fn process_pending_layers(
     to_spawn.sort_by_key(|&idx| {
         let layer_id = pending.layers[idx].id;
         let mut visited = std::collections::HashSet::new();
-        count_spawn_depth(layer_id, &pending.layers, &spawning_ids, &mut visited)
+        count_spawn_depth(layer_id, &pending.layers, &layer_index, &spawning_ids, &mut visited)
     });
 
     // Spawn budget: limit how many layers materialise per frame to spread
@@ -266,7 +277,7 @@ pub(crate) fn process_pending_layers(
             let layer = &pending.layers[idx];
             let depth = {
                 let mut visited = std::collections::HashSet::new();
-                count_spawn_depth(layer.id, &pending.layers, &spawning_ids, &mut visited)
+                count_spawn_depth(layer.id, &pending.layers, &layer_index, &spawning_ids, &mut visited)
             };
             bevy::log::info!(
                 "[SPAWN_ORDER]   depth={}: '{}' (id={}, parent={})",
