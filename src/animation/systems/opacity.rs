@@ -68,19 +68,6 @@ pub fn animate_text_opacity_system(
     }
 
     let global_time = playback.current_time_ms;
-    let text_count = query.iter().count();
-
-    static mut FRAME_COUNT: u32 = 0;
-    unsafe {
-        FRAME_COUNT += 1;
-        if FRAME_COUNT % 300 == 1 {
-            bevy::log::trace!(
-                "[TEXT] Processing {} text entities at time={:.0}",
-                text_count,
-                global_time
-            );
-        }
-    }
 
     for (animated, mut text_color, mut visibility, marker, force_hidden) in query.iter_mut() {
         let local_time = animated.calc_local_time(global_time);

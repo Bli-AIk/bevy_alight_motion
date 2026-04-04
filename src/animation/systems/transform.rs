@@ -24,12 +24,12 @@ use super::shared::{
     resolve_unwrapped_rotation_deg,
 };
 use super::transform_perspective::{
-    AnimatedSpatialState, PendingPerspectiveNullState, apply_perspective_parenting,
-    apply_pivot_offset, apply_sdf_linear_repeat, resolve_pending_perspective_null_state,
-    trace_position_enabled,
+    AnimatedSpatialState, PendingPerspectiveNullState, PerspectiveParentState,
+    apply_perspective_parenting, apply_pivot_offset, apply_sdf_linear_repeat,
+    resolve_pending_perspective_null_state, trace_position_enabled,
 };
 
-pub fn animate_transform_system(
+pub(crate) fn animate_transform_system(
     playback: Res<AmPlayback>,
     mut query: Query<(
         Entity,
@@ -45,26 +45,31 @@ pub fn animate_transform_system(
         Option<&crate::scene::AmPerspectiveNull>,
         Option<&ChildOf>,
     )>,
+    mut perspective_parents: Local<HashMap<Entity, PerspectiveParentState>>,
+    mut pending_perspective_nulls: Local<Vec<PendingPerspectiveNullState>>,
+    mut spatial_states: Local<HashMap<Entity, AnimatedSpatialState>>,
+    mut perspective_null_entities: Local<std::collections::HashSet<Entity>>,
 ) {
+    perspective_parents.clear();
+    pending_perspective_nulls.clear();
+    spatial_states.clear();
+    perspective_null_entities.clear();
+
     if playback.force_stopped {
         return;
     }
 
     let global_time = playback.current_time_ms;
-    let mut perspective_parents = HashMap::new();
-    let mut pending_perspective_nulls = Vec::new();
-    let mut spatial_states = HashMap::new();
 
     // Collect perspective-null entity IDs so the child_of fallback below only
     // fires when the Bevy parent is itself a perspective null.  Without this
     // gate, root-level perspective nulls whose ChildOf points at the scene-root
     // entity (which is *not* a perspective null) would never resolve.
-    let perspective_null_entities: std::collections::HashSet<Entity> = query
-        .iter()
-        .filter_map(|(entity, _, _, _, _, _, _, _, _, _, perspective_null, _)| {
+    perspective_null_entities.extend(query.iter().filter_map(
+        |(entity, _, _, _, _, _, _, _, _, _, perspective_null, _)| {
             perspective_null.is_some().then_some(entity)
-        })
-        .collect();
+        },
+    ));
 
     for (
         entity,
@@ -332,22 +337,24 @@ pub fn animate_transform_system(
     }
 
     while !pending_perspective_nulls.is_empty() {
-        let mut unresolved = Vec::new();
         let mut resolved_this_round = 0_usize;
+        let mut i = 0;
 
-        for pending in pending_perspective_nulls.drain(..) {
-            let Some(state) =
+        while i < pending_perspective_nulls.len() {
+            let pending = pending_perspective_nulls[i];
+            if let Some(state) =
                 resolve_pending_perspective_null_state(&pending, &perspective_parents)
-            else {
-                unresolved.push(pending);
-                continue;
-            };
-            perspective_parents.insert(pending.entity, state);
-            resolved_this_round += 1;
+            {
+                perspective_parents.insert(pending.entity, state);
+                pending_perspective_nulls.swap_remove(i);
+                resolved_this_round += 1;
+            } else {
+                i += 1;
+            }
         }
 
         if resolved_this_round == 0 {
-            for pending in &unresolved {
+            for pending in pending_perspective_nulls.iter() {
                 bevy::log::warn!(
                     "[PerspectiveNull] unresolved perspective parent chain at entity {:?}",
                     pending.entity
@@ -355,8 +362,6 @@ pub fn animate_transform_system(
             }
             break;
         }
-
-        pending_perspective_nulls = unresolved;
     }
 
     for (

@@ -28,19 +28,25 @@ pub fn propagate_render_layers_system(
         Option<&RenderLayers>,
         Option<&Visibility>,
     )>,
+    mut composite_layers: Local<HashMap<Entity, usize>>,
+    mut direct_embeds: Local<HashSet<Entity>>,
 ) {
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
 
-    let composite_layers: HashMap<Entity, usize> = composite_embed_query
-        .iter()
-        .map(|(entity, rtt)| (entity, rtt.render_layer))
-        .collect();
+    composite_layers.clear();
+    composite_layers.extend(
+        composite_embed_query
+            .iter()
+            .map(|(entity, rtt)| (entity, rtt.render_layer)),
+    );
 
-    let direct_embeds: HashSet<Entity> = direct_embed_query
-        .iter()
-        .filter(|(_, strategy)| **strategy == RenderStrategy::Direct)
-        .map(|(entity, _)| entity)
-        .collect();
+    direct_embeds.clear();
+    direct_embeds.extend(
+        direct_embed_query
+            .iter()
+            .filter(|(_, strategy)| **strategy == RenderStrategy::Direct)
+            .map(|(entity, _)| entity),
+    );
 
     let mut updates = 0;
 

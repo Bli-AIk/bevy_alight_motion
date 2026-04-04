@@ -379,8 +379,9 @@ pub(crate) fn cleanup_lift_composite_system(
         SdfCompositeLayersQuery,
         SpriteCompositeLayersQuery,
     )>,
+    mut released_layers: Local<Vec<usize>>,
 ) {
-    let mut released_layers = Vec::new();
+    released_layers.clear();
 
     for (camera_entity, marker) in camera_query.iter() {
         if owner_query.get(marker.owner_entity).is_ok() {
@@ -402,7 +403,7 @@ pub(crate) fn cleanup_lift_composite_system(
         return;
     }
 
-    for render_layer in released_layers {
+    for render_layer in released_layers.iter().copied() {
         for mut layers in &mut renderable_layers.p0() {
             *layers = layers.clone().without(render_layer);
         }

@@ -53,7 +53,7 @@ fn trace_parenthelper_once(key: impl Into<String>, message: impl FnOnce() -> Str
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperLocalState {
+pub(crate) struct ParentHelperLocalState {
     translation: Vec2,
     rotation_deg: f32,
     applied_scale: Vec2,
@@ -61,7 +61,7 @@ struct ParentHelperLocalState {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperSnapshot {
+pub(crate) struct ParentHelperSnapshot {
     local: ParentHelperLocalState,
     parent: Option<Entity>,
     has_effect: bool,
@@ -74,7 +74,7 @@ struct ParentHelperSnapshot {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperWorldState {
+pub(crate) struct ParentHelperWorldState {
     translation: Vec2,
     rotation_deg: f32,
     applied_scale: Vec2,
@@ -282,7 +282,7 @@ fn resolve_parenthelper_world(
     clippy::type_complexity,
     reason = "Bevy ParamSet queries are inherently complex"
 )]
-pub fn apply_parenthelper_system(
+pub(crate) fn apply_parenthelper_system(
     playback: Res<AmPlayback>,
     mut scale_contributions: ResMut<ParenthelperScaleContributions>,
     mut queries: ParamSet<(
@@ -304,14 +304,17 @@ pub fn apply_parenthelper_system(
             Option<&crate::scene::AmPerspectiveParent>,
         )>,
     )>,
+    mut snapshots: Local<HashMap<Entity, ParentHelperSnapshot>>,
+    mut world_cache: Local<HashMap<Entity, ParentHelperWorldState>>,
 ) {
     scale_contributions.map.clear();
+    snapshots.clear();
+    world_cache.clear();
     if playback.force_stopped {
         return;
     }
 
     let global_time = playback.current_time_ms;
-    let mut snapshots = HashMap::new();
 
     for (
         entity,
@@ -388,7 +391,6 @@ pub fn apply_parenthelper_system(
         );
     }
 
-    let mut world_cache = HashMap::new();
     for (entity, animated, marker, mut transform, perspective_parent) in queries.p1().iter_mut() {
         if !animated.parenthelper_has_effect || !animated.has_parent {
             continue;

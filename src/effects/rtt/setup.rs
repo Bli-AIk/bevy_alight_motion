@@ -96,6 +96,8 @@ pub fn setup_embed_scene_rtt_system(
     embed_rtt_query: Query<&EmbedSceneRtt>,
     pending_embed_rtt_query: Query<(), With<NeedsEmbedSceneRtt>>,
     layer_spec_query: Query<&crate::scene::AmLayerSpec>,
+    mut entities_with_depth: Local<Vec<(Entity, u32)>>,
+    mut processed_layers: Local<std::collections::HashMap<Entity, usize>>,
 ) {
     let debug_show_fill_rtt = std::env::var_os("AM_GROUP_FILL_DEBUG_SHOW_RTT").is_some();
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
@@ -105,15 +107,13 @@ pub fn setup_embed_scene_rtt_system(
     // Sort entities by nesting depth (parent before child) so all levels can be
     // set up in a single pass within one frame instead of deferring child embeds.
     // 按嵌套深度排序（父先子后），在单帧内一次遍历完成所有层级的 RTT 设置。
-    let mut entities_with_depth: Vec<(Entity, u32)> = query
-        .iter()
-        .map(|(e, ..)| {
-            let depth = embed_pending_depth(e, &parent_query, &pending_embed_rtt_query);
-            (e, depth)
-        })
-        .collect();
+    entities_with_depth.clear();
+    entities_with_depth.extend(query.iter().map(|(e, ..)| {
+        let depth = embed_pending_depth(e, &parent_query, &pending_embed_rtt_query);
+        (e, depth)
+    }));
     entities_with_depth.sort_by_key(|&(_, depth)| depth);
-    let mut processed_layers = std::collections::HashMap::<Entity, usize>::new();
+    processed_layers.clear();
 
     let budget = rtt_budget.max_per_frame;
     let mut processed_count: usize = 0;

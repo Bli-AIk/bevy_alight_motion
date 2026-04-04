@@ -6,31 +6,31 @@ use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 use crate::scene::AmLayerSpec;
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct PerspectiveParentState {
-    pub(super) base_location: Vec2,
-    pub(super) pivot: Vec2,
-    pub(super) rotation_deg: f32,
-    pub(super) scale: Vec2,
-    pub(super) z: f32,
+pub(crate) struct PerspectiveParentState {
+    pub(crate) base_location: Vec2,
+    pub(crate) pivot: Vec2,
+    pub(crate) rotation_deg: f32,
+    pub(crate) scale: Vec2,
+    pub(crate) z: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct AnimatedSpatialState {
-    pub(super) translation: Vec2,
-    pub(super) rotation_deg: f32,
-    pub(super) pivot_x: f32,
-    pub(super) pivot_y: f32,
-    pub(super) pivot_comp_scale: Vec2,
-    pub(super) effective_scale: Vec2,
-    pub(super) z: f32,
-    pub(super) has_parent: bool,
+pub(crate) struct AnimatedSpatialState {
+    pub(crate) translation: Vec2,
+    pub(crate) rotation_deg: f32,
+    pub(crate) pivot_x: f32,
+    pub(crate) pivot_y: f32,
+    pub(crate) pivot_comp_scale: Vec2,
+    pub(crate) effective_scale: Vec2,
+    pub(crate) z: f32,
+    pub(crate) has_parent: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct PendingPerspectiveNullState {
-    pub(super) entity: Entity,
-    pub(super) parent_entity: Option<Entity>,
-    pub(super) child_state: AnimatedSpatialState,
+pub(crate) struct PendingPerspectiveNullState {
+    pub(crate) entity: Entity,
+    pub(crate) parent_entity: Option<Entity>,
+    pub(crate) child_state: AnimatedSpatialState,
 }
 
 pub(super) fn embed_like_pivot_compensation(
