@@ -67,14 +67,14 @@ impl EmbedSceneRenderLayerPool {
     }
 }
 
-/// Per-frame budget for RTT texture creation. Limits how many composite embed
-/// textures are allocated in a single frame to avoid GPU upload spikes.
+/// Per-frame budget for RTT setup (texture allocation, camera/mesh creation).
+/// Limits how many composite embed RTT pipelines are initialised in a single
+/// frame to avoid GPU upload spikes that cause stuttering.
 ///
-/// Set `AM_RTT_BUDGET_PER_FRAME` to a positive value to enable throttling.
-/// Default is 0 (unlimited — all textures created immediately).
+/// Override with `AM_RTT_BUDGET_PER_FRAME` (0 = unlimited).  Default is 4.
 ///
-/// 每帧 RTT 纹理创建预算。限制单帧内分配的 composite embed 纹理数量，
-/// 避免 GPU 上传尖峰导致卡顿。默认值为 0（不限制）。
+/// 每帧 RTT 设置预算。限制单帧内初始化的 composite embed RTT 管线数量，
+/// 避免 GPU 上传尖峰导致卡顿。默认值为 4。
 #[derive(Resource)]
 pub struct RttSetupBudget {
     pub max_per_frame: usize,
@@ -85,7 +85,7 @@ impl Default for RttSetupBudget {
         let max = std::env::var("AM_RTT_BUDGET_PER_FRAME")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
+            .unwrap_or(4);
         Self { max_per_frame: max }
     }
 }

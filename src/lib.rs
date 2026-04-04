@@ -52,6 +52,7 @@ pub mod scene;
 pub mod schema;
 pub mod sdf;
 pub mod sdf_material;
+mod uniform_setters;
 pub mod validation;
 
 /// Prelude module for convenient imports.

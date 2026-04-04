@@ -14,7 +14,7 @@ use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 pub(crate) fn process_repeat_effect(
     animated: &AmAnimated,
     layer_time: f32,
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
@@ -45,8 +45,8 @@ pub(crate) fn process_repeat_effect(
             alpha
         );
 
-        material.uniform_data.repeat_params1 = Vec4::new(count, offset[0], offset[1], angle);
-        material.uniform_data.repeat_params2 = Vec4::new(repeat_scale, alpha, 0.0, 0.0);
+        uniform.repeat_params1 = Vec4::new(count, offset[0], offset[1], angle);
+        uniform.repeat_params2 = Vec4::new(repeat_scale, alpha, 0.0, 0.0);
 
         let n = (count.floor() as i32 - 1).max(0);
         let angle_rad = angle.to_radians();
@@ -113,7 +113,7 @@ pub(crate) fn process_repeat_effect(
 
         super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
     } else {
-        material.uniform_data.repeat_params1 = Vec4::ZERO;
-        material.uniform_data.repeat_params2 = Vec4::new(1.0, 1.0, 0.0, 0.0);
+        uniform.repeat_params1 = Vec4::ZERO;
+        uniform.repeat_params2 = Vec4::new(1.0, 1.0, 0.0, 0.0);
     }
 }

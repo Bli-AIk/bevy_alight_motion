@@ -20,18 +20,18 @@ fn trace_effect_layer_enabled(var_name: &str, layer_id: u64) -> bool {
 }
 
 pub(super) fn update_replace_color(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
     has_replace_color: bool,
 ) {
     let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
     if trace_effect_layer_enabled("AM_DISABLE_REPLACE_COLOR_IDS", animated.layer_id) {
-        material.uniform_data.replace_color_flags.x = 0.0;
-        material.uniform_data.replace_color_flags.y = 0.0;
-        material.uniform_data.replace_old_color = Vec4::ZERO;
-        material.uniform_data.replace_new_color = Vec4::ZERO;
-        material.uniform_data.replace_color_params = Vec4::ZERO;
+        uniform.replace_color_flags.x = 0.0;
+        uniform.replace_color_flags.y = 0.0;
+        uniform.replace_old_color = Vec4::ZERO;
+        uniform.replace_new_color = Vec4::ZERO;
+        uniform.replace_color_params = Vec4::ZERO;
         bevy::log::warn!(
             "[UnifiedTrace] layer={} replace-color disabled by AM_DISABLE_REPLACE_COLOR_IDS",
             animated.layer_id
@@ -70,7 +70,7 @@ pub(super) fn update_replace_color(
             alpha
         );
 
-        material.set_replace_color(
+        uniform.set_replace_color(
             animated.replace_old_color,
             new_color,
             threshold,
@@ -83,8 +83,8 @@ pub(super) fn update_replace_color(
                 "[UnifiedTrace] layer={} replace-apply new={:?} params={:?} flags={:?}",
                 animated.layer_id,
                 new_color,
-                material.uniform_data.replace_color_params,
-                material.uniform_data.replace_color_flags
+                uniform.replace_color_params,
+                uniform.replace_color_flags
             );
         }
     } else if trace_layer {
@@ -93,13 +93,13 @@ pub(super) fn update_replace_color(
 }
 
 pub(super) fn update_threshold(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
     let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
     if trace_effect_layer_enabled("AM_DISABLE_THRESHOLD_IDS", animated.layer_id) {
-        material.set_threshold(false, 0.5, 0.0, false, 0);
+        uniform.set_threshold(false, 0.5, 0.0, false, 0);
         bevy::log::warn!(
             "[UnifiedTrace] layer={} threshold disabled by AM_DISABLE_THRESHOLD_IDS",
             animated.layer_id
@@ -111,7 +111,7 @@ pub(super) fn update_threshold(
     if has_threshold {
         let threshold = interpolate_float(&animated.threshold_value, layer_time).unwrap_or(0.5);
         let feather = interpolate_float(&animated.threshold_feather, layer_time).unwrap_or(0.0);
-        material.set_threshold(
+        uniform.set_threshold(
             true,
             threshold,
             feather,
@@ -122,8 +122,8 @@ pub(super) fn update_threshold(
             bevy::log::warn!(
                 "[UnifiedTrace] layer={} threshold enabled params={:?} flags={:?}",
                 animated.layer_id,
-                material.uniform_data.threshold_params,
-                material.uniform_data.replace_color_flags
+                uniform.threshold_params,
+                uniform.replace_color_flags
             );
         }
     } else if trace_layer {
@@ -135,7 +135,7 @@ pub(super) fn update_threshold(
 }
 
 pub(super) fn update_grid(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
@@ -149,7 +149,7 @@ pub(super) fn update_grid(
         let color = interpolate_color(&animated.grid_color, layer_time)
             .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
 
-        material.set_grid(
+        uniform.set_grid(
             true,
             animated.grid_punchout,
             animated.grid_screen_space,
@@ -164,7 +164,7 @@ pub(super) fn update_grid(
 }
 
 pub(super) fn update_pixelate(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
     global_transform: &GlobalTransform,
@@ -176,10 +176,10 @@ pub(super) fn update_pixelate(
     let globally_disabled = disabled_effects.is_some_and(|de| de.contains("pixelate"));
     if trace_effect_layer_enabled("AM_DISABLE_PIXELATE_IDS", animated.layer_id) || globally_disabled
     {
-        material.set_pixelate(false, false, 1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 1.0);
-        material.uniform_data.pixelate_flags = Vec4::ZERO;
-        material.uniform_data.pixelate_params1 = Vec4::ZERO;
-        material.uniform_data.pixelate_params2 = Vec4::ZERO;
+        uniform.set_pixelate(false, false, 1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 1.0);
+        uniform.pixelate_flags = Vec4::ZERO;
+        uniform.pixelate_params1 = Vec4::ZERO;
+        uniform.pixelate_params2 = Vec4::ZERO;
         if trace_layer {
             bevy::log::warn!(
                 "[UnifiedTrace] layer={} pixelate disabled by blacklist",
@@ -208,7 +208,7 @@ pub(super) fn update_pixelate(
             angle
         );
 
-        material.set_pixelate(
+        uniform.set_pixelate(
             true,
             animated.pixelate_screen_space,
             size,
@@ -225,19 +225,19 @@ pub(super) fn update_pixelate(
         let local_y_world = global_transform.transform_point(Vec3::Y) - origin;
         let scene_scale_x = local_x_world.length() / root_scale;
         let scene_scale_y = local_y_world.length() / root_scale;
-        material.uniform_data.pixelate_flags.z = scene_scale_x;
-        material.uniform_data.pixelate_flags.w = scene_scale_y;
+        uniform.pixelate_flags.z = scene_scale_x;
+        uniform.pixelate_flags.w = scene_scale_y;
 
         let local_x_world = global_transform.transform_point(Vec3::X) - origin;
         let scene_rotation = local_x_world.y.atan2(local_x_world.x);
-        material.uniform_data.pixelate_params2.w = scene_rotation;
+        uniform.pixelate_params2.w = scene_rotation;
         if trace_layer {
             bevy::log::warn!(
                 "[UnifiedTrace] layer={} pixelate enabled flags={:?} params1={:?} params2={:?}",
                 animated.layer_id,
-                material.uniform_data.pixelate_flags,
-                material.uniform_data.pixelate_params1,
-                material.uniform_data.pixelate_params2
+                uniform.pixelate_flags,
+                uniform.pixelate_params1,
+                uniform.pixelate_params2
             );
         }
     } else if trace_layer {

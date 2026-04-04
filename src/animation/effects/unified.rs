@@ -282,9 +282,11 @@ pub fn animate_unified_effect_system(
         let has_pixelate =
             animated.pixelate_size.value.is_some() || !animated.pixelate_size.keyframes.is_empty();
 
-        let Some(material) = materials.get_mut(&material_handle.0) else {
+        // Read current uniform immutably, clone for mutation, compare at end
+        let Some(mat_ref) = materials.get(&material_handle.0) else {
             continue;
         };
+        let mut new_uniform = mat_ref.uniform_data;
 
         if trace_unified_color_enabled(animated.layer_id) {
             bevy::log::warn!(
@@ -292,37 +294,25 @@ pub fn animate_unified_effect_system(
                 animated.layer_id,
                 marker.label,
                 layer_time,
-                material.uniform_data.color,
-                material.uniform_data.replace_color_flags,
-                material.uniform_data.threshold_params
+                new_uniform.color,
+                new_uniform.replace_color_flags,
+                new_uniform.threshold_params
             );
         }
 
         if force_white_tint_enabled(animated.layer_id) {
-            material.uniform_data.color.x = 1.0;
-            material.uniform_data.color.y = 1.0;
-            material.uniform_data.color.z = 1.0;
+            new_uniform.color.x = 1.0;
+            new_uniform.color.y = 1.0;
+            new_uniform.color.z = 1.0;
         }
 
-        if std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
-            && (marker.label == "长方形 1" || marker.label == "长方形 2")
-        {
-            trace_parenthelper_unified_state(
-                marker,
-                material,
-                transform,
-                global_transform,
-                visibility,
-                render_layers,
-                child_of.map(|c| c.parent()),
-            );
-        }
+        let trace_parenthelper = std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
+            && (marker.label == "长方形 1" || marker.label == "长方形 2");
 
         // Always set original_size so pixelate (and other effects) have correct display dimensions
-        material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, orig_width, orig_height);
+        new_uniform.original_size = Vec4::new(orig_width, orig_height, orig_width, orig_height);
 
-        update_wipe(material, animated, layer_time, has_wipe);
+        update_wipe(&mut new_uniform, animated, layer_time, has_wipe);
 
         // Update stretch2 parameters (directional UV stretch)
         let has_stretch2 = animated.stretch2_scale.value.is_some()
@@ -331,26 +321,38 @@ pub fn animate_unified_effect_system(
         let s2_angle_rad = interpolate_float(&animated.stretch2_angle, layer_time)
             .unwrap_or(0.0)
             .to_radians();
-        update_stretch2_uniform(material, animated, has_stretch2, s2_scale, s2_angle_rad);
+        update_stretch2_uniform(
+            &mut new_uniform,
+            animated,
+            has_stretch2,
+            s2_scale,
+            s2_angle_rad,
+        );
 
-        update_wavewarp2(material, animated, layer_time, orig_width, orig_height);
+        update_wavewarp2(
+            &mut new_uniform,
+            animated,
+            layer_time,
+            orig_width,
+            orig_height,
+        );
 
-        update_mirror(material, animated, layer_time);
+        update_mirror(&mut new_uniform, animated, layer_time);
 
-        update_lift(material, animated, layer_time);
+        update_lift(&mut new_uniform, animated, layer_time);
 
         update_rays(
-            material,
+            &mut new_uniform,
             animated,
             _embed_marker,
             &parent_animated_query,
             global_time,
         );
 
-        update_rgb_split(material, animated, layer_time);
+        update_rgb_split(&mut new_uniform, animated, layer_time);
 
         update_exposure(
-            material,
+            &mut new_uniform,
             animated,
             _embed_marker,
             &parent_animated_query,
@@ -358,17 +360,17 @@ pub fn animate_unified_effect_system(
             layer_time,
         );
 
-        update_chromakey(material, animated, layer_time);
+        update_chromakey(&mut new_uniform, animated, layer_time);
 
-        update_blend(material, animated);
+        update_blend(&mut new_uniform, animated);
 
-        update_solidcolor(material, animated, layer_time);
+        update_solidcolor(&mut new_uniform, animated, layer_time);
 
         let has_blur =
             animated.blur_strength.value.is_some() || !animated.blur_strength.keyframes.is_empty();
 
         update_blur_mesh(
-            material,
+            &mut new_uniform,
             animated,
             layer_time,
             orig_width,
@@ -397,7 +399,7 @@ pub fn animate_unified_effect_system(
         }
 
         update_stretch_mesh(
-            material,
+            &mut new_uniform,
             animated,
             layer_time,
             has_stretch,
@@ -416,7 +418,7 @@ pub fn animate_unified_effect_system(
         );
 
         update_base_mesh(
-            material,
+            &mut new_uniform,
             animated,
             layer_time,
             has_stretch,
@@ -435,16 +437,16 @@ pub fn animate_unified_effect_system(
         // Update palette map alpha if present
         let has_palette =
             animated.palette_alpha.value.is_some() || !animated.palette_alpha.keyframes.is_empty();
-        update_palette(material, animated, layer_time, has_palette);
+        update_palette(&mut new_uniform, animated, layer_time, has_palette);
 
         let has_replace_color = animated.replace_old_color.w > 0.0;
-        update_replace_color(material, animated, layer_time, has_replace_color);
+        update_replace_color(&mut new_uniform, animated, layer_time, has_replace_color);
 
-        update_threshold(material, animated, layer_time);
+        update_threshold(&mut new_uniform, animated, layer_time);
 
-        update_grid(material, animated, layer_time);
+        update_grid(&mut new_uniform, animated, layer_time);
         update_pixelate(
-            material,
+            &mut new_uniform,
             animated,
             layer_time,
             global_transform,
@@ -457,7 +459,7 @@ pub fn animate_unified_effect_system(
         super::repeat::process_repeat_effect(
             animated,
             layer_time,
-            material,
+            &mut new_uniform,
             orig_width,
             orig_height,
             mesh2d,
@@ -467,7 +469,7 @@ pub fn animate_unified_effect_system(
         super::repeat::process_linear_repeat_effect(
             animated,
             layer_time,
-            material,
+            &mut new_uniform,
             orig_width,
             orig_height,
             mesh2d,
@@ -477,12 +479,18 @@ pub fn animate_unified_effect_system(
         super::repeat::process_radial_repeat_effect(
             animated,
             layer_time,
-            material,
+            &mut new_uniform,
             orig_width,
             orig_height,
             mesh2d,
             &mut meshes,
         );
+
+        // Only mutate the material asset if uniform data actually changed
+        if new_uniform != mat_ref.uniform_data {
+            let material = materials.get_mut(&material_handle.0).unwrap();
+            material.uniform_data = new_uniform;
+        }
 
         if trace_unified_color_enabled(animated.layer_id) {
             bevy::log::warn!(
@@ -490,9 +498,21 @@ pub fn animate_unified_effect_system(
                 animated.layer_id,
                 marker.label,
                 layer_time,
-                material.uniform_data.color,
-                material.uniform_data.replace_color_flags,
-                material.uniform_data.threshold_params
+                new_uniform.color,
+                new_uniform.replace_color_flags,
+                new_uniform.threshold_params
+            );
+        }
+
+        if trace_parenthelper && let Some(material) = materials.get(&material_handle.0) {
+            trace_parenthelper_unified_state(
+                marker,
+                material,
+                transform,
+                global_transform,
+                visibility,
+                render_layers,
+                child_of.map(|c| c.parent()),
             );
         }
     }
