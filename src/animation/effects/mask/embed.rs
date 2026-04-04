@@ -14,7 +14,7 @@ pub(super) fn apply_embed_mask_uv(
     mask1: &crate::scene::AmMaskEntry,
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     fit_scale: f32,
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
+    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
 ) {
     let Ok((mask_gt, _, _)) = mask_layer_query.get(mask_entity) else {
         return;
@@ -34,6 +34,6 @@ pub(super) fn apply_embed_mask_uv(
         mask_rotation
     );
 
-    material.uniform_data.mask_params = Vec4::new(mask_pos.x, mask_pos.y, half_w, half_h);
-    material.uniform_data.mask2_flags.y = mask_rotation;
+    uniform.mask_params = Vec4::new(mask_pos.x, mask_pos.y, half_w, half_h);
+    uniform.mask2_flags.y = mask_rotation;
 }
