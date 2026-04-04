@@ -218,10 +218,29 @@ pub fn frame_test_loop(
 
             if state.warmup_frames_remaining == 0 {
                 state.stage = FrameTestStage::Running;
-                println!(
-                    "[FRAME-TEST] Warmup complete, pass 1/{}: shader warmup measurement ({:.0}s, data discarded)...",
-                    2, state.measure_duration_secs
-                );
+                if state.measurement_pass == 1 {
+                    println!(
+                        "[FRAME-TEST] Warmup complete, pass 1/2: shader warmup ({:.0}s, discarded)...",
+                        state.measure_duration_secs
+                    );
+                } else {
+                    // Inter-pass warmup done → start real measurement
+                    if state.play_once {
+                        playback.looping = false;
+                        playback.current_time_ms = 0.0;
+                        playback.playing = true;
+                        state.prev_time_ms = 0.0;
+                    }
+                    let mode_msg = if state.play_once {
+                        format!("one full animation ({:.0}ms)", playback.total_time_ms)
+                    } else {
+                        format!("{:.0}s", state.measure_duration_secs)
+                    };
+                    println!(
+                        "[FRAME-TEST] Stabilized, pass 2/2: measuring FPS for {}...",
+                        mode_msg
+                    );
+                }
             }
         }
 
@@ -256,28 +275,19 @@ pub fn frame_test_loop(
 
             if should_finish {
                 if state.measurement_pass == 1 {
-                    // First pass done: all shaders should be compiled now.
-                    // Discard data and start the real measurement.
+                    // First pass done: all shaders compiled, pipelines cached.
+                    // Go back to warmup for inter-pass stabilization before real measurement.
                     let discarded = state.frame_times.len();
                     state.frame_times.clear();
                     state.measurement_elapsed = 0.0;
                     state.animation_completed = false;
                     state.measurement_pass = 2;
-                    if state.play_once {
-                        playback.looping = false;
-                        playback.current_time_ms = 0.0;
-                        playback.playing = true;
-                        state.prev_time_ms = 0.0;
-                    }
-                    let mode_msg = if state.play_once {
-                        format!("one full animation ({:.0}ms)", playback.total_time_ms)
-                    } else {
-                        format!("{:.0}s", state.measure_duration_secs)
-                    };
+                    state.warmup_frames_remaining = state.warmup_frames;
+                    state.stage = FrameTestStage::Warmup;
                     println!(
-                        "[FRAME-TEST] Pass 1 complete ({} frames discarded, shaders warmed). \
-                         Pass 2: measuring FPS for {}...",
-                        discarded, mode_msg
+                        "[FRAME-TEST] Pass 1 complete ({} frames discarded). \
+                         Stabilizing ({} frames)...",
+                        discarded, state.warmup_frames
                     );
                 } else {
                     state.stage = FrameTestStage::Finished;
