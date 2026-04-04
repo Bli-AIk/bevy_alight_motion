@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 
-use crate::sdf_material::SdfMaterial;
+use crate::sdf_material::SdfMaterialUniform;
 
 use super::components::AmAnimated;
 use super::interpolation::{interpolate_float, interpolate_vec2};
@@ -202,14 +202,14 @@ pub(crate) fn apply_sdf_mask_radial_repeat(
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     playback_time: f32,
     fit_scale: f32,
-    material: &mut SdfMaterial,
+    uniform: &mut SdfMaterialUniform,
 ) {
     let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) else {
-        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+        uniform.mask1_rr_params1 = Vec4::ZERO;
         return;
     };
     let Ok((_, animated, _)) = mask_layer_query.get(mask_entity) else {
-        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+        uniform.mask1_rr_params1 = Vec4::ZERO;
         return;
     };
 
@@ -253,12 +253,11 @@ pub(crate) fn apply_sdf_mask_radial_repeat(
         let off_world_y = -offset[1] * fit_scale;
         let radius_world = radius * fit_scale;
 
-        material.uniform_data.mask1_rr_params1 =
-            Vec4::new(rr_count, radius_world, orientation, start_angle);
-        material.uniform_data.mask1_rr_params2 = Vec4::new(sweep, base_scale, angle, rr_scale);
-        material.uniform_data.mask1_rr_params3 = Vec4::new(alpha, off_world_x, off_world_y, 0.0);
-        material.uniform_data.mask1_rr_params4 = Vec4::new(start, end, phase, overlap);
-        material.uniform_data.mask1_rr_params5 = Vec4::new(
+        uniform.mask1_rr_params1 = Vec4::new(rr_count, radius_world, orientation, start_angle);
+        uniform.mask1_rr_params2 = Vec4::new(sweep, base_scale, angle, rr_scale);
+        uniform.mask1_rr_params3 = Vec4::new(alpha, off_world_x, off_world_y, 0.0);
+        uniform.mask1_rr_params4 = Vec4::new(start, end, phase, overlap);
+        uniform.mask1_rr_params5 = Vec4::new(
             ease_in,
             ease_out,
             sia as f32,
@@ -269,7 +268,7 @@ pub(crate) fn apply_sdf_mask_radial_repeat(
             },
         );
     } else {
-        material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+        uniform.mask1_rr_params1 = Vec4::ZERO;
     }
 }
 
@@ -280,14 +279,14 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
     mask_layer_query: &Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
     playback_time: f32,
     fit_scale: f32,
-    material: &mut SdfMaterial,
+    uniform: &mut SdfMaterialUniform,
 ) {
     let Some(&mask_entity) = pending.spawned_entities.get(&mask.mask_layer_id) else {
-        material.uniform_data.mask1_lr_params1 = Vec4::ZERO;
+        uniform.mask1_lr_params1 = Vec4::ZERO;
         return;
     };
     let Ok((_, animated, _)) = mask_layer_query.get(mask_entity) else {
-        material.uniform_data.mask1_lr_params1 = Vec4::ZERO;
+        uniform.mask1_lr_params1 = Vec4::ZERO;
         return;
     };
 
@@ -340,14 +339,12 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
         let off_world_x = off[0] * fit_scale * repeat_scale_x;
         let off_world_y = -off[1] * fit_scale * repeat_scale_y;
 
-        material.uniform_data.mask1_lr_params1 =
-            Vec4::new(lr_count, pos_world_x, pos_world_y, angle);
-        material.uniform_data.mask1_lr_params2 =
-            Vec4::new(off_world_x, off_world_y, lr_scale, alpha);
-        material.uniform_data.mask1_lr_params3 = Vec4::new(start, end, phase, overlap);
-        material.uniform_data.mask1_lr_params4 = Vec4::new(ease_in, ease_out, 0.0, sia as f32);
+        uniform.mask1_lr_params1 = Vec4::new(lr_count, pos_world_x, pos_world_y, angle);
+        uniform.mask1_lr_params2 = Vec4::new(off_world_x, off_world_y, lr_scale, alpha);
+        uniform.mask1_lr_params3 = Vec4::new(start, end, phase, overlap);
+        uniform.mask1_lr_params4 = Vec4::new(ease_in, ease_out, 0.0, sia as f32);
 
-        material.uniform_data.mask1_lr_params5 = if animated.linear_repeat_random_order {
+        uniform.mask1_lr_params5 = if animated.linear_repeat_random_order {
             let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
             let (lo, hi) =
                 crate::animation::effects::repeat::compute_java_random_state_packed(seed);
@@ -356,6 +353,6 @@ pub(crate) fn apply_sdf_mask_linear_repeat(
             Vec4::ZERO
         };
     } else {
-        material.uniform_data.mask1_lr_params1 = Vec4::ZERO;
+        uniform.mask1_lr_params1 = Vec4::ZERO;
     }
 }

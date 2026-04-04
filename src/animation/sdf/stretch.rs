@@ -75,17 +75,24 @@ pub fn animate_sdf_stretch_system(
             let Ok(material_handle) = sdf_query.get(child) else {
                 continue;
             };
-            let Some(material) = materials.get_mut(material_handle) else {
+            let Some(mat_ref) = materials.get(material_handle) else {
                 continue;
             };
-            material.uniform_data.stretch_params = stretch_params;
-            material.uniform_data.stretch_meta = stretch_meta;
+            let mut new_uniform = mat_ref.uniform_data;
 
-            let base_half = compute_sdf_shape_half_extent(&material.uniform_data)
-                + material.uniform_data.params.z.abs() * 2.0;
+            new_uniform.stretch_params = stretch_params;
+            new_uniform.stretch_meta = stretch_meta;
+
+            let base_half =
+                compute_sdf_shape_half_extent(&new_uniform) + new_uniform.params.z.abs() * 2.0;
             let needed = base_half + extra;
-            if needed > material.uniform_data.frame_half {
-                material.uniform_data.frame_half = needed;
+            if needed > new_uniform.frame_half {
+                new_uniform.frame_half = needed;
+            }
+
+            if new_uniform != mat_ref.uniform_data {
+                let material = materials.get_mut(material_handle).unwrap();
+                material.uniform_data = new_uniform;
             }
         }
     }

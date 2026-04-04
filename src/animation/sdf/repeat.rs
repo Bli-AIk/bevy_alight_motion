@@ -99,14 +99,21 @@ pub fn animate_sdf_repeat_system(
             let Ok(material_handle) = sdf_query.get(child) else {
                 continue;
             };
-            let Some(material) = materials.get_mut(&material_handle.0) else {
+            let Some(mat_ref) = materials.get(&material_handle.0) else {
                 continue;
             };
-            material.uniform_data.linear_repeat_params1 = params1;
-            material.uniform_data.linear_repeat_params2 = params2;
-            material.uniform_data.linear_repeat_params3 = params3;
-            material.uniform_data.linear_repeat_params4 = params4;
-            material.uniform_data.linear_repeat_params5 = params5;
+            let mut new_uniform = mat_ref.uniform_data;
+
+            new_uniform.linear_repeat_params1 = params1;
+            new_uniform.linear_repeat_params2 = params2;
+            new_uniform.linear_repeat_params3 = params3;
+            new_uniform.linear_repeat_params4 = params4;
+            new_uniform.linear_repeat_params5 = params5;
+
+            if new_uniform != mat_ref.uniform_data {
+                let material = materials.get_mut(&material_handle.0).unwrap();
+                material.uniform_data = new_uniform;
+            }
         }
     }
 }

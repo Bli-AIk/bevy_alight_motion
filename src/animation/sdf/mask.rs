@@ -75,17 +75,26 @@ pub fn update_sdf_mask_system(
             let Ok((material_handle, child_global_transform)) = sdf_query.get_mut(child) else {
                 continue;
             };
-            let Some(material) = materials.get_mut(&material_handle.0) else {
+            let Some(mat_ref) = materials.get(&material_handle.0) else {
                 continue;
             };
             let _child_translation = child_global_transform.translation();
             let _child_scale = child_global_transform.to_scale_rotation_translation().0;
-            let _frame_half = material.uniform_data.frame_half;
+            let _frame_half = mat_ref.uniform_data.frame_half;
+
+            let mut new_uniform = mat_ref.uniform_data;
 
             if active_masks.is_empty() {
-                material.uniform_data.mask_type = 0.0;
-                material.uniform_data.mask2_type = 0.0;
-                material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+                new_uniform.mask_type = 0.0;
+                new_uniform.mask2_type = 0.0;
+                new_uniform.mask1_rr_params1 = Vec4::ZERO;
+
+                #[expect(clippy::excessive_nesting)]
+                // reason: guard against spurious GPU re-upload inside empty-masks branch
+                if new_uniform != mat_ref.uniform_data {
+                    let material = materials.get_mut(&material_handle.0).unwrap();
+                    material.uniform_data = new_uniform;
+                }
                 continue;
             }
 
@@ -99,22 +108,21 @@ pub fn update_sdf_mask_system(
                     fit_scale,
                 );
 
-            material.uniform_data.mask_params = Vec4::new(
+            new_uniform.mask_params = Vec4::new(
                 mask1_center.x,
                 mask1_center.y,
                 mask1_half_size.x,
                 mask1_half_size.y,
             );
-            material.uniform_data.mask_blend =
-                Vec4::new(mask1_blend.x, mask1_blend.y, mask1_blend.z, 0.0);
+            new_uniform.mask_blend = Vec4::new(mask1_blend.x, mask1_blend.y, mask1_blend.z, 0.0);
 
             let base_type1 = if mask1.is_circle { 2.0 } else { 1.0 };
-            material.uniform_data.mask_type = if mask1.is_exclude {
+            new_uniform.mask_type = if mask1.is_exclude {
                 base_type1 + 2.0
             } else {
                 base_type1
             };
-            material.uniform_data.mask_rotation = mask1_rotation;
+            new_uniform.mask_rotation = mask1_rotation;
 
             apply_sdf_mask_radial_repeat(
                 mask1,
@@ -122,7 +130,7 @@ pub fn update_sdf_mask_system(
                 &mask_layer_query,
                 playback.current_time_ms,
                 fit_scale,
-                material,
+                &mut new_uniform,
             );
 
             apply_sdf_mask_linear_repeat(
@@ -131,7 +139,7 @@ pub fn update_sdf_mask_system(
                 &mask_layer_query,
                 playback.current_time_ms,
                 fit_scale,
-                material,
+                &mut new_uniform,
             );
 
             if active_masks.len() >= 2 {
@@ -145,21 +153,26 @@ pub fn update_sdf_mask_system(
                         fit_scale,
                     );
 
-                material.uniform_data.mask2_params = Vec4::new(
+                new_uniform.mask2_params = Vec4::new(
                     mask2_center.x,
                     mask2_center.y,
                     mask2_half_size.x,
                     mask2_half_size.y,
                 );
-                material.uniform_data.mask2_blend =
+                new_uniform.mask2_blend =
                     Vec4::new(mask2_blend.x, mask2_blend.y, mask2_blend.z, 0.0);
                 let base_type2 = 1.0 + mask2.is_circle as u8 as f32;
-                material.uniform_data.mask2_type = base_type2 + mask2.is_exclude as u8 as f32 * 2.0;
-                material.uniform_data.mask2_rotation = mask2_rotation;
+                new_uniform.mask2_type = base_type2 + mask2.is_exclude as u8 as f32 * 2.0;
+                new_uniform.mask2_rotation = mask2_rotation;
             } else {
-                material.uniform_data.mask2_type = 0.0;
-                material.uniform_data.mask2_rotation = 0.0;
-                material.uniform_data.mask2_blend = Vec4::ZERO;
+                new_uniform.mask2_type = 0.0;
+                new_uniform.mask2_rotation = 0.0;
+                new_uniform.mask2_blend = Vec4::ZERO;
+            }
+
+            if new_uniform != mat_ref.uniform_data {
+                let material = materials.get_mut(&material_handle.0).unwrap();
+                material.uniform_data = new_uniform;
             }
         }
     }

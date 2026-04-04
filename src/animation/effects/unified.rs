@@ -105,20 +105,15 @@ pub fn animate_unified_effect_system(
         // Use local time for visibility check (affected by speed)
         let local_time = animated.calc_local_time(global_time);
 
-        // Get material to update alpha
-        if let Some(material) = materials.get_mut(&material_handle.0) {
-            if !animated.is_active(local_time) {
-                // Hide layer by setting alpha to 0
+        // Check activity without triggering get_mut
+        if !animated.is_active(local_time) {
+            // Layer is inactive — only set alpha to 0 if not already 0
+            if let Some(mat_ref) = materials.get(&material_handle.0)
+                && mat_ref.uniform_data.color.w != 0.0
+            {
+                let material = materials.get_mut(&material_handle.0).unwrap();
                 material.uniform_data.color.w = 0.0;
-                continue;
             }
-
-            // Layer is active - restore alpha (will be updated by opacity below)
-            let layer_time = animated.calc_layer_time(local_time);
-            let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
-            let fade_alpha = animated.calc_fade_alpha(layer_time);
-            material.uniform_data.color.w = opacity * animated.base_alpha * fade_alpha;
-        } else if !animated.is_active(local_time) {
             continue;
         }
 
@@ -287,6 +282,11 @@ pub fn animate_unified_effect_system(
             continue;
         };
         let mut new_uniform = mat_ref.uniform_data;
+
+        // Apply opacity to clone (was previously done via early get_mut)
+        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+        let fade_alpha = animated.calc_fade_alpha(layer_time);
+        new_uniform.color.w = opacity * animated.base_alpha * fade_alpha;
 
         if trace_unified_color_enabled(animated.layer_id) {
             bevy::log::warn!(

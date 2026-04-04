@@ -57,11 +57,14 @@ pub fn animate_size_system(
             sdf_params.base_half_width = half_width;
             sdf_params.base_half_height = half_height;
 
-            let Some(material) = materials.get_mut(&material_handle.0) else {
-                continue;
-            };
-            material.uniform_data.params.x = half_width;
-            material.uniform_data.params.y = half_height;
+            if let Some(mat_ref) = materials.get(&material_handle.0)
+                && (mat_ref.uniform_data.params.x != half_width
+                    || mat_ref.uniform_data.params.y != half_height)
+            {
+                let material = materials.get_mut(&material_handle.0).unwrap();
+                material.uniform_data.params.x = half_width;
+                material.uniform_data.params.y = half_height;
+            }
         }
     }
 
