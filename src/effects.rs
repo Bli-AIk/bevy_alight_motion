@@ -60,5 +60,5 @@ pub use rtt::{
 
 pub(crate) use lift_composite::{
     LiftCompositeCameraMarker, cleanup_lift_composite_system, propagate_lift_render_layers_system,
-    setup_lift_composite_system, tag_needs_lift_composite_system, update_lift_comp_material_system,
+    setup_lift_composite_system, update_lift_comp_material_system,
 };

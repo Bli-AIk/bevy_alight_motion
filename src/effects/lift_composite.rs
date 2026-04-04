@@ -18,15 +18,9 @@ use bevy::render::render_resource::{
 
 use crate::animation::AmAnimated;
 use crate::effects::EmbedSceneRenderLayerPool;
-use crate::effects::rtt::LiftCompositeBudget;
 use crate::masked_sprite::UnifiedEffectMaterial;
 use crate::scene::AmVisualSpawned;
 use crate::sdf_material::SdfMaterial;
-
-/// Marker for entities that need lift-composite setup but haven't been processed yet.
-/// Persists across frames so budgeted setup can pick them up in subsequent frames.
-#[derive(Component, Debug)]
-pub(crate) struct NeedsLiftComposite;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct LiftCompositeCameraMarker {
@@ -112,35 +106,16 @@ fn assign_layer_to_background_entity(
         .insert(merged_render_layers(current_layers, render_layer));
 }
 
-/// Tags newly-spawned animated entities that need lift-composite with a persistent
-/// marker, replacing the one-shot `Added<AmAnimated>` filter that would miss
-/// entities deferred by the per-frame budget.
-pub(crate) fn tag_needs_lift_composite_system(
-    mut commands: Commands,
-    new_query: Query<
-        (Entity, &AmAnimated),
-        (
-            Added<AmAnimated>,
-            Without<LiftCompositeBinding>,
-            Without<NeedsLiftComposite>,
-        ),
-    >,
-) {
-    for (entity, animated) in new_query.iter() {
-        if needs_composite(animated) {
-            commands.entity(entity).insert(NeedsLiftComposite);
-        }
-    }
-}
-
 pub(crate) fn setup_lift_composite_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
     window_query: Query<&Window>,
     clear_color: Res<ClearColor>,
-    budget: Res<LiftCompositeBudget>,
-    new_layers_query: Query<(Entity, &AmAnimated, &Transform), With<NeedsLiftComposite>>,
+    new_layers_query: Query<
+        (Entity, &AmAnimated, &Transform),
+        (Added<AmAnimated>, Without<LiftCompositeBinding>),
+    >,
     unified_layers_query: Query<
         (Entity, &Transform, Option<&RenderLayers>),
         (
@@ -164,20 +139,8 @@ pub(crate) fn setup_lift_composite_system(
         ),
     >,
 ) {
-    let budget_limit = budget.max_per_frame;
-    let mut processed: usize = 0;
-
     for (owner_entity, animated, transform) in new_layers_query.iter() {
-        if budget_limit > 0 && processed >= budget_limit {
-            bevy::log::debug!(
-                "[LiftComposite] Budget exhausted ({}/frame). Remaining deferred.",
-                budget_limit,
-            );
-            break;
-        }
-
         if !needs_composite(animated) {
-            commands.entity(owner_entity).remove::<NeedsLiftComposite>();
             continue;
         }
 
@@ -270,16 +233,12 @@ pub(crate) fn setup_lift_composite_system(
             }
         }
 
-        commands
-            .entity(owner_entity)
-            .remove::<NeedsLiftComposite>()
-            .insert(LiftCompositeBinding {
-                texture_handle,
-                camera_entity,
-                render_layer,
-                cutoff_z,
-            });
-        processed += 1;
+        commands.entity(owner_entity).insert(LiftCompositeBinding {
+            texture_handle,
+            camera_entity,
+            render_layer,
+            cutoff_z,
+        });
 
         bevy::log::trace!(
             "[LiftComposite] owner={:?} cutoff_z={:.6} render_layer={} camera={:?} texture={}x{}",

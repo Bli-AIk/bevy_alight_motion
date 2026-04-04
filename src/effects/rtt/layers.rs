@@ -175,7 +175,6 @@ pub fn propagate_render_layers_to_children_system(
     visibility_query: Query<&Visibility>,
     force_hidden_query: Query<(), With<crate::scene::AmForceHidden>>,
     non_embed_query: Query<Entity, (Without<EmbedSceneRtt>, Without<RenderStrategy>)>,
-    mut bfs_buffer: Local<Vec<Entity>>,
 ) {
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
     let mut total_updates = 0;
@@ -196,7 +195,6 @@ pub fn propagate_render_layers_to_children_system(
             &visibility_query,
             &force_hidden_query,
             &non_embed_query,
-            &mut bfs_buffer,
         );
         total_updates += updates;
     }
@@ -235,7 +233,6 @@ pub fn propagate_render_layers_to_children_system(
             &visibility_query,
             &force_hidden_query,
             &non_embed_query,
-            &mut bfs_buffer,
         );
     }
 

@@ -149,8 +149,6 @@ pub(super) fn update_quad_mesh(
     bounds: [f32; 4],
     uv_rect: [f32; 4],
 ) {
-    use bevy::mesh::VertexAttributeValues;
-
     if mesh_state.matches(bounds, uv_rect) {
         return;
     }
@@ -162,45 +160,6 @@ pub(super) fn update_quad_mesh(
         return;
     };
 
-    // Try in-place update first (avoids heap allocation after initial setup)
-    let pos_updated = if let Some(VertexAttributeValues::Float32x3(positions)) =
-        mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
-    {
-        if positions.len() == 4 {
-            positions[0] = [min_x, min_y, 0.0];
-            positions[1] = [max_x, min_y, 0.0];
-            positions[2] = [max_x, max_y, 0.0];
-            positions[3] = [min_x, max_y, 0.0];
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    let uv_updated = if let Some(VertexAttributeValues::Float32x2(uvs)) =
-        mesh.attribute_mut(Mesh::ATTRIBUTE_UV_0)
-    {
-        if uvs.len() == 4 {
-            uvs[0] = [uv_left, uv_bottom];
-            uvs[1] = [uv_right, uv_bottom];
-            uvs[2] = [uv_right, uv_top];
-            uvs[3] = [uv_left, uv_top];
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    if pos_updated && uv_updated {
-        mesh_state.store(bounds, uv_rect);
-        return;
-    }
-
-    // Fallback: initial setup (first time, or unexpected state)
     mesh.insert_attribute(
         Mesh::ATTRIBUTE_POSITION,
         vec![
