@@ -35,6 +35,8 @@ pub struct FrameTestState {
     pub prev_time_ms: f64,
     /// Two-pass measurement: pass 1 warms shaders (discarded), pass 2 is the real measurement.
     pub measurement_pass: u32,
+    /// Wall-clock instant of the previous frame, used for uncapped delta measurement.
+    pub last_instant: Option<std::time::Instant>,
     // Config
     pub pass_fps: f32,
     pub fail_fps: f32,
@@ -59,6 +61,7 @@ impl Default for FrameTestState {
             animation_completed: false,
             prev_time_ms: 0.0,
             measurement_pass: 1,
+            last_instant: None,
             pass_fps: 120.0,
             fail_fps: 60.0,
             max_below_fail_rate: 0.05,
@@ -245,7 +248,11 @@ pub fn frame_test_loop(
         }
 
         FrameTestStage::Running => {
-            let dt = time.delta_secs_f64();
+            let now = std::time::Instant::now();
+            let dt = state
+                .last_instant
+                .map_or(time.delta_secs_f64(), |prev| now.duration_since(prev).as_secs_f64());
+            state.last_instant = Some(now);
             if dt > 0.0 {
                 state.frame_times.push(dt);
                 state.measurement_elapsed += dt;
@@ -282,6 +289,7 @@ pub fn frame_test_loop(
                     state.measurement_elapsed = 0.0;
                     state.animation_completed = false;
                     state.measurement_pass = 2;
+                    state.last_instant = None;
                     state.warmup_frames_remaining = state.warmup_frames;
                     state.stage = FrameTestStage::Warmup;
                     println!(
