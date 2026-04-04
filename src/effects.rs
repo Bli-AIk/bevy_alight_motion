@@ -54,8 +54,8 @@ pub use rtt::{
     cleanup_embed_content_system, cleanup_embed_scene_rtt_system, evaluate_render_strategy_system,
     fix_nested_embed_render_layers_system, propagate_render_layers_system,
     propagate_render_layers_to_children_system, setup_embed_scene_rtt_system,
-    sync_new_sdf_child_render_layers_system, sync_rtt_camera_activity_system,
-    sync_rtt_camera_position_system, sync_rtt_capture_root_system,
+    sync_new_sdf_child_render_layers_system, sync_rtt_camera_position_system,
+    sync_rtt_capture_root_system,
 };
 
 pub(crate) use lift_composite::{

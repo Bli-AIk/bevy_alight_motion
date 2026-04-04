@@ -180,7 +180,6 @@ fn register_animation_systems(app: &mut App) {
             animate_text_progress_system,
             animate_rtt_blur_system,
             hot_reload_shader_system,
-            crate::effects::sync_rtt_camera_activity_system,
         )
             .in_set(AlightMotionSystemSet::Animation)
             .after(animate_transform_system),
