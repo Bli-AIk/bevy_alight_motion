@@ -3,59 +3,59 @@
     "private/USER_mortis/revenge": {
       "project": "private/USER_mortis/revenge",
       "status": "warning",
-      "total_frames": 4301,
-      "avg_fps": 537.5,
-      "min_fps": 24.6,
-      "max_fps": 1084.6,
-      "p95_fps": 221.1,
-      "p99_fps": 138.1,
-      "max_frame_time_ms": 40.66,
-      "median_frame_time_ms": 1.39,
-      "stutter_count": 472,
-      "stutter_rate": 0.1097,
-      "below_fail_count": 6,
-      "below_fail_rate": 0.0014,
+      "total_frames": 1645,
+      "avg_fps": 233.8,
+      "min_fps": 4.9,
+      "max_fps": 732.5,
+      "p95_fps": 76.4,
+      "p99_fps": 45.3,
+      "max_frame_time_ms": 204.76,
+      "median_frame_time_ms": 2.57,
+      "stutter_count": 339,
+      "stutter_rate": 0.2061,
+      "below_fail_count": 55,
+      "below_fail_rate": 0.0334,
       "mode": "loop",
       "top_spikes": [
         {
-          "frame": 40,
-          "ms": 40.66
+          "frame": 2,
+          "ms": 204.76
         },
         {
-          "frame": 50,
-          "ms": 39.92
+          "frame": 166,
+          "ms": 108.06
         },
         {
-          "frame": 17,
-          "ms": 39.46
+          "frame": 243,
+          "ms": 46.87
         },
         {
-          "frame": 5,
-          "ms": 37.56
+          "frame": 244,
+          "ms": 42.85
         },
         {
-          "frame": 28,
-          "ms": 36.97
+          "frame": 202,
+          "ms": 39.35
         },
         {
-          "frame": 52,
-          "ms": 17.04
+          "frame": 245,
+          "ms": 38.14
         },
         {
-          "frame": 51,
-          "ms": 14.38
+          "frame": 242,
+          "ms": 30.74
         },
         {
-          "frame": 623,
-          "ms": 14.14
+          "frame": 190,
+          "ms": 30.48
         },
         {
-          "frame": 672,
-          "ms": 13.76
+          "frame": 251,
+          "ms": 28.9
         },
         {
-          "frame": 616,
-          "ms": 13.7
+          "frame": 247,
+          "ms": 28.4
         }
       ]
     }
@@ -66,5 +66,5 @@
     "skipped": 0,
     "failed": 0
   },
-  "timestamp": "2026-04-04T09:39:04.871803+00:00"
+  "timestamp": "2026-04-04T11:23:08.993964+00:00"
 }
