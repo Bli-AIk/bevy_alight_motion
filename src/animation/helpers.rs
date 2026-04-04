@@ -4,43 +4,14 @@
 //!
 //! Helper functions for animation initialization and value extraction.
 //! Contains get_initial_scale_from_animated, get_initial_size_from_animated,
-//! is_descendant_of, and other utility functions.
+//! and other utility functions.
 //!
 //! 动画初始化和值提取的辅助函数。
-//! 包含 get_initial_scale_from_animated、get_initial_size_from_animated、
-//! is_descendant_of 及其他工具函数。
+//! 包含 get_initial_scale_from_animated、get_initial_size_from_animated 及其他工具函数。
 
-use crate::scene::PendingLayer;
 use crate::schema::AmAnimatedVec2;
 
 use super::interpolation::parse_keyframe_vec2;
-
-/// Check if a layer is a descendant of another layer (direct or nested).
-///
-/// 检查一个图层是否是另一个图层的后代（直接或嵌套）。
-pub fn is_descendant_of(layer_id: u64, ancestor_id: u64, layers: &[PendingLayer]) -> bool {
-    if layer_id == ancestor_id {
-        return false; // Not a descendant of itself
-    }
-
-    // Find the layer
-    let layer = match layers.iter().find(|l| l.id == layer_id) {
-        Some(l) => l,
-        None => return false,
-    };
-
-    // Check if direct child
-    if layer.parent == ancestor_id {
-        return true;
-    }
-
-    // Recursively check ancestors (with depth limit to prevent infinite loops)
-    if layer.parent != 0 {
-        return is_descendant_of(layer.parent, ancestor_id, layers);
-    }
-
-    false
-}
 
 /// Get initial scale from animated scale property.
 /// For SDF shapes, the initial scale is stored in the animated data, not the transform.

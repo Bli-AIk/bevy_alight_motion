@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use crate::scene::{AmPendingLayers, PendingLayer};
 use crate::sdf_material::SdfMaterial;
 
-use super::helpers::is_descendant_of;
 use super::spawn_entity::spawn_layer_entity;
 
 fn trace_lifecycle_enabled(layer_id: u64) -> bool {
@@ -56,7 +55,6 @@ pub(crate) fn process_pending_layers(
 ) {
     // We need to collect actions to avoid borrowing issues
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
-    let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
 
     // Helper function to check if an ancestor is active (with cycle detection)
     fn is_ancestor_active(
@@ -188,50 +186,12 @@ pub(crate) fn process_pending_layers(
 
         if should_spawn_filtered && !is_spawned {
             to_spawn.push(idx);
-        } else if !should_be_active && is_spawned {
-            to_despawn.push(layer.id);
         }
-    }
-
-    // Despawn entities that are no longer active
-    for layer_id in to_despawn {
-        let Some(entity) = pending.spawned_entities.remove(&layer_id) else {
-            continue;
-        };
-
-        // Find layer info for logging
-        if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
-            bevy::log::trace!(
-                "  [Lifecycle] Despawning '{}' (id={})",
-                layer.label,
-                layer_id
-            );
-        }
-
-        // Find all children of this layer (direct and nested) and despawn them first
-        let children_to_remove: Vec<u64> = pending
-            .layers
-            .iter()
-            .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
-            .map(|l| l.id)
-            .collect();
-
-        // Remove children from spawned_entities tracking (parent despawn will handle
-        // the actual ECS despawn recursively)
-        for child_id in children_to_remove {
-            if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
-                && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
-            {
-                bevy::log::trace!(
-                    "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
-                    child.label,
-                    child_id
-                );
-            }
-        }
-
-        // Despawn the entity (and all ECS children recursively)
-        commands.entity(entity).despawn();
+        // Entity persistence: entities are never despawned during playback.
+        // Once spawned, they remain alive for the animation's lifetime.
+        // Opacity systems (alpha=0 / Visibility::Hidden) handle hiding
+        // entities outside their time range, avoiding costly despawn/respawn
+        // cycles at animation loop boundaries.
     }
 
     // Sort layers to spawn by dependency (parents before children) using topological sort
