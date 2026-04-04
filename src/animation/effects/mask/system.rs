@@ -34,6 +34,7 @@ pub fn update_unified_mask_system(
         &MeshMaterial2d<crate::masked_sprite::UnifiedEffectMaterial>,
         &AmLayerMarker,
         &GlobalTransform,
+        Option<&AmAnimated>,
     )>,
     pending_query: Query<&crate::scene::AmPendingLayers>,
     mask_layer_query: Query<(&GlobalTransform, &AmAnimated, &crate::scene::AmLayerSpec)>,
@@ -53,7 +54,13 @@ pub fn update_unified_mask_system(
     let disabled_mask_ids = parse_disabled_mask_ids();
 
     let global_time = playback.current_time_ms as u64;
-    for (mask_info, material_handle, marker, _entity_global_transform) in query.iter() {
+    for (mask_info, material_handle, marker, _entity_global_transform, animated) in query.iter() {
+        if let Some(animated) = animated {
+            let local_time = animated.calc_local_time(playback.current_time_ms);
+            if !animated.is_active(local_time) {
+                continue;
+            }
+        }
         let active_masks = mask_info.get_active_masks(global_time);
         let Some(old_mat) = materials.get(&material_handle.0) else {
             continue;

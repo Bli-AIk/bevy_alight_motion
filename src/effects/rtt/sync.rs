@@ -354,9 +354,18 @@ pub fn sync_rtt_camera_position_system(
 pub fn sync_rtt_camera_activity_system(
     playback: Res<crate::animation::AmPlayback>,
     embed_query: Query<&crate::animation::AmAnimated, With<EmbedSceneRtt>>,
-    blur_parent_query: Query<&crate::animation::AmAnimated, With<crate::gaussian_blur::GaussianBlurRtt>>,
-    mut embed_camera_query: Query<(&EmbedSceneRttCamera, &mut Camera), Without<crate::gaussian_blur::BlurPassCamera>>,
-    mut blur_camera_query: Query<(&crate::gaussian_blur::BlurPassCamera, &mut Camera), Without<EmbedSceneRttCamera>>,
+    blur_parent_query: Query<
+        &crate::animation::AmAnimated,
+        With<crate::gaussian_blur::GaussianBlurRtt>,
+    >,
+    mut embed_camera_query: Query<
+        (&EmbedSceneRttCamera, &mut Camera),
+        Without<crate::gaussian_blur::BlurPassCamera>,
+    >,
+    mut blur_camera_query: Query<
+        (&crate::gaussian_blur::BlurPassCamera, &mut Camera),
+        Without<EmbedSceneRttCamera>,
+    >,
 ) {
     if playback.force_stopped {
         return;

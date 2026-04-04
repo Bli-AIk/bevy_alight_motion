@@ -49,8 +49,7 @@ pub(crate) use setup::refresh_group_fill_material_texture_system;
 pub use setup::{fix_nested_embed_render_layers_system, setup_embed_scene_rtt_system};
 pub use strategy::evaluate_render_strategy_system;
 pub use sync::{
-    sync_rtt_camera_activity_system, sync_rtt_camera_position_system,
-    sync_rtt_capture_root_system,
+    sync_rtt_camera_activity_system, sync_rtt_camera_position_system, sync_rtt_capture_root_system,
 };
 
 pub(super) use super::rtt_helpers::{
