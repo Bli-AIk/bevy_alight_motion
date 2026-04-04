@@ -328,35 +328,6 @@ pub(crate) fn apply_parenthelper_system(
     ) in queries.p0().iter()
     {
         let local_time = animated.calc_local_time(global_time);
-
-        // For inactive entities, skip expensive interpolation but still provide
-        // a snapshot for parent-chain resolution using frozen Transform values.
-        if !animated.is_active(local_time) {
-            let applied_scale = transform.scale.truncate();
-            snapshots.insert(
-                entity,
-                ParentHelperSnapshot {
-                    local: ParentHelperLocalState {
-                        translation: transform.translation.truncate(),
-                        rotation_deg: transform.rotation.to_euler(EulerRot::ZYX).0.to_degrees(),
-                        applied_scale,
-                        visual_scale: applied_scale,
-                    },
-                    parent: child_of.map(|p| p.parent()),
-                    has_effect: animated.parenthelper_has_effect && animated.has_parent,
-                    scale_baked_in_mesh: (effect_marker.is_some()
-                        && unified_transform_scale.is_none())
-                        || matches!(layer_spec, AmLayerSpec::SdfShape { .. }),
-                    scale_factor: 1.0,
-                    rotate_factor: 1.0,
-                    auto_rotate: animated.parenthelper_auto_rotate,
-                    radius_adjust: 0.0,
-                    base_size: Vec2::ZERO,
-                },
-            );
-            continue;
-        }
-
         let layer_time = animated.calc_layer_time(local_time);
         let frame_delta = compute_normalized_frame_delta(animated);
         let base_size = resolve_parenthelper_base_size(layer_spec, animated, layer_time);
