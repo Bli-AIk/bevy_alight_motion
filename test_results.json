@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-04T01:20:11.758614+00:00",
+  "timestamp": "2026-04-04T03:27:53.259057+00:00",
   "summary": {
     "passed": 189,
     "warnings": 0,
@@ -885,7 +885,8 @@
       "avg_similarity": 0.9394
     },
     "private/USER_mortis/revenge": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.9697
     },
     "private/USER_mortis/revenge/split1": {
       "status": "fail",
