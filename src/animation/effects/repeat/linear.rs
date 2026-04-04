@@ -15,7 +15,6 @@ use crate::animation::interpolation::{interpolate_color, interpolate_float, inte
 
 use super::java_random::compute_java_random_state_packed;
 
-
 pub(crate) fn process_linear_repeat_effect(
     animated: &AmAnimated,
     layer_time: f32,

@@ -74,7 +74,14 @@ pub(crate) fn process_pending_layers(
         global_time: f32,
         _time_offset: f32,
     ) -> bool {
-        is_ancestor_active_impl(layer_id, layers, layer_index, global_time, _time_offset, &mut Vec::new())
+        is_ancestor_active_impl(
+            layer_id,
+            layers,
+            layer_index,
+            global_time,
+            _time_offset,
+            &mut Vec::new(),
+        )
     }
 
     fn is_ancestor_active_impl(
@@ -131,7 +138,14 @@ pub(crate) fn process_pending_layers(
         }
 
         // Recursively check grandparent
-        is_ancestor_active_impl(layer.parent, layers, layer_index, global_time, _time_offset, visited)
+        is_ancestor_active_impl(
+            layer.parent,
+            layers,
+            layer_index,
+            global_time,
+            _time_offset,
+            visited,
+        )
     }
 
     for (idx, layer) in pending.layers.iter().enumerate() {
@@ -147,8 +161,13 @@ pub(crate) fn process_pending_layers(
             local_time >= layer.start_time as f32 && local_time < layer.end_time as f32;
 
         // Check if all ancestors are active
-        let ancestors_active =
-            is_ancestor_active(layer.id, &pending.layers, &layer_index, global_time, time_offset);
+        let ancestors_active = is_ancestor_active(
+            layer.id,
+            &pending.layers,
+            &layer_index,
+            global_time,
+            time_offset,
+        );
 
         let should_be_active = own_time_active && ancestors_active;
 
@@ -281,7 +300,13 @@ pub(crate) fn process_pending_layers(
         {
             0
         } else {
-            1 + count_spawn_depth(layer.containing_embed_id, layers, layer_index, spawning_ids, visited)
+            1 + count_spawn_depth(
+                layer.containing_embed_id,
+                layers,
+                layer_index,
+                spawning_ids,
+                visited,
+            )
         };
 
         // Return the maximum depth to ensure all dependencies are spawned first
@@ -292,7 +317,13 @@ pub(crate) fn process_pending_layers(
     to_spawn.sort_by_key(|&idx| {
         let layer_id = pending.layers[idx].id;
         let mut visited = std::collections::HashSet::new();
-        count_spawn_depth(layer_id, &pending.layers, &layer_index, &spawning_ids, &mut visited)
+        count_spawn_depth(
+            layer_id,
+            &pending.layers,
+            &layer_index,
+            &spawning_ids,
+            &mut visited,
+        )
     });
 
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
@@ -306,7 +337,13 @@ pub(crate) fn process_pending_layers(
             let layer = &pending.layers[idx];
             let depth = {
                 let mut visited = std::collections::HashSet::new();
-                count_spawn_depth(layer.id, &pending.layers, &layer_index, &spawning_ids, &mut visited)
+                count_spawn_depth(
+                    layer.id,
+                    &pending.layers,
+                    &layer_index,
+                    &spawning_ids,
+                    &mut visited,
+                )
             };
             bevy::log::info!(
                 "[SPAWN_ORDER]   depth={}: '{}' (id={}, parent={})",

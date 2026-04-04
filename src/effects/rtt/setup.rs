@@ -114,7 +114,7 @@ pub fn setup_embed_scene_rtt_system(
     entities_with_depth.sort_by_key(|&(_, depth)| depth);
     processed_layers.clear();
 
-    for (entity, _depth) in entities_with_depth {
+    for &(entity, _depth) in &*entities_with_depth {
         // Skip if parent is still pending AND wasn't processed in this pass.
         if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();

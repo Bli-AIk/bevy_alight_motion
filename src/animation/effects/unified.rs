@@ -543,6 +543,18 @@ pub fn animate_unified_effect_system(
             &mut meshes,
         );
 
+        if trace_parenthelper {
+            trace_parenthelper_unified_state(
+                marker,
+                material,
+                transform,
+                global_transform,
+                visibility,
+                render_layers,
+                child_of.map(|c| c.parent()),
+            );
+        }
+
         if env_cache.trace_color(animated.layer_id) {
             bevy::log::warn!(
                 "[UnifiedColorTrace][post-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
