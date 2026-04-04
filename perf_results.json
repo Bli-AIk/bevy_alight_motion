@@ -3,23 +3,31 @@
     "private/USER_mortis/revenge": {
       "project": "private/USER_mortis/revenge",
       "status": "fail",
-      "total_frames": 498,
-      "avg_fps": 62.2,
-      "min_fps": 26.3,
-      "max_fps": 370.8,
-      "p95_fps": 59.2,
-      "p99_fps": 34.5,
-      "max_frame_time_ms": 38.05,
-      "median_frame_time_ms": 16.08,
-      "stutter_count": 1,
-      "stutter_rate": 0.002,
-      "below_fail_count": 31,
-      "below_fail_rate": 0.0622,
+      "total_frames": 497,
+      "avg_fps": 62.1,
+      "min_fps": 27.0,
+      "max_fps": 258.6,
+      "p95_fps": 59.0,
+      "p99_fps": 38.6,
+      "max_frame_time_ms": 37.1,
+      "median_frame_time_ms": 16.09,
+      "stutter_count": 3,
+      "stutter_rate": 0.006,
+      "below_fail_count": 38,
+      "below_fail_rate": 0.0765,
       "mode": "loop",
       "top_spikes": [
         {
-          "frame": 65,
-          "ms": 38.05
+          "frame": 78,
+          "ms": 37.1
+        },
+        {
+          "frame": 74,
+          "ms": 36.42
+        },
+        {
+          "frame": 111,
+          "ms": 35.85
         }
       ]
     }
@@ -30,5 +38,5 @@
     "skipped": 0,
     "failed": 1
   },
-  "timestamp": "2026-04-04T05:39:37.590341+00:00"
+  "timestamp": "2026-04-04T06:57:38.506065+00:00"
 }

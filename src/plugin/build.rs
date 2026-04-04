@@ -117,29 +117,12 @@ fn register_lifecycle_systems(app: &mut App) {
 }
 
 fn register_animation_systems(app: &mut App) {
+    // Core transform pipeline (strict sequential: echo writes AmAnimated, transform
+    // reads it and writes Transform, parenthelper corrects Transform and produces
+    // ParenthelperScaleContributions, then SDF compensators adjust SDF transforms).
     app.add_systems(
         Update,
-        (
-            update_echo_runtime_system,
-            animate_transform_system,
-            compensate_sdf_parent_scale_system,
-            animate_am_camera_system,
-            animate_size_system,
-            animate_sdf_stretch_system,
-            animate_sdf_scale_system,
-            animate_opacity_system,
-            animate_sdf_opacity_system,
-            animate_text_opacity_system,
-            fix_rtl_line_alignment_system,
-            animate_counter_system,
-            animate_text_spacing_system,
-            animate_text_progress_system,
-            animate_unified_effect_system,
-            animate_path_repeat_system,
-            animate_rtt_blur_system,
-            apply_mask_clipping_system,
-            hot_reload_shader_system,
-        )
+        (update_echo_runtime_system, animate_transform_system)
             .chain()
             .in_set(AlightMotionSystemSet::Animation),
     )
@@ -147,21 +130,66 @@ fn register_animation_systems(app: &mut App) {
         Update,
         apply_parenthelper_system
             .in_set(AlightMotionSystemSet::Animation)
-            .after(animate_transform_system)
-            .before(compensate_sdf_parent_scale_system),
+            .after(animate_transform_system),
     )
     .add_systems(
         Update,
-        animate_sdf_repeat_system
+        compensate_sdf_parent_scale_system
             .in_set(AlightMotionSystemSet::Animation)
-            .after(animate_sdf_stretch_system)
-            .before(animate_sdf_scale_system),
+            .after(apply_parenthelper_system),
     )
     .add_systems(
         Update,
         compensate_sdf_ancestor_scale_for_children_system
             .in_set(AlightMotionSystemSet::Animation)
             .after(compensate_sdf_parent_scale_system),
+    )
+    // SDF material pipeline (sequential: shared ResMut<Assets<SdfMaterial>>).
+    .add_systems(
+        Update,
+        (
+            animate_size_system,
+            animate_sdf_stretch_system,
+            animate_sdf_repeat_system,
+            animate_sdf_scale_system,
+            animate_sdf_opacity_system,
+        )
+            .chain()
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(compensate_sdf_parent_scale_system),
+    )
+    // Unified effect system (needs parenthelper scale contributions + final Transform).
+    .add_systems(
+        Update,
+        animate_unified_effect_system
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(apply_parenthelper_system)
+            .after(compensate_sdf_ancestor_scale_for_children_system),
+    )
+    // Systems that only need echo/transform to be done — can run in parallel
+    // with each other and with unified/SDF pipelines.
+    .add_systems(
+        Update,
+        (
+            animate_am_camera_system,
+            animate_opacity_system,
+            animate_text_opacity_system,
+            fix_rtl_line_alignment_system,
+            animate_counter_system,
+            animate_text_spacing_system,
+            animate_text_progress_system,
+            animate_rtt_blur_system,
+            hot_reload_shader_system,
+        )
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(animate_transform_system),
+    )
+    // Late systems that depend on unified/transform being fully done.
+    .add_systems(
+        Update,
+        (animate_path_repeat_system, apply_mask_clipping_system)
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(animate_unified_effect_system),
     );
 }
 
