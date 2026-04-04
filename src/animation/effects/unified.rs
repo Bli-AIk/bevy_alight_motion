@@ -21,23 +21,76 @@ use super::unified_support::{compute_ancestor_scale, trace_parenthelper_unified_
 use crate::animation::components::{AmAnimated, AmPlayback, AmUnifiedMeshState};
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 
-fn force_white_tint_enabled(layer_id: u64) -> bool {
-    std::env::var_os("AM_FORCE_WHITE_TINT_IDS")
-        .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
-            ids.split(',')
-                .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
-        })
+/// Cached debug/trace env-var state, parsed once per frame.
+pub(super) struct DebugEnvCache {
+    force_white_ids: Option<Vec<u64>>,
+    trace_color_ids: Option<Vec<u64>>,
+    trace_effect_ids: Option<Vec<u64>>,
+    disable_replace_color_ids: Option<Vec<u64>>,
+    disable_threshold_ids: Option<Vec<u64>>,
+    disable_pixelate_ids: Option<Vec<u64>>,
+    trace_parenthelper: bool,
+    trace_linear_repeat_all: bool,
+    trace_linear_repeat_ids: Option<Vec<u64>>,
+    pub(super) disable_linear_repeat: bool,
 }
 
-fn trace_unified_color_enabled(layer_id: u64) -> bool {
-    std::env::var_os("AM_TRACE_UNIFIED_COLOR_IDS")
+impl DebugEnvCache {
+    fn new() -> Self {
+        Self {
+            force_white_ids: parse_env_id_list("AM_FORCE_WHITE_TINT_IDS"),
+            trace_color_ids: parse_env_id_list("AM_TRACE_UNIFIED_COLOR_IDS"),
+            trace_effect_ids: parse_env_id_list("AM_TRACE_EFFECT_IDS"),
+            disable_replace_color_ids: parse_env_id_list("AM_DISABLE_REPLACE_COLOR_IDS"),
+            disable_threshold_ids: parse_env_id_list("AM_DISABLE_THRESHOLD_IDS"),
+            disable_pixelate_ids: parse_env_id_list("AM_DISABLE_PIXELATE_IDS"),
+            trace_parenthelper: std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some(),
+            trace_linear_repeat_all: std::env::var_os("AM_TRACE_LINEAR_REPEAT_ALL").is_some(),
+            trace_linear_repeat_ids: parse_env_id_list("AM_TRACE_LINEAR_REPEAT_IDS"),
+            disable_linear_repeat: std::env::var_os("AM_DISABLE_LINEAR_REPEAT").is_some(),
+        }
+    }
+
+    fn has_id(list: &Option<Vec<u64>>, id: u64) -> bool {
+        list.as_ref().is_some_and(|v| v.contains(&id))
+    }
+
+    pub(super) fn force_white_tint(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.force_white_ids, layer_id)
+    }
+
+    pub(super) fn trace_color(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.trace_color_ids, layer_id)
+    }
+
+    pub(super) fn trace_effect(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.trace_effect_ids, layer_id)
+    }
+
+    pub(super) fn disable_replace_color(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_replace_color_ids, layer_id)
+    }
+
+    pub(super) fn disable_threshold(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_threshold_ids, layer_id)
+    }
+
+    pub(super) fn disable_pixelate(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_pixelate_ids, layer_id)
+    }
+
+    pub(super) fn trace_linear_repeat(&self, layer_id: u64) -> bool {
+        self.trace_linear_repeat_all || Self::has_id(&self.trace_linear_repeat_ids, layer_id)
+    }
+}
+
+fn parse_env_id_list(var: &str) -> Option<Vec<u64>> {
+    std::env::var_os(var)
         .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
+        .map(|ids| {
             ids.split(',')
                 .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
+                .collect()
         })
 }
 
@@ -73,6 +126,9 @@ pub fn animate_unified_effect_system(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let global_time = playback.current_time_ms;
+
+    // Cache all debug env var checks once per frame instead of per entity
+    let env_cache = DebugEnvCache::new();
 
     // Get the FitWindow root scale (uniform scaling applied to project root entity).
     let root_scale = root_query
@@ -288,7 +344,7 @@ pub fn animate_unified_effect_system(
         let fade_alpha = animated.calc_fade_alpha(layer_time);
         new_uniform.color.w = opacity * animated.base_alpha * fade_alpha;
 
-        if trace_unified_color_enabled(animated.layer_id) {
+        if env_cache.trace_color(animated.layer_id) {
             bevy::log::warn!(
                 "[UnifiedColorTrace][pre-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
                 animated.layer_id,
@@ -300,13 +356,13 @@ pub fn animate_unified_effect_system(
             );
         }
 
-        if force_white_tint_enabled(animated.layer_id) {
+        if env_cache.force_white_tint(animated.layer_id) {
             new_uniform.color.x = 1.0;
             new_uniform.color.y = 1.0;
             new_uniform.color.z = 1.0;
         }
 
-        let trace_parenthelper = std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
+        let trace_parenthelper = env_cache.trace_parenthelper
             && (marker.label == "长方形 1" || marker.label == "长方形 2");
 
         // Always set original_size so pixelate (and other effects) have correct display dimensions
@@ -432,6 +488,7 @@ pub fn animate_unified_effect_system(
             mesh2d,
             &mut mesh_state,
             &mut meshes,
+            &env_cache,
         );
 
         // Update palette map alpha if present
@@ -440,9 +497,15 @@ pub fn animate_unified_effect_system(
         update_palette(&mut new_uniform, animated, layer_time, has_palette);
 
         let has_replace_color = animated.replace_old_color.w > 0.0;
-        update_replace_color(&mut new_uniform, animated, layer_time, has_replace_color);
+        update_replace_color(
+            &mut new_uniform,
+            animated,
+            layer_time,
+            has_replace_color,
+            &env_cache,
+        );
 
-        update_threshold(&mut new_uniform, animated, layer_time);
+        update_threshold(&mut new_uniform, animated, layer_time, &env_cache);
 
         update_grid(&mut new_uniform, animated, layer_time);
         update_pixelate(
@@ -453,6 +516,7 @@ pub fn animate_unified_effect_system(
             root_scale,
             has_pixelate,
             disabled_effects.as_deref(),
+            &env_cache,
         );
 
         // Process repeat and linear repeat effects (delegated to repeat module)
@@ -474,6 +538,7 @@ pub fn animate_unified_effect_system(
             orig_height,
             mesh2d,
             &mut meshes,
+            &env_cache,
         );
 
         super::repeat::process_radial_repeat_effect(
@@ -492,7 +557,7 @@ pub fn animate_unified_effect_system(
             material.uniform_data = new_uniform;
         }
 
-        if trace_unified_color_enabled(animated.layer_id) {
+        if env_cache.trace_color(animated.layer_id) {
             bevy::log::warn!(
                 "[UnifiedColorTrace][post-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
                 animated.layer_id,

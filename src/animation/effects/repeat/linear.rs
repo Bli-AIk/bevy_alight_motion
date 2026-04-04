@@ -10,20 +10,10 @@
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;
+use crate::animation::effects::unified::DebugEnvCache;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
 use super::java_random::{compute_java_random_state_packed, precompute_shuffle_packed};
-
-fn linear_repeat_trace_enabled(layer_id: u64) -> bool {
-    std::env::var_os("AM_TRACE_LINEAR_REPEAT_ALL").is_some()
-        || std::env::var_os("AM_TRACE_LINEAR_REPEAT_IDS")
-            .and_then(|v| v.into_string().ok())
-            .is_some_and(|ids| {
-                ids.split(',')
-                    .filter_map(|v| v.trim().parse::<u64>().ok())
-                    .any(|id| id == layer_id)
-            })
-}
 
 pub(crate) fn process_linear_repeat_effect(
     animated: &AmAnimated,
@@ -33,10 +23,11 @@ pub(crate) fn process_linear_repeat_effect(
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
+    env_cache: &DebugEnvCache,
 ) {
-    let trace_enabled = linear_repeat_trace_enabled(animated.layer_id);
+    let trace_enabled = env_cache.trace_linear_repeat(animated.layer_id);
     let linear_repeat_after_stretch_segment = animated.linear_repeat_after_stretch_segment;
-    if std::env::var_os("AM_DISABLE_LINEAR_REPEAT").is_some() {
+    if env_cache.disable_linear_repeat {
         if trace_enabled {
             bevy::log::warn!(
                 "[LinearRepeatTrace] layer={} disabled by AM_DISABLE_LINEAR_REPEAT",

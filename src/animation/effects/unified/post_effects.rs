@@ -6,27 +6,19 @@
 
 use bevy::prelude::*;
 
+use super::DebugEnvCache;
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
-
-fn trace_effect_layer_enabled(var_name: &str, layer_id: u64) -> bool {
-    std::env::var_os(var_name)
-        .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
-            ids.split(',')
-                .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
-        })
-}
 
 pub(super) fn update_replace_color(
     uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
     has_replace_color: bool,
+    env_cache: &DebugEnvCache,
 ) {
-    let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
-    if trace_effect_layer_enabled("AM_DISABLE_REPLACE_COLOR_IDS", animated.layer_id) {
+    let trace_layer = env_cache.trace_effect(animated.layer_id);
+    if env_cache.disable_replace_color(animated.layer_id) {
         uniform.replace_color_flags.x = 0.0;
         uniform.replace_color_flags.y = 0.0;
         uniform.replace_old_color = Vec4::ZERO;
@@ -96,9 +88,10 @@ pub(super) fn update_threshold(
     uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
     animated: &AmAnimated,
     layer_time: f32,
+    env_cache: &DebugEnvCache,
 ) {
-    let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
-    if trace_effect_layer_enabled("AM_DISABLE_THRESHOLD_IDS", animated.layer_id) {
+    let trace_layer = env_cache.trace_effect(animated.layer_id);
+    if env_cache.disable_threshold(animated.layer_id) {
         uniform.set_threshold(false, 0.5, 0.0, false, 0);
         bevy::log::warn!(
             "[UnifiedTrace] layer={} threshold disabled by AM_DISABLE_THRESHOLD_IDS",
@@ -171,11 +164,11 @@ pub(super) fn update_pixelate(
     root_scale: f32,
     has_pixelate: bool,
     disabled_effects: Option<&crate::plugin::DisabledEffects>,
+    env_cache: &DebugEnvCache,
 ) {
-    let trace_layer = trace_effect_layer_enabled("AM_TRACE_EFFECT_IDS", animated.layer_id);
+    let trace_layer = env_cache.trace_effect(animated.layer_id);
     let globally_disabled = disabled_effects.is_some_and(|de| de.contains("pixelate"));
-    if trace_effect_layer_enabled("AM_DISABLE_PIXELATE_IDS", animated.layer_id) || globally_disabled
-    {
+    if env_cache.disable_pixelate(animated.layer_id) || globally_disabled {
         uniform.set_pixelate(false, false, 1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 1.0);
         uniform.pixelate_flags = Vec4::ZERO;
         uniform.pixelate_params1 = Vec4::ZERO;

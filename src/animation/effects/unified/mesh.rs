@@ -9,20 +9,11 @@
 
 use bevy::prelude::*;
 
+use super::DebugEnvCache;
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 
 use super::super::unified_support::{trace_stretch_once, update_quad_mesh};
-
-fn trace_unified_mesh_layer(layer_id: u64) -> bool {
-    std::env::var_os("AM_TRACE_EFFECT_IDS")
-        .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
-            ids.split(',')
-                .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
-        })
-}
 
 pub(super) fn update_blur_mesh(
     uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
@@ -251,9 +242,10 @@ pub(super) fn update_base_mesh(
     mesh2d: &bevy::mesh::Mesh2d,
     mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
+    env_cache: &DebugEnvCache,
 ) {
     if !has_stretch && !has_blur {
-        let trace_layer = trace_unified_mesh_layer(animated.layer_id);
+        let trace_layer = env_cache.trace_effect(animated.layer_id);
         let (s2_uv_expand_x, s2_uv_expand_y, s2_uv_min_x, s2_uv_min_y) =
             if has_stretch2 && !animated.stretch2_content_only && (s2_scale - 1.0).abs() > 0.001 {
                 let cos_a = s2_angle_rad.cos();
