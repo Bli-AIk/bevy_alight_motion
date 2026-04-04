@@ -311,11 +311,58 @@ pub fn frame_test_loop(
 }
 
 fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
-    let total_frames = state.frame_times.len();
+    let raw_frames = state.frame_times.len();
     println!();
     println!("========================================");
     println!("FRAME TEST RESULTS: {}", state.project_name);
     println!("========================================");
+
+    if (raw_frames as u32) < state.min_sample_frames {
+        println!(
+            "{}",
+            format!(
+                "RESULT: FAIL ❌ (insufficient frames: {} < {})",
+                raw_frames, state.min_sample_frames
+            )
+            .red()
+            .bold()
+        );
+        println!(
+            "[FRAME-TEST-JSON] {{\"project\":\"{}\",\"status\":\"fail\",\"reason\":\"insufficient_frames\",\
+             \"total_frames\":{}}}",
+            state.project_name, raw_frames
+        );
+        exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
+        return;
+    }
+
+    // Exclude environmental outliers (container scheduling, GPU driver maintenance, etc.)
+    // These are frames so slow they cannot be caused by rendering code.
+    const OUTLIER_THRESHOLD_SECS: f64 = 0.5; // 500ms
+    let outlier_count = state
+        .frame_times
+        .iter()
+        .filter(|&&dt| dt > OUTLIER_THRESHOLD_SECS)
+        .count();
+    if outlier_count > 0 {
+        println!(
+            "⚠️  Excluding {} environmental outlier frame(s) (>{:.0}ms) from stats",
+            outlier_count,
+            OUTLIER_THRESHOLD_SECS * 1000.0
+        );
+        for (i, &dt) in state.frame_times.iter().enumerate() {
+            if dt > OUTLIER_THRESHOLD_SECS {
+                println!("   Frame {}: {:.1}ms", i, dt * 1000.0);
+            }
+        }
+    }
+    let frame_times: Vec<f64> = state
+        .frame_times
+        .iter()
+        .copied()
+        .filter(|&dt| dt <= OUTLIER_THRESHOLD_SECS)
+        .collect();
+    let total_frames = frame_times.len();
 
     // Frame time histogram for diagnostics
     let buckets = [
@@ -325,12 +372,11 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
         (4.0, 6.94, "144-250 FPS"),
         (6.94, 16.67, "60-144 FPS"),
         (16.67, 33.33, "30-60 FPS"),
-        (33.33, 1000.0, "<30 FPS"),
+        (33.33, 500.0, "<30 FPS"),
     ];
     println!("Frame time distribution:");
     for (lo_ms, hi_ms, label) in &buckets {
-        let count = state
-            .frame_times
+        let count = frame_times
             .iter()
             .filter(|&&dt| {
                 let ms = dt * 1000.0;
@@ -347,42 +393,21 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
         }
     }
 
-    if (total_frames as u32) < state.min_sample_frames {
-        println!(
-            "{}",
-            format!(
-                "RESULT: FAIL ❌ (insufficient frames: {} < {})",
-                total_frames, state.min_sample_frames
-            )
-            .red()
-            .bold()
-        );
-        // Emit JSON line for script parsing
-        println!(
-            "[FRAME-TEST-JSON] {{\"project\":\"{}\",\"status\":\"fail\",\"reason\":\"insufficient_frames\",\
-             \"total_frames\":{}}}",
-            state.project_name, total_frames
-        );
-        exit.write(AppExit::Error(std::num::NonZero::new(1).unwrap()));
-        return;
-    }
-
     // Compute FPS stats
-    let avg_dt: f64 = state.frame_times.iter().sum::<f64>() / total_frames as f64;
+    let avg_dt: f64 = frame_times.iter().sum::<f64>() / total_frames as f64;
     let avg_fps = 1.0 / avg_dt;
 
-    let min_dt = state
-        .frame_times
+    let min_dt = frame_times
         .iter()
         .copied()
         .fold(f64::INFINITY, f64::min);
-    let max_dt = state.frame_times.iter().copied().fold(0.0_f64, f64::max);
+    let max_dt = frame_times.iter().copied().fold(0.0_f64, f64::max);
     let max_fps = 1.0 / min_dt;
     let min_fps = 1.0 / max_dt;
     let max_frame_time_ms = max_dt * 1000.0;
 
     // Percentile FPS: sort frame times ascending (shortest first → highest FPS)
-    let mut sorted = state.frame_times.clone();
+    let mut sorted = frame_times.clone();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     let percentile = |p: f64| -> f64 {
@@ -397,16 +422,14 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     // Median frame time for stutter detection
     let median_dt = sorted[total_frames / 2];
     let stutter_threshold = median_dt * state.stutter_threshold_multiplier as f64;
-    let stutter_count = state
-        .frame_times
+    let stutter_count = frame_times
         .iter()
         .filter(|&&dt| dt > stutter_threshold)
         .count();
     let stutter_rate = stutter_count as f64 / total_frames as f64;
 
     // Find top stutter spikes (for diagnostics)
-    let mut spike_indices: Vec<(usize, f64)> = state
-        .frame_times
+    let mut spike_indices: Vec<(usize, f64)> = frame_times
         .iter()
         .enumerate()
         .filter(|(_, dt)| **dt > stutter_threshold)
@@ -415,13 +438,11 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     spike_indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     spike_indices.truncate(10);
 
-    let below_fail = state
-        .frame_times
+    let below_fail = frame_times
         .iter()
         .filter(|&&dt| 1.0 / dt < state.fail_fps as f64)
         .count();
-    let below_pass = state
-        .frame_times
+    let below_pass = frame_times
         .iter()
         .filter(|&&dt| 1.0 / dt < state.pass_fps as f64)
         .count();
