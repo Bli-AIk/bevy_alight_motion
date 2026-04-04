@@ -97,9 +97,13 @@ fn register_lifecycle_systems(app: &mut App) {
             .in_set(AlightMotionSystemSet::Lifecycle),
     );
 
+    app.init_resource::<crate::effects::LiftCompositeBudget>();
+
     app.add_systems(
         Update,
         (
+            crate::effects::tag_needs_lift_composite_system,
+            ApplyDeferred,
             crate::effects::setup_lift_composite_system,
             ApplyDeferred,
             crate::effects::propagate_lift_render_layers_system,

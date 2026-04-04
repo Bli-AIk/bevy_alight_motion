@@ -325,6 +325,7 @@ pub(super) fn propagate_to_descendants(
             Without<super::types::RenderStrategy>,
         ),
     >,
+    bfs_buffer: &mut Vec<Entity>,
 ) -> u32 {
     let mut updates = 0;
 
@@ -355,14 +356,14 @@ pub(super) fn propagate_to_descendants(
             );
         }
 
-        let mut to_process: Vec<Entity> = Vec::new();
+        bfs_buffer.clear();
         if non_embed_query.get(child_entity).is_ok()
             && let Ok(grandchildren) = children_query.get(child_entity)
         {
-            to_process.extend(grandchildren.to_vec());
+            bfs_buffer.extend(grandchildren.iter());
         }
 
-        while let Some(entity) = to_process.pop() {
+        while let Some(entity) = bfs_buffer.pop() {
             if non_embed_query.get(entity).is_err() {
                 continue;
             }
@@ -388,7 +389,7 @@ pub(super) fn propagate_to_descendants(
             }
 
             if let Ok(grandchildren) = children_query.get(entity) {
-                to_process.extend(grandchildren.to_vec());
+                bfs_buffer.extend(grandchildren.iter());
             }
         }
     }

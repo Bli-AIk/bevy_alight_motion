@@ -89,3 +89,23 @@ impl Default for RttSetupBudget {
         Self { max_per_frame: max }
     }
 }
+
+/// Per-frame budget for lift-composite setup (texture allocation + camera creation).
+/// Limits how many lift-composite pipelines are initialised per frame to avoid
+/// GPU upload spikes from large Rgba16Float texture allocations.
+///
+/// Override with `AM_LIFT_BUDGET_PER_FRAME` (0 = unlimited). Default is 2.
+#[derive(Resource)]
+pub struct LiftCompositeBudget {
+    pub max_per_frame: usize,
+}
+
+impl Default for LiftCompositeBudget {
+    fn default() -> Self {
+        let max = std::env::var("AM_LIFT_BUDGET_PER_FRAME")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2);
+        Self { max_per_frame: max }
+    }
+}
