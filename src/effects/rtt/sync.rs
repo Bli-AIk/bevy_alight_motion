@@ -2,8 +2,7 @@
 //! It updates camera placement, projection, dynamic-resolution sizing, and the
 //! matching sprite or mesh representation when an embed scene moves or scales.
 //! Also disables RTT camera rendering for inactive (time-range-exited) embeds
-//! and gaussian-blur layers to avoid wasted GPU render passes from entity
-//! persistence.
+//! to avoid wasted GPU render passes from entity persistence.
 //!
 //! 负责让 RTT 相机和渲染纹理持续与嵌套场景同步。它会在 embed scene 发生
 //! 位移或缩放时，更新相机位置、投影、动态分辨率尺寸，以及与之配套的 sprite 或 mesh
@@ -345,37 +344,24 @@ pub fn sync_rtt_camera_position_system(
     }
 }
 
-/// Disables RTT cameras whose parent entity is outside its active time range.
+/// Disables RTT cameras whose embed entity is outside its active time range.
 ///
-/// With entity persistence, entities are never despawned — they stay alive with
-/// alpha=0 when inactive. Without this system, associated RTT cameras (both
-/// embed-scene and gaussian-blur) keep rendering empty passes every frame,
-/// wasting GPU time.
+/// With entity persistence, embed entities are never despawned — they stay
+/// alive with alpha=0 when inactive. Without this system the associated RTT
+/// camera would keep rendering empty passes every frame, wasting GPU time.
 pub fn sync_rtt_camera_activity_system(
     playback: Res<crate::animation::AmPlayback>,
     embed_query: Query<&crate::animation::AmAnimated, With<EmbedSceneRtt>>,
-    blur_parent_query: Query<&crate::animation::AmAnimated, With<crate::gaussian_blur::GaussianBlurRtt>>,
-    mut embed_camera_query: Query<(&EmbedSceneRttCamera, &mut Camera), Without<crate::gaussian_blur::BlurPassCamera>>,
-    mut blur_camera_query: Query<(&crate::gaussian_blur::BlurPassCamera, &mut Camera), Without<EmbedSceneRttCamera>>,
+    mut camera_query: Query<(&EmbedSceneRttCamera, &mut Camera)>,
 ) {
     if playback.force_stopped {
         return;
     }
     let global_time = playback.current_time_ms;
 
-    for (marker, mut camera) in embed_camera_query.iter_mut() {
+    for (marker, mut camera) in camera_query.iter_mut() {
         let should_be_active = embed_query
             .get(marker.embed_entity)
-            .is_ok_and(|animated| animated.is_active(animated.calc_local_time(global_time)));
-
-        if camera.is_active != should_be_active {
-            camera.is_active = should_be_active;
-        }
-    }
-
-    for (marker, mut camera) in blur_camera_query.iter_mut() {
-        let should_be_active = blur_parent_query
-            .get(marker.parent_entity)
             .is_ok_and(|animated| animated.is_active(animated.calc_local_time(global_time)));
 
         if camera.is_active != should_be_active {
