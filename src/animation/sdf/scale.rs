@@ -34,6 +34,10 @@ pub fn animate_sdf_scale_system(
     let mut scale_map: HashMap<u64, [f32; 2]> = HashMap::new();
     let mut parent_map: HashMap<u64, u64> = HashMap::new();
 
+    // Cache env var once per frame instead of per SDF child
+    let disable_ancestor_pivot_comp =
+        std::env::var_os("AM_DISABLE_SDF_ANCESTOR_PIVOT_COMP").is_some();
+
     for (animated, _children) in parent_query.iter() {
         let local_time = animated.calc_local_time(global_time);
         if !animated.is_active(local_time) {
@@ -112,6 +116,7 @@ pub fn animate_sdf_scale_system(
                 &shape_extra_anim,
                 has_pts_anim,
                 &shape_pts_anim,
+                disable_ancestor_pivot_comp,
             );
 
             if new_uniform != mat_ref.uniform_data {

@@ -128,7 +128,10 @@ pub(crate) fn resolve_unwrapped_rotation_deg(
 }
 
 pub(crate) fn compute_normalized_frame_delta(animated: &AmAnimated) -> f32 {
-    if std::env::var_os("AM_DISABLE_REVERSE_INTERPOLATE").is_some() {
+    static DISABLED: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("AM_DISABLE_REVERSE_INTERPOLATE").is_some());
+
+    if *DISABLED {
         return 0.0;
     }
 

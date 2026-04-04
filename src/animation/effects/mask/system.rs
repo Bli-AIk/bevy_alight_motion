@@ -17,13 +17,13 @@ use super::embed::apply_embed_mask_uv;
 use super::repeat::set_mask_repeat_uniforms;
 use super::trace::trace_mask_once;
 
-fn mask_disabled_for_layer(layer_id: u64) -> bool {
+fn parse_disabled_mask_ids() -> Option<Vec<u64>> {
     std::env::var_os("AM_DISABLE_MASK_IDS")
         .and_then(|value| value.into_string().ok())
-        .is_some_and(|ids| {
+        .map(|ids| {
             ids.split(',')
                 .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == layer_id)
+                .collect()
         })
 }
 
@@ -49,6 +49,9 @@ pub fn update_unified_mask_system(
     };
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
+    // Cache env var once per frame instead of per entity
+    let disabled_mask_ids = parse_disabled_mask_ids();
+
     let global_time = playback.current_time_ms as u64;
     for (mask_info, material_handle, marker, _entity_global_transform) in query.iter() {
         let active_masks = mask_info.get_active_masks(global_time);
@@ -59,7 +62,10 @@ pub fn update_unified_mask_system(
         let mut new_uniform = old_mat.uniform_data;
         let mut new_mask_texture = old_mat.mask_texture.clone();
 
-        if mask_disabled_for_layer(marker.id) {
+        if disabled_mask_ids
+            .as_ref()
+            .is_some_and(|ids| ids.contains(&marker.id))
+        {
             new_uniform.effect_flags.x = 0.0;
             new_uniform.mask2_flags.x = 0.0;
             new_uniform.mask2_flags.y = 0.0;

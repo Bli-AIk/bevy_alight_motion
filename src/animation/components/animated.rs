@@ -315,13 +315,18 @@ impl AmAnimated {
                 base_time
             }
         };
-        if let Some(trace_ids) =
-            std::env::var_os("AM_RETIME_TRACE_IDS").and_then(|value| value.into_string().ok())
-        {
-            let should_trace = trace_ids
-                .split(',')
-                .filter_map(|value| value.trim().parse::<u64>().ok())
-                .any(|id| id == self.layer_id);
+        static RETIME_TRACE_IDS: std::sync::LazyLock<Option<Vec<u64>>> =
+            std::sync::LazyLock::new(|| {
+                std::env::var_os("AM_RETIME_TRACE_IDS")
+                    .and_then(|value| value.into_string().ok())
+                    .map(|ids| {
+                        ids.split(',')
+                            .filter_map(|value| value.trim().parse::<u64>().ok())
+                            .collect()
+                    })
+            });
+        if let Some(trace_ids) = RETIME_TRACE_IDS.as_ref() {
+            let should_trace = trace_ids.contains(&self.layer_id);
             if should_trace {
                 bevy::log::warn!(
                     "[RetimeTrace] id={} mode={:?} global={:.3} comparison={:.3} bias={:.3} embed_start={:.3} embed_elapsed={:.3} in_time={:.3} base_time={:.3} total={:.3} renderable_total={:.3} nested={:.3} scene_fps={:.3}",

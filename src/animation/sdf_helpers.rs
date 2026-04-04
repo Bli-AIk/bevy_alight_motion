@@ -137,10 +137,8 @@ pub(super) fn update_sdf_child_material(
     shape_extra_anim: &[f32; 4],
     has_pts_anim: bool,
     shape_pts_anim: &[[f32; 2]; 5],
+    disable_ancestor_pivot_comp: bool,
 ) {
-    let disable_ancestor_pivot_comp =
-        std::env::var_os("AM_DISABLE_SDF_ANCESTOR_PIVOT_COMP").is_some();
-
     let scaled_half_width = sdf_params.base_half_width * combined_scale[0];
     let scaled_half_height = sdf_params.base_half_height * combined_scale[1];
 
