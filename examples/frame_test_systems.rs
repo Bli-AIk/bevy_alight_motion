@@ -33,6 +33,9 @@ pub struct FrameTestState {
     pub project_name: String,
     pub animation_completed: bool,
     pub prev_time_ms: f64,
+    // Shader pre-warm: track whether a full animation cycle has been played during warmup
+    pub warmup_prev_anim_time: f64,
+    pub warmup_full_cycle_done: bool,
     // Config
     pub pass_fps: f32,
     pub fail_fps: f32,
@@ -56,6 +59,8 @@ impl Default for FrameTestState {
             project_name: String::new(),
             animation_completed: false,
             prev_time_ms: 0.0,
+            warmup_prev_anim_time: 0.0,
+            warmup_full_cycle_done: false,
             pass_fps: 120.0,
             fail_fps: 60.0,
             max_below_fail_rate: 0.05,
@@ -197,26 +202,38 @@ pub fn frame_test_loop(
         FrameTestStage::WaitingForLoad => {
             let project_loaded = project_query.iter().any(|root| root.spawned);
             if project_loaded {
-                if state.play_once {
-                    playback.looping = false;
-                } else {
-                    playback.looping = true;
-                }
+                // Always loop during warmup so the animation plays through a full cycle,
+                // ensuring all shaders/pipelines compile before measurement begins.
+                playback.looping = true;
                 state.stage = FrameTestStage::Warmup;
                 println!(
-                    "[FRAME-TEST] Project loaded (duration={:.1}ms), warming up {} frames...",
+                    "[FRAME-TEST] Project loaded (duration={:.1}ms), warming up ({} frames + full animation cycle)...",
                     playback.total_time_ms, state.warmup_frames_remaining
                 );
             }
         }
 
         FrameTestStage::Warmup => {
+            // Detect full animation cycle completion via wrap-around
+            let current_anim = playback.current_time_ms as f64;
+            if !state.warmup_full_cycle_done && current_anim < state.warmup_prev_anim_time - 100.0 {
+                state.warmup_full_cycle_done = true;
+                println!(
+                    "[FRAME-TEST] Warmup: full animation cycle completed (shader pre-warm done)"
+                );
+            }
+            state.warmup_prev_anim_time = current_anim;
+
             if state.warmup_frames_remaining > 0 {
                 state.warmup_frames_remaining -= 1;
-            } else {
+            }
+
+            // Require both: minimum frames elapsed AND a full animation cycle completed
+            if state.warmup_frames_remaining == 0 && state.warmup_full_cycle_done {
                 state.stage = FrameTestStage::Running;
-                // Reset playback to start for play-once mode
+                // Reset playback for measurement
                 if state.play_once {
+                    playback.looping = false;
                     playback.current_time_ms = 0.0;
                     playback.playing = true;
                     state.prev_time_ms = 0.0;
