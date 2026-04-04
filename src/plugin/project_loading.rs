@@ -76,7 +76,6 @@ pub(super) fn spawn_loaded_projects_system(
     mut playback: ResMut<crate::animation::AmPlayback>,
     resolution_config: Res<AmProjectResolution>,
     window_query: Query<&Window>,
-    mut images: ResMut<Assets<Image>>,
 ) {
     for (entity, mut root, mut transform) in query.iter_mut() {
         if root.spawned {
@@ -141,17 +140,6 @@ pub(super) fn spawn_loaded_projects_system(
             pending_layers.len()
         );
 
-        // Pre-allocate RTT textures for layers that will need Composite rendering.
-        // This spreads the GPU upload cost across asset loading instead of causing
-        // a single-frame spike when many embeds become active simultaneously.
-        let rtt_texture_cache = preallocate_rtt_textures(&pending_layers, &mut images);
-        if !rtt_texture_cache.is_empty() {
-            bevy::log::info!(
-                "Pre-allocated {} RTT textures for composite embeds",
-                rtt_texture_cache.len()
-            );
-        }
-
         let layers_container = spawn_named_container(
             &mut commands,
             "AmLayersContainer",
@@ -179,7 +167,6 @@ pub(super) fn spawn_loaded_projects_system(
                 layers_container: Some(layers_container),
                 embed_contents_container: Some(embed_contents_container),
                 rtt_cameras_container: Some(rtt_cameras_container),
-                rtt_texture_cache,
             });
 
         root.spawned = true;
@@ -305,52 +292,4 @@ fn spawn_named_container<C: Component>(commands: &mut Commands, name: &str, mark
             ViewVisibility::default(),
         ))
         .id()
-}
-
-/// Pre-allocate RTT textures for layers that will need Composite rendering.
-///
-/// By creating the `Image` assets at load time instead of the first frame where
-/// all embeds become visible, we avoid a large single-frame GPU upload spike
-/// (measured at 541ms for ~50 textures in the `revenge` example).
-fn preallocate_rtt_textures(
-    layers: &[crate::scene::PendingLayer],
-    images: &mut Assets<Image>,
-) -> std::collections::HashMap<u64, Handle<Image>> {
-    use crate::scene::{AmBlendingMode, AmLayerSpec};
-
-    let format = crate::effects::rtt::setup_helpers::selected_embed_rtt_format();
-    let mut cache = std::collections::HashMap::new();
-
-    if std::env::var_os("AM_DISABLE_RTT_PREALLOC").is_some() {
-        return cache;
-    }
-
-    for layer in layers {
-        if !matches!(layer.spec, AmLayerSpec::EmbedScene) {
-            continue;
-        }
-
-        let requires_composite = layer
-            .embed_render_plan
-            .map(|plan| plan.requires_composite)
-            .unwrap_or(false);
-        let has_group_fill = layer.group_fill.is_some();
-        let is_mask = layer.blending_mode == AmBlendingMode::Mask
-            || layer.blending_mode == AmBlendingMode::Exclude;
-
-        if !(requires_composite || has_group_fill || is_mask) {
-            continue;
-        }
-
-        let (w, h) = layer.embed_scene_size.unwrap_or((1280.0, 960.0));
-        let texture = Image::new_target_texture(
-            w.max(1.0).ceil() as u32,
-            h.max(1.0).ceil() as u32,
-            format,
-            None,
-        );
-        cache.insert(layer.id, images.add(texture));
-    }
-
-    cache
 }

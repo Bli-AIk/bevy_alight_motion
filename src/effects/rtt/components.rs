@@ -42,7 +42,6 @@ pub struct NeedsEmbedSceneRtt {
     pub scene_width: f32,
     pub scene_height: f32,
     pub render_plan: crate::effects::EmbedSceneRenderPlan,
-    pub prealloc_texture: Option<Handle<Image>>,
 }
 
 #[derive(Component)]
@@ -51,7 +50,6 @@ pub struct NeedsStrategyEvaluation {
     pub scene_height: f32,
     pub has_scale_animation: bool,
     pub render_plan: crate::effects::EmbedSceneRenderPlan,
-    pub prealloc_texture: Option<Handle<Image>>,
 }
 
 #[derive(Component, Debug, Clone)]

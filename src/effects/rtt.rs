@@ -25,7 +25,7 @@ mod layers;
 mod plugin;
 mod pool;
 mod setup;
-pub(crate) mod setup_helpers;
+mod setup_helpers;
 mod strategy;
 mod sync;
 

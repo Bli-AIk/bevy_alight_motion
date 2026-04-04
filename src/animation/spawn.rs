@@ -390,8 +390,6 @@ pub(crate) fn process_pending_layers(
             .iter()
             .any(|candidate| candidate.parent == layer.id);
 
-        let prealloc_texture = pending.rtt_texture_cache.get(&layer.id).cloned();
-
         let entity = spawn_layer_entity(
             commands,
             meshes,
@@ -410,7 +408,6 @@ pub(crate) fn process_pending_layers(
             has_child_layers,
             &pending.spawned_entities,
             global_time,
-            prealloc_texture,
         );
 
         bevy::log::debug!(
