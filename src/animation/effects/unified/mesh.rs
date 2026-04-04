@@ -16,7 +16,7 @@ use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 use super::super::unified_support::{trace_stretch_once, update_quad_mesh};
 
 pub(super) fn update_blur_mesh(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     orig_width: f32,
@@ -30,10 +30,10 @@ pub(super) fn update_blur_mesh(
     if has_blur {
         let blur_strength = interpolate_float(&animated.blur_strength, layer_time).unwrap_or(0.0);
         if blur_strength > 0.001 {
-            uniform.set_blur_enabled(true);
+            material.set_blur_enabled(true);
             let blur_radius_px = blur_strength * 80.0;
             let blur_expansion = blur_radius_px * 2.0;
-            uniform.blur_params =
+            material.uniform_data.blur_params =
                 Vec4::new(blur_radius_px, orig_width, orig_height, blur_expansion);
 
             let half_w = orig_width / 2.0;
@@ -58,15 +58,15 @@ pub(super) fn update_blur_mesh(
                 ],
             );
         } else {
-            uniform.set_blur_enabled(false);
+            material.set_blur_enabled(false);
         }
     } else {
-        uniform.set_blur_enabled(false);
+        material.set_blur_enabled(false);
     }
 }
 
 pub(super) fn update_stretch_mesh(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_stretch: bool,
@@ -84,7 +84,7 @@ pub(super) fn update_stretch_mesh(
     meshes: &mut Assets<Mesh>,
 ) {
     if has_stretch {
-        uniform.set_stretch_enabled(true);
+        material.set_stretch_enabled(true);
 
         let angle_deg = interpolate_float(&animated.stretch_angle, layer_time).unwrap_or(0.0);
         let angle_rad = angle_deg.to_radians();
@@ -189,25 +189,27 @@ pub(super) fn update_stretch_mesh(
             );
         }
 
-        uniform.stretch_params = Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
-        uniform.original_size = Vec4::new(local_orig_w, local_orig_h, local_new_w, local_new_h);
+        material.uniform_data.stretch_params =
+            Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
+        material.uniform_data.original_size =
+            Vec4::new(local_orig_w, local_orig_h, local_new_w, local_new_h);
         let stretch_sign_code =
             (if scale[0] < 0.0 { 1.0 } else { 0.0 }) + (if scale[1] < 0.0 { 2.0 } else { 0.0 });
-        uniform.mesh_offset = Vec4::new(
+        material.uniform_data.mesh_offset = Vec4::new(
             transform_rotation_rad,
             stretch_sign_code,
             scene_width,
             scene_height,
         );
         // Store layer_scale in solid_color_alpha.yz for the shader's local↔screen conversion
-        uniform.solid_color_alpha.y = layer_scale.x;
-        uniform.solid_color_alpha.z = layer_scale.y;
+        material.uniform_data.solid_color_alpha.y = layer_scale.x;
+        material.uniform_data.solid_color_alpha.z = layer_scale.y;
 
         if has_stretch_seg2 {
-            uniform.stretch_seg2_params =
+            material.uniform_data.stretch_seg2_params =
                 Vec4::new(angle_rad2, adj_stretch2, offset_norm2, smooth_raw2);
         } else {
-            uniform.stretch_seg2_params = Vec4::ZERO;
+            material.uniform_data.stretch_seg2_params = Vec4::ZERO;
         }
 
         let u_pad = aa_pad / local_new_w;
@@ -220,15 +222,15 @@ pub(super) fn update_stretch_mesh(
             [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
         );
     } else {
-        uniform.set_stretch_enabled(false);
+        material.set_stretch_enabled(false);
         // Default layer_scale for non-stretch layers
-        uniform.solid_color_alpha.y = 1.0;
-        uniform.solid_color_alpha.z = 1.0;
+        material.uniform_data.solid_color_alpha.y = 1.0;
+        material.uniform_data.solid_color_alpha.z = 1.0;
     }
 }
 
 pub(super) fn update_base_mesh(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_stretch: bool,
@@ -363,7 +365,8 @@ pub(super) fn update_base_mesh(
                 uv_rect
             );
         }
-        uniform.original_size = Vec4::new(orig_width, orig_height, mesh_width, mesh_height);
+        material.uniform_data.original_size =
+            Vec4::new(orig_width, orig_height, mesh_width, mesh_height);
         update_quad_mesh(meshes, mesh2d, mesh_state, bounds, uv_rect);
     }
 }

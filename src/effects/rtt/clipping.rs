@@ -37,6 +37,10 @@ pub fn apply_embed_bounds_clipping_system(
             continue;
         }
 
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+
         let has_active_mask = mask_info
             .map(|info| !info.get_active_masks(global_time).is_empty())
             .unwrap_or(false);
@@ -47,30 +51,6 @@ pub fn apply_embed_bounds_clipping_system(
         let center_x = embed_pos.x;
         let center_y = embed_pos.y;
         let rotation_z = embed_rotation.to_euler(bevy::math::EulerRot::XYZ).2;
-
-        // Read immutably first to check if values actually changed.
-        let Some(mat_ref) = materials.get(&material_handle.0) else {
-            continue;
-        };
-        let u = &mat_ref.uniform_data;
-
-        let needs_update = if has_active_mask {
-            u.embed_clip_params != Vec4::new(center_x, center_y, half_width, half_height)
-                || u.embed_clip_rotation.x != rotation_z
-        } else {
-            u.effect_flags.x != 1.0
-                || u.mask_params != Vec4::new(center_x, center_y, half_width, half_height)
-                || u.mask_blend != Vec4::new(1.0, 1.0, 0.0, 0.0)
-                || u.mask2_flags.y != rotation_z
-        };
-
-        if !needs_update {
-            continue;
-        }
-
-        let Some(material) = materials.get_mut(&material_handle.0) else {
-            continue;
-        };
 
         if has_active_mask {
             // Entity has a real mask — write embed bounds into the dedicated

@@ -13,7 +13,7 @@ use crate::animation::interpolation::{interpolate_color, interpolate_float, inte
 pub(crate) fn process_radial_repeat_effect(
     animated: &AmAnimated,
     layer_time: f32,
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
@@ -67,12 +67,12 @@ pub(crate) fn process_radial_repeat_effect(
 
         let count_for_shader = if count.round() <= 0.0 { -1.0 } else { count };
 
-        uniform.radial_repeat_params1 =
+        material.uniform_data.radial_repeat_params1 =
             Vec4::new(count_for_shader, radius, orientation, start_angle);
-        uniform.radial_repeat_params2 = Vec4::new(sweep, base_scale, angle, scale);
-        uniform.radial_repeat_params3 = Vec4::new(alpha, offset[0], offset[1], blend);
-        uniform.radial_repeat_params4 = Vec4::new(start, end, phase, overlap);
-        uniform.radial_repeat_params5 = Vec4::new(
+        material.uniform_data.radial_repeat_params2 = Vec4::new(sweep, base_scale, angle, scale);
+        material.uniform_data.radial_repeat_params3 = Vec4::new(alpha, offset[0], offset[1], blend);
+        material.uniform_data.radial_repeat_params4 = Vec4::new(start, end, phase, overlap);
+        material.uniform_data.radial_repeat_params5 = Vec4::new(
             ease_in,
             ease_out,
             shape_invert_alt as f32,
@@ -82,13 +82,13 @@ pub(crate) fn process_radial_repeat_effect(
                 animated.radial_repeat_seed
             },
         );
-        uniform.radial_repeat_fill_color = fill_color;
+        material.uniform_data.radial_repeat_fill_color = fill_color;
 
         // Element pivot for rotation correction: AM's `rotatedBy` applies
         // the spread rotation around the element's pivot, so the inverse
         // transform must account for the pivot offset.
         let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
-        uniform.radial_repeat_params6 = Vec4::new(pivot[0], pivot[1], 0.0, 0.0);
+        material.uniform_data.radial_repeat_params6 = Vec4::new(pivot[0], pivot[1], 0.0, 0.0);
 
         let pivot_mag = (pivot[0].powi(2) + pivot[1].powi(2)).sqrt();
         let max_mix = scale.abs().max(1.0);
@@ -106,7 +106,8 @@ pub(crate) fn process_radial_repeat_effect(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
-        uniform.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
+        material.uniform_data.original_size =
+            Vec4::new(orig_width, orig_height, new_width, new_height);
 
         let uv_min_x = min_x / orig_width + 0.5;
         let uv_max_x = max_x / orig_width + 0.5;
@@ -129,12 +130,12 @@ pub(crate) fn process_radial_repeat_effect(
 
         super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
     } else {
-        uniform.radial_repeat_params1 = Vec4::ZERO;
-        uniform.radial_repeat_params2 = Vec4::new(360.0, 1.0, 0.0, 1.0);
-        uniform.radial_repeat_params3 = Vec4::new(1.0, 0.0, 0.0, 0.0);
-        uniform.radial_repeat_params4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.radial_repeat_params5 = Vec4::ZERO;
-        uniform.radial_repeat_params6 = Vec4::ZERO;
-        uniform.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.radial_repeat_params1 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params2 = Vec4::new(360.0, 1.0, 0.0, 1.0);
+        material.uniform_data.radial_repeat_params3 = Vec4::new(1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.radial_repeat_params4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.radial_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params6 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
 }

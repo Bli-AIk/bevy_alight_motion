@@ -18,7 +18,7 @@ use super::java_random::{compute_java_random_state_packed, precompute_shuffle_pa
 pub(crate) fn process_linear_repeat_effect(
     animated: &AmAnimated,
     layer_time: f32,
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
@@ -34,21 +34,21 @@ pub(crate) fn process_linear_repeat_effect(
                 animated.layer_id
             );
         }
-        uniform.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        uniform.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        uniform.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.linear_repeat_params4 = Vec4::ZERO;
-        uniform.linear_repeat_params5 = Vec4::ZERO;
-        uniform.linear_repeat_perm = Vec4::ZERO;
-        uniform.linear_repeat_source_size = Vec4::ZERO;
-        uniform.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
-        uniform.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        uniform.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        uniform.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.linear_repeat2_params4 = Vec4::ZERO;
-        uniform.linear_repeat2_params5 = Vec4::ZERO;
-        uniform.linear_repeat2_perm = Vec4::ZERO;
-        uniform.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
+        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         return;
     }
 
@@ -59,21 +59,21 @@ pub(crate) fn process_linear_repeat_effect(
             .iter()
             .any(|kf| kf.value.parse::<f32>().unwrap_or(0.0) > 0.0);
     if !has_linear_repeat {
-        uniform.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        uniform.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        uniform.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.linear_repeat_params4 = Vec4::ZERO;
-        uniform.linear_repeat_params5 = Vec4::ZERO;
-        uniform.linear_repeat_perm = Vec4::ZERO;
-        uniform.linear_repeat_source_size = Vec4::ZERO;
-        uniform.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
-        uniform.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        uniform.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        uniform.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.linear_repeat2_params4 = Vec4::ZERO;
-        uniform.linear_repeat2_params5 = Vec4::ZERO;
-        uniform.linear_repeat2_perm = Vec4::ZERO;
-        uniform.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
+        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         return;
     }
 
@@ -110,15 +110,17 @@ pub(crate) fn process_linear_repeat_effect(
 
     let count_rounded = count.round();
 
-    uniform.linear_repeat_params1 = Vec4::new(count_rounded, position[0], position[1], angle);
-    uniform.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
-    uniform.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
-    uniform.linear_repeat_params4 = Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
-    uniform.linear_repeat_params5 = if animated.linear_repeat_random_order {
+    material.uniform_data.linear_repeat_params1 =
+        Vec4::new(count_rounded, position[0], position[1], angle);
+    material.uniform_data.linear_repeat_params2 = Vec4::new(offset[0], offset[1], scale, alpha);
+    material.uniform_data.linear_repeat_params3 = Vec4::new(start, end, phase, overlap);
+    material.uniform_data.linear_repeat_params4 =
+        Vec4::new(ease_in, ease_out, blend, shape_invert_alt as f32);
+    material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
         let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
         let count_int = count_rounded as usize;
         if let Some((p5y, p5z, perm_vec4)) = precompute_shuffle_packed(seed, count_int) {
-            uniform.linear_repeat_perm = perm_vec4;
+            material.uniform_data.linear_repeat_perm = perm_vec4;
             Vec4::new(
                 2.0, // 2.0 = precomputed permutation
                 p5y,
@@ -127,7 +129,7 @@ pub(crate) fn process_linear_repeat_effect(
             )
         } else {
             // Fallback: count > 24, compute in shader
-            uniform.linear_repeat_perm = Vec4::ZERO;
+            material.uniform_data.linear_repeat_perm = Vec4::ZERO;
             let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
             Vec4::new(
                 1.0,
@@ -137,7 +139,7 @@ pub(crate) fn process_linear_repeat_effect(
             )
         }
     } else {
-        uniform.linear_repeat_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat_perm = Vec4::ZERO;
         Vec4::new(
             0.0,
             0.0,
@@ -145,14 +147,14 @@ pub(crate) fn process_linear_repeat_effect(
             linear_repeat_after_stretch_segment as u32 as f32,
         )
     };
-    let os = &uniform.original_size;
+    let os = &material.uniform_data.original_size;
     let (lr_src_w, lr_src_h) = if linear_repeat_after_stretch_segment {
         (os.z.max(1.0), os.w.max(1.0))
     } else {
         (orig_width, orig_height)
     };
-    uniform.linear_repeat_source_size = Vec4::new(lr_src_w, lr_src_h, 0.0, 0.0);
-    uniform.linear_repeat_fill_color = fill_color;
+    material.uniform_data.linear_repeat_source_size = Vec4::new(lr_src_w, lr_src_h, 0.0, 0.0);
+    material.uniform_data.linear_repeat_fill_color = fill_color;
 
     let (has_lr2, count2_rounded, position2, offset2, angle2, scale2) = if let Some(ref lr2) =
         animated.linear_repeat2
@@ -183,35 +185,35 @@ pub(crate) fn process_linear_repeat_effect(
             + if lr2.color_alt_copies { 1 } else { 0 };
         let c2r = c2.round();
 
-        uniform.linear_repeat2_params1 = Vec4::new(c2r, p2[0], p2[1], a2);
-        uniform.linear_repeat2_params2 = Vec4::new(o2[0], o2[1], s2, al2);
-        uniform.linear_repeat2_params3 = Vec4::new(st2, en2, ph2, ov2);
-        uniform.linear_repeat2_params4 = Vec4::new(ei2, eo2, bl2, sia2 as f32);
-        uniform.linear_repeat2_params5 = if lr2.random_order {
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(c2r, p2[0], p2[1], a2);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(o2[0], o2[1], s2, al2);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(st2, en2, ph2, ov2);
+        material.uniform_data.linear_repeat2_params4 = Vec4::new(ei2, eo2, bl2, sia2 as f32);
+        material.uniform_data.linear_repeat2_params5 = if lr2.random_order {
             let lr2_seed = interpolate_float(&lr2.seed, layer_time).unwrap_or(0.0);
             let count_int = c2r as usize;
             if let Some((p5y, p5z, perm_vec4)) = precompute_shuffle_packed(lr2_seed, count_int) {
-                uniform.linear_repeat2_perm = perm_vec4;
+                material.uniform_data.linear_repeat2_perm = perm_vec4;
                 Vec4::new(2.0, p5y, p5z, 0.0)
             } else {
-                uniform.linear_repeat2_perm = Vec4::ZERO;
+                material.uniform_data.linear_repeat2_perm = Vec4::ZERO;
                 let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(lr2_seed);
                 Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
             }
         } else {
-            uniform.linear_repeat2_perm = Vec4::ZERO;
+            material.uniform_data.linear_repeat2_perm = Vec4::ZERO;
             Vec4::ZERO
         };
-        uniform.linear_repeat2_fill_color = fc2;
+        material.uniform_data.linear_repeat2_fill_color = fc2;
         (true, c2r, p2, o2, a2, s2)
     } else {
-        uniform.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
-        uniform.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
-        uniform.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-        uniform.linear_repeat2_params4 = Vec4::ZERO;
-        uniform.linear_repeat2_params5 = Vec4::ZERO;
-        uniform.linear_repeat2_perm = Vec4::ZERO;
-        uniform.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_perm = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         (false, 0.0, [0.0, 0.0], [0.0, 0.0], 0.0, 1.0)
     };
 
@@ -232,10 +234,10 @@ pub(crate) fn process_linear_repeat_effect(
             calc_linear_repeat_progress(
                 0,
                 count2_rounded.max(1.0) as i32,
-                uniform.linear_repeat2_params3.x,
-                uniform.linear_repeat2_params3.y,
-                uniform.linear_repeat2_params3.z,
-                uniform.linear_repeat2_params3.w,
+                material.uniform_data.linear_repeat2_params3.x,
+                material.uniform_data.linear_repeat2_params3.y,
+                material.uniform_data.linear_repeat2_params3.z,
+                material.uniform_data.linear_repeat2_params3.w,
                 if let Some(ref lr2) = animated.linear_repeat2 {
                     lr2.shape
                 } else {
@@ -246,8 +248,8 @@ pub(crate) fn process_linear_repeat_effect(
                 } else {
                     false
                 },
-                uniform.linear_repeat2_params4.x,
-                uniform.linear_repeat2_params4.y,
+                material.uniform_data.linear_repeat2_params4.x,
+                material.uniform_data.linear_repeat2_params4.y,
             )
         });
         bevy::log::warn!(
@@ -379,7 +381,7 @@ pub(crate) fn process_linear_repeat_effect(
 
     let new_width = max_x - min_x;
     let new_height = max_y - min_y;
-    uniform.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
+    material.uniform_data.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
 
     // Keep repeat-space UVs in the same coordinate basis that the shader uses for
     // `pixel_coord`. When repeat follows stretchsegment, that basis is the stretched

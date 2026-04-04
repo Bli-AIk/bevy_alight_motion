@@ -14,25 +14,26 @@ use crate::animation::interpolation::{interpolate_color, interpolate_float};
 use super::super::unified_support::srgb_to_linear;
 
 pub(super) fn update_wipe(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_wipe: bool,
 ) {
     if has_wipe {
-        uniform.set_wipe_enabled(true);
+        material.set_wipe_enabled(true);
         let wipe_start = interpolate_float(&animated.wipe_start, layer_time).unwrap_or(0.0);
         let wipe_end = interpolate_float(&animated.wipe_end, layer_time).unwrap_or(1.0);
         let wipe_angle = interpolate_float(&animated.wipe_angle, layer_time).unwrap_or(0.0);
         let wipe_feather = interpolate_float(&animated.wipe_feather, layer_time).unwrap_or(0.0);
-        uniform.wipe_params = Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
+        material.uniform_data.wipe_params =
+            Vec4::new(wipe_start, wipe_end, wipe_angle, wipe_feather);
     } else {
-        uniform.set_wipe_enabled(false);
+        material.set_wipe_enabled(false);
     }
 }
 
 pub(super) fn update_stretch2_uniform(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     has_stretch2: bool,
     s2_scale: f32,
@@ -51,14 +52,15 @@ pub(super) fn update_stretch2_uniform(
             s2_angle_rad,
             animated.stretch2_content_only
         );
-        uniform.stretch2_params = Vec4::new(s2_scale, s2_angle_rad, s2_content_only, 0.0);
+        material.uniform_data.stretch2_params =
+            Vec4::new(s2_scale, s2_angle_rad, s2_content_only, 0.0);
     } else {
-        uniform.stretch2_params = Vec4::ZERO;
+        material.uniform_data.stretch2_params = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_wavewarp2(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     orig_width: f32,
@@ -79,11 +81,12 @@ pub(super) fn update_wavewarp2(
         let damping_origin =
             interpolate_float(&animated.wavewarp2_damping_origin, layer_time).unwrap_or(0.5);
 
-        uniform.wavewarp2_params1 = Vec4::new(phase, a1d_rad, m1, m2);
-        uniform.wavewarp2_params2 = Vec4::new(a2_rad, damping_val, damping_space, damping_origin);
+        material.uniform_data.wavewarp2_params1 = Vec4::new(phase, a1d_rad, m1, m2);
+        material.uniform_data.wavewarp2_params2 =
+            Vec4::new(a2_rad, damping_val, damping_space, damping_origin);
         let mag_x = animated.canvas_width / orig_width.max(1.0);
         let mag_y = animated.canvas_height / orig_height.max(1.0);
-        uniform.wavewarp2_flags = Vec4::new(
+        material.uniform_data.wavewarp2_flags = Vec4::new(
             if animated.wavewarp2_screen_space {
                 1.0
             } else {
@@ -94,14 +97,14 @@ pub(super) fn update_wavewarp2(
             mag_y,
         );
     } else {
-        uniform.wavewarp2_params1 = Vec4::ZERO;
-        uniform.wavewarp2_params2 = Vec4::ZERO;
-        uniform.wavewarp2_flags = Vec4::ZERO;
+        material.uniform_data.wavewarp2_params1 = Vec4::ZERO;
+        material.uniform_data.wavewarp2_params2 = Vec4::ZERO;
+        material.uniform_data.wavewarp2_flags = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_mirror(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
@@ -109,32 +112,33 @@ pub(super) fn update_mirror(
         let alpha = interpolate_float(&animated.mirror_alpha, layer_time).unwrap_or(1.0);
         let offset = interpolate_float(&animated.mirror_offset, layer_time).unwrap_or(0.0);
         let type_plus_1 = (animated.mirror_type + 1) as f32;
-        uniform.mirror_params = Vec4::new(
+        material.uniform_data.mirror_params = Vec4::new(
             type_plus_1,
             animated.mirror_blend_mode as f32,
             alpha,
             offset,
         );
     } else {
-        uniform.mirror_params = Vec4::ZERO;
+        material.uniform_data.mirror_params = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_lift(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
     if animated.lift_has_effect {
         let fill = interpolate_float(&animated.lift_fill, layer_time).unwrap_or(0.0);
-        uniform.lift_params = Vec4::new(fill, animated.canvas_width, animated.canvas_height, 1.0);
+        material.uniform_data.lift_params =
+            Vec4::new(fill, animated.canvas_width, animated.canvas_height, 1.0);
     } else {
-        uniform.lift_params = Vec4::ZERO;
+        material.uniform_data.lift_params = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_rays(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     embed_marker: Option<&crate::scene::AmEmbedContentMarker>,
     parent_animated_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
@@ -162,20 +166,20 @@ pub(super) fn update_rays(
         let blend = interpolate_float(&rays_src.rays_blend, rt).unwrap_or(0.0);
         let cx = 0.5 + interpolate_float(&rays_src.rays_center_x, rt).unwrap_or(0.0) / 500.0;
         let cy = 0.5 - interpolate_float(&rays_src.rays_center_y, rt).unwrap_or(0.0) / 500.0;
-        uniform.rays_params1 = Vec4::new(strength, intensity, threshold, quality);
-        uniform.rays_params2 = Vec4::new(blend, cx, cy, 1.0);
-        uniform.rays_threshold_color = rays_src.rays_threshold_color;
-        uniform.rays_fill_color = rays_src.rays_fill_color;
+        material.uniform_data.rays_params1 = Vec4::new(strength, intensity, threshold, quality);
+        material.uniform_data.rays_params2 = Vec4::new(blend, cx, cy, 1.0);
+        material.uniform_data.rays_threshold_color = rays_src.rays_threshold_color;
+        material.uniform_data.rays_fill_color = rays_src.rays_fill_color;
     } else {
-        uniform.rays_params1 = Vec4::ZERO;
-        uniform.rays_params2 = Vec4::ZERO;
-        uniform.rays_threshold_color = Vec4::ZERO;
-        uniform.rays_fill_color = Vec4::ZERO;
+        material.uniform_data.rays_params1 = Vec4::ZERO;
+        material.uniform_data.rays_params2 = Vec4::ZERO;
+        material.uniform_data.rays_threshold_color = Vec4::ZERO;
+        material.uniform_data.rays_fill_color = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_rgb_split(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
@@ -186,19 +190,19 @@ pub(super) fn update_rgb_split(
         let adj_strength = strength / 8.0;
         let offset_x = angle_rad.cos() * adj_strength;
         let offset_y = angle_rad.sin() * adj_strength;
-        uniform.rgb_split_params = Vec4::new(
+        material.uniform_data.rgb_split_params = Vec4::new(
             offset_x,
             offset_y,
             animated.rgb_split_center as f32,
             animated.rgb_split_mode as f32,
         );
     } else {
-        uniform.rgb_split_params = Vec4::new(0.0, 0.0, 0.0, -1.0);
+        material.uniform_data.rgb_split_params = Vec4::new(0.0, 0.0, 0.0, -1.0);
     }
 }
 
 pub(super) fn update_exposure(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     embed_marker: Option<&crate::scene::AmEmbedContentMarker>,
     parent_animated_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
@@ -231,11 +235,11 @@ pub(super) fn update_exposure(
         has_exp = true;
     }
 
-    uniform.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
+    material.set_exposure_gamma(exp_val, gam_val, off_val, has_exp);
 }
 
 pub(super) fn update_chromakey(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
@@ -250,7 +254,7 @@ pub(super) fn update_chromakey(
             srgb_to_linear(key_color.z),
             key_color.w,
         );
-        uniform.set_chromakey(
+        material.set_chromakey(
             linear_key,
             threshold,
             feather,
@@ -261,11 +265,11 @@ pub(super) fn update_chromakey(
 }
 
 pub(super) fn update_blend(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
 ) {
     if animated.blend_mode.is_blend() {
-        uniform.set_blend_mode(
+        material.set_blend_mode(
             animated.blend_mode.as_f32(),
             animated.canvas_width,
             animated.canvas_height,
@@ -274,33 +278,33 @@ pub(super) fn update_blend(
 }
 
 pub(super) fn update_solidcolor(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
 ) {
     let sc_alpha_val = interpolate_float(&animated.solid_color_alpha, layer_time).unwrap_or(0.0);
     if sc_alpha_val > 0.0 {
         let sc_color = interpolate_color(&animated.solid_color, layer_time).unwrap_or(Vec4::ZERO);
-        uniform.solid_color_params = Vec4::new(
+        material.uniform_data.solid_color_params = Vec4::new(
             srgb_to_linear(sc_color.x),
             srgb_to_linear(sc_color.y),
             srgb_to_linear(sc_color.z),
             animated.solid_color_blend_mode as f32,
         );
-        uniform.solid_color_alpha = Vec4::new(sc_alpha_val, 0.0, 0.0, 0.0);
+        material.uniform_data.solid_color_alpha = Vec4::new(sc_alpha_val, 0.0, 0.0, 0.0);
     } else {
-        uniform.solid_color_alpha = Vec4::ZERO;
+        material.uniform_data.solid_color_alpha = Vec4::ZERO;
     }
 }
 
 pub(super) fn update_palette(
-    uniform: &mut crate::masked_sprite::UnifiedEffectUniform,
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_palette: bool,
 ) {
-    if has_palette && uniform.is_palette_enabled() {
+    if has_palette && material.is_palette_enabled() {
         let palette_alpha = interpolate_float(&animated.palette_alpha, layer_time).unwrap_or(1.0);
-        uniform.set_palette_alpha(palette_alpha);
+        material.set_palette_alpha(palette_alpha);
     }
 }
