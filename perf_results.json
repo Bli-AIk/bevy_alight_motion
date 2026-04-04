@@ -3,59 +3,23 @@
     "private/USER_mortis/revenge": {
       "project": "private/USER_mortis/revenge",
       "status": "fail",
-      "total_frames": 322,
-      "avg_fps": 40.2,
-      "min_fps": 4.0,
-      "max_fps": 234.1,
-      "p95_fps": 22.2,
-      "p99_fps": 4.6,
-      "max_frame_time_ms": 250.0,
-      "median_frame_time_ms": 16.53,
-      "stutter_count": 24,
-      "stutter_rate": 0.0745,
-      "below_fail_count": 153,
-      "below_fail_rate": 0.4752,
+      "total_frames": 498,
+      "avg_fps": 62.2,
+      "min_fps": 26.3,
+      "max_fps": 370.8,
+      "p95_fps": 59.2,
+      "p99_fps": 34.5,
+      "max_frame_time_ms": 38.05,
+      "median_frame_time_ms": 16.08,
+      "stutter_count": 1,
+      "stutter_rate": 0.002,
+      "below_fail_count": 31,
+      "below_fail_rate": 0.0622,
       "mode": "loop",
       "top_spikes": [
         {
-          "frame": 54,
-          "ms": 250.0
-        },
-        {
-          "frame": 56,
-          "ms": 245.54
-        },
-        {
-          "frame": 59,
-          "ms": 219.66
-        },
-        {
-          "frame": 58,
-          "ms": 205.99
-        },
-        {
-          "frame": 55,
-          "ms": 200.55
-        },
-        {
-          "frame": 57,
-          "ms": 197.94
-        },
-        {
-          "frame": 60,
-          "ms": 194.39
-        },
-        {
-          "frame": 53,
-          "ms": 169.32
-        },
-        {
-          "frame": 51,
-          "ms": 113.64
-        },
-        {
-          "frame": 62,
-          "ms": 113.62
+          "frame": 65,
+          "ms": 38.05
         }
       ]
     }
@@ -66,5 +30,5 @@
     "skipped": 0,
     "failed": 1
   },
-  "timestamp": "2026-04-03T15:22:04.365409+00:00"
+  "timestamp": "2026-04-04T05:39:37.590341+00:00"
 }
