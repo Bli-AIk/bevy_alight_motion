@@ -33,9 +33,8 @@ pub struct FrameTestState {
     pub project_name: String,
     pub animation_completed: bool,
     pub prev_time_ms: f64,
-    // Shader pre-warm: track whether a full animation cycle has been played during warmup
-    pub warmup_prev_anim_time: f64,
-    pub warmup_full_cycle_done: bool,
+    /// Two-pass measurement: pass 1 warms shaders (discarded), pass 2 is the real measurement.
+    pub measurement_pass: u32,
     // Config
     pub pass_fps: f32,
     pub fail_fps: f32,
@@ -59,8 +58,7 @@ impl Default for FrameTestState {
             project_name: String::new(),
             animation_completed: false,
             prev_time_ms: 0.0,
-            warmup_prev_anim_time: 0.0,
-            warmup_full_cycle_done: false,
+            measurement_pass: 1,
             pass_fps: 120.0,
             fail_fps: 60.0,
             max_below_fail_rate: 0.05,
@@ -202,51 +200,28 @@ pub fn frame_test_loop(
         FrameTestStage::WaitingForLoad => {
             let project_loaded = project_query.iter().any(|root| root.spawned);
             if project_loaded {
-                // Always loop during warmup so the animation plays through a full cycle,
-                // ensuring all shaders/pipelines compile before measurement begins.
+                // Always loop during warmup + first measurement pass so all shaders
+                // and pipelines compile before the real measurement begins.
                 playback.looping = true;
                 state.stage = FrameTestStage::Warmup;
                 println!(
-                    "[FRAME-TEST] Project loaded (duration={:.1}ms), warming up ({} frames + full animation cycle)...",
+                    "[FRAME-TEST] Project loaded (duration={:.1}ms), warming up ({} frames)...",
                     playback.total_time_ms, state.warmup_frames_remaining
                 );
             }
         }
 
         FrameTestStage::Warmup => {
-            // Detect full animation cycle completion via wrap-around
-            let current_anim = playback.current_time_ms as f64;
-            if !state.warmup_full_cycle_done && current_anim < state.warmup_prev_anim_time - 100.0 {
-                state.warmup_full_cycle_done = true;
-                println!(
-                    "[FRAME-TEST] Warmup: full animation cycle completed (shader pre-warm done)"
-                );
-            }
-            state.warmup_prev_anim_time = current_anim;
-
             if state.warmup_frames_remaining > 0 {
                 state.warmup_frames_remaining -= 1;
             }
 
-            // Require both: minimum frames elapsed AND a full animation cycle completed
-            if state.warmup_frames_remaining == 0 && state.warmup_full_cycle_done {
+            if state.warmup_frames_remaining == 0 {
                 state.stage = FrameTestStage::Running;
-                // Reset playback for measurement
-                if state.play_once {
-                    playback.looping = false;
-                    playback.current_time_ms = 0.0;
-                    playback.playing = true;
-                    state.prev_time_ms = 0.0;
-                }
-                let mode_msg = if state.play_once {
-                    format!(
-                        "measuring FPS for one full animation ({:.0}ms)...",
-                        playback.total_time_ms
-                    )
-                } else {
-                    format!("measuring FPS for {:.0}s...", state.measure_duration_secs)
-                };
-                println!("[FRAME-TEST] Warmup complete, {}", mode_msg);
+                println!(
+                    "[FRAME-TEST] Warmup complete, pass 1/{}: shader warmup measurement ({:.0}s, data discarded)...",
+                    2, state.measure_duration_secs
+                );
             }
         }
 
@@ -258,7 +233,7 @@ pub fn frame_test_loop(
             }
 
             // Check end condition
-            let should_finish = if state.play_once {
+            let should_finish = if state.play_once && state.measurement_pass == 2 {
                 // Detect animation completion: current_time wrapped back or reached end
                 let current = playback.current_time_ms as f64;
                 let total = playback.total_time_ms as f64;
@@ -280,7 +255,33 @@ pub fn frame_test_loop(
             };
 
             if should_finish {
-                state.stage = FrameTestStage::Finished;
+                if state.measurement_pass == 1 {
+                    // First pass done: all shaders should be compiled now.
+                    // Discard data and start the real measurement.
+                    let discarded = state.frame_times.len();
+                    state.frame_times.clear();
+                    state.measurement_elapsed = 0.0;
+                    state.animation_completed = false;
+                    state.measurement_pass = 2;
+                    if state.play_once {
+                        playback.looping = false;
+                        playback.current_time_ms = 0.0;
+                        playback.playing = true;
+                        state.prev_time_ms = 0.0;
+                    }
+                    let mode_msg = if state.play_once {
+                        format!("one full animation ({:.0}ms)", playback.total_time_ms)
+                    } else {
+                        format!("{:.0}s", state.measure_duration_secs)
+                    };
+                    println!(
+                        "[FRAME-TEST] Pass 1 complete ({} frames discarded, shaders warmed). \
+                         Pass 2: measuring FPS for {}...",
+                        discarded, mode_msg
+                    );
+                } else {
+                    state.stage = FrameTestStage::Finished;
+                }
             }
         }
 
