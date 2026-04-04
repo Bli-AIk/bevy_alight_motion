@@ -249,9 +249,9 @@ pub fn frame_test_loop(
 
         FrameTestStage::Running => {
             let now = std::time::Instant::now();
-            let dt = state.last_instant.map_or(time.delta_secs_f64(), |prev| {
-                now.duration_since(prev).as_secs_f64()
-            });
+            let dt = state
+                .last_instant
+                .map_or(time.delta_secs_f64(), |prev| now.duration_since(prev).as_secs_f64());
             state.last_instant = Some(now);
             if dt > 0.0 {
                 state.frame_times.push(dt);
@@ -397,7 +397,10 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     let avg_dt: f64 = frame_times.iter().sum::<f64>() / total_frames as f64;
     let avg_fps = 1.0 / avg_dt;
 
-    let min_dt = frame_times.iter().copied().fold(f64::INFINITY, f64::min);
+    let min_dt = frame_times
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
     let max_dt = frame_times.iter().copied().fold(0.0_f64, f64::max);
     let max_fps = 1.0 / min_dt;
     let min_fps = 1.0 / max_dt;

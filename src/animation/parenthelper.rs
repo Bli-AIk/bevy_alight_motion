@@ -395,10 +395,6 @@ pub(crate) fn apply_parenthelper_system(
         if !animated.parenthelper_has_effect || !animated.has_parent {
             continue;
         }
-        let local_time = animated.calc_local_time(global_time);
-        if !animated.is_active(local_time) {
-            continue;
-        }
         // Skip entities whose no-op parenthelper defers to perspective parenting
         // (matching the gate in animate_transform_system).
         if perspective_parent.is_some()

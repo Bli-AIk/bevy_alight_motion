@@ -61,10 +61,6 @@ pub fn update_sdf_mask_system(
     let global_time = playback.current_time_ms;
 
     for (_animated, children, mask_info, marker, parent_global_transform) in parent_query.iter() {
-        let local_time = _animated.calc_local_time(global_time);
-        if !_animated.is_active(local_time) {
-            continue;
-        }
         let parent_scale = parent_global_transform.to_scale_rotation_translation().0;
         bevy::log::debug!(
             "[MaskParent] '{}' parent_global_scale=({:.2},{:.2})",
