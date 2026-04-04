@@ -351,9 +351,6 @@ pub fn sync_rtt_camera_position_system(
 /// alpha=0 when inactive. Without this system, associated RTT cameras (both
 /// embed-scene and gaussian-blur) keep rendering empty passes every frame,
 /// wasting GPU time.
-///
-/// Cameras activate slightly before the entity's visible window (preload) so the
-/// first visible frame already has a populated RTT texture.
 pub fn sync_rtt_camera_activity_system(
     playback: Res<crate::animation::AmPlayback>,
     embed_query: Query<&crate::animation::AmAnimated, With<EmbedSceneRtt>>,
@@ -369,7 +366,7 @@ pub fn sync_rtt_camera_activity_system(
     for (marker, mut camera) in embed_camera_query.iter_mut() {
         let should_be_active = embed_query
             .get(marker.embed_entity)
-            .is_ok_and(|animated| is_active_with_preload(animated, global_time));
+            .is_ok_and(|animated| animated.is_active(animated.calc_local_time(global_time)));
 
         if camera.is_active != should_be_active {
             camera.is_active = should_be_active;
@@ -379,25 +376,10 @@ pub fn sync_rtt_camera_activity_system(
     for (marker, mut camera) in blur_camera_query.iter_mut() {
         let should_be_active = blur_parent_query
             .get(marker.parent_entity)
-            .is_ok_and(|animated| is_active_with_preload(animated, global_time));
+            .is_ok_and(|animated| animated.is_active(animated.calc_local_time(global_time)));
 
         if camera.is_active != should_be_active {
             camera.is_active = should_be_active;
         }
     }
-}
-
-/// Check if an entity is active or will become active within a short preload
-/// window. Activating RTT cameras a few hundred milliseconds early lets the GPU
-/// populate the render texture before the entity actually becomes visible, so the
-/// first visible frame doesn't stall while the RTT is first rendered.
-fn is_active_with_preload(animated: &crate::animation::AmAnimated, global_time: f32) -> bool {
-    let local_time = animated.calc_local_time(global_time);
-    if animated.is_active(local_time) {
-        return true;
-    }
-    // Preload: activate camera 200ms before the entity's start_time.
-    const PRELOAD_MS: f32 = 200.0;
-    let preloaded = local_time + PRELOAD_MS;
-    animated.is_active(preloaded)
 }
