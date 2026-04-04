@@ -763,7 +763,9 @@ for name, info in matched.items():
     stutter_rate = info.get("stutter_rate", 0)
     max_ft = info.get("max_frame_time_ms", "?")
     mode = info.get("mode", "?")
-    print(f"  {name}: {status} | avg={avg_fps:.1f} p99={p99_fps:.1f} fps | stutters={stutter} ({stutter_rate:.1%}) | max_ft={max_ft:.1f}ms | mode={mode}")
+    def fmt_f(v, spec=".1f"):
+        return f"{v:{spec}}" if isinstance(v, (int, float)) else str(v)
+    print(f"  {name}: {status} | avg={fmt_f(avg_fps)} p99={fmt_f(p99_fps)} fps | stutters={stutter} ({fmt_f(stutter_rate, '.1%')}) | max_ft={fmt_f(max_ft)}ms | mode={mode}")
 
 print(
     "[vast-render] Perf summary matched={matched} pass={pass_} warning={warning} fail={fail}".format(
