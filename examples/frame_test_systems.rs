@@ -192,6 +192,33 @@ pub fn setup_frame_test(mut state: ResMut<FrameTestState>, project_file: Res<Pro
     );
 }
 
+fn handle_warmup_completion(state: &mut FrameTestState, playback: &mut AmPlayback) {
+    state.stage = FrameTestStage::Running;
+    if state.measurement_pass == 1 {
+        println!(
+            "[FRAME-TEST] Warmup complete, pass 1/2: shader warmup ({:.0}s, discarded)...",
+            state.measure_duration_secs
+        );
+    } else {
+        // Inter-pass warmup done → start real measurement
+        if state.play_once {
+            playback.looping = false;
+            playback.current_time_ms = 0.0;
+            playback.playing = true;
+            state.prev_time_ms = 0.0;
+        }
+        let mode_msg = if state.play_once {
+            format!("one full animation ({:.0}ms)", playback.total_time_ms)
+        } else {
+            format!("{:.0}s", state.measure_duration_secs)
+        };
+        println!(
+            "[FRAME-TEST] Stabilized, pass 2/2: measuring FPS for {}...",
+            mode_msg
+        );
+    }
+}
+
 pub fn frame_test_loop(
     mut state: ResMut<FrameTestState>,
     mut playback: ResMut<AmPlayback>,
@@ -220,30 +247,7 @@ pub fn frame_test_loop(
             }
 
             if state.warmup_frames_remaining == 0 {
-                state.stage = FrameTestStage::Running;
-                if state.measurement_pass == 1 {
-                    println!(
-                        "[FRAME-TEST] Warmup complete, pass 1/2: shader warmup ({:.0}s, discarded)...",
-                        state.measure_duration_secs
-                    );
-                } else {
-                    // Inter-pass warmup done → start real measurement
-                    if state.play_once {
-                        playback.looping = false;
-                        playback.current_time_ms = 0.0;
-                        playback.playing = true;
-                        state.prev_time_ms = 0.0;
-                    }
-                    let mode_msg = if state.play_once {
-                        format!("one full animation ({:.0}ms)", playback.total_time_ms)
-                    } else {
-                        format!("{:.0}s", state.measure_duration_secs)
-                    };
-                    println!(
-                        "[FRAME-TEST] Stabilized, pass 2/2: measuring FPS for {}...",
-                        mode_msg
-                    );
-                }
+                handle_warmup_completion(&mut state, &mut playback);
             }
         }
 
