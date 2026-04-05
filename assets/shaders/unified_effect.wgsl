@@ -2633,14 +2633,15 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                                 orig_height,
                             );
                         } else {
-                            // Single stretch: use content dimensions (orig_width/height)
-                            // to match main stretch call — copy_uv is in display UV space
-                            // and needs the same UV→pixel mapping as the main stretch.
+                            // Single stretch: use display dimensions to match main
+                            // stretch call (apply_stretch_segment uses original_size.z/w).
+                            // copy_uv is in display UV space and needs the same
+                            // UV→pixel mapping as the main stretch.
                             copy_uv = apply_stretch_segment_gen(
                                 copy_uv,
                                 uniforms.stretch_params,
-                                orig_width,
-                                orig_height,
+                                linear_repeat_width,
+                                linear_repeat_height,
                             );
                         }
                         if copy_uv.x < 0.0 || copy_uv.x > 1.0 || copy_uv.y < 0.0 || copy_uv.y > 1.0 {
