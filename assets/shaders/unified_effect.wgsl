@@ -311,6 +311,34 @@ fn decode_mask_axis_sign(mask_blend: vec4<f32>) -> vec2<f32> {
 //   params.w = smooth (raw AM value, 0..1)
 // in_width/in_height + cx/cy define the input UV-to-pixel mapping.
 // Output always uses orig_width/orig_height for pixel-to-UV conversion.
+
+/// Snap a UV coordinate to a pixelate grid cell center.
+/// Used both in the main pixelate block and per-copy in linear repeat loops.
+fn pixelate_snap_uv(
+    uv: vec2<f32>,
+    pixel_dim: vec2<f32>,
+    size_vec: vec2<f32>,
+    cos_a: f32,
+    sin_a: f32,
+) -> vec2<f32> {
+    let dp = (uv - vec2<f32>(0.5)) * pixel_dim;
+    var st_am = vec2<f32>(dp.x, -dp.y);
+    var st_rot = vec2<f32>(
+        cos_a * st_am.x - sin_a * st_am.y,
+        sin_a * st_am.x + cos_a * st_am.y
+    );
+    var pos_in_pixel = st_rot - floor(st_rot / size_vec) * size_vec;
+    pos_in_pixel -= size_vec * 0.5;
+    pos_in_pixel = vec2<f32>(
+        cos_a * pos_in_pixel.x + sin_a * pos_in_pixel.y,
+        -sin_a * pos_in_pixel.x + cos_a * pos_in_pixel.y
+    );
+    pos_in_pixel += size_vec * 0.5;
+    let snapped_am = st_am - pos_in_pixel + size_vec * 0.5;
+    let snapped_dp = vec2<f32>(snapped_am.x, -snapped_am.y);
+    return clamp(snapped_dp / pixel_dim + vec2<f32>(0.5), vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
 fn apply_stretch_segment_gen(
     uv: vec2<f32>,
     params: vec4<f32>,
@@ -2276,6 +2304,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // When stretch is inactive, sample_uv is mesh.uv in expanded display space.
     // We use the appropriate pixel dimensions for UV↔pixel conversion in each case.
     var pixelate_dist_center = 0.0;
+    // Hoist pixelate grid parameters so they are available in the repeat loop
+    var pix_pixel_dim = vec2<f32>(1.0);
+    var pix_size_vec = vec2<f32>(1.0);
+    var pix_cos_a = 1.0;
+    var pix_sin_a = 0.0;
     if pixelate_enabled {
         let content_size = max(vec2<f32>(uniforms.original_size.x, uniforms.original_size.y), vec2<f32>(1.0));
         let display_size = vec2<f32>(uniforms.original_size.z, uniforms.original_size.w);
@@ -2295,17 +2328,24 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             pixelate_size * pixelate_stretch.y
         ) / scene_scale * expansion_ratio;
 
+        // Apply rotation: pixelate angle adjusted for parent rotation
+        let parent_rotation = uniforms.pixelate_params2.w;
+        let total_angle = pixelate_angle - parent_rotation;
+        let cos_a = cos(total_angle);
+        let sin_a = sin(total_angle);
+
+        // Save for repeat loop per-copy pixelate snap
+        pix_pixel_dim = pixel_dim;
+        pix_size_vec = size_vec;
+        pix_cos_a = cos_a;
+        pix_sin_a = sin_a;
+
         // Position in pixel units relative to center
         let dp = (sample_uv - vec2<f32>(0.5)) * pixel_dim;
 
         // Convert to AM's coordinate convention (Y negated: GL Y-up → WebGPU Y-down)
         var st_am = vec2<f32>(dp.x, -dp.y);
 
-        // Apply rotation: pixelate angle adjusted for parent rotation
-        let parent_rotation = uniforms.pixelate_params2.w;
-        let total_angle = pixelate_angle - parent_rotation;
-        let cos_a = cos(total_angle);
-        let sin_a = sin(total_angle);
         var st_rot = vec2<f32>(
             cos_a * st_am.x - sin_a * st_am.y,
             sin_a * st_am.x + cos_a * st_am.y
@@ -2463,9 +2503,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         );
         
         let center = vec2<f32>(0.5, 0.5);
-        let pixel_coord = (
-            select(sample_uv, repeat_space_uv, linear_repeat_after_stretch_segment) - center
+        // When stretch precedes repeat (AM pipeline: stretch → repeat → pixelate),
+        // use mesh.uv (display UV) as the repeat base, NOT repeat_space_uv (content UV).
+        // This avoids double-stretching: the per-copy stretch correctly maps display UV
+        // to content UV for sampling, matching AM's repeat-on-stretch-FBO behavior.
+        var pixel_coord = (
+            select(sample_uv, mesh.uv, linear_repeat_after_stretch_segment) - center
         ) * vec2<f32>(linear_repeat_width, linear_repeat_height);
+
+        // When stretch precedes repeat and pixelate follows repeat (AM pipeline order:
+        // stretch → repeat → pixelate), snap the base display-space position to the
+        // pixelate grid ONCE before iterating copies. This matches AM's post-repeat
+        // pixelation where the combined output is snapped to a single global grid.
+        if linear_repeat_after_stretch_segment && pixelate_enabled {
+            let lr_display_size = vec2<f32>(linear_repeat_width, linear_repeat_height);
+            let lr_content_size = max(vec2<f32>(orig_width, orig_height), vec2<f32>(1.0));
+            let lr_expansion = lr_display_size / lr_content_size;
+            let display_size_vec = pix_size_vec * lr_expansion;
+            let snapped_uv = pixelate_snap_uv(
+                mesh.uv, lr_display_size, display_size_vec, pix_cos_a, pix_sin_a
+            );
+            pixel_coord = (snapped_uv - center) * lr_display_size;
+        }
         
         // AM composites in sRGB space; accumulate in sRGB premultiplied alpha
         let lr_gamma = vec3<f32>(2.2);
@@ -2574,11 +2633,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                                 orig_height,
                             );
                         } else {
+                            // Single stretch: use content dimensions (orig_width/height)
+                            // to match main stretch call — copy_uv is in display UV space
+                            // and needs the same UV→pixel mapping as the main stretch.
                             copy_uv = apply_stretch_segment_gen(
                                 copy_uv,
                                 uniforms.stretch_params,
-                                linear_repeat_width,
-                                linear_repeat_height,
+                                orig_width,
+                                orig_height,
                             );
                         }
                         if copy_uv.x < 0.0 || copy_uv.x > 1.0 || copy_uv.y < 0.0 || copy_uv.y > 1.0 {
@@ -3097,56 +3159,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Apply mask blend factor if any mask is enabled
     var mask_factor = 1.0;
     if mask_enabled {
-        // When stretch is active, evaluate the mask at the PRE-STRETCH world
-        // position.  AM applies the mask before the stretch distortion, so
-        // content that was outside the mask boundary before stretch should
-        // remain invisible even if the stretch expansion pushes it into the
-        // mask's world-space footprint.
-        var mask_eval_pos = mesh.world_position.xy;
-        if stretch_enabled {
-            let mesh_w = uniforms.original_size.z;
-            let mesh_h = uniforms.original_size.w;
-            let orig_w  = uniforms.original_size.x;
-            let orig_h  = uniforms.original_size.y;
-            let rot     = uniforms.mesh_offset.x;
-            let cr      = cos(rot);
-            let sr      = sin(rot);
-
-            // Recover entity center from current fragment's world pos + UV.
-            let cur_lx = (mesh.uv.x - 0.5) * mesh_w;
-            let cur_ly = (0.5 - mesh.uv.y) * mesh_h;
-            let cx = mesh.world_position.x - (cur_lx * cr - cur_ly * sr);
-            let cy = mesh.world_position.y - (cur_lx * sr + cur_ly * cr);
-
-            // Compute the stretch source UV (where this pixel comes from in
-            // the original, un-stretched content).
-            var source_uv = mesh.uv;
-            let seg2_stretch = uniforms.stretch_seg2_params.y;
-            let has_seg2 = abs(seg2_stretch) > 0.001;
-            if has_seg2 {
-                source_uv = apply_stretch_segment_gen(
-                    source_uv, uniforms.stretch_seg2_params,
-                    mesh_w, mesh_h,
-                );
-                source_uv = apply_stretch_segment_gen(
-                    source_uv, uniforms.stretch_params,
-                    orig_w, orig_h,
-                );
-            } else {
-                source_uv = apply_stretch_segment_gen(
-                    source_uv, uniforms.stretch_params,
-                    mesh_w, mesh_h,
-                );
-            }
-
-            // Map the source UV back to the original mesh's world position.
-            let o_lx = (source_uv.x - 0.5) * orig_w;
-            let o_ly = (0.5 - source_uv.y) * orig_h;
-            mask_eval_pos = vec2<f32>(
-                cx + o_lx * cr - o_ly * sr,
-                cy + o_lx * sr + o_ly * cr,
-            );
-        }
+        // Evaluate the mask at the fragment's display (post-stretch) world
+        // position.  AM clips the stretched content at the mask boundary,
+        // so pixels that stretch beyond the mask region are discarded.
+        let mask_eval_pos = mesh.world_position.xy;
         mask_factor = apply_masks_blend(mask_eval_pos);
         if mask_factor < 0.005 {
             discard;
