@@ -68,7 +68,7 @@ wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 
 [dev-dependencies]
-bevy = { version = "0.18", features = ["bevy_winit", "default_font", "x11", "bevy_state"] }
+bevy = { version = "0.18", default-features = false, features = ["bevy_winit", "default_font", "x11", "bevy_state"] }
 toml = "0.8"
 
 [dependencies.tracing-tracy]
