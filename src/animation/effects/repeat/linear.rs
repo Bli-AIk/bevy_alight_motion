@@ -24,6 +24,7 @@ pub(crate) fn process_linear_repeat_effect(
     mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
     env_cache: &DebugEnvCache,
+    element_scale: [f32; 2],
 ) {
     let trace_enabled = env_cache.trace_linear_repeat(animated.layer_id);
     let linear_repeat_after_stretch_segment = animated.linear_repeat_after_stretch_segment;
@@ -74,9 +75,18 @@ pub(crate) fn process_linear_repeat_effect(
     }
 
     let count = interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0);
-    let position =
+    let raw_position =
         interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
-    let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+    let raw_offset =
+        interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+
+    // AM repeat displacement is in scene/parent space; our shader operates in element-local
+    // pixel_coord space. When the element has negative scale, the local axis is reversed
+    // relative to scene space, so we must flip the displacement to match.
+    let sign_x = element_scale[0].signum();
+    let sign_y = element_scale[1].signum();
+    let position = [raw_position[0] * sign_x, raw_position[1] * sign_y];
+    let offset = [raw_offset[0] * sign_x, raw_offset[1] * sign_y];
     let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
     let scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
     let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
@@ -152,6 +162,9 @@ pub(crate) fn process_linear_repeat_effect(
             let c2 = interpolate_float(&lr2.count, layer_time).unwrap_or(0.0);
             let p2 = interpolate_vec2(&lr2.position, layer_time).unwrap_or([0.0, 0.0]);
             let o2 = interpolate_vec2(&lr2.offset, layer_time).unwrap_or([0.0, 0.0]);
+            // Flip displacement for negative element scale (same reason as primary repeat)
+            let p2 = [p2[0] * sign_x, p2[1] * sign_y];
+            let o2 = [o2[0] * sign_x, o2[1] * sign_y];
             let a2 = interpolate_float(&lr2.angle, layer_time).unwrap_or(0.0);
             let s2 = interpolate_float(&lr2.scale, layer_time).unwrap_or(1.0);
             let al2 = interpolate_float(&lr2.alpha, layer_time).unwrap_or(1.0);

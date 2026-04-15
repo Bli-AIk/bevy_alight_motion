@@ -531,6 +531,7 @@ pub fn animate_unified_effect_system(
             mesh2d,
             &mut meshes,
             &env_cache,
+            scale,
         );
 
         super::repeat::process_radial_repeat_effect(

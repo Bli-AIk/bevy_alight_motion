@@ -62,7 +62,7 @@ struct UnifiedEffectUniform {
     radial_repeat_params3: vec4<f32>,  // (alpha, offset_x, offset_y, blend)
     radial_repeat_params4: vec4<f32>,  // (start, end, phase, overlap)
     radial_repeat_params5: vec4<f32>,  // (ease_in, ease_out, shape_invert_alt, seed+random)
-    radial_repeat_params6: vec4<f32>,  // (pivot_x, pivot_y, 0, 0)
+    radial_repeat_params6: vec4<f32>,  // (pivot_x, pivot_y, rr_orig_w, rr_orig_h)
     radial_repeat_fill_color: vec4<f32>,
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
@@ -2370,7 +2370,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let snapped_dp = vec2<f32>(snapped_am.x, -snapped_am.y);
         sample_uv = snapped_dp / pixel_dim + vec2<f32>(0.5);
 
-        if !stretch_enabled {
+        if !stretch_enabled && !linear_repeat_enabled && !rr_enabled {
+            // When repeat effects expand the mesh beyond [0,1] UV, pixels in the
+            // expanded region are valid copy positions — don't discard them here.
+            // The repeat loop handles per-copy bounds checking.
             if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
                 discard;
             }
@@ -2722,10 +2725,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         //         translate(-Q) rotate(orbit) scale(baseScale)
         // Forward: pixel = P + offset*interp + R(spread)*mix*(R(orbit)*baseScale*p + (0,r) - P)
         // Inverse: p = R(-orbit)*(R(-spread)*(pixel - P - offset*interp)/mix - (0,r) + P) / baseScale
-        let orig_width = uniforms.original_size.x;
-        let orig_height = uniforms.original_size.y;
+        // When stretch is active, original_size retains stretch's local dims.
+        // Read radial repeat's screen-space element size from params6.z/w.
+        let rr_elem_w = select(uniforms.original_size.x, uniforms.radial_repeat_params6.z,
+                               uniforms.radial_repeat_params6.z > 0.5);
+        let rr_elem_h = select(uniforms.original_size.y, uniforms.radial_repeat_params6.w,
+                               uniforms.radial_repeat_params6.w > 0.5);
         let center = vec2<f32>(0.5, 0.5);
-        let pixel_coord = (sample_uv - center) * vec2<f32>(orig_width, orig_height);
+        let pixel_coord = (sample_uv - center) * vec2<f32>(rr_elem_w, rr_elem_h);
         let deg2rad = 3.14159265 / 180.0;
         let gamma = vec3<f32>(2.2);
         let inv_gamma = vec3<f32>(1.0 / 2.2);
@@ -2769,12 +2776,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
             tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
             tc = tc / rr_base_scale;
             
-            let half_w = orig_width * 0.5;
-            let half_h = orig_height * 0.5;
+            let half_w = rr_elem_w * 0.5;
+            let half_h = rr_elem_h * 0.5;
             
             if tc.x >= -half_w && tc.x <= half_w &&
                tc.y >= -half_h && tc.y <= half_h {
-                let copy_uv = tc / vec2<f32>(orig_width, orig_height) + center;
+                let copy_uv = tc / vec2<f32>(rr_elem_w, rr_elem_h) + center;
                 var copy_color: vec4<f32>;
                 if blur_enabled && uniforms.blur_params.x > 0.5 {
                     copy_color = apply_blur(copy_uv);

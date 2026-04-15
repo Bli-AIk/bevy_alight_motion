@@ -88,7 +88,8 @@ pub(crate) fn process_radial_repeat_effect(
         // the spread rotation around the element's pivot, so the inverse
         // transform must account for the pivot offset.
         let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
-        material.uniform_data.radial_repeat_params6 = Vec4::new(pivot[0], pivot[1], 0.0, 0.0);
+        material.uniform_data.radial_repeat_params6 =
+            Vec4::new(pivot[0], pivot[1], orig_width, orig_height);
 
         let pivot_mag = (pivot[0].powi(2) + pivot[1].powi(2)).sqrt();
         let max_mix = scale.abs().max(1.0);
@@ -106,8 +107,19 @@ pub(crate) fn process_radial_repeat_effect(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
-        material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, new_width, new_height);
+        // When stretch precedes radial repeat, preserve stretch's local dims
+        // in original_size.x/y but set .z/w = .x/y so the main stretch function
+        // uses in_width == orig_width (content-space stretch, correct fold zone).
+        // The radial repeat reads its element size from params6.z/w instead.
+        let stretch_active = material.uniform_data.stretch_params.y.abs() > 0.001;
+        if stretch_active {
+            // Keep .x/.y from mesh.rs (local_orig_w/h), set .z/.w to match
+            let os = material.uniform_data.original_size;
+            material.uniform_data.original_size = Vec4::new(os.x, os.y, os.x, os.y);
+        } else {
+            material.uniform_data.original_size =
+                Vec4::new(orig_width, orig_height, new_width, new_height);
+        }
 
         let uv_min_x = min_x / orig_width + 0.5;
         let uv_max_x = max_x / orig_width + 0.5;
