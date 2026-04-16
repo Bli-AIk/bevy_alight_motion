@@ -75,7 +75,7 @@ fn ancestor_embed_render_layer(
 ///
 /// 每帧最多创建的 RTT 纹理数量。
 /// 将创建分散到多帧可避免 GPU 上传引起的卡顿尖峰。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 2;
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
