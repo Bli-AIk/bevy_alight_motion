@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-16T04:56:00.940699+00:00",
+  "timestamp": "2026-04-16T06:26:48.805324+00:00",
   "summary": {
-    "passed": 193,
+    "passed": 194,
     "warnings": 0,
     "skipped": 5,
-    "failed": 98
+    "failed": 97
   },
   "results": {
     "basic/bezier/bezier": {
@@ -885,8 +885,7 @@
       "avg_similarity": 0.9394
     },
     "private/USER_mortis/revenge": {
-      "status": "fail",
-      "avg_similarity": 0.9665
+      "status": "pass"
     },
     "private/USER_mortis/revenge/nogroup_sub1": {
       "status": "pass"
