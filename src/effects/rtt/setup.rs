@@ -70,6 +70,13 @@ fn ancestor_embed_render_layer(
     RenderLayers::layer(0)
 }
 
+/// Maximum number of RTT textures to create per frame.
+/// Spreading creation across frames avoids GPU upload stutter spikes.
+///
+/// 每帧最多创建的 RTT 纹理数量。
+/// 将创建分散到多帧可避免 GPU 上传引起的卡顿尖峰。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
+
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -114,7 +121,14 @@ pub fn setup_embed_scene_rtt_system(
     entities_with_depth.sort_by_key(|&(_, depth)| depth);
     processed_layers.clear();
 
+    let mut rtt_created_this_frame = 0usize;
+
     for &(entity, _depth) in &*entities_with_depth {
+        // Enforce per-frame budget to avoid GPU upload stutter.
+        if rtt_created_this_frame >= RTT_SETUP_BUDGET_PER_FRAME {
+            break;
+        }
+
         // Skip if parent is still pending AND wasn't processed in this pass.
         if let Ok(child_of) = parent_query.get(entity) {
             let parent = child_of.parent();
@@ -151,6 +165,7 @@ pub fn setup_embed_scene_rtt_system(
             None,
         );
         let render_texture_handle = images.add(render_texture);
+        rtt_created_this_frame += 1;
         let (global_scale, embed_rotation, embed_translation) =
             embed_global.to_scale_rotation_translation();
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();
