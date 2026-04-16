@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-15T22:45:41.126208+00:00",
+  "timestamp": "2026-04-16T04:56:00.940699+00:00",
   "summary": {
-    "passed": 191,
+    "passed": 193,
     "warnings": 0,
     "skipped": 5,
-    "failed": 100
+    "failed": 98
   },
   "results": {
     "basic/bezier/bezier": {
@@ -892,12 +892,10 @@
       "status": "pass"
     },
     "private/USER_mortis/revenge/nogroup_sub2": {
-      "status": "fail",
-      "avg_similarity": 0.9832
+      "status": "pass"
     },
     "private/USER_mortis/revenge/nogroup_sub3": {
-      "status": "fail",
-      "avg_similarity": 0.4776
+      "status": "pass"
     },
     "private/USER_mortis/revenge/split1": {
       "status": "fail",

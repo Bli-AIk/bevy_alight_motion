@@ -18,6 +18,7 @@ pub(crate) fn process_radial_repeat_effect(
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
+    element_scale: [f32; 2],
 ) {
     let has_radial_repeat = animated.radial_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -107,6 +108,16 @@ pub(crate) fn process_radial_repeat_effect(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
+        // Pass expanded mesh dimensions for per-copy stretch.
+        // Following the linear repeat pattern: per-copy stretch uses display
+        // (expanded) dims as in_width so the fold band is correctly sized
+        // relative to the larger coordinate space.
+        material.uniform_data.radial_repeat_params7 = Vec4::new(
+            new_width,
+            new_height,
+            element_scale[0].abs().max(0.001),
+            element_scale[1].abs().max(0.001),
+        );
         // When stretch precedes radial repeat, preserve stretch's local dims
         // in original_size.x/y but set .z/w = .x/y so the main stretch function
         // uses in_width == orig_width (content-space stretch, correct fold zone).
@@ -148,6 +159,7 @@ pub(crate) fn process_radial_repeat_effect(
         material.uniform_data.radial_repeat_params4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.radial_repeat_params5 = Vec4::ZERO;
         material.uniform_data.radial_repeat_params6 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params7 = Vec4::ZERO;
         material.uniform_data.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
 }

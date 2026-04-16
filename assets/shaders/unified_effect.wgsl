@@ -63,6 +63,7 @@ struct UnifiedEffectUniform {
     radial_repeat_params4: vec4<f32>,  // (start, end, phase, overlap)
     radial_repeat_params5: vec4<f32>,  // (ease_in, ease_out, shape_invert_alt, seed+random)
     radial_repeat_params6: vec4<f32>,  // (pivot_x, pivot_y, rr_orig_w, rr_orig_h)
+    radial_repeat_params7: vec4<f32>,  // (expanded_w, expanded_h, elem_scale_x, elem_scale_y)
     radial_repeat_fill_color: vec4<f32>,
     // Threshold effect
     threshold_params: vec4<f32>,       // (threshold, feather, invert, blendMode)
@@ -344,6 +345,19 @@ fn apply_stretch_segment_gen(
     params: vec4<f32>,
     in_width: f32, in_height: f32,
 ) -> vec2<f32> {
+    return apply_stretch_segment_rotated(uv, params, in_width, in_height, 0.0);
+}
+
+// Stretch with per-copy rotation offset (for radial repeat copies).
+// AM renders each copy as an independent element whose transform includes
+// the copy's spread + orbit rotation.  The stretch shader converts
+// element-local coords → screen-norm using the copy's full rotation.
+fn apply_stretch_segment_rotated(
+    uv: vec2<f32>,
+    params: vec4<f32>,
+    in_width: f32, in_height: f32,
+    copy_rot_offset: f32,
+) -> vec2<f32> {
     let angle = params.x;       // Original AM angle (NOT rotation-compensated)
     let adj_stretch = params.y;
     let offset_norm = params.z;
@@ -353,7 +367,7 @@ fn apply_stretch_segment_gen(
     let orig_height = uniforms.original_size.y;
     let scene_width = uniforms.mesh_offset.z;
     let scene_height = uniforms.mesh_offset.w;
-    let transform_rot = uniforms.mesh_offset.x;
+    let transform_rot = uniforms.mesh_offset.x + copy_rot_offset;
     let axis_sign = decode_axis_sign(uniforms.mesh_offset.y);
 
     // Layer scale: converts mesh-local pixels to screen pixels.
@@ -2263,6 +2277,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     // Step 1: Apply stretch segment effect.
     // Converts mesh.uv (expanded display space) → content UV (0..1 = original content).
+    // When radial repeat is active, skip the discard — fragments in the expanded
+    // area are needed for radial copies even if they fall outside content bounds.
     if stretch_enabled {
         let seg2_stretch = uniforms.stretch_seg2_params.y;
         let has_seg2 = abs(seg2_stretch) > 0.001;
@@ -2289,13 +2305,18 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                            * smoothstep(-aa_half.x, aa_half.x, 1.0 - sample_uv.x)
                            * smoothstep(-aa_half.y, aa_half.y, sample_uv.y)
                            * smoothstep(-aa_half.y, aa_half.y, 1.0 - sample_uv.y);
-        if stretch_edge_alpha < 0.001 {
+        if stretch_edge_alpha < 0.001 && !rr_enabled {
             discard;
         }
-        if sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0 {
+        if !rr_enabled && (sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0) {
             discard;
         }
-        sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+        // Clamp for normal rendering.  When radial repeat is active, the
+        // expanded mesh has UVs well beyond [0,1] and they must be preserved
+        // so pixel_coord can reach distant copy positions.
+        if !rr_enabled {
+            sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+        }
     }
     repeat_space_uv = sample_uv;
     
@@ -2380,7 +2401,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         // When stretch is active, pixelate grid snapping near edges may push UV
         // slightly outside [0, 1]. Clamp to match AM's texture edge clamping.
-        if stretch_enabled {
+        // Skip when radial repeat needs unclamped UVs for distant copies.
+        if stretch_enabled && !rr_enabled {
             sample_uv = clamp(sample_uv, vec2<f32>(0.0), vec2<f32>(1.0));
         }
     }
@@ -2732,6 +2754,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         let rr_elem_h = select(uniforms.original_size.y, uniforms.radial_repeat_params6.w,
                                uniforms.radial_repeat_params6.w > 0.5);
         let center = vec2<f32>(0.5, 0.5);
+        // AM's Canvas transform applies element scale between the pivot
+        // translate and un-translate, so (0, radius) and pivot are scaled by
+        // element_scale in the forward pass.  The inverse must divide by
+        // element_scale * mix to undo this.
+        let rr_elem_scl = vec2<f32>(
+            max(uniforms.radial_repeat_params7.z, 0.001),
+            max(uniforms.radial_repeat_params7.w, 0.001),
+        );
         let pixel_coord = (sample_uv - center) * vec2<f32>(rr_elem_w, rr_elem_h);
         let deg2rad = 3.14159265 / 180.0;
         let gamma = vec3<f32>(2.2);
@@ -2764,24 +2794,29 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
                 continue;
             }
             
-            // Inverse transform: p = R(-orbit)*(R(-spread)*(pixel-P-offset*interp)/mix - (0,r)+P) / baseScale
+            // Inverse transform:
+            // Forward: pixel = P + offset*interp + R(spread)*S(scl*mix)*(R(orbit)*baseScale*p + (0,r) - P)
+            // Inverse: p = R(-orbit)*(R(-spread)*(pixel-P-offset*interp)/(scl*mix) - (0,r)+P) / baseScale
             var tc = pixel_coord - rr_pivot - rr_offset * interp_progress;
             let cos_s = cos(-spread);
             let sin_s = sin(-spread);
             tc = vec2<f32>(tc.x * cos_s - tc.y * sin_s, tc.x * sin_s + tc.y * cos_s);
-            tc = tc / mix_scale;
+            tc = tc / (mix_scale * rr_elem_scl);
             tc = tc - vec2<f32>(0.0, rr_radius) + rr_pivot;
             let cos_o = cos(-orbit);
             let sin_o = sin(-orbit);
             tc = vec2<f32>(tc.x * cos_o - tc.y * sin_o, tc.x * sin_o + tc.y * cos_o);
             tc = tc / rr_base_scale;
             
-            let half_w = rr_elem_w * 0.5;
-            let half_h = rr_elem_h * 0.5;
+            // tc is now in pre-scale (AM local) space; use pre-scale element dims
+            let pre_w = rr_elem_w / rr_elem_scl.x;
+            let pre_h = rr_elem_h / rr_elem_scl.y;
+            let half_w = pre_w * 0.5;
+            let half_h = pre_h * 0.5;
             
             if tc.x >= -half_w && tc.x <= half_w &&
                tc.y >= -half_h && tc.y <= half_h {
-                let copy_uv = tc / vec2<f32>(rr_elem_w, rr_elem_h) + center;
+                let copy_uv = tc / vec2<f32>(pre_w, pre_h) + center;
                 var copy_color: vec4<f32>;
                 if blur_enabled && uniforms.blur_params.x > 0.5 {
                     copy_color = apply_blur(copy_uv);
@@ -3261,8 +3296,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
 
-    // Apply stretch edge AA alpha (soft boundary fade)
-    if stretch_edge_alpha < 0.999 {
+    // Apply stretch edge AA alpha (soft boundary fade).
+    // Skip when radial repeat is active — copies handle their own bounds checking.
+    if stretch_edge_alpha < 0.999 && !rr_enabled {
         final_color = vec4<f32>(final_color.rgb, final_color.a * stretch_edge_alpha);
     }
 

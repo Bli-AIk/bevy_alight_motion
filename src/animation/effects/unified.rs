@@ -542,6 +542,7 @@ pub fn animate_unified_effect_system(
             orig_height,
             mesh2d,
             &mut meshes,
+            scale,
         );
 
         if trace_parenthelper {
