@@ -218,7 +218,8 @@ impl PingPongBuffer {
             depth_or_array_layers: 1,
         };
 
-        let mut image = Image {
+        let image = Image {
+            data: None,
             texture_descriptor: TextureDescriptor {
                 label: Some(label),
                 size: extent,
@@ -231,9 +232,9 @@ impl PingPongBuffer {
                     | TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             },
+            copy_on_resize: false,
             ..default()
         };
-        image.resize(extent);
         images.add(image)
     }
 

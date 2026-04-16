@@ -550,7 +550,8 @@ fn create_rtt_texture(
         depth_or_array_layers: 1,
     };
 
-    let mut image = Image {
+    let image = Image {
+        data: None,
         texture_descriptor: TextureDescriptor {
             label: None,
             size: extent,
@@ -563,9 +564,9 @@ fn create_rtt_texture(
                 | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         },
+        copy_on_resize: false,
         ..default()
     };
-    image.resize(extent);
     images.add(image)
 }
 

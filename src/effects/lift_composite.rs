@@ -166,7 +166,8 @@ pub(crate) fn setup_lift_composite_system(
             height: tex_h.max(1),
             depth_or_array_layers: 1,
         };
-        let mut render_texture = Image {
+        let render_texture = Image {
+            data: None,
             texture_descriptor: TextureDescriptor {
                 label: Some("lift_composite_rtt"),
                 size,
@@ -181,9 +182,9 @@ pub(crate) fn setup_lift_composite_system(
                     | TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             },
+            copy_on_resize: false,
             ..default()
         };
-        render_texture.resize(size);
         let texture_handle = images.add(render_texture);
         let camera_order = lift_camera_order(cutoff_z);
 
