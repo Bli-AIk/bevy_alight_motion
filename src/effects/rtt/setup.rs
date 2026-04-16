@@ -21,7 +21,7 @@ use super::setup_helpers::{
 use super::{
     AmEmbedMask, AmGroupFill, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR, EMBED_RTT_CAMERA_Z,
     EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
-    GroupFillType, NeedsEmbedSceneRtt,
+    GroupFillType, NeedsEmbedSceneRtt, RttTextureCache,
 };
 
 /// Count how many pending-RTT ancestors an entity has, used to sort embeds
@@ -81,6 +81,7 @@ pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
+    mut rtt_cache: ResMut<RttTextureCache>,
     mut fill_materials: ResMut<Assets<crate::group_fill::GroupFillMaterial>>,
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -158,14 +159,17 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        let render_texture = Image::new_target_texture(
-            needs_rtt.scene_width.max(1.0).ceil() as u32,
-            needs_rtt.scene_height.max(1.0).ceil() as u32,
-            render_texture_format,
-            None,
-        );
-        let render_texture_handle = images.add(render_texture);
-        rtt_created_this_frame += 1;
+        let tex_w = needs_rtt.scene_width.max(1.0).ceil() as u32;
+        let tex_h = needs_rtt.scene_height.max(1.0).ceil() as u32;
+        let render_texture_handle = if let Some(cached) = rtt_cache.pop(tex_w, tex_h) {
+            // Reuse a cached texture — no GPU upload needed.
+            cached
+        } else {
+            let render_texture =
+                Image::new_target_texture(tex_w, tex_h, render_texture_format, None);
+            rtt_created_this_frame += 1;
+            images.add(render_texture)
+        };
         let (global_scale, embed_rotation, embed_translation) =
             embed_global.to_scale_rotation_translation();
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();
@@ -269,6 +273,7 @@ pub fn setup_embed_scene_rtt_system(
                 EmbedSceneRttCamera {
                     embed_entity: entity,
                     render_layer,
+                    render_texture: render_texture_handle.clone(),
                 },
                 Camera2d,
                 Camera {

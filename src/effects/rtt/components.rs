@@ -24,6 +24,7 @@ pub struct EmbedSceneRtt {
 pub struct EmbedSceneRttCamera {
     pub embed_entity: Entity,
     pub render_layer: usize,
+    pub render_texture: Handle<Image>,
 }
 
 #[derive(Component, Debug, Clone)]

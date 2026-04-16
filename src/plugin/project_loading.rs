@@ -76,6 +76,8 @@ pub(super) fn spawn_loaded_projects_system(
     mut playback: ResMut<crate::animation::AmPlayback>,
     resolution_config: Res<AmProjectResolution>,
     window_query: Query<&Window>,
+    mut images: ResMut<Assets<Image>>,
+    mut rtt_cache: ResMut<crate::effects::RttTextureCache>,
 ) {
     for (entity, mut root, mut transform) in query.iter_mut() {
         if root.spawned {
@@ -134,6 +136,9 @@ pub(super) fn spawn_loaded_projects_system(
         {
             trace_pending_subtree(&pending_layers, root_id);
         }
+
+        // Pre-warm RTT texture cache so GPU uploads happen before first visible frame.
+        rtt_cache.pre_warm(&pending_layers, &mut images);
 
         bevy::log::info!(
             "Prepared {} pending layers for lazy spawning",

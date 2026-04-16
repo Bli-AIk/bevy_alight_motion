@@ -9,6 +9,7 @@ use bevy::prelude::*;
 
 use super::{
     EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
+    RttTextureCache,
 };
 
 pub fn cleanup_embed_content_system(
@@ -31,10 +32,12 @@ pub fn cleanup_embed_content_system(
 pub fn cleanup_embed_scene_rtt_system(
     mut commands: Commands,
     mut layer_pool: ResMut<EmbedSceneRenderLayerPool>,
+    mut rtt_cache: ResMut<RttTextureCache>,
     mut removed: RemovedComponents<EmbedSceneRtt>,
     rtt_query: Query<&EmbedSceneRtt>,
     camera_query: Query<(Entity, &EmbedSceneRttCamera)>,
     capture_root_query: Query<(Entity, &EmbedSceneRttCaptureRoot)>,
+    images: Res<Assets<Image>>,
 ) {
     for entity in removed.read() {
         bevy::log::debug!("EmbedSceneRtt removed from {:?}", entity);
@@ -43,6 +46,18 @@ pub fn cleanup_embed_scene_rtt_system(
     for (camera_entity, camera_marker) in camera_query.iter() {
         let should_cleanup = rtt_query.get(camera_marker.embed_entity).is_err();
         if should_cleanup {
+            // Cache the texture handle for reuse instead of dropping it.
+            if let Some(img) = images.get(&camera_marker.render_texture) {
+                let size = img.size();
+                rtt_cache.push(size.x, size.y, camera_marker.render_texture.clone());
+                bevy::log::trace!(
+                    "Cached RTT texture ({}x{}) from layer {}",
+                    size.x,
+                    size.y,
+                    camera_marker.render_layer,
+                );
+            }
+
             layer_pool.release(camera_marker.render_layer);
             bevy::log::debug!(
                 "Released render layer {} from orphaned RTT camera {:?} for embed {:?}",
