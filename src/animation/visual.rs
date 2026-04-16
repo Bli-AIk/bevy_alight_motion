@@ -270,7 +270,7 @@ pub(crate) fn add_visual_components(
             gradient_end_color,
             gradient_points,
         } => {
-            bevy::log::info!("[Visual] Spawning SdfShape for '{}'", label);
+            bevy::log::trace!("[Visual] Spawning SdfShape for '{}'", label);
             spawn_sdf_visual(
                 commands,
                 meshes,

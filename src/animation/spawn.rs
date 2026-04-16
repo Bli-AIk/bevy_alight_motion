@@ -10,11 +10,11 @@
 use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::scene::{AmPendingLayers, PendingLayer};
 use crate::sdf_material::SdfMaterial;
 
-use super::helpers::is_descendant_of;
 use super::spawn_entity::spawn_layer_entity;
 
 fn trace_lifecycle_enabled(layer_id: u64) -> bool {
@@ -190,9 +190,10 @@ pub(crate) fn process_pending_layers(
         }
 
         // Debug: log layer status (only first 5 frames and first 10 layers)
-        static mut DEBUG_FRAME: u32 = 0;
-        unsafe {
-            if DEBUG_FRAME < 5 && idx < 10 {
+        static DEBUG_FRAME: AtomicU32 = AtomicU32::new(0);
+        {
+            let frame = DEBUG_FRAME.load(Ordering::Relaxed);
+            if frame < 5 && idx < 10 {
                 bevy::log::debug!(
                     "[Lifecycle] Layer '{}' (id={}, parent={}): time={:.1}ms, local_time={:.1}, range={}..{}, own_active={}, ancestors_active={}, spawned={}",
                     layer.label,
@@ -208,7 +209,7 @@ pub(crate) fn process_pending_layers(
                 );
             }
             if idx == 0 {
-                DEBUG_FRAME += 1;
+                DEBUG_FRAME.fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -222,40 +223,44 @@ pub(crate) fn process_pending_layers(
         }
     }
 
-    // Despawn entities that are no longer active
+    // Despawn entities that are no longer active.
+    // Pre-build parent→children map for O(n) descendant collection instead of O(n²).
+    let mut children_map: HashMap<u64, Vec<u64>> = HashMap::new();
+    if !to_despawn.is_empty() {
+        for layer in &pending.layers {
+            if layer.parent != 0 {
+                children_map.entry(layer.parent).or_default().push(layer.id);
+            }
+        }
+    }
+
     for layer_id in to_despawn {
         let Some(entity) = pending.spawned_entities.remove(&layer_id) else {
             continue;
         };
 
-        // Find layer info for logging
-        if let Some(layer) = pending.layers.iter().find(|l| l.id == layer_id) {
+        if let Some(&idx) = layer_index.get(&layer_id) {
             bevy::log::trace!(
                 "  [Lifecycle] Despawning '{}' (id={})",
-                layer.label,
+                pending.layers[idx].label,
                 layer_id
             );
         }
 
-        // Find all children of this layer (direct and nested) and despawn them first
-        let children_to_remove: Vec<u64> = pending
-            .layers
-            .iter()
-            .filter(|l| is_descendant_of(l.id, layer_id, &pending.layers))
-            .map(|l| l.id)
-            .collect();
-
-        // Remove children from spawned_entities tracking (parent despawn will handle
-        // the actual ECS despawn recursively)
-        for child_id in children_to_remove {
+        // Collect all descendants via BFS using children_map (O(n) total)
+        let mut stack: Vec<u64> = children_map.get(&layer_id).cloned().unwrap_or_default();
+        while let Some(child_id) = stack.pop() {
             if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
-                && let Some(child) = pending.layers.iter().find(|l| l.id == child_id)
+                && let Some(&idx) = layer_index.get(&child_id)
             {
                 bevy::log::trace!(
                     "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
-                    child.label,
+                    pending.layers[idx].label,
                     child_id
                 );
+            }
+            if let Some(grandchildren) = children_map.get(&child_id) {
+                stack.extend(grandchildren);
             }
         }
 
@@ -313,17 +318,30 @@ pub(crate) fn process_pending_layers(
         parent_depth.max(embed_depth)
     }
 
+    // Pre-compute spawn depths into a HashMap for O(1) lookups during sort and debug.
+    let spawn_depths: HashMap<u64, usize> = {
+        let mut depths = HashMap::with_capacity(to_spawn.len());
+        for &idx in &to_spawn {
+            let layer_id = pending.layers[idx].id;
+            if let std::collections::hash_map::Entry::Vacant(e) = depths.entry(layer_id) {
+                let mut visited = std::collections::HashSet::new();
+                let depth = count_spawn_depth(
+                    layer_id,
+                    &pending.layers,
+                    &layer_index,
+                    &spawning_ids,
+                    &mut visited,
+                );
+                e.insert(depth);
+            }
+        }
+        depths
+    };
+
     // Sort by depth (lower depth = spawn first)
     to_spawn.sort_by_key(|&idx| {
         let layer_id = pending.layers[idx].id;
-        let mut visited = std::collections::HashSet::new();
-        count_spawn_depth(
-            layer_id,
-            &pending.layers,
-            &layer_index,
-            &spawning_ids,
-            &mut visited,
-        )
+        spawn_depths.get(&layer_id).copied().unwrap_or(0)
     });
 
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
@@ -335,16 +353,7 @@ pub(crate) fn process_pending_layers(
         bevy::log::info!("[SPAWN_ORDER] Spawning {} layers:", to_spawn.len());
         for &idx in &to_spawn {
             let layer = &pending.layers[idx];
-            let depth = {
-                let mut visited = std::collections::HashSet::new();
-                count_spawn_depth(
-                    layer.id,
-                    &pending.layers,
-                    &layer_index,
-                    &spawning_ids,
-                    &mut visited,
-                )
-            };
+            let depth = spawn_depths.get(&layer.id).copied().unwrap_or(0);
             bevy::log::info!(
                 "[SPAWN_ORDER]   depth={}: '{}' (id={}, parent={})",
                 depth,
@@ -355,14 +364,24 @@ pub(crate) fn process_pending_layers(
         }
     }
 
+    // Cache env var checks outside the loop
+    let trace_debug_transform = std::env::var_os("AM_DEBUG_TRANSFORM_TRACE").is_some();
+
+    // Pre-build set of layer IDs that have children for O(1) lookup
+    let parents_with_children: std::collections::HashSet<u64> = pending
+        .layers
+        .iter()
+        .filter(|l| l.parent != 0)
+        .map(|l| l.parent)
+        .collect();
+
     // Spawn new entities in dependency order
     for idx in to_spawn {
         let layer = &pending.layers[idx];
 
-        let perspective_parent_layer = pending
-            .layers
-            .iter()
-            .find(|candidate| candidate.id == layer.parent)
+        let perspective_parent_layer = layer_index
+            .get(&layer.parent)
+            .map(|&i| &pending.layers[i])
             .filter(|parent_layer| parent_layer.is_perspective_null);
         // AM's generic layer-parenting applies ordinary parent transforms at sample time.
         // Only embedded scenes need flattening here so RTT/composite ownership stays sane.
@@ -412,20 +431,16 @@ pub(crate) fn process_pending_layers(
         let resolved_embed_owner_id = if layer.containing_embed_id == 0 {
             0
         } else {
-            pending
-                .layers
-                .iter()
-                .find(|candidate| candidate.id == layer.parent)
+            layer_index
+                .get(&layer.parent)
+                .map(|&i| &pending.layers[i])
                 .filter(|parent_layer| {
                     matches!(parent_layer.spec, crate::scene::AmLayerSpec::EmbedScene)
                 })
                 .map(|parent_layer| parent_layer.id)
                 .unwrap_or(layer.containing_embed_id)
         };
-        let has_child_layers = pending
-            .layers
-            .iter()
-            .any(|candidate| candidate.parent == layer.id);
+        let has_child_layers = parents_with_children.contains(&layer.id);
 
         let entity = spawn_layer_entity(
             commands,
@@ -460,7 +475,6 @@ pub(crate) fn process_pending_layers(
             actual_parent
         );
 
-        let trace_debug_transform = std::env::var_os("AM_DEBUG_TRANSFORM_TRACE").is_some();
         if trace_debug_transform
             && (layer.label.contains("空") || layer.label.contains("Image_1699715690143"))
         {
