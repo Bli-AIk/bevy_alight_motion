@@ -18,6 +18,7 @@
 //! 2. **Stencil**: Clipping via GPU stencil/scissor test, still on parent's layer.
 //! 3. **Composite**: Full RTT isolation with dedicated RenderLayer.
 
+mod activation;
 mod cleanup;
 mod clipping;
 mod components;
@@ -33,11 +34,12 @@ pub(super) const EMBED_RTT_CAMERA_Z: f32 = 1000.0;
 pub(super) const EMBED_RTT_CAMERA_NEAR: f32 = -1000.0;
 pub(super) const EMBED_RTT_CAMERA_FAR: f32 = 2000.0;
 
+pub use activation::activate_rtt_cameras_system;
 pub use cleanup::{cleanup_embed_content_system, cleanup_embed_scene_rtt_system};
 pub use clipping::apply_embed_bounds_clipping_system;
 pub use components::{
     AmEmbedMask, EmbedSceneBounds, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
-    NeedsEmbedSceneRtt, NeedsStrategyEvaluation,
+    NeedsEmbedSceneRtt, NeedsStrategyEvaluation, PendingRttCameraActivation,
 };
 pub use layers::{
     propagate_render_layers_system, propagate_render_layers_to_children_system,

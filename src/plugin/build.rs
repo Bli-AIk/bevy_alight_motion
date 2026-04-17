@@ -81,6 +81,7 @@ fn register_lifecycle_systems(app: &mut App) {
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,
+            crate::effects::activate_rtt_cameras_system,
             crate::effects::evaluate_render_strategy_system,
             ApplyDeferred,
             crate::effects::setup_embed_scene_rtt_system,

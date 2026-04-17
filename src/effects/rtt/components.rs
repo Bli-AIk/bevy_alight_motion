@@ -52,5 +52,14 @@ pub struct NeedsStrategyEvaluation {
     pub render_plan: crate::effects::EmbedSceneRenderPlan,
 }
 
+/// Marker for embed entities whose main RTT camera is inactive and waiting for
+/// budget-controlled activation. The activation system enables cameras gradually
+/// to avoid shader-compilation + rendering spikes during loading / loop transitions.
+///
+/// 标记主 RTT 相机尚未激活的 embed 实体。激活系统按预算逐帧启用相机，
+/// 避免加载/循环切换时的着色器编译和渲染尖峰。
+#[derive(Component)]
+pub struct PendingRttCameraActivation;
+
 #[derive(Component, Debug, Clone)]
 pub struct AmEmbedMask;

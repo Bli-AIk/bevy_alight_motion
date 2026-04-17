@@ -77,7 +77,7 @@ fn ancestor_embed_render_layer(
 ///
 /// 每帧最多创建的 RTT 纹理数量。
 /// 用于控制相机激活速率，避免加载期的渲染尖峰。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 2;
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -278,6 +278,7 @@ pub fn setup_embed_scene_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: camera_order,
+                    is_active: false,
                     ..default()
                 },
                 RenderTarget::Image(render_texture_handle.clone().into()),
@@ -335,6 +336,7 @@ pub fn setup_embed_scene_rtt_system(
                     dynamic_resolution: needs_rtt.render_plan.dynamic_resolution,
                 },
                 sprite_render_layer,
+                super::PendingRttCameraActivation,
             ));
 
         if embed_mask.is_some() {
