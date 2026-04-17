@@ -10,14 +10,29 @@ use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 
-/// Global RTT resolution scale factor.
-/// Controlled by `AM_RTT_SCALE` env var; defaults to 1.0 (full resolution).
-/// Values below 1.0 reduce GPU rendering cost proportionally to the square of the
-/// factor (0.75 → ~56% of original pixel count) at the expense of embed sharpness.
+use std::sync::atomic::{AtomicU32, Ordering};
+
+/// Adaptive RTT scale stored as f32 bits. Updated each frame by
+/// [`update_adaptive_rtt_scale`] based on active camera count.
+/// Initial value = 1.0f32 = 0x3F80_0000.
+static ADAPTIVE_RTT_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
+
+/// Combined RTT resolution scale: min(env fixed, adaptive).
 ///
-/// RTT 全局分辨率缩放因子。通过 `AM_RTT_SCALE` 环境变量控制，默认 1.0。
-/// 值低于 1.0 时按因子平方比例降低 GPU 渲染成本（0.75 → 约 56%），但会降低嵌套场景锐度。
+/// - **Fixed** component: `AM_RTT_SCALE` env var (default 1.0, range 0.25–1.0).
+/// - **Adaptive** component: automatically adjusted per-frame based on the number
+///   of active RTT cameras. When cameras exceed a threshold, the scale shrinks
+///   linearly so total pixel throughput stays roughly constant.
+///
+/// 综合 RTT 分辨率缩放 = min(环境变量固定值, 自适应值)。
 pub fn rtt_resolution_scale() -> f32 {
+    let env_scale = env_rtt_scale();
+    let adaptive = f32::from_bits(ADAPTIVE_RTT_SCALE.load(Ordering::Relaxed));
+    env_scale.min(adaptive)
+}
+
+/// Fixed env-var scale, cached once at startup.
+fn env_rtt_scale() -> f32 {
     use std::sync::OnceLock;
     static SCALE: OnceLock<f32> = OnceLock::new();
     *SCALE.get_or_init(|| {
@@ -27,6 +42,23 @@ pub fn rtt_resolution_scale() -> f32 {
             .unwrap_or(1.0)
             .clamp(0.25, 1.0)
     })
+}
+
+/// Camera count above which adaptive scaling starts reducing resolution.
+/// At the threshold the scale is 1.0; at 2× threshold it is 0.5; etc.
+///
+/// 超过此相机数量时，自适应缩放开始降低 RTT 分辨率。
+const ADAPTIVE_CAMERA_THRESHOLD: usize = 6;
+
+/// Update the adaptive RTT scale based on the current number of active RTT
+/// cameras. Called once per frame by [`adaptive_rtt_scale_system`].
+pub fn update_adaptive_rtt_scale(active_rtt_camera_count: usize) {
+    let scale = if active_rtt_camera_count <= ADAPTIVE_CAMERA_THRESHOLD {
+        1.0
+    } else {
+        (ADAPTIVE_CAMERA_THRESHOLD as f32 / active_rtt_camera_count as f32).clamp(0.25, 1.0)
+    };
+    ADAPTIVE_RTT_SCALE.store(scale.to_bits(), Ordering::Relaxed);
 }
 
 /// Apply [`rtt_resolution_scale`] to a pixel dimension, returning at least 1.

@@ -42,6 +42,7 @@ pub use types::{
     scaled_rtt_dimension,
     setup_effect_buffers_system,
     stretch_params_to_vec4,
+    update_adaptive_rtt_scale,
     update_effect_buffers_system,
     vec4_to_mask_params,
     vec4_to_stretch_params,
@@ -49,6 +50,7 @@ pub use types::{
     wipe_params_to_vec4,
 };
 
+pub use rtt::adaptive_rtt_scale_system;
 pub(crate) use rtt::refresh_group_fill_material_texture_system;
 pub use rtt::{
     AmEmbedMask, EffectRenderPlugin, EmbedSceneBounds, EmbedSceneRenderLayerPool, EmbedSceneRtt,

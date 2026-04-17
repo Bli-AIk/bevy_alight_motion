@@ -90,6 +90,7 @@ fn register_lifecycle_systems(app: &mut App) {
             ApplyDeferred,
             crate::effects::evaluate_render_strategy_system,
             ApplyDeferred,
+            crate::effects::adaptive_rtt_scale_system,
             crate::effects::setup_embed_scene_rtt_system,
             ApplyDeferred,
             crate::effects::sync_rtt_capture_root_system,

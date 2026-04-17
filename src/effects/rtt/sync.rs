@@ -329,3 +329,17 @@ pub fn sync_rtt_camera_position_system(
         }
     }
 }
+
+/// Counts active RTT cameras (embed + blur + composite) and updates the
+/// adaptive resolution scale factor. Runs early each frame so that
+/// [`setup`](super::setup_embed_scene_rtt_system) and
+/// [`sync`](sync_embed_scene_rtt_system) pick up the latest scale.
+///
+/// 每帧统计活跃 RTT 相机数量并更新自适应分辨率缩放因子。
+pub fn adaptive_rtt_scale_system(
+    embed_cameras: Query<(), With<EmbedSceneRttCamera>>,
+    blur_cameras: Query<(), With<crate::gaussian_blur::BlurPassCamera>>,
+) {
+    let count = embed_cameras.iter().count() + blur_cameras.iter().count();
+    crate::effects::update_adaptive_rtt_scale(count);
+}
