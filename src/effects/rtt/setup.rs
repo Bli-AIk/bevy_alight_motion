@@ -72,12 +72,11 @@ fn ancestor_embed_render_layer(
 
 /// Maximum number of RTT textures to create per frame.
 /// With `data: None` textures, creation is nearly free. The budget controls
-/// the camera activation rate (each RTT spawns blur / composite cameras)
-/// to avoid rendering + shader-compilation spikes during loading.
+/// Per-frame budget for RTT texture creation. With `data: None` render targets
+/// this is effectively free, so set generously to allow full setup in one frame.
 ///
-/// 每帧最多创建的 RTT 纹理数量。
-/// 用于控制相机激活速率，避免加载期的渲染尖峰。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
+/// 每帧最多创建的 RTT 纹理数量。data:None 使创建几乎免费，设置较大值。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 64;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -293,6 +292,7 @@ pub fn setup_embed_scene_rtt_system(
                 }),
                 dynamic_render_layer(render_layer),
                 initial_camera_transform,
+                super::PendingCameraActivation,
             ))
             .id();
 
@@ -336,7 +336,6 @@ pub fn setup_embed_scene_rtt_system(
                     dynamic_resolution: needs_rtt.render_plan.dynamic_resolution,
                 },
                 sprite_render_layer,
-                super::PendingRttCameraActivation,
             ));
 
         if embed_mask.is_some() {

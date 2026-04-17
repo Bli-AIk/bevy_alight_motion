@@ -184,6 +184,7 @@ pub(crate) fn setup_lift_composite_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(clear_color.0),
                     order: camera_order,
+                    is_active: false,
                     ..default()
                 },
                 RenderTarget::Image(texture_handle.clone().into()),
@@ -198,6 +199,7 @@ pub(crate) fn setup_lift_composite_system(
                 }),
                 dynamic_render_layer(render_layer),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
+                crate::effects::PendingCameraActivation,
             ))
             .id();
 

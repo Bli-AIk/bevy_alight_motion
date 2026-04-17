@@ -39,7 +39,7 @@ pub use cleanup::{cleanup_embed_content_system, cleanup_embed_scene_rtt_system};
 pub use clipping::apply_embed_bounds_clipping_system;
 pub use components::{
     AmEmbedMask, EmbedSceneBounds, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
-    NeedsEmbedSceneRtt, NeedsStrategyEvaluation, PendingRttCameraActivation,
+    NeedsEmbedSceneRtt, NeedsStrategyEvaluation, PendingCameraActivation,
 };
 pub use layers::{
     propagate_render_layers_system, propagate_render_layers_to_children_system,

@@ -357,12 +357,14 @@ pub fn setup_blur_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: -100 - (layer_h as isize),
+                    is_active: false,
                     ..default()
                 },
                 // In Bevy 0.18, RenderTarget is a separate component
                 RenderTarget::Image(rtt_h.clone().into()),
                 RenderLayers::layer(layer_h as usize),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
+                crate::effects::PendingCameraActivation,
             ))
             .id();
 
@@ -395,12 +397,14 @@ pub fn setup_blur_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: -100 - (layer_v as isize),
+                    is_active: false,
                     ..default()
                 },
                 // In Bevy 0.18, RenderTarget is a separate component
                 RenderTarget::Image(rtt_v.clone().into()),
                 RenderLayers::layer(layer_v as usize),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
+                crate::effects::PendingCameraActivation,
             ))
             .id();
 
