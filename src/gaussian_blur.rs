@@ -26,9 +26,7 @@ use bevy::{
     camera::visibility::RenderLayers,
     prelude::*,
     reflect::TypePath,
-    render::render_resource::{
-        AsBindGroup, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    },
+    render::render_resource::{AsBindGroup, TextureFormat},
     shader::ShaderRef,
     sprite_render::{AlphaMode2d, Material2d},
 };
@@ -544,30 +542,14 @@ fn create_rtt_texture(
     height: f32,
     _label: &str,
 ) -> Handle<Image> {
-    let extent = Extent3d {
-        width: width.max(1.0) as u32,
-        height: height.max(1.0) as u32,
-        depth_or_array_layers: 1,
-    };
-
-    let image = Image {
-        data: None,
-        texture_descriptor: TextureDescriptor {
-            label: None,
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        },
-        copy_on_resize: false,
-        ..default()
-    };
-    images.add(image)
+    let w = width.max(1.0) as u32;
+    let h = height.max(1.0) as u32;
+    images.add(crate::effects::create_rtt_image(
+        w,
+        h,
+        TextureFormat::Rgba8UnormSrgb,
+        None,
+    ))
 }
 
 #[allow(dead_code)]

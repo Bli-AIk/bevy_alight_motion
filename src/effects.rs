@@ -21,6 +21,7 @@ mod types;
 pub use contracts::{
     EmbedSceneRenderPlan, TextureAlphaContract, TextureSourceContract, TextureSourceKind,
 };
+pub(crate) use types::create_rtt_image;
 pub use types::{
     AmGroupFill,
     EffectLayer,

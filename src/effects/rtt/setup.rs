@@ -10,7 +10,6 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureFormat;
 
 use super::setup_helpers::{
     PendingGroupFillTextureRefresh, composite_camera_order, dynamic_render_layer,
@@ -72,11 +71,13 @@ fn ancestor_embed_render_layer(
 }
 
 /// Maximum number of RTT textures to create per frame.
-/// Spreading creation across frames avoids GPU upload stutter spikes.
+/// With `data: None` textures, creation is nearly free. The budget controls
+/// the camera activation rate (each RTT spawns blur / composite cameras)
+/// to avoid rendering + shader-compilation spikes during loading.
 ///
 /// 每帧最多创建的 RTT 纹理数量。
-/// 将创建分散到多帧可避免 GPU 上传引起的卡顿尖峰。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
+/// 用于控制相机激活速率，避免加载期的渲染尖峰。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 2;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -161,7 +162,12 @@ pub fn setup_embed_scene_rtt_system(
 
         let tex_w = needs_rtt.scene_width.max(1.0).ceil() as u32;
         let tex_h = needs_rtt.scene_height.max(1.0).ceil() as u32;
-        let render_texture = create_render_target_image(tex_w, tex_h, render_texture_format);
+        let render_texture = crate::effects::create_rtt_image(
+            tex_w,
+            tex_h,
+            render_texture_format,
+            Some("embed_scene_rtt"),
+        );
         let render_texture_handle = images.add(render_texture);
         rtt_created_this_frame += 1;
         let (global_scale, embed_rotation, embed_translation) =
@@ -550,47 +556,5 @@ pub fn fix_nested_embed_render_layers_system(
             }
             commands.entity(entity).insert(expected_layer);
         }
-    }
-}
-
-/// Create a render target [`Image`] with no initial pixel data.
-///
-/// Unlike [`Image::new_target_texture`] which allocates and uploads a zero-filled
-/// buffer (≈8 MB for 1920×1080 RGBA8), this function sets `data: None` so Bevy's
-/// `prepare_assets<GpuImage>` calls `device.create_texture()` (GPU memory
-/// allocation only) instead of `create_texture_with_data()` (allocation +
-/// data transfer). Render targets are immediately overwritten by the camera,
-/// so the initial pixel content is irrelevant.
-///
-/// 创建一个不带初始像素数据的渲染目标 [`Image`]。
-/// 与 `Image::new_target_texture` 不同，本函数设置 `data: None`，
-/// 使 Bevy 仅分配 GPU 内存而不上传数据，从而消除创建时的 GPU 上传尖峰。
-fn create_render_target_image(width: u32, height: u32, format: TextureFormat) -> Image {
-    use bevy::render::render_resource::{
-        Extent3d, TextureDescriptor, TextureDimension, TextureUsages,
-    };
-    Image {
-        data: None,
-        texture_descriptor: TextureDescriptor {
-            label: Some("embed_scene_rtt"),
-            size: Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        },
-        sampler: bevy::image::ImageSampler::Default,
-        texture_view_descriptor: None,
-        asset_usage: bevy::asset::RenderAssetUsages::default(),
-        copy_on_resize: false,
-        ..default()
     }
 }

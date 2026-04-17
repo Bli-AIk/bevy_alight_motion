@@ -10,6 +10,38 @@ use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 
+/// Create a render target [`Image`] with `data: None` (GPU alloc only, no upload).
+///
+/// 创建不带初始像素数据的渲染目标 [`Image`]（仅分配 GPU 内存，不上传数据）。
+pub(crate) fn create_rtt_image(
+    width: u32,
+    height: u32,
+    format: TextureFormat,
+    label: Option<&'static str>,
+) -> Image {
+    Image {
+        data: None,
+        texture_descriptor: TextureDescriptor {
+            label,
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        copy_on_resize: false,
+        ..default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WipeParams {
     /// Start position (0.0-1.0)
@@ -212,30 +244,14 @@ impl PingPongBuffer {
     }
 
     fn create_rtt(images: &mut Assets<Image>, size: Vec2, label: &'static str) -> Handle<Image> {
-        let extent = Extent3d {
-            width: size.x.max(1.0) as u32,
-            height: size.y.max(1.0) as u32,
-            depth_or_array_layers: 1,
-        };
-
-        let image = Image {
-            data: None,
-            texture_descriptor: TextureDescriptor {
-                label: Some(label),
-                size: extent,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            copy_on_resize: false,
-            ..default()
-        };
-        images.add(image)
+        let w = size.x.max(1.0) as u32;
+        let h = size.y.max(1.0) as u32;
+        images.add(create_rtt_image(
+            w,
+            h,
+            TextureFormat::Rgba8UnormSrgb,
+            Some(label),
+        ))
     }
 
     /// Get the current read (input) texture

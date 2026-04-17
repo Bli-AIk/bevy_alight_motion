@@ -12,9 +12,7 @@ use bevy::camera::RenderTarget;
 use bevy::camera::ScalingMode;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::render::render_resource::{
-    Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-};
+use bevy::render::render_resource::TextureFormat;
 
 use crate::animation::AmAnimated;
 use crate::effects::EmbedSceneRenderLayerPool;
@@ -161,30 +159,14 @@ pub(crate) fn setup_lift_composite_system(
             (canvas_w as u32, canvas_h as u32)
         };
 
-        let size = Extent3d {
-            width: tex_w.max(1),
-            height: tex_h.max(1),
-            depth_or_array_layers: 1,
-        };
-        let render_texture = Image {
-            data: None,
-            texture_descriptor: TextureDescriptor {
-                label: Some("lift_composite_rtt"),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                // Keep blend backgrounds in linear high precision. Difference/exclusion/divide
-                // amplify tiny encode/decode and 8-bit rounding drift across drivers.
-                format: TextureFormat::Rgba16Float,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            copy_on_resize: false,
-            ..default()
-        };
+        let render_texture = crate::effects::create_rtt_image(
+            tex_w.max(1),
+            tex_h.max(1),
+            // Keep blend backgrounds in linear high precision. Difference/exclusion/divide
+            // amplify tiny encode/decode and 8-bit rounding drift across drivers.
+            TextureFormat::Rgba16Float,
+            Some("lift_composite_rtt"),
+        );
         let texture_handle = images.add(render_texture);
         let camera_order = lift_camera_order(cutoff_z);
 
