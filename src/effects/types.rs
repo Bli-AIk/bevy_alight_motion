@@ -48,7 +48,7 @@ fn env_rtt_scale() -> f32 {
 /// At the threshold the scale is 1.0; at 2× threshold it is 0.5; etc.
 ///
 /// 超过此相机数量时，自适应缩放开始降低 RTT 分辨率。
-const ADAPTIVE_CAMERA_THRESHOLD: usize = 6;
+const ADAPTIVE_CAMERA_THRESHOLD: usize = 5;
 
 /// Update the adaptive RTT scale based on estimated total camera count.
 /// Uses a one-way ratchet: the scale can only decrease over the scene's
