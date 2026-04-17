@@ -71,12 +71,11 @@ fn ancestor_embed_render_layer(
 }
 
 /// Maximum number of RTT textures to create per frame.
-/// With `data: None` textures, creation is nearly free. The budget controls
-/// Per-frame budget for RTT texture creation. With `data: None` render targets
-/// this is effectively free, so set generously to allow full setup in one frame.
+/// Spreading creation across frames avoids GPU upload stutter spikes.
 ///
-/// 每帧最多创建的 RTT 纹理数量。data:None 使创建几乎免费，设置较大值。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 64;
+/// 每帧最多创建的 RTT 纹理数量。
+/// 将创建分散到多帧可避免 GPU 上传引起的卡顿尖峰。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -159,13 +158,11 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        let tex_w = needs_rtt.scene_width.max(1.0).ceil() as u32;
-        let tex_h = needs_rtt.scene_height.max(1.0).ceil() as u32;
-        let render_texture = crate::effects::create_rtt_image(
-            tex_w,
-            tex_h,
+        let render_texture = Image::new_target_texture(
+            needs_rtt.scene_width.max(1.0).ceil() as u32,
+            needs_rtt.scene_height.max(1.0).ceil() as u32,
             render_texture_format,
-            Some("embed_scene_rtt"),
+            None,
         );
         let render_texture_handle = images.add(render_texture);
         rtt_created_this_frame += 1;
@@ -277,7 +274,6 @@ pub fn setup_embed_scene_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: camera_order,
-                    is_active: false,
                     ..default()
                 },
                 RenderTarget::Image(render_texture_handle.clone().into()),
@@ -292,7 +288,6 @@ pub fn setup_embed_scene_rtt_system(
                 }),
                 dynamic_render_layer(render_layer),
                 initial_camera_transform,
-                super::PendingCameraActivation,
             ))
             .id();
 

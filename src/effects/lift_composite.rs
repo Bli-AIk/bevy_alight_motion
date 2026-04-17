@@ -12,7 +12,9 @@ use bevy::camera::RenderTarget;
 use bevy::camera::ScalingMode;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureFormat;
+use bevy::render::render_resource::{
+    Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+};
 
 use crate::animation::AmAnimated;
 use crate::effects::EmbedSceneRenderLayerPool;
@@ -159,14 +161,29 @@ pub(crate) fn setup_lift_composite_system(
             (canvas_w as u32, canvas_h as u32)
         };
 
-        let render_texture = crate::effects::create_rtt_image(
-            tex_w.max(1),
-            tex_h.max(1),
-            // Keep blend backgrounds in linear high precision. Difference/exclusion/divide
-            // amplify tiny encode/decode and 8-bit rounding drift across drivers.
-            TextureFormat::Rgba16Float,
-            Some("lift_composite_rtt"),
-        );
+        let size = Extent3d {
+            width: tex_w.max(1),
+            height: tex_h.max(1),
+            depth_or_array_layers: 1,
+        };
+        let mut render_texture = Image {
+            texture_descriptor: TextureDescriptor {
+                label: Some("lift_composite_rtt"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                // Keep blend backgrounds in linear high precision. Difference/exclusion/divide
+                // amplify tiny encode/decode and 8-bit rounding drift across drivers.
+                format: TextureFormat::Rgba16Float,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_DST
+                    | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            },
+            ..default()
+        };
+        render_texture.resize(size);
         let texture_handle = images.add(render_texture);
         let camera_order = lift_camera_order(cutoff_z);
 
@@ -184,7 +201,6 @@ pub(crate) fn setup_lift_composite_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(clear_color.0),
                     order: camera_order,
-                    is_active: false,
                     ..default()
                 },
                 RenderTarget::Image(texture_handle.clone().into()),
@@ -199,7 +215,6 @@ pub(crate) fn setup_lift_composite_system(
                 }),
                 dynamic_render_layer(render_layer),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
-                crate::effects::PendingCameraActivation,
             ))
             .id();
 

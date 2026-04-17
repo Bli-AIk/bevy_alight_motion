@@ -26,7 +26,9 @@ use bevy::{
     camera::visibility::RenderLayers,
     prelude::*,
     reflect::TypePath,
-    render::render_resource::{AsBindGroup, TextureFormat},
+    render::render_resource::{
+        AsBindGroup, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    },
     shader::ShaderRef,
     sprite_render::{AlphaMode2d, Material2d},
 };
@@ -357,14 +359,12 @@ pub fn setup_blur_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: -100 - (layer_h as isize),
-                    is_active: false,
                     ..default()
                 },
                 // In Bevy 0.18, RenderTarget is a separate component
                 RenderTarget::Image(rtt_h.clone().into()),
                 RenderLayers::layer(layer_h as usize),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
-                crate::effects::PendingCameraActivation,
             ))
             .id();
 
@@ -397,14 +397,12 @@ pub fn setup_blur_rtt_system(
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     order: -100 - (layer_v as isize),
-                    is_active: false,
                     ..default()
                 },
                 // In Bevy 0.18, RenderTarget is a separate component
                 RenderTarget::Image(rtt_v.clone().into()),
                 RenderLayers::layer(layer_v as usize),
                 Transform::from_xyz(0.0, 0.0, 1000.0),
-                crate::effects::PendingCameraActivation,
             ))
             .id();
 
@@ -546,14 +544,29 @@ fn create_rtt_texture(
     height: f32,
     _label: &str,
 ) -> Handle<Image> {
-    let w = width.max(1.0) as u32;
-    let h = height.max(1.0) as u32;
-    images.add(crate::effects::create_rtt_image(
-        w,
-        h,
-        TextureFormat::Rgba8UnormSrgb,
-        None,
-    ))
+    let extent = Extent3d {
+        width: width.max(1.0) as u32,
+        height: height.max(1.0) as u32,
+        depth_or_array_layers: 1,
+    };
+
+    let mut image = Image {
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        ..default()
+    };
+    image.resize(extent);
+    images.add(image)
 }
 
 #[allow(dead_code)]
