@@ -344,6 +344,27 @@ pub(crate) fn process_pending_layers(
         spawn_depths.get(&layer_id).copied().unwrap_or(0)
     });
 
+    // Budget: cap entities spawned per frame to smooth loop-transition spikes.
+    // Parents/roots (depth 0) spawn first; remaining layers naturally pick up
+    // in subsequent frames because lifecycle re-evaluates every frame.
+    {
+        static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+        let budget = *BUDGET.get_or_init(|| {
+            std::env::var("AM_SPAWN_BUDGET")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8)
+        });
+        if to_spawn.len() > budget {
+            bevy::log::trace!(
+                "[Lifecycle] Spawn budget: {}/{} entities this frame",
+                budget,
+                to_spawn.len()
+            );
+            to_spawn.truncate(budget);
+        }
+    }
+
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
     if trace_spawn_order
         && to_spawn
