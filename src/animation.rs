@@ -42,6 +42,7 @@ pub use effects::{
     animate_text_progress_system, animate_text_spacing_system, animate_unified_effect_system,
     fix_rtl_line_alignment_system, update_unified_mask_system,
 };
+pub use lifecycle::frame_diagnostics_system;
 pub use lifecycle::manage_layer_lifecycle_system;
 pub use parenthelper::ParenthelperScaleContributions;
 pub(crate) use parenthelper::apply_parenthelper_system;

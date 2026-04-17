@@ -20,8 +20,8 @@ use crate::animation::{
     animate_transform_system, animate_unified_effect_system, apply_mask_clipping_system,
     apply_parenthelper_system, compensate_sdf_ancestor_scale_for_children_system,
     compensate_sdf_parent_scale_system, debug_layer_global_z_system, fix_rtl_line_alignment_system,
-    manage_layer_lifecycle_system, update_echo_runtime_system, update_sdf_mask_system,
-    update_unified_mask_system,
+    frame_diagnostics_system, manage_layer_lifecycle_system, update_echo_runtime_system,
+    update_sdf_mask_system, update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -72,6 +72,13 @@ fn configure_update_sets(app: &mut App) {
 
 fn register_lifecycle_systems(app: &mut App) {
     use bevy::ecs::schedule::ApplyDeferred;
+
+    // Frame-level diagnostics — runs before everything else so it
+    // captures the previous frame's total wall-clock time.
+    app.add_systems(
+        Update,
+        frame_diagnostics_system.before(AlightMotionSystemSet::Lifecycle),
+    );
 
     app.add_systems(
         Update,
