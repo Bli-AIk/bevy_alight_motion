@@ -20,7 +20,10 @@ use super::super::interpolation::{interpolate_float, interpolate_vec2};
 
 pub fn animate_sdf_repeat_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
+    parent_query: Query<
+        (&AmAnimated, &Children),
+        (With<AmSdfShapeParent>, Without<crate::scene::AmHibernated>),
+    >,
     sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {

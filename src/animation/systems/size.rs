@@ -16,7 +16,10 @@ use crate::animation::{AmPlayback, AmSdfShapeParent};
 
 pub fn animate_size_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<(&crate::animation::AmAnimated, &Children), With<AmSdfShapeParent>>,
+    parent_query: Query<
+        (&crate::animation::AmAnimated, &Children),
+        (With<AmSdfShapeParent>, Without<crate::scene::AmHibernated>),
+    >,
     mut sdf_query: Query<(
         &bevy::prelude::MeshMaterial2d<crate::sdf_material::SdfMaterial>,
         &mut crate::animation::AmSdfParams,
@@ -24,7 +27,10 @@ pub fn animate_size_system(
     mut materials: ResMut<Assets<crate::sdf_material::SdfMaterial>>,
     mut sprite_query: Query<
         (&crate::animation::AmAnimated, &mut Sprite),
-        Without<AmSdfShapeParent>,
+        (
+            Without<AmSdfShapeParent>,
+            Without<crate::scene::AmHibernated>,
+        ),
     >,
 ) {
     if playback.force_stopped {

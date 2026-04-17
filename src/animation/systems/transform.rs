@@ -17,7 +17,7 @@ use crate::animation::interpolation::{
     interpolate_float, interpolate_vec2, interpolate_vec2_reverse, interpolate_vec3_reverse,
 };
 use crate::animation::noise_effects::{compute_jitter, compute_simplex_displace};
-use crate::scene::{AmLayerMarker, AmLayerSpec};
+use crate::scene::{AmHibernated, AmLayerMarker, AmLayerSpec};
 
 use super::shared::{
     apply_oscillate, compute_normalized_frame_delta, invert_transform_component,
@@ -31,20 +31,23 @@ use super::transform_perspective::{
 
 pub(crate) fn animate_transform_system(
     playback: Res<AmPlayback>,
-    mut query: Query<(
-        Entity,
-        &AmAnimated,
-        &mut Transform,
-        &AmLayerMarker,
-        &AmLayerSpec,
-        Option<&AmSdfShapeParent>,
-        Option<&crate::masked_sprite::UnifiedEffectMarker>,
-        Option<&AmUnifiedUsesTransformScale>,
-        Option<&crate::scene::AmEmbedContentMarker>,
-        Option<&crate::scene::AmPerspectiveParent>,
-        Option<&crate::scene::AmPerspectiveNull>,
-        Option<&ChildOf>,
-    )>,
+    mut query: Query<
+        (
+            Entity,
+            &AmAnimated,
+            &mut Transform,
+            &AmLayerMarker,
+            &AmLayerSpec,
+            Option<&AmSdfShapeParent>,
+            Option<&crate::masked_sprite::UnifiedEffectMarker>,
+            Option<&AmUnifiedUsesTransformScale>,
+            Option<&crate::scene::AmEmbedContentMarker>,
+            Option<&crate::scene::AmPerspectiveParent>,
+            Option<&crate::scene::AmPerspectiveNull>,
+            Option<&ChildOf>,
+        ),
+        Without<AmHibernated>,
+    >,
     mut perspective_parents: Local<HashMap<Entity, PerspectiveParentState>>,
     mut pending_perspective_nulls: Local<Vec<PendingPerspectiveNullState>>,
     mut spatial_states: Local<HashMap<Entity, AnimatedSpatialState>>,
