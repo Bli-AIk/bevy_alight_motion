@@ -38,6 +38,8 @@ pub use types::{
     create_rtt_image,
     mark_dirty_on_change_system,
     mask_params_to_vec4,
+    rtt_resolution_scale,
+    scaled_rtt_dimension,
     setup_effect_buffers_system,
     stretch_params_to_vec4,
     update_effect_buffers_system,

@@ -258,9 +258,10 @@ pub fn sync_rtt_camera_position_system(
                 };
             }
 
+            let rtt_scale = crate::effects::rtt_resolution_scale();
             let new_extent = Extent3d {
-                width: effective_size.x.ceil().max(1.0) as u32,
-                height: effective_size.y.ceil().max(1.0) as u32,
+                width: (effective_size.x * rtt_scale).ceil().max(1.0) as u32,
+                height: (effective_size.y * rtt_scale).ceil().max(1.0) as u32,
                 depth_or_array_layers: 1,
             };
             let keep_full_resolution_for_group_fill =

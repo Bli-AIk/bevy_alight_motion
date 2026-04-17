@@ -160,8 +160,9 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        let tex_w = needs_rtt.scene_width.max(1.0).ceil() as u32;
-        let tex_h = needs_rtt.scene_height.max(1.0).ceil() as u32;
+        let rtt_scale = crate::effects::rtt_resolution_scale();
+        let tex_w = (needs_rtt.scene_width.max(1.0) * rtt_scale).ceil() as u32;
+        let tex_h = (needs_rtt.scene_height.max(1.0) * rtt_scale).ceil() as u32;
         let render_texture = crate::effects::create_rtt_image(tex_w, tex_h, render_texture_format);
         let render_texture_handle = images.add(render_texture);
         rtt_created_this_frame += 1;

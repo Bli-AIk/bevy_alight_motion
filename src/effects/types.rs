@@ -10,6 +10,30 @@ use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 
+/// Global RTT resolution scale factor.
+/// Controlled by `AM_RTT_SCALE` env var; defaults to 1.0 (full resolution).
+/// Values below 1.0 reduce GPU rendering cost proportionally to the square of the
+/// factor (0.75 → ~56% of original pixel count) at the expense of embed sharpness.
+///
+/// RTT 全局分辨率缩放因子。通过 `AM_RTT_SCALE` 环境变量控制，默认 1.0。
+/// 值低于 1.0 时按因子平方比例降低 GPU 渲染成本（0.75 → 约 56%），但会降低嵌套场景锐度。
+pub fn rtt_resolution_scale() -> f32 {
+    use std::sync::OnceLock;
+    static SCALE: OnceLock<f32> = OnceLock::new();
+    *SCALE.get_or_init(|| {
+        std::env::var("AM_RTT_SCALE")
+            .ok()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(1.0)
+            .clamp(0.25, 1.0)
+    })
+}
+
+/// Apply [`rtt_resolution_scale`] to a pixel dimension, returning at least 1.
+pub fn scaled_rtt_dimension(dim: f32) -> u32 {
+    (dim * rtt_resolution_scale()).ceil().max(1.0) as u32
+}
+
 /// Create a render-target `Image` with `data: None` so Bevy allocates GPU
 /// memory without an expensive DMA zero-fill upload (~18 ms per 1080p RGBA8).
 /// The camera will overwrite every pixel on first render anyway.
@@ -241,8 +265,8 @@ impl PingPongBuffer {
 
     fn create_rtt(images: &mut Assets<Image>, size: Vec2, _label: &'static str) -> Handle<Image> {
         images.add(create_rtt_image(
-            size.x.max(1.0) as u32,
-            size.y.max(1.0) as u32,
+            scaled_rtt_dimension(size.x),
+            scaled_rtt_dimension(size.y),
             TextureFormat::Rgba8UnormSrgb,
         ))
     }

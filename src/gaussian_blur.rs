@@ -278,15 +278,15 @@ pub fn setup_blur_rtt_system(
         let expanded_width = orig_width + blur_expansion * 2.0;
         let expanded_height = orig_height + blur_expansion * 2.0;
 
-        // Create RTT textures with expanded dimensions
+        // Create RTT textures with expanded dimensions (scaled by global RTT factor)
         let rtt_h = images.add(crate::effects::create_rtt_image(
-            expanded_width.max(1.0) as u32,
-            expanded_height.max(1.0) as u32,
+            crate::effects::scaled_rtt_dimension(expanded_width),
+            crate::effects::scaled_rtt_dimension(expanded_height),
             TextureFormat::Rgba8UnormSrgb,
         ));
         let rtt_v = images.add(crate::effects::create_rtt_image(
-            expanded_width.max(1.0) as u32,
-            expanded_height.max(1.0) as u32,
+            crate::effects::scaled_rtt_dimension(expanded_width),
+            crate::effects::scaled_rtt_dimension(expanded_height),
             TextureFormat::Rgba8UnormSrgb,
         ));
 
