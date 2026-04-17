@@ -26,9 +26,7 @@ use bevy::{
     camera::visibility::RenderLayers,
     prelude::*,
     reflect::TypePath,
-    render::render_resource::{
-        AsBindGroup, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    },
+    render::render_resource::{AsBindGroup, TextureFormat},
     shader::ShaderRef,
     sprite_render::{AlphaMode2d, Material2d},
 };
@@ -281,8 +279,16 @@ pub fn setup_blur_rtt_system(
         let expanded_height = orig_height + blur_expansion * 2.0;
 
         // Create RTT textures with expanded dimensions
-        let rtt_h = create_rtt_texture(&mut images, expanded_width, expanded_height, "blur_rtt_h");
-        let rtt_v = create_rtt_texture(&mut images, expanded_width, expanded_height, "blur_rtt_v");
+        let rtt_h = images.add(crate::effects::create_rtt_image(
+            expanded_width.max(1.0) as u32,
+            expanded_height.max(1.0) as u32,
+            TextureFormat::Rgba8UnormSrgb,
+        ));
+        let rtt_v = images.add(crate::effects::create_rtt_image(
+            expanded_width.max(1.0) as u32,
+            expanded_height.max(1.0) as u32,
+            TextureFormat::Rgba8UnormSrgb,
+        ));
 
         // Create mesh for blur passes with expanded dimensions
         // The mesh is centered, so it covers [-expanded_width/2, expanded_width/2]
@@ -537,37 +543,6 @@ pub fn cleanup_blur_rtt_system(
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-fn create_rtt_texture(
-    images: &mut Assets<Image>,
-    width: f32,
-    height: f32,
-    _label: &str,
-) -> Handle<Image> {
-    let extent = Extent3d {
-        width: width.max(1.0) as u32,
-        height: height.max(1.0) as u32,
-        depth_or_array_layers: 1,
-    };
-
-    let mut image = Image {
-        texture_descriptor: TextureDescriptor {
-            label: None,
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        },
-        ..default()
-    };
-    image.resize(extent);
-    images.add(image)
-}
 
 #[allow(dead_code)]
 fn create_blur_mesh(meshes: &mut Assets<Mesh>, width: f32, height: f32) -> Handle<Mesh> {

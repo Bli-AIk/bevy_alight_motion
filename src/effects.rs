@@ -35,6 +35,7 @@ pub use types::{
     RenderStrategy,
     StretchSegmentParams,
     WipeParams,
+    create_rtt_image,
     mark_dirty_on_change_system,
     mask_params_to_vec4,
     setup_effect_buffers_system,

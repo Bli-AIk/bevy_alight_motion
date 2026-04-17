@@ -71,11 +71,13 @@ fn ancestor_embed_render_layer(
 }
 
 /// Maximum number of RTT textures to create per frame.
-/// Spreading creation across frames avoids GPU upload stutter spikes.
+/// With `data: None` textures GPU allocation is near-free; a high budget lets
+/// all layers initialise in a single frame, avoiding a prolonged ramp-up that
+/// accumulates camera rendering work across many partially-active frames.
 ///
-/// 每帧最多创建的 RTT 纹理数量。
-/// 将创建分散到多帧可避免 GPU 上传引起的卡顿尖峰。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 4;
+/// 每帧最多创建的 RTT 纹理数量。data:None 使 GPU 分配几乎免费，
+/// 高预算允许所有图层在一帧内初始化。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 64;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -158,12 +160,9 @@ pub fn setup_embed_scene_rtt_system(
             continue;
         };
 
-        let render_texture = Image::new_target_texture(
-            needs_rtt.scene_width.max(1.0).ceil() as u32,
-            needs_rtt.scene_height.max(1.0).ceil() as u32,
-            render_texture_format,
-            None,
-        );
+        let tex_w = needs_rtt.scene_width.max(1.0).ceil() as u32;
+        let tex_h = needs_rtt.scene_height.max(1.0).ceil() as u32;
+        let render_texture = crate::effects::create_rtt_image(tex_w, tex_h, render_texture_format);
         let render_texture_handle = images.add(render_texture);
         rtt_created_this_frame += 1;
         let (global_scale, embed_rotation, embed_translation) =

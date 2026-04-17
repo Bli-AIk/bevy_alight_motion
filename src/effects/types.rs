@@ -10,6 +10,34 @@ use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 
+/// Create a render-target `Image` with `data: None` so Bevy allocates GPU
+/// memory without an expensive DMA zero-fill upload (~18 ms per 1080p RGBA8).
+/// The camera will overwrite every pixel on first render anyway.
+///
+/// 创建 `data: None` 的渲染目标纹理。跳过 DMA 零填充上传，GPU 仅分配显存。
+pub fn create_rtt_image(w: u32, h: u32, format: TextureFormat) -> Image {
+    Image {
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: w.max(1),
+                height: h.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        data: None,
+        ..default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WipeParams {
     /// Start position (0.0-1.0)
@@ -211,30 +239,12 @@ impl PingPongBuffer {
         }
     }
 
-    fn create_rtt(images: &mut Assets<Image>, size: Vec2, label: &'static str) -> Handle<Image> {
-        let extent = Extent3d {
-            width: size.x.max(1.0) as u32,
-            height: size.y.max(1.0) as u32,
-            depth_or_array_layers: 1,
-        };
-
-        let mut image = Image {
-            texture_descriptor: TextureDescriptor {
-                label: Some(label),
-                size: extent,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            ..default()
-        };
-        image.resize(extent);
-        images.add(image)
+    fn create_rtt(images: &mut Assets<Image>, size: Vec2, _label: &'static str) -> Handle<Image> {
+        images.add(create_rtt_image(
+            size.x.max(1.0) as u32,
+            size.y.max(1.0) as u32,
+            TextureFormat::Rgba8UnormSrgb,
+        ))
     }
 
     /// Get the current read (input) texture
