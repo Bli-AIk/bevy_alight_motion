@@ -13,6 +13,7 @@
 mod components;
 mod effects;
 mod helpers;
+pub(crate) mod hibernation;
 mod interpolation;
 mod lifecycle;
 mod noise_effects;

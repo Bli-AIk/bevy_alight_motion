@@ -38,6 +38,7 @@ pub use components::{
     AmEmbedContentsContainer,
     AmEntitySpawned,
     AmForceHidden,
+    AmHibernated,
     AmLayerMarker,
     // 2.3 标识与查询标准化
     AmLayerName,

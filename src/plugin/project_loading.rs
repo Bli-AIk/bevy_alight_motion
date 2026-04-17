@@ -163,6 +163,7 @@ pub(super) fn spawn_loaded_projects_system(
             .insert(crate::scene::AmPendingLayers {
                 layers: pending_layers,
                 spawned_entities: std::collections::HashMap::new(),
+                hibernated_entities: std::collections::HashMap::new(),
                 inv_fit_scale: 1.0 / fit_scale,
                 layers_container: Some(layers_container),
                 embed_contents_container: Some(embed_contents_container),

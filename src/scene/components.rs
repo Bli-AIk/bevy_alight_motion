@@ -11,8 +11,8 @@ pub use identity::{
     AmPerspectiveNull, AmPerspectiveParent,
 };
 pub use project::{
-    AmEmbedContent, AmEmbedContentMarker, AmEmbedContentsContainer, AmLayersContainer,
-    AmPendingLayers, AmProjectBundle, AmProjectRoot, AmRttCamerasContainer,
+    AmEmbedContent, AmEmbedContentMarker, AmEmbedContentsContainer, AmHibernated,
+    AmLayersContainer, AmPendingLayers, AmProjectBundle, AmProjectRoot, AmRttCamerasContainer,
 };
 pub use spawn::{
     AmLayerSpec, AmSceneConfig, AmSpawnSettings, AmVisualSpawned, LayerFilter, PendingLayer,
