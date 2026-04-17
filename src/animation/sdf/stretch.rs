@@ -21,10 +21,7 @@ use super::super::sdf_geometry::compute_sdf_shape_half_extent;
 
 pub fn animate_sdf_stretch_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<
-        (&AmAnimated, &Children, &GlobalTransform),
-        (With<AmSdfShapeParent>, Without<crate::scene::AmHibernated>),
-    >,
+    parent_query: Query<(&AmAnimated, &Children, &GlobalTransform), With<AmSdfShapeParent>>,
     sdf_query: Query<&MeshMaterial2d<SdfMaterial>>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {

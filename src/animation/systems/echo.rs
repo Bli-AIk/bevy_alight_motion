@@ -12,20 +12,17 @@
 use bevy::prelude::*;
 
 use crate::animation::{AmAnimated, AmEchoRuntime, AmPlayback, EchoAlphaConfig};
-use crate::scene::{AmForceHidden, AmHibernated};
+use crate::scene::AmForceHidden;
 
 pub fn update_echo_runtime_system(
     playback: Res<AmPlayback>,
-    mut echo_query: Query<
-        (
-            Entity,
-            &AmEchoRuntime,
-            &mut AmAnimated,
-            &mut Visibility,
-            Option<&AmForceHidden>,
-        ),
-        Without<AmHibernated>,
-    >,
+    mut echo_query: Query<(
+        Entity,
+        &AmEchoRuntime,
+        &mut AmAnimated,
+        &mut Visibility,
+        Option<&AmForceHidden>,
+    )>,
     children_query: Query<&Children>,
     mut child_animated_query: Query<&mut AmAnimated, Without<AmEchoRuntime>>,
 ) {

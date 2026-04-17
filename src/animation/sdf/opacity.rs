@@ -26,7 +26,7 @@ pub fn animate_sdf_opacity_system(
             &crate::scene::AmLayerMarker,
             Option<&crate::scene::AmForceHidden>,
         ),
-        (With<AmSdfShapeParent>, Without<crate::scene::AmHibernated>),
+        With<AmSdfShapeParent>,
     >,
     mut sdf_query: Query<(
         &MeshMaterial2d<SdfMaterial>,

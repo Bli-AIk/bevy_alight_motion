@@ -11,9 +11,6 @@
 use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 
-use crate::animation::hibernation::{
-    enforce_hibernation_visibility_system, sync_hibernation_cameras_system,
-};
 use crate::animation::{
     AmPlayback, ParenthelperScaleContributions, advance_playback_system, animate_am_camera_system,
     animate_counter_system, animate_opacity_system, animate_path_repeat_system,
@@ -84,7 +81,6 @@ fn register_lifecycle_systems(app: &mut App) {
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,
-            sync_hibernation_cameras_system,
             crate::effects::evaluate_render_strategy_system,
             ApplyDeferred,
             crate::effects::setup_embed_scene_rtt_system,
@@ -190,14 +186,6 @@ fn register_animation_systems(app: &mut App) {
         (animate_path_repeat_system, apply_mask_clipping_system)
             .in_set(AlightMotionSystemSet::Animation)
             .after(animate_unified_effect_system),
-    )
-    // Enforce hibernation visibility AFTER all animation systems that may set Visibility.
-    .add_systems(
-        Update,
-        enforce_hibernation_visibility_system
-            .in_set(AlightMotionSystemSet::Animation)
-            .after(animate_opacity_system)
-            .after(animate_path_repeat_system),
     );
 }
 

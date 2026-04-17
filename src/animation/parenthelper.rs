@@ -17,7 +17,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use crate::scene::{AmHibernated, AmLayerMarker, AmLayerSpec};
+use crate::scene::{AmLayerMarker, AmLayerSpec};
 
 use super::components::{AmAnimated, AmPlayback, AmUnifiedUsesTransformScale};
 use super::interpolation::{interpolate_float, interpolate_vec2};
@@ -286,29 +286,23 @@ pub(crate) fn apply_parenthelper_system(
     playback: Res<AmPlayback>,
     mut scale_contributions: ResMut<ParenthelperScaleContributions>,
     mut queries: ParamSet<(
-        Query<
-            (
-                Entity,
-                &AmAnimated,
-                &AmLayerMarker,
-                &Transform,
-                &AmLayerSpec,
-                Option<&crate::masked_sprite::UnifiedEffectMarker>,
-                Option<&AmUnifiedUsesTransformScale>,
-                Option<&ChildOf>,
-            ),
-            Without<AmHibernated>,
-        >,
-        Query<
-            (
-                Entity,
-                &AmAnimated,
-                &AmLayerMarker,
-                &mut Transform,
-                Option<&crate::scene::AmPerspectiveParent>,
-            ),
-            Without<AmHibernated>,
-        >,
+        Query<(
+            Entity,
+            &AmAnimated,
+            &AmLayerMarker,
+            &Transform,
+            &AmLayerSpec,
+            Option<&crate::masked_sprite::UnifiedEffectMarker>,
+            Option<&AmUnifiedUsesTransformScale>,
+            Option<&ChildOf>,
+        )>,
+        Query<(
+            Entity,
+            &AmAnimated,
+            &AmLayerMarker,
+            &mut Transform,
+            Option<&crate::scene::AmPerspectiveParent>,
+        )>,
     )>,
     mut snapshots: Local<HashMap<Entity, ParentHelperSnapshot>>,
     mut world_cache: Local<HashMap<Entity, ParentHelperWorldState>>,

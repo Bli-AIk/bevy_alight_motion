@@ -22,10 +22,7 @@ use super::super::sdf_helpers::{
 
 pub fn animate_sdf_scale_system(
     playback: Res<AmPlayback>,
-    parent_query: Query<
-        (&AmAnimated, &Children),
-        (With<AmSdfShapeParent>, Without<crate::scene::AmHibernated>),
-    >,
+    parent_query: Query<(&AmAnimated, &Children), With<AmSdfShapeParent>>,
     mut sdf_query: Query<(&MeshMaterial2d<SdfMaterial>, &AmSdfParams, &mut Transform)>,
     mut materials: ResMut<Assets<SdfMaterial>>,
 ) {

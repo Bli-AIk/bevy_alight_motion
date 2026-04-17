@@ -9,10 +9,7 @@ use crate::animation::interpolation::interpolate_float;
 /// This updates the GaussianBlurEffect component's radius based on animation keyframes.
 pub fn animate_rtt_blur_system(
     playback: Res<AmPlayback>,
-    mut query: Query<
-        (&AmAnimated, &mut crate::gaussian_blur::GaussianBlurEffect),
-        Without<crate::scene::AmHibernated>,
-    >,
+    mut query: Query<(&AmAnimated, &mut crate::gaussian_blur::GaussianBlurEffect)>,
 ) {
     // Skip animation only when force stopped
     if playback.force_stopped {

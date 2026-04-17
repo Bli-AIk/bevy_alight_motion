@@ -11,11 +11,11 @@ use bevy::prelude::*;
 
 use crate::animation::interpolation::interpolate_float;
 use crate::animation::{AmAnimated, AmPlayback};
-use crate::scene::{AmForceHidden, AmHibernated, AmLayerMarker};
+use crate::scene::{AmForceHidden, AmLayerMarker};
 
 pub fn animate_opacity_system(
     playback: Res<AmPlayback>,
-    mut query: Query<(&AmAnimated, &mut Sprite), Without<AmHibernated>>,
+    mut query: Query<(&AmAnimated, &mut Sprite)>,
 ) {
     if playback.force_stopped {
         return;

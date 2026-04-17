@@ -43,19 +43,11 @@ pub struct AmProjectRoot {
 pub struct AmPendingLayers {
     pub layers: Vec<super::spawn::PendingLayer>,
     pub spawned_entities: HashMap<u64, Entity>,
-    /// Entities hidden but kept alive with all RTT resources intact.
-    /// Avoids costly destroy/recreate at loop transitions.
-    pub hibernated_entities: HashMap<u64, Entity>,
     pub inv_fit_scale: f32,
     pub layers_container: Option<Entity>,
     pub embed_contents_container: Option<Entity>,
     pub rtt_cameras_container: Option<Entity>,
 }
-
-/// Marker on layer entities that are hibernated (hidden, cameras disabled).
-/// Animation systems should not override visibility while this is present.
-#[derive(Component, Debug, Clone)]
-pub struct AmHibernated;
 
 #[derive(Component, Debug, Clone, Default)]
 pub struct AmLayersContainer;

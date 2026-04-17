@@ -192,17 +192,14 @@ pub fn animate_path_repeat_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,
     white_pixel: Option<Res<AmWhitePixel>>,
-    mut path_repeat_query: Query<
-        (
-            Entity,
-            &mut AmPathRepeat,
-            &AmAnimated,
-            &Transform,
-            &mut Visibility,
-            Option<&ChildOf>,
-        ),
-        Without<crate::scene::AmHibernated>,
-    >,
+    mut path_repeat_query: Query<(
+        Entity,
+        &mut AmPathRepeat,
+        &AmAnimated,
+        &Transform,
+        &mut Visibility,
+        Option<&ChildOf>,
+    )>,
     mut copy_query: Query<(&mut Transform, &mut Visibility, &mut Sprite), Without<AmPathRepeat>>,
 ) {
     let white_pixel_handle = match &white_pixel {

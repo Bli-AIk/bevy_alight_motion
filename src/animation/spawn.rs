@@ -56,8 +56,7 @@ pub(crate) fn process_pending_layers(
 ) {
     // We need to collect actions to avoid borrowing issues
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
-    let mut to_hibernate: Vec<u64> = Vec::new(); // layer_id — hide instead of despawn
-    let mut to_wake: Vec<u64> = Vec::new(); // layer_id — wake from hibernation
+    let mut to_despawn: Vec<u64> = Vec::new(); // layer_id
 
     // Build O(1) lookup index: layer_id → index in pending.layers
     let layer_index: std::collections::HashMap<u64, usize> = pending
@@ -173,11 +172,10 @@ pub(crate) fn process_pending_layers(
         let should_be_active = own_time_active && ancestors_active;
 
         let is_spawned = pending.spawned_entities.contains_key(&layer.id);
-        let is_hibernated = pending.hibernated_entities.contains_key(&layer.id);
 
         if trace_lifecycle_enabled(layer.id) {
             bevy::log::warn!(
-                "[LifecycleTrace] id={} label='{}' parent={} global={:.1} local={:.1} range={}..{} own_active={} ancestors_active={} spawned={} hibernated={}",
+                "[LifecycleTrace] id={} label='{}' parent={} global={:.1} local={:.1} range={}..{} own_active={} ancestors_active={} spawned={}",
                 layer.id,
                 layer.label,
                 layer.parent,
@@ -188,7 +186,6 @@ pub(crate) fn process_pending_layers(
                 own_time_active,
                 ancestors_active,
                 is_spawned,
-                is_hibernated,
             );
         }
 
@@ -219,19 +216,17 @@ pub(crate) fn process_pending_layers(
         // 应用过滤器检查 (Apply filter check)
         let should_spawn_filtered = should_be_active && filter.should_spawn(&layer.label);
 
-        if should_spawn_filtered && !is_spawned && !is_hibernated {
+        if should_spawn_filtered && !is_spawned {
             to_spawn.push(idx);
-        } else if should_spawn_filtered && is_hibernated {
-            to_wake.push(layer.id);
         } else if !should_be_active && is_spawned {
-            to_hibernate.push(layer.id);
+            to_despawn.push(layer.id);
         }
     }
 
-    // Hibernate entities that are no longer active (hide + disable cameras, keep alive).
+    // Despawn entities that are no longer active.
     // Pre-build parent→children map for O(n) descendant collection instead of O(n²).
     let mut children_map: HashMap<u64, Vec<u64>> = HashMap::new();
-    if !to_hibernate.is_empty() {
+    if !to_despawn.is_empty() {
         for layer in &pending.layers {
             if layer.parent != 0 {
                 children_map.entry(layer.parent).or_default().push(layer.id);
@@ -239,66 +234,38 @@ pub(crate) fn process_pending_layers(
         }
     }
 
-    for layer_id in to_hibernate {
+    for layer_id in to_despawn {
         let Some(entity) = pending.spawned_entities.remove(&layer_id) else {
             continue;
         };
 
         if let Some(&idx) = layer_index.get(&layer_id) {
             bevy::log::trace!(
-                "  [Lifecycle] Hibernating '{}' (id={})",
+                "  [Lifecycle] Despawning '{}' (id={})",
                 pending.layers[idx].label,
                 layer_id
             );
         }
 
-        commands
-            .entity(entity)
-            .insert((Visibility::Hidden, crate::scene::AmHibernated));
-        pending.hibernated_entities.insert(layer_id, entity);
-
-        // Cascade: move spawned descendants to hibernated too
+        // Collect all descendants via BFS using children_map (O(n) total)
         let mut stack: Vec<u64> = children_map.get(&layer_id).cloned().unwrap_or_default();
         while let Some(child_id) = stack.pop() {
-            if let Some(child_entity) = pending.spawned_entities.remove(&child_id) {
-                let label = layer_index
-                    .get(&child_id)
-                    .map(|&i| pending.layers[i].label.as_str());
+            if let Some(_child_entity) = pending.spawned_entities.remove(&child_id)
+                && let Some(&idx) = layer_index.get(&child_id)
+            {
                 bevy::log::trace!(
-                    "    [Lifecycle] (cascade) Hibernating '{}' (id={})",
-                    label.unwrap_or("?"),
+                    "    [Lifecycle] (cascade) Removing '{}' (id={}) from tracking",
+                    pending.layers[idx].label,
                     child_id
                 );
-                commands
-                    .entity(child_entity)
-                    .insert((Visibility::Hidden, crate::scene::AmHibernated));
-                pending.hibernated_entities.insert(child_id, child_entity);
             }
             if let Some(grandchildren) = children_map.get(&child_id) {
                 stack.extend(grandchildren);
             }
         }
-    }
 
-    // Wake hibernated entities that should be active again.
-    for layer_id in to_wake {
-        let Some(entity) = pending.hibernated_entities.remove(&layer_id) else {
-            continue;
-        };
-
-        if let Some(&idx) = layer_index.get(&layer_id) {
-            bevy::log::trace!(
-                "  [Lifecycle] Waking '{}' (id={})",
-                pending.layers[idx].label,
-                layer_id
-            );
-        }
-
-        commands
-            .entity(entity)
-            .remove::<crate::scene::AmHibernated>()
-            .insert(Visibility::Inherited);
-        pending.spawned_entities.insert(layer_id, entity);
+        // Despawn the entity (and all ECS children recursively)
+        commands.entity(entity).despawn();
     }
 
     // Sort layers to spawn by dependency (parents before children) using topological sort
