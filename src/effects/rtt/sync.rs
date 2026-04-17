@@ -258,10 +258,9 @@ pub fn sync_rtt_camera_position_system(
                 };
             }
 
-            let rtt_scale = crate::effects::rtt_resolution_scale();
             let new_extent = Extent3d {
-                width: (effective_size.x * rtt_scale).ceil().max(1.0) as u32,
-                height: (effective_size.y * rtt_scale).ceil().max(1.0) as u32,
+                width: (effective_size.x * rtt.rtt_scale).ceil().max(1.0) as u32,
+                height: (effective_size.y * rtt.rtt_scale).ceil().max(1.0) as u32,
                 depth_or_array_layers: 1,
             };
             let keep_full_resolution_for_group_fill =
@@ -330,16 +329,23 @@ pub fn sync_rtt_camera_position_system(
     }
 }
 
-/// Counts active RTT cameras (embed + blur + composite) and updates the
-/// adaptive resolution scale factor. Runs early each frame so that
-/// [`setup`](super::setup_embed_scene_rtt_system) and
-/// [`sync`](sync_embed_scene_rtt_system) pick up the latest scale.
+/// Counts active RTT cameras plus pending embed setups and updates the
+/// adaptive resolution scale factor. Runs before RTT setup each frame so
+/// newly created textures immediately use the scaled dimensions.
 ///
-/// 每帧统计活跃 RTT 相机数量并更新自适应分辨率缩放因子。
+/// Pending embeds are counted with a multiplier (each embed ≈ 3 cameras:
+/// main + blur_h + blur_v) to pre-emptively lower the scale before setup
+/// creates the actual cameras and textures.
+///
+/// 统计活跃 RTT 相机和待创建 embed，更新自适应分辨率缩放因子。
 pub fn adaptive_rtt_scale_system(
     embed_cameras: Query<(), With<EmbedSceneRttCamera>>,
     blur_cameras: Query<(), With<crate::gaussian_blur::BlurPassCamera>>,
+    pending_embeds: Query<(), With<super::NeedsEmbedSceneRtt>>,
 ) {
-    let count = embed_cameras.iter().count() + blur_cameras.iter().count();
-    crate::effects::update_adaptive_rtt_scale(count);
+    let existing = embed_cameras.iter().count() + blur_cameras.iter().count();
+    let pending = pending_embeds.iter().count();
+    // Each pending embed creates ~3 cameras (main + blur H + blur V).
+    let estimated_total = existing + pending * 3;
+    crate::effects::update_adaptive_rtt_scale(estimated_total);
 }

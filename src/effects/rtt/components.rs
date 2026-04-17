@@ -18,6 +18,9 @@ pub struct EmbedSceneRtt {
     pub scene_width: f32,
     pub scene_height: f32,
     pub dynamic_resolution: bool,
+    /// Resolution scale locked at creation time. Used by sync to keep resize
+    /// consistent (prevents oscillation from changing adaptive scale).
+    pub rtt_scale: f32,
 }
 
 #[derive(Component)]

@@ -329,6 +329,7 @@ pub fn setup_embed_scene_rtt_system(
                     scene_width: needs_rtt.scene_width,
                     scene_height: needs_rtt.scene_height,
                     dynamic_resolution: needs_rtt.render_plan.dynamic_resolution,
+                    rtt_scale,
                 },
                 sprite_render_layer,
             ));

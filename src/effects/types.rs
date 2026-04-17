@@ -50,15 +50,37 @@ fn env_rtt_scale() -> f32 {
 /// 超过此相机数量时，自适应缩放开始降低 RTT 分辨率。
 const ADAPTIVE_CAMERA_THRESHOLD: usize = 6;
 
-/// Update the adaptive RTT scale based on the current number of active RTT
-/// cameras. Called once per frame by [`adaptive_rtt_scale_system`].
-pub fn update_adaptive_rtt_scale(active_rtt_camera_count: usize) {
-    let scale = if active_rtt_camera_count <= ADAPTIVE_CAMERA_THRESHOLD {
+/// Update the adaptive RTT scale based on estimated total camera count.
+/// Uses a one-way ratchet: the scale can only decrease over the scene's
+/// lifetime, preventing texture resize oscillation that triggers costly
+/// GPU pipeline recompilation.
+///
+/// Called once per frame by [`adaptive_rtt_scale_system`].
+pub fn update_adaptive_rtt_scale(estimated_camera_count: usize) {
+    let target = if estimated_camera_count <= ADAPTIVE_CAMERA_THRESHOLD {
         1.0
     } else {
-        (ADAPTIVE_CAMERA_THRESHOLD as f32 / active_rtt_camera_count as f32).clamp(0.25, 1.0)
+        (ADAPTIVE_CAMERA_THRESHOLD as f32 / estimated_camera_count as f32).clamp(0.25, 1.0)
     };
-    ADAPTIVE_RTT_SCALE.store(scale.to_bits(), Ordering::Relaxed);
+    // One-way ratchet: only decrease, never increase.
+    loop {
+        let current_bits = ADAPTIVE_RTT_SCALE.load(Ordering::Relaxed);
+        let current = f32::from_bits(current_bits);
+        if target >= current {
+            break;
+        }
+        if ADAPTIVE_RTT_SCALE
+            .compare_exchange_weak(
+                current_bits,
+                target.to_bits(),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .is_ok()
+        {
+            break;
+        }
+    }
 }
 
 /// Apply [`rtt_resolution_scale`] to a pixel dimension, returning at least 1.
