@@ -177,6 +177,15 @@ skip = true
 [overrides."private/USER_mortis/sunshine"]
 skip = true
 
+[overrides."private/USER_baby/sans"]
+skip = true
+
+[overrides."private/USER_baby/yes"]
+skip = true
+
+[overrides."private/USER_qiu/monster"]
+skip = true
+
 # =============================================================================
 # Frame Test (FPS Performance) Configuration
 # 帧测试（FPS 性能）配置
