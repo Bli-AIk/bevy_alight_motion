@@ -347,6 +347,10 @@ pub(crate) fn process_pending_layers(
     // Budget: cap entities spawned per frame to smooth loop-transition spikes.
     // Parents/roots (depth 0) spawn first; remaining layers naturally pick up
     // in subsequent frames because lifecycle re-evaluates every frame.
+    //
+    // After truncation, re-include embed content entities whose EmbedScene parent
+    // survived the cut. Without this, an embed's RTT renders empty for one frame
+    // because content entities haven't spawned yet (causes visible flicker).
     {
         static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
         let budget = *BUDGET.get_or_init(|| {
@@ -361,7 +365,32 @@ pub(crate) fn process_pending_layers(
                 budget,
                 to_spawn.len()
             );
-            to_spawn.truncate(budget);
+            let cut = to_spawn.split_off(budget);
+
+            // Collect IDs of EmbedScene entities that survived the budget cut.
+            let surviving_embed_ids: std::collections::HashSet<u64> = to_spawn
+                .iter()
+                .filter_map(|&idx| {
+                    let layer = &pending.layers[idx];
+                    if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
+                        Some(layer.id)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Re-add content entities that belong to surviving embeds.
+            if !surviving_embed_ids.is_empty() {
+                for idx in cut {
+                    let layer = &pending.layers[idx];
+                    if layer.containing_embed_id != 0
+                        && surviving_embed_ids.contains(&layer.containing_embed_id)
+                    {
+                        to_spawn.push(idx);
+                    }
+                }
+            }
         }
     }
 
