@@ -571,10 +571,7 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
             ));
         }
         if stutter_exceeded {
-            notes.push(format!(
-                "stutter {:.1}%",
-                stutter_rate * 100.0,
-            ));
+            notes.push(format!("stutter {:.1}%", stutter_rate * 100.0,));
         }
         println!(
             "{}",
