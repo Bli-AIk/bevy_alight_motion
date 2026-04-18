@@ -351,47 +351,38 @@ pub(crate) fn process_pending_layers(
     // After truncation, re-include embed content entities whose EmbedScene parent
     // survived the cut. Without this, an embed's RTT renders empty for one frame
     // because content entities haven't spawned yet (causes visible flicker).
-    {
-        static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-        let budget = *BUDGET.get_or_init(|| {
-            std::env::var("AM_SPAWN_BUDGET")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(8)
-        });
-        if to_spawn.len() > budget {
-            bevy::log::trace!(
-                "[Lifecycle] Spawn budget: {}/{} entities this frame",
-                budget,
-                to_spawn.len()
-            );
-            let cut = to_spawn.split_off(budget);
+    static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let budget = *BUDGET.get_or_init(|| {
+        std::env::var("AM_SPAWN_BUDGET")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8)
+    });
+    if to_spawn.len() > budget {
+        bevy::log::trace!(
+            "[Lifecycle] Spawn budget: {}/{} entities this frame",
+            budget,
+            to_spawn.len()
+        );
+        let cut = to_spawn.split_off(budget);
 
-            // Collect IDs of EmbedScene entities that survived the budget cut.
-            let surviving_embed_ids: std::collections::HashSet<u64> = to_spawn
-                .iter()
-                .filter_map(|&idx| {
-                    let layer = &pending.layers[idx];
-                    if matches!(layer.spec, crate::scene::AmLayerSpec::EmbedScene) {
-                        Some(layer.id)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        // Collect IDs of EmbedScene entities that survived the budget cut.
+        let surviving_embed_ids: std::collections::HashSet<u64> = to_spawn
+            .iter()
+            .filter(|&&idx| {
+                matches!(
+                    pending.layers[idx].spec,
+                    crate::scene::AmLayerSpec::EmbedScene
+                )
+            })
+            .map(|&idx| pending.layers[idx].id)
+            .collect();
 
-            // Re-add content entities that belong to surviving embeds.
-            if !surviving_embed_ids.is_empty() {
-                for idx in cut {
-                    let layer = &pending.layers[idx];
-                    if layer.containing_embed_id != 0
-                        && surviving_embed_ids.contains(&layer.containing_embed_id)
-                    {
-                        to_spawn.push(idx);
-                    }
-                }
-            }
-        }
+        // Re-add content entities that belong to surviving embeds.
+        to_spawn.extend(cut.into_iter().filter(|&idx| {
+            let embed_id = pending.layers[idx].containing_embed_id;
+            embed_id != 0 && surviving_embed_ids.contains(&embed_id)
+        }));
     }
 
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
