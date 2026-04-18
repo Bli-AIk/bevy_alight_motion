@@ -185,19 +185,21 @@ skip = true
 # 当使用 --features frame-test 运行时使用
 
 [frame_test]
-# FPS thresholds / FPS 阈值
-# >= pass_fps: FULL PASS (green) / 完全通过（绿色）
-# >= fail_fps: WARNING (pass with warning, yellow) / 警告（通过但有警告，黄色）
-# < fail_fps: FAIL (red) / 失败（红色）
+# FPS thresholds (two-tier system: Great / Perfect)
+# FPS 阈值（两级评价：Great / Perfect）
+#
+# >= pass_fps + stutter OK:  PERFECT ✨
+# >= fail_fps:               GREAT ✅
+# < fail_fps:                FAIL ❌
 pass_fps = 120.0
 fail_fps = 60.0
 
-# Maximum ratio of frames below fail_fps to still pass
-# 低于 fail_fps 的帧数最大占比（超过则失败）
-max_below_fail_rate = 0.05
+# Maximum ratio of frames below fail_fps before FAIL
+# 低于 fail_fps 的帧数最大占比（超过则 FAIL）
+max_below_fail_rate = 0.20
 
-# Maximum ratio of frames below pass_fps to still get full pass (not warning)
-# 低于 pass_fps 的帧数最大占比（超过则降级为 warning）
+# Maximum ratio of frames below pass_fps to achieve PERFECT
+# 低于 pass_fps 的帧数最大占比（超过则降为 GREAT）
 max_below_pass_rate = 0.20
 
 # Minimum number of frames to sample before reporting

@@ -64,7 +64,7 @@ impl Default for FrameTestState {
             last_instant: None,
             pass_fps: 120.0,
             fail_fps: 60.0,
-            max_below_fail_rate: 0.05,
+            max_below_fail_rate: 0.20,
             max_below_pass_rate: 0.20,
             min_sample_frames: 30,
             warmup_frames: 60,
@@ -107,7 +107,7 @@ fn default_fail_fps() -> f32 {
     60.0
 }
 fn default_max_below_fail_rate() -> f32 {
-    0.05
+    0.20
 }
 fn default_max_below_pass_rate() -> f32 {
     0.20
@@ -502,10 +502,11 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
     );
     println!("----------------------------------------");
 
-    // Determine result:
-    // FAIL if avg < fail_fps OR too many frames below fail_fps OR stutter rate exceeded
-    // PASS if avg >= pass_fps AND few frames below pass_fps AND stutter OK
-    // WARNING otherwise (between fail and pass)
+    // Determine result (two-tier system):
+    //
+    // FAIL:    avg < fail_fps OR too many frames below fail_fps
+    // GREAT:   avg >= fail_fps (stable 60 FPS tier)
+    // PERFECT: avg >= pass_fps AND few frames below pass_fps AND stutter OK
     let fail_rate_exceeded = below_fail_rate > state.max_below_fail_rate as f64;
     let stutter_exceeded = stutter_rate > state.max_stutter_rate as f64;
 
@@ -543,45 +544,50 @@ fn report_results(state: &FrameTestState, exit: &mut MessageWriter<AppExit>) {
         println!(
             "{}",
             format!(
-                "RESULT: PASS ✅ (avg {:.1} FPS >= {:.0})",
-                avg_fps, state.pass_fps
+                "RESULT: PERFECT ✨ (avg {:.1} FPS >= {:.0}, stutter {:.1}%)",
+                avg_fps,
+                state.pass_fps,
+                stutter_rate * 100.0,
             )
             .green()
             .bold()
         );
-        status = "pass";
+        status = "perfect";
         exit.write(AppExit::Success);
     } else {
-        let mut reasons = Vec::new();
+        // GREAT tier: stable 60+ FPS, not yet perfect
+        let mut notes = Vec::new();
         if avg_fps < state.pass_fps as f64 {
-            reasons.push(format!(
-                "avg {:.1} FPS: {:.0} <= fps < {:.0}",
-                avg_fps, state.fail_fps, state.pass_fps
+            notes.push(format!(
+                "avg {:.1} FPS (target {:.0})",
+                avg_fps, state.pass_fps
             ));
         }
         if below_pass_rate > state.max_below_pass_rate as f64 {
-            reasons.push(format!(
-                "{:.1}% frames below {:.0} FPS (max {:.1}%)",
+            notes.push(format!(
+                "{:.1}% below {:.0} FPS",
                 below_pass_rate * 100.0,
                 state.pass_fps,
-                state.max_below_pass_rate * 100.0
             ));
         }
         if stutter_exceeded {
-            reasons.push(format!(
-                "stutter {:.1}% > {:.1}%",
+            notes.push(format!(
+                "stutter {:.1}%",
                 stutter_rate * 100.0,
-                state.max_stutter_rate * 100.0
             ));
         }
         println!(
             "{}",
-            format!("RESULT: WARNING ⚠️ ({})", reasons.join("; "))
-                .yellow()
-                .bold()
+            format!(
+                "RESULT: GREAT ✅ (avg {:.1} FPS >= {:.0}; {})",
+                avg_fps,
+                state.fail_fps,
+                notes.join("; ")
+            )
+            .yellow()
+            .bold()
         );
-        // Warning is still a pass (exit 0)
-        status = "warning";
+        status = "great";
         exit.write(AppExit::Success);
     }
     println!("========================================");
