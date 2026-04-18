@@ -5,6 +5,7 @@
 //! Effect parameter types and data structures.
 //! 效果参数类型和数据结构。
 
+use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -111,6 +112,7 @@ pub fn create_rtt_image(w: u32, h: u32, format: TextureFormat) -> Image {
                 | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         },
+        sampler: ImageSampler::nearest(),
         data: None,
         ..default()
     }

@@ -27,7 +27,7 @@ pub(super) fn load_embedded_images(
             bevy::image::ImageType::Extension(format),
             bevy::image::CompressedImageFormats::NONE,
             true,
-            bevy::image::ImageSampler::Default,
+            bevy::image::ImageSampler::nearest(),
             RenderAssetUsages::all(),
         ) {
             let handle = load_context.add_labeled_asset(label.to_string(), image);
