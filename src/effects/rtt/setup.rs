@@ -84,7 +84,7 @@ fn rtt_setup_budget() -> usize {
         std::env::var("AM_RTT_SETUP_BUDGET")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(4)
+            .unwrap_or(1)
     })
 }
 
