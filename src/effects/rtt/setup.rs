@@ -72,12 +72,21 @@ fn ancestor_embed_render_layer(
 
 /// Maximum number of RTT textures to create per frame.
 /// With `data: None` textures GPU allocation is near-free; a high budget lets
-/// all layers initialise in a single frame, avoiding a prolonged ramp-up that
-/// accumulates camera rendering work across many partially-active frames.
+/// Per-frame cap on RTT texture+camera creation. A lower budget spreads GPU
+/// render-target allocation (`prepare_view_targets`) and material specialisation
+/// across more frames, trading a brief pop-in for no single-frame stutter.
 ///
-/// 每帧最多创建的 RTT 纹理数量。data:None 使 GPU 分配几乎免费，
-/// 高预算允许所有图层在一帧内初始化。
-const RTT_SETUP_BUDGET_PER_FRAME: usize = 64;
+/// 每帧最多创建的 RTT 纹理数量。较低的预算将 GPU 渲染目标分配和材质
+/// 特化分散到更多帧中，以消除单帧卡顿。
+fn rtt_setup_budget() -> usize {
+    static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *BUDGET.get_or_init(|| {
+        std::env::var("AM_RTT_SETUP_BUDGET")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(4)
+    })
+}
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -127,7 +136,7 @@ pub fn setup_embed_scene_rtt_system(
 
     for &(entity, _depth) in &*entities_with_depth {
         // Enforce per-frame budget to avoid GPU upload stutter.
-        if rtt_created_this_frame >= RTT_SETUP_BUDGET_PER_FRAME {
+        if rtt_created_this_frame >= rtt_setup_budget() {
             break;
         }
 
