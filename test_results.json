@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-04-18T20:57:26.365047+08:00",
+  "timestamp": "2026-04-19T09:28:01.055448+08:00",
   "summary": {
-    "passed": 190,
+    "passed": 193,
     "warnings": 0,
     "skipped": 5,
     "failed": 103
@@ -829,6 +829,15 @@
     "private/USER_hong_jiao/test": {
       "status": "fail",
       "avg_similarity": 0.9465
+    },
+    "private/USER_hong_jiao/test/bone_circle": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/bone_circle_lot": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/bone_circle_lot_hidden": {
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
