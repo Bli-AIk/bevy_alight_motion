@@ -85,6 +85,9 @@ fn register_lifecycle_systems(app: &mut App) {
         (
             spawn_loaded_projects_system,
             ApplyDeferred,
+            super::warmup::start_warmup_system,
+            ApplyDeferred,
+            super::warmup::tick_warmup_system,
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,

@@ -6,6 +6,7 @@ mod build;
 mod project_loading;
 mod resources;
 mod startup;
+mod warmup;
 
 use bevy::prelude::*;
 
