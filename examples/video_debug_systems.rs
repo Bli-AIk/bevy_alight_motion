@@ -1,3 +1,14 @@
+//! Debug overlay systems for viewing extracted reference video frames.
+//!
+//! 用于查看提取后参考视频帧的调试覆盖层系统。
+//!
+//! When comparing renderer output to a reference video, it is useful to display the source frames
+//! inside the example player itself. The module manages that overlay, including frame loading,
+//! playback timing, and the UI entities used to preview the reference sequence.
+//!
+//! 在把渲染结果和参考视频进行对比时，最好能在示例播放器里直接看到源视频帧。
+//! 负责那层调试覆盖，包括帧资源加载、播放时序，以及用于预览参考序列的 UI 实体。
+
 use super::*;
 use crate::video_utils;
 use std::path::PathBuf;

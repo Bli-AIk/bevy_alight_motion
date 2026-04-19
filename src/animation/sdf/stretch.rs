@@ -1,3 +1,16 @@
+//! Computes stretch-effect uniforms for SDF parents.
+//!
+//! 计算 SDF 父级图层的拉伸效果 uniform。
+//!
+//! Stretch on SDF-backed layers depends on the authored angle, smoothness, offsets, and the live
+//! world-space size of the parent shape. The module translates those animated properties into the
+//! normalized parameters expected by the SDF material so stretch is rendered in shader space rather
+//! than by deforming geometry on the CPU.
+//!
+//! 基于 SDF 的图层拉伸效果既依赖作者设置的角度、平滑度、偏移，也依赖父级形状当前的世界空间尺寸。
+//! 该模块会把这些动画属性换算成 SDF 材质需要的归一化参数，让拉伸在 shader 空间里完成，而不是
+//! 通过 CPU 直接改几何体。
+
 use bevy::prelude::*;
 
 use crate::sdf_material::SdfMaterial;
@@ -37,11 +50,11 @@ pub fn animate_sdf_stretch_system(
         let offset_raw = interpolate_float(&animated.stretch_offset, layer_time).unwrap_or(0.0);
         let smooth_raw = interpolate_float(&animated.stretch_smooth, layer_time).unwrap_or(0.0);
 
-        let adj_stretch = stretch_raw / 500.0;
-        let offset_norm = offset_raw / 1000.0;
-
         let scene_width = animated.canvas_width;
         let scene_height = animated.canvas_height;
+
+        let adj_stretch = stretch_raw / 500.0;
+        let offset_norm = offset_raw / 1000.0;
 
         let (_, quat, _) = global_transform.to_scale_rotation_translation();
         let transform_rot = quat.to_euler(bevy::math::EulerRot::ZYX).0;

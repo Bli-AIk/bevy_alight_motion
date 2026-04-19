@@ -1,3 +1,16 @@
+//! Repairs parent-helper inheritance for runtime layer transforms.
+//!
+//! 修正运行时图层在 Parent Helper 效果下的父子继承结果。
+//!
+//! Reconstructs world-space translation, rotation, and scale for layers that opt into
+//! Alight Motion's parent-helper behavior. It is the runtime half of the parent-helper effect:
+//! scene collection records the effect parameters, and this module applies them every frame so
+//! child layers inherit only the weighted subset of parent motion that the effect requests.
+//!
+//! 负责在运行时重建启用了 Parent Helper 效果的图层世界空间平移、旋转和缩放。
+//! 它是 Parent Helper 效果的运行时一半：scene 收集阶段先记录效果参数，这里再按帧应用，
+//! 让子图层只继承效果要求的那部分父级运动。
+
 use bevy::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
@@ -9,6 +22,16 @@ use crate::scene::{AmLayerMarker, AmLayerSpec};
 use super::components::{AmAnimated, AmPlayback, AmUnifiedUsesTransformScale};
 use super::interpolation::{interpolate_float, interpolate_vec2};
 use super::systems::{compute_normalized_frame_delta, resolve_unwrapped_rotation_deg};
+
+/// Per-frame map of entities whose parent hierarchy applies a scale not reflected in
+/// Transform.scale (i.e. baked-scale shapes under a perspective null).
+///
+/// Populated by [`apply_parenthelper_system`] and consumed by the unified effect system
+/// to compensate ancestor_scale and layer_scale.
+#[derive(Resource, Default, Debug)]
+pub struct ParenthelperScaleContributions {
+    pub map: HashMap<Entity, Vec2>,
+}
 
 fn trace_parenthelper_once(key: impl Into<String>, message: impl FnOnce() -> String) {
     if std::env::var_os("AM_PARENTHELPER_TRACE").is_none() {
@@ -30,7 +53,7 @@ fn trace_parenthelper_once(key: impl Into<String>, message: impl FnOnce() -> Str
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperLocalState {
+pub(crate) struct ParentHelperLocalState {
     translation: Vec2,
     rotation_deg: f32,
     applied_scale: Vec2,
@@ -38,7 +61,7 @@ struct ParentHelperLocalState {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperSnapshot {
+pub(crate) struct ParentHelperSnapshot {
     local: ParentHelperLocalState,
     parent: Option<Entity>,
     has_effect: bool,
@@ -51,7 +74,7 @@ struct ParentHelperSnapshot {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ParentHelperWorldState {
+pub(crate) struct ParentHelperWorldState {
     translation: Vec2,
     rotation_deg: f32,
     applied_scale: Vec2,
@@ -255,8 +278,13 @@ fn resolve_parenthelper_world(
 
 /// Apply parenthelper effect by compensating local transforms against the current parent world
 /// transform. This runs after base animation has produced the normal local Transform.
-pub fn apply_parenthelper_system(
+#[expect(
+    clippy::type_complexity,
+    reason = "Bevy ParamSet queries are inherently complex"
+)]
+pub(crate) fn apply_parenthelper_system(
     playback: Res<AmPlayback>,
+    mut scale_contributions: ResMut<ParenthelperScaleContributions>,
     mut queries: ParamSet<(
         Query<(
             Entity,
@@ -268,15 +296,25 @@ pub fn apply_parenthelper_system(
             Option<&AmUnifiedUsesTransformScale>,
             Option<&ChildOf>,
         )>,
-        Query<(Entity, &AmAnimated, &AmLayerMarker, &mut Transform)>,
+        Query<(
+            Entity,
+            &AmAnimated,
+            &AmLayerMarker,
+            &mut Transform,
+            Option<&crate::scene::AmPerspectiveParent>,
+        )>,
     )>,
+    mut snapshots: Local<HashMap<Entity, ParentHelperSnapshot>>,
+    mut world_cache: Local<HashMap<Entity, ParentHelperWorldState>>,
 ) {
+    scale_contributions.map.clear();
+    snapshots.clear();
+    world_cache.clear();
     if playback.force_stopped {
         return;
     }
 
     let global_time = playback.current_time_ms;
-    let mut snapshots = HashMap::new();
 
     for (
         entity,
@@ -353,9 +391,17 @@ pub fn apply_parenthelper_system(
         );
     }
 
-    let mut world_cache = HashMap::new();
-    for (entity, animated, marker, mut transform) in queries.p1().iter_mut() {
+    for (entity, animated, marker, mut transform, perspective_parent) in queries.p1().iter_mut() {
         if !animated.parenthelper_has_effect || !animated.has_parent {
+            continue;
+        }
+        // Skip entities whose no-op parenthelper defers to perspective parenting
+        // (matching the gate in animate_transform_system).
+        if perspective_parent.is_some()
+            && animated.parenthelper_scale_mode == 0
+            && animated.parenthelper_rotate_mode == 0
+            && animated.parenthelper_auto_rotate == 0
+        {
             continue;
         }
         let Some(snapshot) = snapshots.get(&entity).copied() else {
@@ -405,5 +451,17 @@ pub fn apply_parenthelper_system(
         transform.rotation = Quat::from_rotation_z(corrected.rotation_deg.to_radians());
         transform.scale.x = corrected.applied_scale.x;
         transform.scale.y = corrected.applied_scale.y;
+
+        // For baked-scale shapes the parenthelper preserves Transform.scale ≈ (1,1),
+        // but the parent's scale still affects the visual through Bevy's transform
+        // propagation. Record it so the unified effect system can compensate.
+        if snapshot.scale_baked_in_mesh
+            && ((parent_world.applied_scale.x - 1.0).abs() > 0.001
+                || (parent_world.applied_scale.y - 1.0).abs() > 0.001)
+        {
+            scale_contributions
+                .map
+                .insert(entity, parent_world.applied_scale);
+        }
     }
 }

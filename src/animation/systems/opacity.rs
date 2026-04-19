@@ -1,3 +1,12 @@
+//! Applies opacity curves to non-SDF sprite-backed layers.
+//! 把透明度曲线应用到非 SDF 的 sprite 图层。
+//!
+//! Standard sprite/text layers can use Bevy-side alpha directly, but they still need Alight
+//! Motion's layer activity rules, fade effect, and echo alpha adjustments. This file evaluates
+//! those curves and writes the final alpha back to the visible sprite state.
+//! 普通 sprite 或文本图层可以直接使用 Bevy 侧 alpha，但它们仍然要遵守 Alight Motion 的图层激活规则、
+//! Fade 效果和 echo alpha 修正。这个文件负责求值这些曲线，并把最终透明度写回可见的 sprite 状态。
+
 use bevy::prelude::*;
 
 use crate::animation::interpolation::interpolate_float;
@@ -59,19 +68,6 @@ pub fn animate_text_opacity_system(
     }
 
     let global_time = playback.current_time_ms;
-    let text_count = query.iter().count();
-
-    static mut FRAME_COUNT: u32 = 0;
-    unsafe {
-        FRAME_COUNT += 1;
-        if FRAME_COUNT % 300 == 1 {
-            bevy::log::trace!(
-                "[TEXT] Processing {} text entities at time={:.0}",
-                text_count,
-                global_time
-            );
-        }
-    }
 
     for (animated, mut text_color, mut visibility, marker, force_hidden) in query.iter_mut() {
         let local_time = animated.calc_local_time(global_time);

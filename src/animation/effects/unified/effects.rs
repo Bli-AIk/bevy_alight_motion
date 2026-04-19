@@ -1,7 +1,15 @@
+//! Updates the effect uniforms used by the unified material path.
+//! It converts animated wipe, stretch, wavewarp, mirror, palette, and other
+//! effect parameters into GPU-ready uniform fields on `UnifiedEffectMaterial`.
+//!
+//! 负责更新统一材质路径使用的特效 uniform。它会把 wipe、stretch、
+//! wavewarp、mirror、palette 等动画参数转换成 `UnifiedEffectMaterial`
+//! 可直接提交给 GPU 的 uniform 字段。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;
-use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
+use crate::animation::interpolation::{interpolate_color, interpolate_float};
 
 use super::super::unified_support::srgb_to_linear;
 
@@ -298,148 +306,5 @@ pub(super) fn update_palette(
     if has_palette && material.is_palette_enabled() {
         let palette_alpha = interpolate_float(&animated.palette_alpha, layer_time).unwrap_or(1.0);
         material.set_palette_alpha(palette_alpha);
-    }
-}
-
-pub(super) fn update_replace_color(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
-    animated: &AmAnimated,
-    layer_time: f32,
-    has_replace_color: bool,
-) {
-    bevy::log::debug!(
-        "[ReplaceColor Check] layer={} has_replace={} old_color={:?}",
-        animated.layer_id,
-        has_replace_color,
-        animated.replace_old_color
-    );
-    if has_replace_color {
-        let new_color = interpolate_color(&animated.replace_new_color, layer_time)
-            .unwrap_or(animated.replace_old_color);
-        let threshold = interpolate_float(&animated.replace_threshold, layer_time).unwrap_or(0.25);
-        let feather = interpolate_float(&animated.replace_feather, layer_time).unwrap_or(0.25);
-        let alpha = interpolate_float(&animated.replace_alpha, layer_time).unwrap_or(1.0);
-
-        bevy::log::debug!(
-            "[ReplaceColor Apply] layer={} old={:?} new={:?} threshold={:.3} feather={:.3} alpha={:.3}",
-            animated.layer_id,
-            animated.replace_old_color,
-            new_color,
-            threshold,
-            feather,
-            alpha
-        );
-
-        material.set_replace_color(
-            animated.replace_old_color,
-            new_color,
-            threshold,
-            feather,
-            alpha,
-            animated.replace_lock_luminance,
-        );
-    }
-}
-
-pub(super) fn update_threshold(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
-    animated: &AmAnimated,
-    layer_time: f32,
-) {
-    let has_threshold =
-        animated.threshold_value.value.is_some() || !animated.threshold_value.keyframes.is_empty();
-    if has_threshold {
-        let threshold = interpolate_float(&animated.threshold_value, layer_time).unwrap_or(0.5);
-        let feather = interpolate_float(&animated.threshold_feather, layer_time).unwrap_or(0.0);
-        material.set_threshold(
-            true,
-            threshold,
-            feather,
-            animated.threshold_invert,
-            animated.threshold_blend_mode,
-        );
-    }
-}
-
-pub(super) fn update_grid(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
-    animated: &AmAnimated,
-    layer_time: f32,
-) {
-    let has_grid =
-        animated.grid_spacing.value.is_some() || !animated.grid_spacing.keyframes.is_empty();
-    if has_grid {
-        let position = interpolate_vec2(&animated.grid_position, layer_time).unwrap_or([0.0, 0.0]);
-        let spacing = interpolate_float(&animated.grid_spacing, layer_time).unwrap_or(0.1);
-        let width = interpolate_float(&animated.grid_width, layer_time).unwrap_or(0.02);
-        let smoothing = interpolate_float(&animated.grid_smoothing, layer_time).unwrap_or(0.0);
-        let color = interpolate_color(&animated.grid_color, layer_time)
-            .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
-
-        material.set_grid(
-            true,
-            animated.grid_punchout,
-            animated.grid_screen_space,
-            position[0],
-            position[1],
-            spacing,
-            width,
-            smoothing,
-            color,
-        );
-    }
-}
-
-pub(super) fn update_pixelate(
-    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
-    animated: &AmAnimated,
-    layer_time: f32,
-    global_transform: &GlobalTransform,
-    root_scale: f32,
-    has_pixelate: bool,
-) {
-    if has_pixelate {
-        let size = interpolate_float(&animated.pixelate_size, layer_time).unwrap_or(1.0);
-        let stretch =
-            interpolate_vec2(&animated.pixelate_stretch, layer_time).unwrap_or([1.0, 1.0]);
-        let angle = interpolate_float(&animated.pixelate_angle, layer_time).unwrap_or(0.0);
-        let vignette = interpolate_float(&animated.pixelate_vignette, layer_time).unwrap_or(0.0);
-        let threshold = interpolate_float(&animated.pixelate_threshold, layer_time).unwrap_or(0.5);
-        let saturation =
-            interpolate_float(&animated.pixelate_saturation, layer_time).unwrap_or(1.0);
-
-        bevy::log::debug!(
-            "[Pixelate] layer={} time={:.2} size={:.1} stretch=({:.2},{:.2}) angle={:.1}",
-            animated.layer_id,
-            layer_time,
-            size,
-            stretch[0],
-            stretch[1],
-            angle
-        );
-
-        material.set_pixelate(
-            true,
-            animated.pixelate_screen_space,
-            size,
-            stretch[0],
-            stretch[1],
-            angle,
-            vignette,
-            threshold,
-            saturation,
-        );
-
-        let origin = global_transform.translation();
-        let local_x_world = global_transform.transform_point(Vec3::X) - origin;
-        let local_y_world = global_transform.transform_point(Vec3::Y) - origin;
-        let scene_scale_x = local_x_world.length() / root_scale;
-        let scene_scale_y = local_y_world.length() / root_scale;
-        material.uniform_data.pixelate_flags.z = scene_scale_x;
-        material.uniform_data.pixelate_flags.w = scene_scale_y;
-
-        let local_x_world = global_transform.transform_point(Vec3::X) - origin;
-        let scene_rotation = local_x_world.y.atan2(local_x_world.x);
-        material.uniform_data.pixelate_params2.w = scene_rotation;
     }
 }

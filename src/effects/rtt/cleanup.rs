@@ -1,6 +1,15 @@
+//! Cleans up render-to-texture resources associated with embed scenes.
+//! It despawns orphaned embed content and RTT cameras, and returns no-longer-used
+//! render layers to the pool so composite rendering can keep reusing scarce slots.
+//!
+//! 负责清理嵌套场景相关的 RTT 资源。它会销毁已经失去宿主的 embed 内容和
+//! RTT 相机，并把不再使用的 render layer 归还给池子，让复合渲染继续复用稀缺槽位。
+
 use bevy::prelude::*;
 
-use super::{EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera};
+use super::{
+    EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
+};
 
 pub fn cleanup_embed_content_system(
     mut commands: Commands,
@@ -25,6 +34,7 @@ pub fn cleanup_embed_scene_rtt_system(
     mut removed: RemovedComponents<EmbedSceneRtt>,
     rtt_query: Query<&EmbedSceneRtt>,
     camera_query: Query<(Entity, &EmbedSceneRttCamera)>,
+    capture_root_query: Query<(Entity, &EmbedSceneRttCaptureRoot)>,
 ) {
     for entity in removed.read() {
         bevy::log::debug!("EmbedSceneRtt removed from {:?}", entity);
@@ -42,5 +52,18 @@ pub fn cleanup_embed_scene_rtt_system(
             );
             commands.entity(camera_entity).despawn();
         }
+    }
+
+    for (capture_root_entity, capture_root) in capture_root_query.iter() {
+        if rtt_query.get(capture_root.embed_entity).is_ok() {
+            continue;
+        }
+
+        bevy::log::debug!(
+            "Despawning orphaned RTT capture root {:?} for embed {:?}",
+            capture_root_entity,
+            capture_root.embed_entity
+        );
+        commands.entity(capture_root_entity).despawn();
     }
 }

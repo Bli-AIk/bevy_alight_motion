@@ -1,3 +1,12 @@
+//! Handles font ingestion during project loading.
+//! It turns embedded font blobs or resolved system-font fallbacks into Bevy font
+//! handles, preserves raw bytes when later stages still need them, and extracts
+//! the metrics that text layout code depends on.
+//!
+//! 负责项目加载阶段的字体导入。它会把嵌入字体数据或解析出的系统字体回退
+//! 转成 Bevy 字体句柄，在后续阶段仍需要时保留原始字节，并提取文本布局所依赖的
+//! 字体度量信息。
+
 use std::collections::HashMap;
 
 use bevy::asset::LoadContext;
@@ -169,6 +178,19 @@ fn resolve_google_font_to_system(font_ref: &str) -> Option<String> {
         900 => "Black",
         _ => "Regular",
     };
+
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let bundled_roboto = match (font_name, weight) {
+        ("Roboto", 400) => Some(manifest_dir.join("assets/fonts/roboto_regular.ttf")),
+        ("Roboto", 500) => Some(manifest_dir.join("assets/fonts/roboto_medium.ttf")),
+        ("Roboto", 700) => Some(manifest_dir.join("assets/fonts/roboto_bold.ttf")),
+        _ => None,
+    };
+    if let Some(path) = bundled_roboto
+        && path.exists()
+    {
+        return Some(path.to_string_lossy().into_owned());
+    }
 
     let candidates = [
         format!("/usr/share/fonts/TTF/{}-{}.ttf", font_name, suffix),

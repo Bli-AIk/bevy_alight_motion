@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Fade effect.
+//! 注册内置 Fade 效果的元数据。
+//!
+//! Fade is one of the simplest but most frequently used timeline effects. This file captures the
+//! exact public field names and descriptions used by the registry so generated docs and tests stay
+//! aligned with the authored XML representation.
+//! Fade 是最基础也最常用的时间线效果之一。这个文件记录注册表所依赖的公开字段名和说明，
+//! 让生成的文档与测试始终和作者侧 XML 表达保持一致。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

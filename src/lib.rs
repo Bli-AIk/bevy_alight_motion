@@ -44,6 +44,7 @@ pub mod effects_registry;
 pub mod error;
 pub mod gaussian_blur;
 pub mod group_fill;
+pub mod image_comparison;
 pub mod loader;
 pub mod masked_sprite;
 pub mod plugin;
@@ -59,7 +60,8 @@ pub mod prelude {
     pub use crate::error::AmError;
     pub use crate::loader::AmProject;
     pub use crate::plugin::{
-        AlightMotionPlugin, AlightMotionSystemSet, AmProjectResolution, load_am_project,
+        AlightMotionPlugin, AlightMotionSystemSet, AmProjectResolution, DisabledEffects,
+        load_am_project,
     };
     pub use crate::scene::{
         AmElement,

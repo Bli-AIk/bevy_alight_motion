@@ -1,3 +1,12 @@
+//! Builds the `AmLayerSpec` for shape layers.
+//! It chooses between SDF and sprite-shape representations, derives stroke and
+//! gradient information, and packages the resulting geometry metadata into the
+//! spec that later spawn and animation code will use.
+//!
+//! 负责为形状图层构建 `AmLayerSpec`。它会在 SDF 和 sprite-shape 表示之间
+//! 做选择，推导描边与渐变信息，并把最终几何元数据打包进后续生成和动画代码要使用的
+//! spec 结构里。
+
 use crate::schema::{AmShape, AmStroke};
 
 use super::super::components::{AmLayerSpec, AmSceneConfig};
@@ -122,9 +131,7 @@ pub(super) fn build_shape_spec(
             gradient_end_color,
             gradient_points,
         }
-    } else if !shape.fill_image.is_empty()
-        && (shape.fill_type == "media" || shape.fill_type == "color")
-    {
+    } else if !shape.fill_image.is_empty() && shape.fill_type == "media" {
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,

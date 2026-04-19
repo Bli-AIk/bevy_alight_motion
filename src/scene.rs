@@ -47,6 +47,8 @@ pub use components::{
     AmMaskInfo,
     AmPaletteMapParams,
     AmPendingLayers,
+    AmPerspectiveNull,
+    AmPerspectiveParent,
     AmProjectBundle,
     AmProjectRoot,
     AmRttCamerasContainer,
@@ -91,6 +93,7 @@ mod tests {
             repeat_offset: bevy::math::Vec2::ZERO,
             repeat_rotation_deg: 0.0,
             repeat_scale_factor: 1.0,
+            comparison_frame_center_bias_ms: 0.0,
         };
 
         // Center of AM canvas should be at Bevy origin

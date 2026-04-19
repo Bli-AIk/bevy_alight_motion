@@ -95,8 +95,11 @@ pub struct UnifiedEffectUniform {
     /// shape_invert_alt packs: shape*100 + invert*10 + color_alt_copies
     pub linear_repeat_params4: Vec4,
 
-    /// Linear repeat params5: (random_order, seed, 0, 0)
+    /// Linear repeat params5: (random_order, seed_lo, seed_hi, stretch_before_repeat)
     pub linear_repeat_params5: Vec4,
+
+    /// Linear repeat source size: (source_width, source_height, layer_scale_x, layer_scale_y)
+    pub linear_repeat_source_size: Vec4,
 
     /// Linear repeat fill color (r, g, b, a)
     pub linear_repeat_fill_color: Vec4,
@@ -133,6 +136,12 @@ pub struct UnifiedEffectUniform {
 
     /// Radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed)
     pub radial_repeat_params5: Vec4,
+
+    /// Radial repeat params6: (pivot_x, pivot_y, orig_w, orig_h)
+    pub radial_repeat_params6: Vec4,
+
+    /// Radial repeat params7: (expanded_width, expanded_height, 0, 0)
+    pub radial_repeat_params7: Vec4,
 
     /// Radial repeat fill color (r, g, b, a)
     pub radial_repeat_fill_color: Vec4,
@@ -173,7 +182,7 @@ pub struct UnifiedEffectUniform {
     /// Solidcolor params: (r, g, b, blend_mode)
     pub solid_color_params: Vec4,
 
-    /// Solidcolor alpha: (alpha, 0, 0, 0)
+    /// Solidcolor alpha: (alpha, layer_scale_x, layer_scale_y, 0)
     pub solid_color_alpha: Vec4,
 
     /// Second stretch segment params: (angle_rad, stretch_px, offset_px, smooth)
@@ -257,6 +266,15 @@ pub struct UnifiedEffectUniform {
     pub mask1_rr_params4: Vec4,
     /// Mask1 radial repeat params5: (ease_in, ease_out, shape_invert_alt, seed+random)
     pub mask1_rr_params5: Vec4,
+    /// Source flags: (sampled_from_offscreen, premultiplied_alpha, source_kind, 0)
+    pub source_flags: Vec4,
+    /// Embed bounds clip: (center_x, center_y, half_width, half_height)
+    /// Applied independently of mask evaluation so stretched content inside embeds
+    /// is clipped even when a real mask is also active.  Disabled when half_width ≤ 0.
+    pub embed_clip_params: Vec4,
+    /// Embed clip rotation (radians) stored separately to keep embed_clip_params a
+    /// simple AABB-like rect.  Only the z-rotation component is used.
+    pub embed_clip_rotation: Vec4,
 }
 
 /// Unified material supporting mask, wipe, stretch segment, and blur effects.
@@ -360,6 +378,10 @@ impl UnifiedEffectMaterial {
 
     pub fn set_wipe_enabled(&mut self, enabled: bool) {
         self.uniform_data.effect_flags.y = if enabled { 1.0 } else { 0.0 };
+    }
+
+    pub fn is_stretch_enabled(&self) -> bool {
+        self.uniform_data.effect_flags.z != 0.0
     }
 
     pub fn set_stretch_enabled(&mut self, enabled: bool) {
@@ -527,6 +549,7 @@ impl Default for UnifiedEffectUniform {
             linear_repeat_params3: Vec4::new(0.0, 1.0, 0.0, 0.0),
             linear_repeat_params4: Vec4::ZERO,
             linear_repeat_params5: Vec4::ZERO,
+            linear_repeat_source_size: Vec4::ZERO,
             linear_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             linear_repeat2_params1: Vec4::new(-1.0, 0.0, 0.0, 0.0),
             linear_repeat2_params2: Vec4::new(0.0, 0.0, 1.0, 1.0),
@@ -539,6 +562,8 @@ impl Default for UnifiedEffectUniform {
             radial_repeat_params3: Vec4::new(1.0, 0.0, 0.0, 0.0),
             radial_repeat_params4: Vec4::new(0.0, 1.0, 0.0, 0.0),
             radial_repeat_params5: Vec4::ZERO,
+            radial_repeat_params6: Vec4::ZERO,
+            radial_repeat_params7: Vec4::ZERO,
             radial_repeat_fill_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             threshold_params: Vec4::ZERO,
             grid_flags: Vec4::ZERO,
@@ -588,6 +613,9 @@ impl Default for UnifiedEffectUniform {
             mask1_rr_params3: Vec4::ZERO,
             mask1_rr_params4: Vec4::ZERO,
             mask1_rr_params5: Vec4::ZERO,
+            source_flags: crate::effects::TextureSourceContract::default().to_uniform_flags(),
+            embed_clip_params: Vec4::ZERO,
+            embed_clip_rotation: Vec4::ZERO,
         }
     }
 }

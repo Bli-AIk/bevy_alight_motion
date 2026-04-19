@@ -1,3 +1,15 @@
+//! Extracts filter-like effects during scene collection.
+//!
+//! 在 scene 收集阶段提取滤镜类效果。
+//!
+//! Wipe, stretch, replace-color, and other filter-style effects are imported as generic XML
+//! properties, but the runtime expects typed parameter structs. The module performs that conversion
+//! so downstream spawn and animation code can work with strongly named fields instead of raw effect
+//! property scans.
+//!
+//! Wipe、Stretch、替色等滤镜式效果在导入时都只是通用 XML 属性，但运行时需要的是强类型参数结构。
+//! 负责完成这次转换，让后续的 spawn 与动画代码操作具名字段，而不是重复遍历原始 effect 属性。
+
 use bevy::prelude::*;
 
 use crate::schema::{AmAnimatedColor, AmAnimatedFloat, AmEffect};

@@ -1,3 +1,10 @@
+//! Extracts group-fill configuration from embed scenes.
+//! It translates the authored fill mode and gradient/color payload into the
+//! runtime `AmGroupFill` structure used later by composite rendering.
+//!
+//! 负责从嵌套场景里提取 group fill 配置。它会把作者侧的 fill 模式以及
+//! 渐变/纯色数据转换成后续 composite 渲染要使用的 `AmGroupFill` 运行时结构。
+
 use bevy::prelude::*;
 
 /// Build AmGroupFill from embed scene's fill type and color/gradient data.

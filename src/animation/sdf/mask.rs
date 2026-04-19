@@ -1,3 +1,14 @@
+//! Pushes animated mask parameters into SDF materials.
+//! 把动画遮罩参数写入 SDF 材质。
+//!
+//! Parent SDF layers collect mask metadata during scene import, but the actual mask transform,
+//! repeat mode, and fit-scale compensation all depend on runtime playback time. This file reads the
+//! current parent/mask transforms and updates each child SDF material so shader-based masking stays
+//! aligned with the animated scene.
+//! scene 导入阶段只会记录父级 SDF 图层的遮罩元数据，真正的遮罩变换、重复模式和 fit-scale
+//! 补偿都依赖运行时播放时间。这个文件读取当前父级和遮罩图层的变换，把结果写回每个子级
+//! SDF 材质，确保 shader 侧遮罩始终和动画场景保持对齐。
+
 use bevy::prelude::*;
 
 use crate::scene::{AmLayerMarker, AmMaskInfo};

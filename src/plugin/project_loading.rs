@@ -1,8 +1,73 @@
+//! Bridges loaded `AmProject` assets into live scene entities.
+//! Once the asset loader has parsed a project, the systems here apply resolution
+//! scaling, build the layer containers needed for lazy spawning, and attach the
+//! runtime bookkeeping that playback uses afterwards.
+//!
+//! 负责把已经加载好的 `AmProject` 资产接到真实场景实体上。资产加载器
+//! 解析完项目后，这里的系统会应用分辨率缩放、创建懒生成所需的图层容器，并挂上
+//! 后续播放阶段要使用的运行时状态。
+
 use bevy::prelude::*;
 
 use crate::loader::AmProject;
 use crate::plugin::resources::AmProjectResolution;
 use crate::scene::{AmProjectBundle, AmProjectRoot, AmSceneConfig};
+
+fn trace_replace_pending_layers(layers: &[crate::scene::PendingLayer]) {
+    fn visit(layers: &[crate::scene::PendingLayer]) {
+        for layer in layers {
+            if layer.animated.replace_old_color != Vec4::ZERO
+                || layer.animated.replace_new_color.value.is_some()
+                || !layer.animated.replace_new_color.keyframes.is_empty()
+            {
+                bevy::log::warn!(
+                    "[PendingReplaceTrace] id={} label='{}' old={:?} new_static={:?}",
+                    layer.id,
+                    layer.label,
+                    layer.animated.replace_old_color,
+                    layer.animated.replace_new_color.value,
+                );
+            }
+            visit(&layer.children);
+        }
+    }
+
+    visit(layers);
+}
+
+fn trace_pending_subtree(layers: &[crate::scene::PendingLayer], root_id: u64) {
+    fn print_layer(layer: &crate::scene::PendingLayer, depth: usize) {
+        let indent = "  ".repeat(depth);
+        bevy::log::warn!(
+            "[PendingSubtree] {}id={} label='{}' parent={} range={}..{} children={}",
+            indent,
+            layer.id,
+            layer.label,
+            layer.parent,
+            layer.start_time,
+            layer.end_time,
+            layer.children.len(),
+        );
+        for child in &layer.children {
+            print_layer(child, depth + 1);
+        }
+    }
+
+    fn visit(layers: &[crate::scene::PendingLayer], root_id: u64) -> bool {
+        for layer in layers {
+            if layer.id == root_id {
+                print_layer(layer, 0);
+                return true;
+            }
+            if visit(&layer.children, root_id) {
+                return true;
+            }
+        }
+        false
+    }
+
+    let _ = visit(layers, root_id);
+}
 
 pub(super) fn spawn_loaded_projects_system(
     mut commands: Commands,
@@ -49,6 +114,7 @@ pub(super) fn spawn_loaded_projects_system(
             scene_fps: project.scene.fps as f32,
             scene_total_time: project.scene.total_time as f32,
             render_fps: project.scene.fps as f32,
+            comparison_frame_center_bias_ms: 500.0 / project.scene.fps.max(1) as f32,
             ..Default::default()
         };
 
@@ -58,6 +124,16 @@ pub(super) fn spawn_loaded_projects_system(
             &project.font_metrics,
             &config,
         );
+
+        if std::env::var_os("AM_TRACE_PENDING_REPLACE").is_some() {
+            trace_replace_pending_layers(&pending_layers);
+        }
+        if let Some(root_id) = std::env::var("AM_TRACE_PENDING_SUBTREE_ID")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+        {
+            trace_pending_subtree(&pending_layers, root_id);
+        }
 
         bevy::log::info!(
             "Prepared {} pending layers for lazy spawning",

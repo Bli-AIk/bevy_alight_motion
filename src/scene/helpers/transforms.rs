@@ -1,3 +1,12 @@
+//! Contains transform and coordinate helpers used during scene collection.
+//! It converts authored AM coordinates into Bevy space and extracts sensible
+//! initial location, rotation, scale, opacity, and pivot values from animated
+//! schema fields.
+//!
+//! 存放场景收集阶段使用的变换与坐标辅助函数。它负责把作者侧的 AM 坐标转换成
+//! Bevy 空间，并从带动画的 schema 字段里提取合理的初始位置、旋转、缩放、透明度和
+//! pivot 数值。
+
 use bevy::prelude::*;
 
 use super::super::components::AmSceneConfig;
@@ -107,7 +116,15 @@ pub(crate) fn calculate_embed_position_compensation(
     let scaled_offset_x = -pivot_x * scale.0;
     let scaled_offset_y = -pivot_y * scale.1;
 
-    let rotation_rad = (-rotation_deg).to_radians();
+    // For non-parented embeds, pivot_y is negated to match Bevy's Y-up coords.
+    // The rotation must also be in Bevy space (rotation_deg is already Bevy-convention,
+    // i.e. -AM_value).  Parented embeds keep AM's Y direction for the pivot, so the
+    // rotation must revert to the original AM angle (-rotation_deg).
+    let rotation_rad = if has_parent {
+        (-rotation_deg).to_radians()
+    } else {
+        rotation_deg.to_radians()
+    };
     let rotated_offset_x =
         scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
     let rotated_offset_y =

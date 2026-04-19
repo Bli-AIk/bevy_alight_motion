@@ -1,3 +1,12 @@
+//! Computes the geometric parameters for animated masks.
+//! Given a mask entry and the currently spawned mask layer, it resolves center,
+//! half-size, rotation, blend, and stretch data so the shader-side masking path
+//! can mirror the source project faithfully.
+//!
+//! 负责计算动画遮罩的几何参数。它会根据 mask entry 和当前已生成的遮罩图层，
+//! 求出中心、半尺寸、旋转、混合和拉伸信息，让 shader 端的遮罩路径能够尽量忠实地
+//! 还原源项目的表现。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;
@@ -150,8 +159,16 @@ pub(super) fn compute_mask_params(
                 corrected_pos,
             )
         } else {
-            let scaled_offset_x = -pivot_x * scale_x * mask_global_scale.x;
-            let scaled_offset_y = pivot_y * scale_y * mask_global_scale.y;
+            // For root-level masks, the entity's GlobalTransform.scale already
+            // contains the animation scale (animate_transform_system bakes it
+            // into Transform.scale for SDF/sprite parent entities).  The
+            // interpolated `scale_x`/`scale_y` are the same animation values,
+            // so multiplying both would double-apply the scale.  Use only the
+            // sign from GlobalTransform to preserve flip direction.
+            let sign_x = mask_global_scale.x.signum();
+            let sign_y = mask_global_scale.y.signum();
+            let scaled_offset_x = -pivot_x * scale_x * sign_x;
+            let scaled_offset_y = pivot_y * scale_y * sign_y;
             let rotated_offset_x =
                 scaled_offset_x * rotation_rad.cos() - scaled_offset_y * rotation_rad.sin();
             let rotated_offset_y =

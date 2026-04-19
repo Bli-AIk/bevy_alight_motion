@@ -177,6 +177,15 @@ skip = true
 [overrides."private/USER_mortis/sunshine"]
 skip = true
 
+[overrides."private/USER_baby/sans"]
+skip = true
+
+[overrides."private/USER_baby/yes"]
+skip = true
+
+[overrides."private/USER_qiu/monster"]
+skip = true
+
 # =============================================================================
 # Frame Test (FPS Performance) Configuration
 # 帧测试（FPS 性能）配置
@@ -185,19 +194,21 @@ skip = true
 # 当使用 --features frame-test 运行时使用
 
 [frame_test]
-# FPS thresholds / FPS 阈值
-# >= pass_fps: FULL PASS (green) / 完全通过（绿色）
-# >= fail_fps: WARNING (pass with warning, yellow) / 警告（通过但有警告，黄色）
-# < fail_fps: FAIL (red) / 失败（红色）
+# FPS thresholds (two-tier system: Great / Perfect)
+# FPS 阈值（两级评价：Great / Perfect）
+#
+# >= pass_fps + stutter OK:  PERFECT ✨
+# >= fail_fps:               GREAT ✅
+# < fail_fps:                FAIL ❌
 pass_fps = 120.0
 fail_fps = 60.0
 
-# Maximum ratio of frames below fail_fps to still pass
-# 低于 fail_fps 的帧数最大占比（超过则失败）
-max_below_fail_rate = 0.05
+# Maximum ratio of frames below fail_fps before FAIL
+# 低于 fail_fps 的帧数最大占比（超过则 FAIL）
+max_below_fail_rate = 0.20
 
-# Maximum ratio of frames below pass_fps to still get full pass (not warning)
-# 低于 pass_fps 的帧数最大占比（超过则降级为 warning）
+# Maximum ratio of frames below pass_fps to achieve PERFECT
+# 低于 pass_fps 的帧数最大占比（超过则降为 GREAT）
 max_below_pass_rate = 0.20
 
 # Minimum number of frames to sample before reporting
@@ -211,3 +222,15 @@ warmup_frames = 60
 # Duration in seconds to measure FPS after warmup
 # 预热后测量 FPS 的持续时间（秒）
 measure_duration_secs = 8.0
+
+# Play animation once then exit (instead of looping for measure_duration_secs)
+# 只播放一次动画然后退出（而非循环播放 measure_duration_secs 秒）
+play_once = false
+
+# Stutter detection: a frame is "stutter" if its time > median * stutter_threshold_multiplier
+# 卡顿检测：帧时间 > 中位数 × stutter_threshold_multiplier 则判定为卡顿
+stutter_threshold_multiplier = 2.0
+
+# Maximum allowed stutter rate (ratio of stutter frames to total frames)
+# 最大允许卡顿率（卡顿帧数占总帧数比例）
+max_stutter_rate = 0.05

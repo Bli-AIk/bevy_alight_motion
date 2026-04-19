@@ -1,3 +1,12 @@
+//! Defines the typed layer payloads that make up an Alight Motion scene.
+//! It is the largest schema slice in the crate because every exported layer kind
+//! lands here: text, image, video, camera, shape, embed scene, and the small
+//! bookkeeping nodes that surround them.
+//!
+//! 定义了组成 Alight Motion 场景的各类图层数据结构。它是整个 schema
+//! 里最大的一块，因为导出的每种图层都会落到这里：文本、图片、视频、相机、形状、
+//! 嵌套场景，以及围绕它们存在的那些轻量辅助节点。
+
 use serde::{Deserialize, Serialize};
 
 use super::animation::{

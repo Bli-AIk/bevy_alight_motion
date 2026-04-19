@@ -1,3 +1,12 @@
+//! Acts as the main scene-to-pending-layer collection pass.
+//! It walks the parsed `AmScene`, dispatches each authored layer to the matching
+//! collector, flattens nested results, and produces the `PendingLayer` list that
+//! later spawning systems consume.
+//!
+//! 从场景 schema 到待生成图层列表的主收集入口。它会遍历解析后的
+//! `AmScene`，把每个作者侧图层分发给对应的收集器，再把嵌套结果拍平，最终产出
+//! 后续生成系统会消费的 `PendingLayer` 列表。
+
 mod embed;
 mod flatten;
 
@@ -11,7 +20,7 @@ use self::embed::collect_embed_layer;
 use self::flatten::flatten_pending_layers;
 use super::collect_camera::*;
 use super::collect_image::*;
-use super::collect_mask::apply_mask_to_children;
+use super::collect_mask::{apply_mask_to_children, lift_masks_to_composite_embeds};
 use super::collect_shape::*;
 use super::collect_types::*;
 use super::components::*;
@@ -46,6 +55,7 @@ pub fn collect_pending_layers(
 
     let mut flattened = flatten_pending_layers(pending_layers, config.nesting_depth);
     apply_mask_to_children(&mut flattened);
+    lift_masks_to_composite_embeds(&mut flattened);
 
     bevy::log::trace!(
         "Collected {} pending layers (after flatten)",

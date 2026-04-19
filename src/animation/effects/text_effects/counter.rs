@@ -1,3 +1,11 @@
+//! Implements the numeric counter text effect.
+//! It evaluates counter parameters against the current playback time and rewrites
+//! a text layer's visible string so authored placeholders can become animated
+//! numbers in the final scene.
+//!
+//! 实现数字计数器文本效果。它会根据当前播放时间求值 counter 参数，并重写
+//! 文本图层实际显示的字符串，让作者写下的占位文本在最终场景里变成动态数字。
+
 use bevy::prelude::*;
 use bevy::sprite::Text2d;
 

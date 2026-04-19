@@ -20,7 +20,7 @@
 *.sln.DotSettings.user
 *.user
 
-AGENTS.md
+AGENTS.md*
 GEMINI.md
 agent_*.md
 ai_check.sh
@@ -28,6 +28,10 @@ ai_check.sh
 logs/
 .codex_logs/
 dev/
+.venv-vast/
+.vast_bundle.*/
+.vast_pull.*/
+.hong_jiao_target1_frames.*/
 
 # System
 .DS_Store

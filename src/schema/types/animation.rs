@@ -1,3 +1,12 @@
+//! Defines the reusable animation-oriented schema fragments shared by
+//! many Alight Motion layer types. It covers animated scalars, vectors, colors,
+//! keyframes, and effect/property payloads so higher-level layer structs can
+//! compose timeline-capable fields without duplicating XML mapping logic.
+//!
+//! 定义了多个 Alight Motion 图层类型共用的动画 schema 片段。它包含
+//! 带关键帧的标量、向量、颜色，以及 effect/property 的数据结构，让更高层的
+//! 图层结构可以复用时间轴字段，而不必重复书写 XML 映射逻辑。
+
 use bevy::prelude::Vec4;
 use serde::{Deserialize, Serialize};
 

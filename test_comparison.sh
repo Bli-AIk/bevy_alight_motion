@@ -38,6 +38,19 @@
 # Configuration
 PARALLEL_JOBS=${PARALLEL_JOBS:-4}  # Default 4 parallel jobs (for frame extraction)
 PLAYER_EXTRA_FEATURES=${AM_PLAYER_EXTRA_FEATURES:-}
+PLAYER_BIN_OVERRIDE=${AM_PLAYER_BIN:-}
+SKIP_BUILD_REQUESTED=${AM_SKIP_BUILD:-0}
+
+is_truthy() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
 
 # Parse command line arguments
 FILTER_PATTERN=""
@@ -53,12 +66,14 @@ for arg in "$@"; do
         HEADLESS=true
     elif [ "$arg" == "--single" ]; then
         EXACT_MATCH=true
+    elif [ "$arg" == "--frame-test" ]; then
+        FRAME_TEST=true
     fi
 done
 # Remove flags that can appear anywhere from positional args
 ARGS=()
 for arg in "$@"; do
-    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ]; then
+    if [ "$arg" != "--headless" ] && [ "$arg" != "--single" ] && [ "$arg" != "--frame-test" ]; then
         ARGS+=("$arg")
     fi
 done
@@ -80,22 +95,6 @@ fi
 if [ "$1" == "--all" ]; then
     RUN_ALL=true
     shift
-elif [ "$1" == "--frame-test" ]; then
-    FRAME_TEST=true
-    shift
-    # After --frame-test, accept optional filter pattern
-    if [ "$1" == "--all" ]; then
-        RUN_ALL=true
-        shift
-    elif [ -n "$1" ]; then
-        FILTER_PATTERN="$1"
-        FILTER_PATTERN="${FILTER_PATTERN#./}"
-        FILTER_PATTERN="${FILTER_PATTERN#assets/projects/}"
-        FILTER_PATTERN="${FILTER_PATTERN#projects/}"
-        HAS_EXPLICIT_FILTER=true
-    else
-        FILTER_PATTERN="basic/"
-    fi
 elif [ -n "$1" ]; then
     FILTER_PATTERN="$1"
     # Strip common path prefixes so users can pass paths like
@@ -344,25 +343,38 @@ if [ -n "$PLAYER_EXTRA_FEATURES" ]; then
     echo "Extra player features: $PLAYER_EXTRA_FEATURES"
 fi
 
-if [ "$FRAME_TEST" = true ]; then
-    echo "Building player example (${BUILD_FEATURES})..."
-    cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
+if is_truthy "$SKIP_BUILD_REQUESTED"; then
+    if [ -z "$PLAYER_BIN_OVERRIDE" ]; then
+        echo "Error: AM_SKIP_BUILD is set but AM_PLAYER_BIN is empty"
+        exit 1
+    fi
+    echo "Skipping build because AM_SKIP_BUILD is enabled."
+    PLAYER_BIN="$PLAYER_BIN_OVERRIDE"
 else
     echo "Building player example (${BUILD_FEATURES})..."
     cargo build -p bevy_alight_motion --example player --features "$BUILD_FEATURES" --release
-fi
-if [ $? -ne 0 ]; then
-    echo "Build failed!"
-    exit 1
-fi
+    if [ $? -ne 0 ]; then
+        echo "Build failed!"
+        exit 1
+    fi
 
-# Get binary path
-PLAYER_BIN=$(cargo metadata --format-version=1 2>/dev/null | \
-    python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])")/release/examples/player
+    # Get binary path
+    PLAYER_BIN=$(cargo metadata --format-version=1 2>/dev/null | \
+        python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])")/release/examples/player
+
+    if [ ! -f "$PLAYER_BIN" ]; then
+        # Fallback path detection
+        PLAYER_BIN="target/release/examples/player"
+    fi
+
+    if [ -n "$PLAYER_BIN_OVERRIDE" ]; then
+        PLAYER_BIN="$PLAYER_BIN_OVERRIDE"
+    fi
+fi
 
 if [ ! -f "$PLAYER_BIN" ]; then
-    # Fallback path detection
-    PLAYER_BIN="target/release/examples/player"
+    echo "Player binary not found: $PLAYER_BIN"
+    exit 1
 fi
 
 echo "Using binary: $PLAYER_BIN"
@@ -579,34 +591,55 @@ run_single_test() {
         $xvfb_prefix "$PLAYER_BIN" "$test_id" $headless_flag > "$log_file" 2>&1
     
     local exit_code=$?
+    local report_path=""
+    if grep -q "Report saved to:" "$log_file"; then
+        report_path=$(grep "Report saved to:" "$log_file" | tail -1 | sed -E 's/.*Report saved to: "?([^"]+)"?/\1/')
+    fi
     
     # Determine result from log
     if grep -q "RESULT: PASS" "$log_file"; then
-        echo "PASS|$test_id|" > "$result_file"
+        echo "PASS|$test_id|||$report_path" > "$result_file"
         echo "✅ $test_id"
     elif grep -q "RESULT: WARNING" "$log_file"; then
         local warning_msg=$(grep "RESULT: WARNING" "$log_file" | head -1)
-        echo "WARNING|$test_id|$warning_msg" > "$result_file"
+        echo "WARNING|$test_id|$warning_msg||$report_path" > "$result_file"
         echo "⚠️  $test_id (WARNING)"
     elif grep -q "RESULT: SKIP" "$log_file"; then
-        echo "SKIP|$test_id|" > "$result_file"
+        echo "SKIP|$test_id|||$report_path" > "$result_file"
         echo "⚠️  $test_id (SKIP)"
     elif grep -q "RESULT: CANCELLED" "$log_file"; then
-        echo "CANCELLED|$test_id|" > "$result_file"
+        echo "CANCELLED|$test_id|||$report_path" > "$result_file"
         echo "⛔ $test_id (CANCELLED by user)"
     else
         # Extract failure details (both Average Similarity and Per-Frame Pass Rate)
         avg_sim=$(grep "Average Similarity" "$log_file" | head -1)
         frame_rate=$(grep "Per-Frame Pass Rate" "$log_file" | head -1)
-        echo "FAIL|$test_id|$avg_sim|$frame_rate" > "$result_file"
+        echo "FAIL|$test_id|$avg_sim|$frame_rate|$report_path" > "$result_file"
         echo "❌ $test_id (FAIL)"
+        if [ -n "${AM_ECHO_FAIL_LOG_TAIL:-}" ]; then
+            local tail_lines="${AM_ECHO_FAIL_LOG_LINES:-120}"
+            echo "   ↳ fail-log-tail (${tail_lines} lines)"
+            tail -n "$tail_lines" "$log_file" | sed 's/^/      | /'
+        fi
+    fi
+
+    # Extract frame-test JSON data (for perf_results.json)
+    if [ "$FRAME_TEST" = "true" ]; then
+        local perf_json_line
+        perf_json_line=$(grep '^\[FRAME-TEST-JSON\]' "$log_file" | tail -1 | sed 's/^\[FRAME-TEST-JSON\] //')
+        if [ -n "$perf_json_line" ]; then
+            echo "$perf_json_line" > "$RESULTS_DIR/${flat_name}.perf_json"
+        fi
+    fi
+
+    if [ -n "$report_path" ]; then
+        echo "   ↳ report: $report_path"
     fi
 }
 
 # Function to incrementally write a single test result to JSON
 write_result_to_json() {
     local result_file=$1
-    local json_output="${BASE_DIR}/test_results.json"
     local result_key
     if [ "$FRAME_TEST" = "true" ]; then
         result_key="frame_test_results"
@@ -618,14 +651,68 @@ write_result_to_json() {
         return
     fi
 
-    IFS='|' read -r status name avg_details frame_details < "$result_file"
+    IFS='|' read -r status name avg_details frame_details report_path < "$result_file"
     local avg_val=""
     if [ -n "$avg_details" ]; then
         avg_val=$(echo "$avg_details" | grep -oP '\d+\.\d+' | head -1)
     fi
     local status_lower=$(echo "$status" | tr '[:upper:]' '[:lower:]')
 
-    python3 << PYEOF
+    # For frame-test mode, check for rich JSON data and write to perf_results.json
+    if [ "$FRAME_TEST" = "true" ]; then
+        local flat_name=$(echo "$name" | tr '/' '_')
+        local perf_json_file="$RESULTS_DIR/${flat_name}.perf_json"
+        local json_output="${BASE_DIR}/perf_results.json"
+
+        python3 << PYEOF
+import json, os
+from datetime import datetime
+
+json_output = "$json_output"
+name = "$name"
+status = "$status_lower"
+perf_json_file = "$perf_json_file"
+
+existing_data = {}
+if os.path.exists(json_output):
+    try:
+        with open(json_output, 'r') as f:
+            existing_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results = existing_data.get("results", {})
+
+# Try to read rich perf data from [FRAME-TEST-JSON] output
+entry = {"status": status}
+if os.path.exists(perf_json_file):
+    try:
+        with open(perf_json_file, 'r') as f:
+            perf_data = json.load(f)
+        entry.update(perf_data)
+        entry["status"] = status  # ensure status from result file takes precedence
+    except (json.JSONDecodeError, IOError):
+        pass
+
+results[name] = entry
+existing_data["results"] = dict(sorted(results.items()))
+
+# Recalculate summary
+passed = sum(1 for r in results.values() if r.get('status') == 'pass')
+failed = sum(1 for r in results.values() if r.get('status') == 'fail')
+warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
+skipped = sum(1 for r in results.values() if r.get('status') in ('skip', 'cancelled'))
+existing_data["summary"] = {"passed": passed, "warnings": warnings, "skipped": skipped, "failed": failed}
+existing_data["timestamp"] = datetime.now().astimezone().isoformat()
+
+with open(json_output, 'w') as f:
+    json.dump(existing_data, f, indent=2)
+PYEOF
+    else
+        # Original behavior for comparison tests — write to test_results.json
+        local json_output="${BASE_DIR}/test_results.json"
+
+        python3 << PYEOF
 import json, os
 from datetime import datetime
 
@@ -634,7 +721,6 @@ result_key = "$result_key"
 name = "$name"
 status = "$status_lower"
 avg_val = "$avg_val"
-frame_test = "$FRAME_TEST" == "true"
 
 existing_data = {}
 if os.path.exists(json_output):
@@ -647,16 +733,13 @@ if os.path.exists(json_output):
 results = existing_data.get(result_key, {})
 entry = {"status": status}
 if avg_val:
-    if frame_test:
-        entry["avg_fps"] = float(avg_val)
-    else:
-        entry["avg_similarity"] = float(avg_val)
+    entry["avg_similarity"] = float(avg_val)
 results[name] = entry
 
 existing_data[result_key] = dict(sorted(results.items()))
 
 # Recalculate summary
-summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
+summary_key = "summary"
 passed = sum(1 for r in results.values() if r.get('status') == 'pass')
 failed = sum(1 for r in results.values() if r.get('status') == 'fail')
 warnings = sum(1 for r in results.values() if r.get('status') == 'warning')
@@ -667,13 +750,14 @@ existing_data["timestamp"] = datetime.now().astimezone().isoformat()
 with open(json_output, 'w') as f:
     json.dump(existing_data, f, indent=2)
 PYEOF
+    fi
 }
 
 # Run tests sequentially (GPU doesn't handle parallel rendering well)
 for example in $SKIP_EXAMPLES; do
     flat_name=$(echo "$example" | tr '/' '_')
     result_file="$RESULTS_DIR/${flat_name}.result"
-    echo "SKIP|$example|" > "$result_file"
+    echo "SKIP|$example|||" > "$result_file"
     write_result_to_json "$result_file"
     echo "⚠️  $example (SKIP by config)"
 done
@@ -704,21 +788,33 @@ FAILED_EXAMPLES=""
 
 for result_file in "$RESULTS_DIR"/*.result; do
     if [ -f "$result_file" ]; then
-        IFS='|' read -r status name avg_details frame_details < "$result_file"
+        IFS='|' read -r status name avg_details frame_details report_path < "$result_file"
         if [ "$status" == "PASS" ]; then
             printf "%-40s | \033[0;32m✅ PASS\033[0m\n" "$name"
+            if [ -n "$report_path" ]; then
+                printf "%-40s   %s\n" "" "Report: $report_path"
+            fi
             PASSED_COUNT=$((PASSED_COUNT + 1))
         elif [ "$status" == "WARNING" ]; then
             printf "%-40s | \033[1;33m⚠️ WARNING\033[0m\n" "$name"
             if [ -n "$avg_details" ]; then
                 printf "%-40s   %s\n" "" "$avg_details"
             fi
+            if [ -n "$report_path" ]; then
+                printf "%-40s   %s\n" "" "Report: $report_path"
+            fi
             WARNING_COUNT=$((WARNING_COUNT + 1))
         elif [ "$status" == "SKIP" ]; then
             printf "%-40s | \033[0;33m⚠️ SKIP\033[0m\n" "$name"
+            if [ -n "$report_path" ]; then
+                printf "%-40s   %s\n" "" "Report: $report_path"
+            fi
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
         elif [ "$status" == "CANCELLED" ]; then
             printf "%-40s | \033[0;33m⛔ CANCELLED\033[0m\n" "$name"
+            if [ -n "$report_path" ]; then
+                printf "%-40s   %s\n" "" "Report: $report_path"
+            fi
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
         else
             printf "%-40s | \033[0;31m❌ FAIL\033[0m\n" "$name"
@@ -727,6 +823,9 @@ for result_file in "$RESULTS_DIR"/*.result; do
             fi
             if [ -n "$frame_details" ]; then
                 printf "%-40s   %s\n" "" "$frame_details"
+            fi
+            if [ -n "$report_path" ]; then
+                printf "%-40s   %s\n" "" "Report: $report_path"
             fi
             FAILED_COUNT=$((FAILED_COUNT + 1))
             FAILED_EXAMPLES="${FAILED_EXAMPLES}\n  - ${name}"
@@ -744,13 +843,17 @@ echo "Skipped:  $SKIPPED_COUNT"
 echo "Failed:   $FAILED_COUNT"
 
 # Generate JSON results file (merge with existing results)
-JSON_OUTPUT="${BASE_DIR}/test_results.json"
+if [ "$FRAME_TEST" = "true" ]; then
+    JSON_OUTPUT="${BASE_DIR}/perf_results.json"
+else
+    JSON_OUTPUT="${BASE_DIR}/test_results.json"
+fi
 
 # Build new results as JSON entries
 NEW_RESULTS=""
 for result_file in "$RESULTS_DIR"/*.result; do
     if [ -f "$result_file" ]; then
-        IFS='|' read -r status name avg_details frame_details < "$result_file"
+        IFS='|' read -r status name avg_details frame_details report_path < "$result_file"
         
         # Extract similarity value or FPS value from details if present
         avg_val=""
@@ -781,11 +884,7 @@ for result_file in "$RESULTS_DIR"/*.result; do
 done
 
 # Determine result key based on test type
-if [ "$FRAME_TEST" = "true" ]; then
-    RESULT_KEY="frame_test_results"
-else
-    RESULT_KEY="results"
-fi
+RESULT_KEY="results"
 
 # Merge with existing results using Python (preserves old results, updates with new)
 python3 << EOF
@@ -795,6 +894,8 @@ from datetime import datetime
 
 json_output = "$JSON_OUTPUT"
 result_key = "$RESULT_KEY"
+frame_test = "$FRAME_TEST" == "true"
+results_dir = "$RESULTS_DIR"
 new_results_json = '''{$NEW_RESULTS}'''
 
 # Parse new results
@@ -802,6 +903,21 @@ try:
     new_results = json.loads(new_results_json) if new_results_json.strip() and new_results_json.strip() != '{}' else {}
 except json.JSONDecodeError:
     new_results = {}
+
+# For frame-test mode, enrich entries with [FRAME-TEST-JSON] data
+if frame_test:
+    for name in list(new_results.keys()):
+        flat_name = name.replace('/', '_')
+        perf_json_path = os.path.join(results_dir, f"{flat_name}.perf_json")
+        if os.path.exists(perf_json_path):
+            try:
+                with open(perf_json_path, 'r') as f:
+                    perf_data = json.load(f)
+                status = new_results[name].get('status', 'fail')
+                new_results[name] = perf_data
+                new_results[name]['status'] = status
+            except (json.JSONDecodeError, IOError):
+                pass
 
 # Load existing data if file exists
 existing_data = {}
@@ -824,12 +940,9 @@ failed = sum(1 for r in merged_results.values() if r.get('status') == 'fail')
 warnings = sum(1 for r in merged_results.values() if r.get('status') == 'warning')
 skipped = sum(1 for r in merged_results.values() if r.get('status') in ('skip', 'cancelled'))
 
-# Build summary key
-summary_key = f"{result_key}_summary" if result_key != "results" else "summary"
-
 # Update existing data with new results (preserving other test types)
 existing_data[result_key] = dict(sorted(merged_results.items()))
-existing_data[summary_key] = {
+existing_data["summary"] = {
     "passed": passed,
     "warnings": warnings,
     "skipped": skipped,

@@ -1,3 +1,14 @@
+//! Animates authored size curves for sprites and SDF parents.
+//!
+//! 驱动 sprite 与 SDF 父级图层的尺寸曲线。
+//!
+//! Size animation is split because sprite-backed layers and SDF-backed layers store size in
+//! different places. The module updates the correct runtime representation for each case so later
+//! visual and material systems see the same authored layer dimensions.
+//!
+//! 尺寸动画之所以单独拆出来，是因为 sprite 图层和 SDF 图层保存尺寸的位置不同。
+//! 该模块会分别更新它们对应的运行时表示，保证后续视觉与材质系统看到的是同一份作者定义尺寸。
+
 use bevy::prelude::*;
 
 use crate::animation::interpolation::interpolate_vec2;

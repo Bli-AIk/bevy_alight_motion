@@ -1,3 +1,12 @@
+//! Acts as the main asset-loading pipeline for Alight Motion projects.
+//! It reads zipped `.amproj` archives or directory exports, parses the XML scene,
+//! gathers embedded media, applies override files, and builds the fully resolved
+//! `AmProject` asset consumed by the runtime.
+//!
+//! Alight Motion 项目的主资产加载管线。它负责读取压缩 `.amproj`
+//! 归档或目录形式的导出结果，解析 XML 场景、收集嵌入媒体、应用覆盖配置，并最终
+//! 构建运行时要消费的完整 `AmProject` 资产。
+
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};

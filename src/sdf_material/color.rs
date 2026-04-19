@@ -1,3 +1,15 @@
+//! Packs and repacks colors for the SDF material uniform layout.
+//!
+//! 为 SDF 材质 uniform 布局打包和重打包颜色。
+//!
+//! The SDF shader stores colors as packed integer bits embedded in floats, which keeps the uniform
+//! format aligned with the existing shader contract. The module centralizes that packing logic so
+//! runtime systems do not need to duplicate bit-manipulation code when changing fill or border
+//! alpha values.
+//!
+//! SDF shader 会把颜色编码成嵌入 float 的整数位模式，以保持与现有 shader 协议一致。
+//! 该模块把这套打包逻辑集中起来，避免运行时系统在修改填充色或边框 alpha 时到处重复写位运算。
+
 use bevy::prelude::*;
 
 /// Pack RGBA color into a u32 stored as f32 bits.

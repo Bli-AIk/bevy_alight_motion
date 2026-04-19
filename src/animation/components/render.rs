@@ -1,3 +1,12 @@
+//! Defines render-adjacent runtime components created during spawning.
+//! It covers cached SDF geometry parameters, camera-layer animation data, and
+//! the bookkeeping used by path-repeat copies, all of which sit close to the
+//! actual rendering path but are still updated from animation state.
+//!
+//! 定义了生成阶段创建的、紧贴渲染路径的运行时组件。它包含缓存后的 SDF
+//! 几何参数、相机图层动画数据，以及 path repeat 副本使用的状态记录；这些数据
+//! 虽然靠近最终渲染，但仍然由动画状态持续驱动更新。
+
 use bevy::prelude::*;
 
 use super::animated::AmAnimated;

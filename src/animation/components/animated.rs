@@ -1,3 +1,12 @@
+//! Defines the main per-entity animation payload used at runtime.
+//! `AmAnimated` is the dense component that carries timeline data, effect
+//! parameters, repeat settings, and various precomputed fields needed by the
+//! transform, opacity, text, and unified-effect systems every frame.
+//!
+//! 定义了运行时最核心的逐实体动画载荷。`AmAnimated` 是那个高密度组件，
+//! 它承载时间轴数据、效果参数、重复设置，以及变换、透明度、文本和统一特效系统
+//! 每帧都会读取的各种预计算字段。
+
 use bevy::prelude::*;
 
 use crate::scene::AmBlendingMode;
@@ -21,6 +30,9 @@ pub struct AmAnimated {
     pub pivot: AmAnimatedVec2,
     pub rotation: AmAnimatedFloat,
     pub scale: AmAnimatedVec2,
+    /// When true, the animated scale is baked into mesh/SDF dimensions (Transform.scale=1).
+    /// When false, the animated scale is in Transform.scale (images, non-SDF shapes).
+    pub scale_baked_into_mesh: bool,
     pub opacity: AmAnimatedFloat,
     pub canvas_width: f32,
     pub canvas_height: f32,
@@ -132,6 +144,7 @@ pub struct AmAnimated {
     pub linear_repeat_invert: bool,
     pub linear_repeat_random_order: bool,
     pub linear_repeat_seed: AmAnimatedFloat,
+    pub linear_repeat_after_stretch_segment: bool,
     pub linear_repeat2: Option<Box<crate::scene::effects::LinearRepeatParams>>,
     pub radial_repeat_count: AmAnimatedFloat,
     pub radial_repeat_radius: AmAnimatedFloat,
@@ -240,12 +253,29 @@ pub struct AmAnimated {
 }
 
 impl AmAnimated {
+    fn renderable_nested_total(total_ms: f32, scene_fps: f32) -> f32 {
+        if total_ms <= 0.0 {
+            return 0.0;
+        }
+        let total_ms_i = total_ms.floor().max(0.0) as i32;
+        let sample_ms = total_ms_i.saturating_sub(1);
+        let fphs = (scene_fps * 100.0).round().max(1.0) as i32;
+        let frame_number = (sample_ms * fphs) / 100_000;
+        (((frame_number * 100_000) + 50_000) / fphs) as f32
+    }
+
     fn apply_retime(&self, global_time: f32) -> Option<f32> {
         let rt = self.retime.as_ref()?;
         if rt.mode == RetimeMode::Off {
             return None;
         }
-        let embed_elapsed = (global_time - rt.embed_global_start) * rt.embed_speed;
+        let comparison_time = match rt.mode {
+            RetimeMode::Stretch | RetimeMode::LoopStretch => {
+                global_time + rt.comparison_frame_center_bias_ms
+            }
+            _ => global_time,
+        };
+        let embed_elapsed = (comparison_time - rt.embed_global_start) * rt.embed_speed;
         if embed_elapsed < 0.0 {
             return Some(0.0);
         }
@@ -253,6 +283,13 @@ impl AmAnimated {
         if total <= 0.0 {
             return Some(0.0);
         }
+        let renderable_total = Self::renderable_nested_total(total, self.scene_fps)
+            .max(0.0)
+            .min(total);
+        // For Freeze/Loop/Blank the playback starts at `inTime` inside the
+        // nested timeline, not at 0.  Stretch/LoopStretch remap the entire
+        // timeline so inTime is not applicable there.
+        let base_time = embed_elapsed + rt.in_time_ms;
         let nested_time = match rt.mode {
             RetimeMode::Off => return None,
             RetimeMode::Stretch => {
@@ -263,18 +300,52 @@ impl AmAnimated {
                     embed_elapsed
                 }
             }
-            RetimeMode::Freeze => embed_elapsed.min(total),
-            RetimeMode::Loop => embed_elapsed.rem_euclid(total),
+            RetimeMode::Freeze => base_time.min(renderable_total.max(0.0)),
+            RetimeMode::Loop => {
+                let loop_total = renderable_total.max(1.0);
+                base_time.rem_euclid(loop_total)
+            }
             RetimeMode::LoopStretch => {
                 Self::calc_loop_stretch_time(rt.container_duration_ms, total, embed_elapsed)
             }
             RetimeMode::Blank => {
-                if embed_elapsed > total {
+                if base_time > renderable_total.max(0.0) {
                     return Some(-1.0);
                 }
-                embed_elapsed
+                base_time
             }
         };
+        static RETIME_TRACE_IDS: std::sync::LazyLock<Option<Vec<u64>>> =
+            std::sync::LazyLock::new(|| {
+                std::env::var_os("AM_RETIME_TRACE_IDS")
+                    .and_then(|value| value.into_string().ok())
+                    .map(|ids| {
+                        ids.split(',')
+                            .filter_map(|value| value.trim().parse::<u64>().ok())
+                            .collect()
+                    })
+            });
+        if let Some(trace_ids) = RETIME_TRACE_IDS.as_ref() {
+            let should_trace = trace_ids.contains(&self.layer_id);
+            if should_trace {
+                bevy::log::warn!(
+                    "[RetimeTrace] id={} mode={:?} global={:.3} comparison={:.3} bias={:.3} embed_start={:.3} embed_elapsed={:.3} in_time={:.3} base_time={:.3} total={:.3} renderable_total={:.3} nested={:.3} scene_fps={:.3}",
+                    self.layer_id,
+                    rt.mode,
+                    global_time,
+                    comparison_time,
+                    rt.comparison_frame_center_bias_ms,
+                    rt.embed_global_start,
+                    embed_elapsed,
+                    rt.in_time_ms,
+                    base_time,
+                    total,
+                    renderable_total,
+                    nested_time,
+                    self.scene_fps,
+                );
+            }
+        }
         Some(nested_time)
     }
 

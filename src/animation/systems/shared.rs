@@ -1,3 +1,12 @@
+//! Holds math helpers shared by multiple animation systems.
+//! It centralizes reusable calculations such as perspective zoom, accumulated
+//! frequencies, oscillation waveforms, and unwrapped rotation resolution so the
+//! per-feature systems can stay focused on applying results to entities.
+//!
+//! 存放多个动画系统共用的数学辅助逻辑。它把透视缩放、频率累积、振荡波形、
+//! 以及连续旋转角解析等可复用计算集中起来，让具体效果系统只需要专注于把结果应用到
+//! 实体上。
+
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_float, interpolate_float_reverse};
 
@@ -119,6 +128,13 @@ pub(crate) fn resolve_unwrapped_rotation_deg(
 }
 
 pub(crate) fn compute_normalized_frame_delta(animated: &AmAnimated) -> f32 {
+    static DISABLED: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("AM_DISABLE_REVERSE_INTERPOLATE").is_some());
+
+    if *DISABLED {
+        return 0.0;
+    }
+
     let element_duration_ms = (animated.end_time - animated.start_time) as f32;
     if element_duration_ms <= 0.0 {
         return 0.0;

@@ -1,3 +1,10 @@
+//! Evaluates the radial-repeat effect for unified visuals.
+//! It computes circular copy placement, scale, alpha, color, and timing values
+//! from the animated parameters and writes the result into shader uniforms.
+//!
+//! 负责为统一材质视觉对象求值 radial repeat 效果。它根据动画参数计算环形
+//! 副本的排布、缩放、透明度、颜色和时序，并把结果写入 shader uniform。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;
@@ -9,9 +16,9 @@ pub(crate) fn process_radial_repeat_effect(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
-    entity: Entity,
+    mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
-    commands: &mut Commands,
+    element_scale: [f32; 2],
 ) {
     let has_radial_repeat = animated.radial_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
@@ -78,12 +85,21 @@ pub(crate) fn process_radial_repeat_effect(
         );
         material.uniform_data.radial_repeat_fill_color = fill_color;
 
+        // Element pivot for rotation correction: AM's `rotatedBy` applies
+        // the spread rotation around the element's pivot, so the inverse
+        // transform must account for the pivot offset.
+        let pivot = interpolate_vec2(&animated.pivot, layer_time).unwrap_or([0.0, 0.0]);
+        material.uniform_data.radial_repeat_params6 =
+            Vec4::new(pivot[0], pivot[1], orig_width, orig_height);
+
+        let pivot_mag = (pivot[0].powi(2) + pivot[1].powi(2)).sqrt();
         let max_mix = scale.abs().max(1.0);
         let visual_scale = (max_mix * base_scale).abs().max(1.0);
         let max_extent = radius.abs() * max_mix
             + orig_width.max(orig_height) / 2.0 * visual_scale
             + offset[0].abs()
-            + offset[1].abs();
+            + offset[1].abs()
+            + pivot_mag;
         let padding = 20.0;
         let min_x = -max_extent - padding;
         let max_x = max_extent + padding;
@@ -92,8 +108,29 @@ pub(crate) fn process_radial_repeat_effect(
 
         let new_width = max_x - min_x;
         let new_height = max_y - min_y;
-        material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, new_width, new_height);
+        // Pass expanded mesh dimensions for per-copy stretch.
+        // Following the linear repeat pattern: per-copy stretch uses display
+        // (expanded) dims as in_width so the fold band is correctly sized
+        // relative to the larger coordinate space.
+        material.uniform_data.radial_repeat_params7 = Vec4::new(
+            new_width,
+            new_height,
+            element_scale[0].abs().max(0.001),
+            element_scale[1].abs().max(0.001),
+        );
+        // When stretch precedes radial repeat, preserve stretch's local dims
+        // in original_size.x/y but set .z/w = .x/y so the main stretch function
+        // uses in_width == orig_width (content-space stretch, correct fold zone).
+        // The radial repeat reads its element size from params6.z/w instead.
+        let stretch_active = material.uniform_data.stretch_params.y.abs() > 0.001;
+        if stretch_active {
+            // Keep .x/.y from mesh.rs (local_orig_w/h), set .z/.w to match
+            let os = material.uniform_data.original_size;
+            material.uniform_data.original_size = Vec4::new(os.x, os.y, os.x, os.y);
+        } else {
+            material.uniform_data.original_size =
+                Vec4::new(orig_width, orig_height, new_width, new_height);
+        }
 
         let uv_min_x = min_x / orig_width + 0.5;
         let uv_max_x = max_x / orig_width + 0.5;
@@ -106,7 +143,6 @@ pub(crate) fn process_radial_repeat_effect(
             [max_x, max_y, 0.0],
             [min_x, max_y, 0.0],
         ];
-        let normals = vec![[0.0, 0.0, 1.0]; 4];
         let uvs = vec![
             [uv_min_x, uv_at_bottom],
             [uv_max_x, uv_at_bottom],
@@ -115,26 +151,15 @@ pub(crate) fn process_radial_repeat_effect(
         ];
         let indices = vec![0u32, 1, 2, 0, 2, 3];
 
-        let mut new_mesh = Mesh::new(
-            bevy::mesh::PrimitiveTopology::TriangleList,
-            bevy::asset::RenderAssetUsages::RENDER_WORLD
-                | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-        );
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-        new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-        let new_mesh_handle = meshes.add(new_mesh);
-        commands
-            .entity(entity)
-            .insert(bevy::mesh::Mesh2d(new_mesh_handle));
+        super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
     } else {
         material.uniform_data.radial_repeat_params1 = Vec4::ZERO;
         material.uniform_data.radial_repeat_params2 = Vec4::new(360.0, 1.0, 0.0, 1.0);
         material.uniform_data.radial_repeat_params3 = Vec4::new(1.0, 0.0, 0.0, 0.0);
         material.uniform_data.radial_repeat_params4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.radial_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params6 = Vec4::ZERO;
+        material.uniform_data.radial_repeat_params7 = Vec4::ZERO;
         material.uniform_data.radial_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
     }
 }

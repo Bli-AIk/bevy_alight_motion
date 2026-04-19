@@ -8,24 +8,100 @@ use bevy::prelude::*;
 
 mod effects;
 mod mesh;
+mod post_effects;
 
 use self::effects::{
-    update_blend, update_chromakey, update_exposure, update_grid, update_lift, update_mirror,
-    update_palette, update_pixelate, update_rays, update_replace_color, update_rgb_split,
-    update_solidcolor, update_stretch2_uniform, update_threshold, update_wavewarp2, update_wipe,
+    update_blend, update_chromakey, update_exposure, update_lift, update_mirror, update_palette,
+    update_rays, update_rgb_split, update_solidcolor, update_stretch2_uniform, update_wavewarp2,
+    update_wipe,
 };
 use self::mesh::{update_base_mesh, update_blur_mesh, update_stretch_mesh};
+use self::post_effects::{update_grid, update_pixelate, update_replace_color, update_threshold};
 use super::unified_support::{compute_ancestor_scale, trace_parenthelper_unified_state};
-use crate::animation::components::{AmAnimated, AmPlayback};
+use crate::animation::components::{AmAnimated, AmPlayback, AmUnifiedMeshState};
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
+
+/// Cached debug/trace env-var state, parsed once per frame.
+pub(super) struct DebugEnvCache {
+    force_white_ids: Option<Vec<u64>>,
+    trace_color_ids: Option<Vec<u64>>,
+    trace_effect_ids: Option<Vec<u64>>,
+    disable_replace_color_ids: Option<Vec<u64>>,
+    disable_threshold_ids: Option<Vec<u64>>,
+    disable_pixelate_ids: Option<Vec<u64>>,
+    trace_parenthelper: bool,
+    trace_linear_repeat_all: bool,
+    trace_linear_repeat_ids: Option<Vec<u64>>,
+    pub(super) disable_linear_repeat: bool,
+}
+
+impl DebugEnvCache {
+    fn new() -> Self {
+        Self {
+            force_white_ids: parse_env_id_list("AM_FORCE_WHITE_TINT_IDS"),
+            trace_color_ids: parse_env_id_list("AM_TRACE_UNIFIED_COLOR_IDS"),
+            trace_effect_ids: parse_env_id_list("AM_TRACE_EFFECT_IDS"),
+            disable_replace_color_ids: parse_env_id_list("AM_DISABLE_REPLACE_COLOR_IDS"),
+            disable_threshold_ids: parse_env_id_list("AM_DISABLE_THRESHOLD_IDS"),
+            disable_pixelate_ids: parse_env_id_list("AM_DISABLE_PIXELATE_IDS"),
+            trace_parenthelper: std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some(),
+            trace_linear_repeat_all: std::env::var_os("AM_TRACE_LINEAR_REPEAT_ALL").is_some(),
+            trace_linear_repeat_ids: parse_env_id_list("AM_TRACE_LINEAR_REPEAT_IDS"),
+            disable_linear_repeat: std::env::var_os("AM_DISABLE_LINEAR_REPEAT").is_some(),
+        }
+    }
+
+    fn has_id(list: &Option<Vec<u64>>, id: u64) -> bool {
+        list.as_ref().is_some_and(|v| v.contains(&id))
+    }
+
+    pub(super) fn force_white_tint(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.force_white_ids, layer_id)
+    }
+
+    pub(super) fn trace_color(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.trace_color_ids, layer_id)
+    }
+
+    pub(super) fn trace_effect(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.trace_effect_ids, layer_id)
+    }
+
+    pub(super) fn disable_replace_color(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_replace_color_ids, layer_id)
+    }
+
+    pub(super) fn disable_threshold(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_threshold_ids, layer_id)
+    }
+
+    pub(super) fn disable_pixelate(&self, layer_id: u64) -> bool {
+        Self::has_id(&self.disable_pixelate_ids, layer_id)
+    }
+
+    pub(super) fn trace_linear_repeat(&self, layer_id: u64) -> bool {
+        self.trace_linear_repeat_all || Self::has_id(&self.trace_linear_repeat_ids, layer_id)
+    }
+}
+
+fn parse_env_id_list(var: &str) -> Option<Vec<u64>> {
+    std::env::var_os(var)
+        .and_then(|value| value.into_string().ok())
+        .map(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .collect()
+        })
+}
 
 /// System to animate effects on sprites using UnifiedEffectMaterial.
 /// This system handles all effect types (wipe, stretch segment, mask, blur) in a single pass.
 /// It is designed for the RTT architecture where effects are stackable.
 pub fn animate_unified_effect_system(
     playback: Res<AmPlayback>,
-    mut commands: Commands,
-    query: Query<(
+    parent_scale_map: Res<crate::animation::parenthelper::ParenthelperScaleContributions>,
+    disabled_effects: Option<Res<crate::plugin::DisabledEffects>>,
+    mut query: Query<(
         Entity,
         &AmAnimated,
         &crate::scene::AmLayerMarker,
@@ -33,6 +109,7 @@ pub fn animate_unified_effect_system(
         &Transform,
         &GlobalTransform,
         &bevy::mesh::Mesh2d,
+        &mut AmUnifiedMeshState,
         Option<&crate::animation::components::AmUnifiedUsesTransformScale>,
         Option<&crate::scene::AmEmbedContentMarker>,
         Option<&Visibility>,
@@ -41,12 +118,18 @@ pub fn animate_unified_effect_system(
     )>,
     parent_animated_query: Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_marker_query: Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
+    null_query: Query<(), With<crate::scene::AmPerspectiveNull>>,
     root_query: Query<&Transform, With<crate::scene::AmProjectRoot>>,
-    _embed_gt_query: Query<&GlobalTransform>,
+    embed_gt_query: Query<&GlobalTransform>,
+    embed_rtt_query: Query<(), With<crate::effects::EmbedSceneRtt>>,
     mut materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let global_time = playback.current_time_ms;
+
+    // Cache all debug env var checks once per frame instead of per entity
+    let env_cache = DebugEnvCache::new();
+
     // Get the FitWindow root scale (uniform scaling applied to project root entity).
     let root_scale = root_query
         .iter()
@@ -63,12 +146,13 @@ pub fn animate_unified_effect_system(
         transform,
         global_transform,
         mesh2d,
+        mut mesh_state,
         unified_transform_scale,
         _embed_marker,
         visibility,
         render_layers,
         child_of,
-    ) in query.iter()
+    ) in query.iter_mut()
     {
         if unified_transform_scale.is_some() {
             continue;
@@ -160,6 +244,7 @@ pub fn animate_unified_effect_system(
             entity,
             &parent_animated_query,
             &effect_marker_query,
+            &null_query,
             global_time,
         );
         if animated.parenthelper_has_effect {
@@ -172,6 +257,20 @@ pub fn animate_unified_effect_system(
             ancestor_scale[0] = 1.0 + (ancestor_scale[0] - 1.0) * parenthelper_scale_factor;
             ancestor_scale[1] = 1.0 + (ancestor_scale[1] - 1.0) * parenthelper_scale_factor;
         }
+
+        // If the parenthelper system recorded a parent scale contribution for this entity
+        // (baked-scale shape under a perspective null), fold it into ancestor_scale so that
+        // orig_width reflects the visual size, and into layer_scale so the shader correctly
+        // converts between mesh-local and canvas pixels.
+        let parent_scale_contrib = parent_scale_map.map.get(&entity).copied();
+
+        // Include the parent null's scale contribution in ancestor_scale for orig_width.
+        // This ensures orig_width = sprite_size × animated_scale × null_scale (visual size).
+        if let Some(ps) = parent_scale_contrib {
+            ancestor_scale[0] *= ps.x;
+            ancestor_scale[1] *= ps.y;
+        }
+
         let orig_width = (sprite_size[0] * scale[0]).abs().max(1.0) * ancestor_scale[0].abs();
         let orig_height = (sprite_size[1] * scale[1]).abs().max(1.0) * ancestor_scale[1].abs();
 
@@ -180,14 +279,30 @@ pub fn animate_unified_effect_system(
         // display size is determined by embed's transform scale and main scene's fit_scale.
         // Applying inv_fit_scale here would incorrectly enlarge the content.
 
-        // Get transform rotation angle for effect compensation
-        // In Bevy, rotation is stored as Quat, extract Z rotation
-        let (_, _, transform_rotation_rad) = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
+        // Stretch operates in screen space, so nested/embed content needs the composed
+        // world rotation instead of only the layer's local transform rotation.
+        // However, RTT embed content is captured by a camera rotated to the embed's
+        // global rotation, so the stretch "screen space" is the RTT camera view.
+        // Subtract the embed's rotation to get the shape's rotation relative to the
+        // RTT camera, preventing the embed rotation from distorting the stretch.
+        let (_, global_rotation, _) = global_transform.to_scale_rotation_translation();
+        let embed_rotation = _embed_marker
+            .filter(|m| embed_rtt_query.contains(m.embed_entity))
+            .and_then(|m| embed_gt_query.get(m.embed_entity).ok())
+            .map(|gt| gt.to_scale_rotation_translation().1);
+        let effective_rotation = match embed_rotation {
+            Some(er) => {
+                (er.inverse() * global_rotation)
+                    .to_euler(bevy::math::EulerRot::ZYX)
+                    .0
+            }
+            None => global_rotation.to_euler(bevy::math::EulerRot::ZYX).0,
+        };
 
         // Calculate "world-space" dimensions for stretch calculations
         // When element is rotated, its local width/height swap in world space
-        let rot_cos = transform_rotation_rad.cos().abs();
-        let rot_sin = transform_rotation_rad.sin().abs();
+        let rot_cos = effective_rotation.cos().abs();
+        let rot_sin = effective_rotation.sin().abs();
         let _world_width = orig_width * rot_cos + orig_height * rot_sin;
         let world_height = orig_width * rot_sin + orig_height * rot_cos;
         let _ = world_height; // Reserved for future use
@@ -227,19 +342,31 @@ pub fn animate_unified_effect_system(
             continue;
         };
 
-        if std::env::var_os("AM_PARENTHELPER_UNIFIED_TRACE").is_some()
-            && (marker.label == "长方形 1" || marker.label == "长方形 2")
-        {
-            trace_parenthelper_unified_state(
-                marker,
-                material,
-                transform,
-                global_transform,
-                visibility,
-                render_layers,
-                child_of.map(|c| c.parent()),
+        // Apply opacity
+        let opacity = interpolate_float(&animated.opacity, layer_time).unwrap_or(1.0);
+        let fade_alpha = animated.calc_fade_alpha(layer_time);
+        material.uniform_data.color.w = opacity * animated.base_alpha * fade_alpha;
+
+        if env_cache.trace_color(animated.layer_id) {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][pre-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
+                animated.layer_id,
+                marker.label,
+                layer_time,
+                material.uniform_data.color,
+                material.uniform_data.replace_color_flags,
+                material.uniform_data.threshold_params
             );
         }
+
+        if env_cache.force_white_tint(animated.layer_id) {
+            material.uniform_data.color.x = 1.0;
+            material.uniform_data.color.y = 1.0;
+            material.uniform_data.color.z = 1.0;
+        }
+
+        let trace_parenthelper = env_cache.trace_parenthelper
+            && (marker.label == "长方形 1" || marker.label == "长方形 2");
 
         // Always set original_size so pixelate (and other effects) have correct display dimensions
         material.uniform_data.original_size =
@@ -289,6 +416,7 @@ pub fn animate_unified_effect_system(
 
         let has_blur =
             animated.blur_strength.value.is_some() || !animated.blur_strength.keyframes.is_empty();
+
         update_blur_mesh(
             material,
             animated,
@@ -296,8 +424,27 @@ pub fn animate_unified_effect_system(
             orig_width,
             orig_height,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
         );
+
+        // For SDF layers (scale baked into mesh), Transform.scale ≈ 1 so local = screen.
+        // For non-SDF layers (images, rects), Transform.scale = animated_scale so local ≠ screen.
+        // When a baked-scale shape sits under a perspective null, its GlobalTransform includes
+        // the null's scale but Transform.scale remains ≈ 1. Use the parent contribution to
+        // give the shader the correct local↔screen conversion.
+        let mut layer_scale = if animated.scale_baked_into_mesh {
+            Vec2::ONE
+        } else {
+            Vec2::new(
+                transform.scale.x.abs().max(0.001),
+                transform.scale.y.abs().max(0.001),
+            )
+        };
+        if let Some(ps) = parent_scale_contrib {
+            layer_scale.x *= ps.x.abs().max(0.001);
+            layer_scale.y *= ps.y.abs().max(0.001);
+        }
 
         update_stretch_mesh(
             material,
@@ -305,22 +452,21 @@ pub fn animate_unified_effect_system(
             layer_time,
             has_stretch,
             has_stretch_seg2,
-            transform_rotation_rad,
+            effective_rotation,
             sprite_size,
             scale,
             ancestor_scale,
             orig_width,
             orig_height,
+            layer_scale,
             global_transform,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
         );
 
-        // For effect sprites without blur/stretch, still need to update mesh size
-        // when scale/size animation changes. This ensures content scales correctly.
-        // This applies to BOTH regular content AND embed content.
-        // Bounds clipping (if needed) is handled separately by apply_embed_bounds_clipping_system.
         update_base_mesh(
+            material,
             animated,
             layer_time,
             has_stretch,
@@ -332,7 +478,9 @@ pub fn animate_unified_effect_system(
             orig_width,
             orig_height,
             mesh2d,
+            &mut mesh_state,
             &mut meshes,
+            &env_cache,
         );
 
         // Update palette map alpha if present
@@ -341,9 +489,15 @@ pub fn animate_unified_effect_system(
         update_palette(material, animated, layer_time, has_palette);
 
         let has_replace_color = animated.replace_old_color.w > 0.0;
-        update_replace_color(material, animated, layer_time, has_replace_color);
+        update_replace_color(
+            material,
+            animated,
+            layer_time,
+            has_replace_color,
+            &env_cache,
+        );
 
-        update_threshold(material, animated, layer_time);
+        update_threshold(material, animated, layer_time, &env_cache);
 
         update_grid(material, animated, layer_time);
         update_pixelate(
@@ -353,6 +507,8 @@ pub fn animate_unified_effect_system(
             global_transform,
             root_scale,
             has_pixelate,
+            disabled_effects.as_deref(),
+            &env_cache,
         );
 
         // Process repeat and linear repeat effects (delegated to repeat module)
@@ -362,9 +518,8 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
         );
 
         super::repeat::process_linear_repeat_effect(
@@ -373,9 +528,10 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
+            &env_cache,
+            scale,
         );
 
         super::repeat::process_radial_repeat_effect(
@@ -384,9 +540,33 @@ pub fn animate_unified_effect_system(
             material,
             orig_width,
             orig_height,
-            entity,
+            mesh2d,
             &mut meshes,
-            &mut commands,
+            scale,
         );
+
+        if trace_parenthelper {
+            trace_parenthelper_unified_state(
+                marker,
+                material,
+                transform,
+                global_transform,
+                visibility,
+                render_layers,
+                child_of.map(|c| c.parent()),
+            );
+        }
+
+        if env_cache.trace_color(animated.layer_id) {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][post-update] id={} label='{}' layer_time={:.6} color={:?} replace_flags={:?} threshold={:?}",
+                animated.layer_id,
+                marker.label,
+                layer_time,
+                material.uniform_data.color,
+                material.uniform_data.replace_color_flags,
+                material.uniform_data.threshold_params
+            );
+        }
     }
 }

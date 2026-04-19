@@ -1,3 +1,12 @@
+//! Collects text layers into pending runtime layers.
+//! It resolves font names and metrics, computes initial placement and wrap-aware
+//! offsets, extracts text-related effects, and produces the animated text layer
+//! payload that later spawn code turns into Bevy text entities.
+//!
+//! 负责把文本图层收集成待生成的运行时图层。它会解析字体名称和度量、计算
+//! 初始位置与换行相关偏移、提取文本特效，并生成后续 spawn 代码会变成 Bevy 文本实体的
+//! 动画图层载荷。
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -66,6 +75,7 @@ pub(crate) fn collect_text(
         id: text.id,
         label: text.label.clone(),
         parent: text.parent,
+        is_perspective_null: false,
         start_time: text.start_time,
         end_time: text.end_time,
         transform,
@@ -79,6 +89,7 @@ pub(crate) fn collect_text(
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
             scale: text.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: text.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
@@ -202,6 +213,7 @@ pub(crate) fn collect_text(
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
             linear_repeat_seed: AmAnimatedFloat::default(),
+            linear_repeat_after_stretch_segment: false,
             linear_repeat2: None,
             radial_repeat_count: AmAnimatedFloat::default(),
             radial_repeat_radius: AmAnimatedFloat::default(),
@@ -333,8 +345,7 @@ pub(crate) fn collect_text(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: text.hidden,
     })

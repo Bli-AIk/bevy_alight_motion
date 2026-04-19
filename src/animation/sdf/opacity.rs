@@ -1,3 +1,14 @@
+//! Animates opacity and solid-color blending for SDF-backed visuals.
+//! 驱动基于 SDF 的可视对象透明度与纯色混合动画。
+//!
+//! SDF children do not use Bevy's standard sprite alpha path, so opacity, fade curves, echo alpha,
+//! and solid-color overlays must be resolved into shader uniforms here. This module converts the
+//! layer timeline into packed material data and keeps hidden/force-hidden states in sync with the
+//! visibility expected by the rest of the animation pipeline.
+//! SDF 子对象不走 Bevy 默认的 sprite 透明度路径，所以透明度、淡入淡出、echo alpha 和纯色叠加
+//! 都必须在这里折算成 shader uniform。这个模块把图层时间线转换成材质数据，并同步隐藏 /
+//! 强制隐藏状态，让可见性行为与整个动画管线保持一致。
+
 use bevy::prelude::*;
 
 use crate::sdf_material::{SdfMaterial, repack_with_alpha};

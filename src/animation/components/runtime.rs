@@ -1,3 +1,12 @@
+//! Defines runtime-only helper types that do not come directly from the
+//! authored project schema. It includes embed-scene retime metadata, live echo
+//! bookkeeping, and marker/config types that later systems use to specialize how
+//! visuals are updated.
+//!
+//! 定义了一批不直接来自作者侧 project schema 的运行时辅助类型。它包括
+//! 嵌套场景的 retime 元数据、实时 echo 状态，以及后续系统用来细化视觉更新方式的
+//! 标记与配置类型。
+
 use bevy::prelude::*;
 
 /// Retime mode for embedded scenes.
@@ -33,6 +42,11 @@ pub struct AmRetimeInfo {
     pub container_duration_ms: f32,
     pub nested_total_time_ms: f32,
     pub embed_speed: f32,
+    pub comparison_frame_center_bias_ms: f32,
+    /// The embed's `inTime` offset in milliseconds.  For Freeze / Loop / Blank
+    /// this shifts the starting position inside the nested timeline so that
+    /// playback begins at `inTime` rather than 0.
+    pub in_time_ms: f32,
 }
 
 /// Runtime echokf data for dynamically updating echo entities each frame.
@@ -64,6 +78,50 @@ pub struct EchoAlphaConfig {
 /// Marker for unified-material visuals whose size should come from Transform.scale.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AmUnifiedUsesTransformScale;
+
+/// Last mesh bounds written by unified-effect mesh maintenance.
+///
+/// Unified effect layers often recompute their quad every frame, but many of
+/// them are visually static for long stretches. Caching the last bounds/UV rect
+/// lets us skip redundant mesh writes without changing rendering behavior.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct AmUnifiedMeshState {
+    pub bounds: [f32; 4],
+    pub uv_rect: [f32; 4],
+    pub initialized: bool,
+}
+
+impl Default for AmUnifiedMeshState {
+    fn default() -> Self {
+        Self {
+            bounds: [0.0; 4],
+            uv_rect: [0.0; 4],
+            initialized: false,
+        }
+    }
+}
+
+impl AmUnifiedMeshState {
+    const EPSILON: f32 = 0.0005;
+
+    pub fn matches(&self, bounds: [f32; 4], uv_rect: [f32; 4]) -> bool {
+        self.initialized
+            && approx_rect_eq(self.bounds, bounds)
+            && approx_rect_eq(self.uv_rect, uv_rect)
+    }
+
+    pub fn store(&mut self, bounds: [f32; 4], uv_rect: [f32; 4]) {
+        self.bounds = bounds;
+        self.uv_rect = uv_rect;
+        self.initialized = true;
+    }
+}
+
+fn approx_rect_eq(lhs: [f32; 4], rhs: [f32; 4]) -> bool {
+    lhs.into_iter()
+        .zip(rhs)
+        .all(|(left, right)| (left - right).abs() <= AmUnifiedMeshState::EPSILON)
+}
 
 impl EchoAlphaConfig {
     pub fn evaluate(&self, global_time: f32) -> f32 {

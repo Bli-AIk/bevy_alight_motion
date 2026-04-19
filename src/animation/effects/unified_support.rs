@@ -1,3 +1,10 @@
+//! Contains shared helper code for the unified-effect animation path.
+//! It provides color conversion, one-shot tracing utilities, and a few reusable
+//! mesh update helpers that multiple unified-effect modules rely on.
+//!
+//! 存放统一特效动画路径共用的辅助逻辑。它提供颜色空间转换、一次性追踪日志，
+//! 以及多个统一特效模块都会复用的网格更新工具函数。
+
 use bevy::prelude::*;
 use std::{
     collections::HashSet,
@@ -103,6 +110,7 @@ pub(super) fn compute_ancestor_scale(
     entity: Entity,
     parent_query: &Query<(&AmAnimated, Option<&ChildOf>)>,
     effect_check: &Query<(), With<crate::masked_sprite::UnifiedEffectMarker>>,
+    null_check: &Query<(), With<crate::scene::AmPerspectiveNull>>,
     global_time: f32,
 ) -> [f32; 2] {
     let mut acc_scale = [1.0f32, 1.0f32];
@@ -114,7 +122,9 @@ pub(super) fn compute_ancestor_scale(
 
     let mut current = parent_entity;
     while let Ok((animated, child_of_ref)) = parent_query.get(current) {
-        if effect_check.contains(current) {
+        let is_effect = effect_check.contains(current);
+        let is_null = null_check.contains(current);
+        if is_effect || is_null {
             let local_time = animated.calc_local_time(global_time);
             let layer_time = animated.calc_layer_time(local_time);
             let s = interpolate_vec2(&animated.scale, layer_time).unwrap_or([1.0, 1.0]);
@@ -135,9 +145,14 @@ pub(super) fn compute_ancestor_scale(
 pub(super) fn update_quad_mesh(
     meshes: &mut Assets<Mesh>,
     mesh_handle: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     bounds: [f32; 4],
     uv_rect: [f32; 4],
 ) {
+    if mesh_state.matches(bounds, uv_rect) {
+        return;
+    }
+
     let [min_x, max_x, min_y, max_y] = bounds;
     let [uv_left, uv_right, uv_top, uv_bottom] = uv_rect;
 
@@ -165,4 +180,5 @@ pub(super) fn update_quad_mesh(
         ],
     );
     mesh.insert_indices(bevy::mesh::Indices::U32(vec![0u32, 1, 2, 0, 2, 3]));
+    mesh_state.store(bounds, uv_rect);
 }

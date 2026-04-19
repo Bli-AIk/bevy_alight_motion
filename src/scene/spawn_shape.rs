@@ -49,6 +49,7 @@ pub(crate) fn spawn_shape(
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&shape.effects);
+    let linear_repeat_after_stretch_segment = linear_repeat_after_stretch_segment(&shape.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let oscillate_effect = extract_oscillate_effect(&shape.effects);
@@ -147,12 +148,7 @@ pub(crate) fn spawn_shape(
                 s.value
                     .or_else(|| s.keyframes.first().and_then(|kf| kf.value.parse().ok()))
             })
-            .unwrap_or({
-                // Fall back: AM's default stroke size for path-stroke is 4.0
-                // (from KeyableEdgeDecoration.NO_STROKE template)
-                // end-size is a separate attribute (end cap size multiplier), not stroke width
-                4.0
-            });
+            .unwrap_or(4.0); // AM's default stroke size (KeyableEdgeDecoration.NO_STROKE)
         let stroke_color_value = stroke
             .color
             .as_ref()
@@ -239,9 +235,7 @@ pub(crate) fn spawn_shape(
             gradient_end_color,
             gradient_points,
         }
-    } else if !shape.fill_image.is_empty()
-        && (shape.fill_type == "media" || shape.fill_type == "color")
-    {
+    } else if !shape.fill_image.is_empty() && shape.fill_type == "media" {
         AmLayerSpec::SpriteShape {
             image_uri: shape.fill_image.clone(),
             is_media: true,
@@ -262,12 +256,10 @@ pub(crate) fn spawn_shape(
         }
     };
 
-    // Spawn the layer entity without visual components (they'll be added by lifecycle system)
-    // For SDF shapes, anchor_offset moves parent from center to pivot point
-    // For SpriteShape, use the computed compensation
+    // For SDF shapes, anchor_offset moves parent from center to pivot point;
+    // for SpriteShape, use the computed compensation
     let anchor_offset = if needs_sdf {
-        // SDF parent needs to be offset from center to pivot point
-        Vec2::new(pivot_x, -pivot_y)
+        Vec2::new(pivot_x, -pivot_y) // SDF: offset from center to pivot
     } else {
         Vec2::new(comp_x, comp_y)
     };
@@ -301,6 +293,7 @@ pub(crate) fn spawn_shape(
                 pivot: shape.transform.pivot.clone(),
                 rotation: shape.transform.rotation.clone(),
                 scale: shape.transform.scale.clone(),
+                scale_baked_into_mesh: needs_sdf,
                 opacity: shape.transform.opacity.clone(),
                 canvas_width: config.canvas_width,
                 canvas_height: config.canvas_height,
@@ -340,7 +333,13 @@ pub(crate) fn spawn_shape(
                     .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
                 blur_strength: gaussian_blur.strength,
                 speed_multiplier: config.speed_multiplier,
-                element_speed: shape.speed,
+                // Keep transform/effect keyframes on the layer timeline for media fills;
+                // AM's speedMap is source-time remapping, not a global layer-time scale.
+                element_speed: if shape.fill_type == "media" {
+                    1.0
+                } else {
+                    shape.speed
+                },
                 scene_fps: config.scene_fps,
                 embed_offset: Vec2::ZERO,
                 inv_fit_scale: 1.0,
@@ -421,6 +420,7 @@ pub(crate) fn spawn_shape(
                 linear_repeat_invert: linear_repeat_effect.invert,
                 linear_repeat_random_order: linear_repeat_effect.random_order,
                 linear_repeat_seed: linear_repeat_effect.seed,
+                linear_repeat_after_stretch_segment,
                 linear_repeat2: linear_repeat_effect2.map(Box::new),
                 // Radial repeat effect
                 radial_repeat_count: radial_repeat_effect.count.clone(),

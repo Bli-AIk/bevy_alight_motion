@@ -1,7 +1,19 @@
+//! Builds runtime visuals for sprite-shape layers.
+//! 为 SpriteShape 图层构建运行时可视对象。
+//!
+//! Sprite-shape layers sit between plain images and true SDF shapes: they may render a fill image,
+//! a solid-color fallback, unified shader effects, or transform-scale compensation. This file owns
+//! that branch of the spawn pipeline so the caller can treat sprite-shape layers as one case even
+//! though the final rendering setup has several sub-paths.
+//! SpriteShape 图层介于普通图片和真正的 SDF 形状之间：它既可能渲染填充图片，也可能渲染纯色兜底，
+//! 还可能叠加统一 shader 效果或变换缩放补偿。这个文件负责这条 spawn 分支，让上层调用方可以把
+//! SpriteShape 当成一个案例处理，而底层渲染配置仍能按不同子路径展开。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 
 use super::super::components::AmUnifiedUsesTransformScale;
@@ -9,12 +21,29 @@ use super::super::visual_helpers::{create_stretch_bounds_mesh, extract_fill_colo
 use super::material::create_unified_material;
 use super::mesh::create_anchored_rectangle_with_blur;
 
+fn force_plain_sprite_for_label(label: &str) -> bool {
+    std::env::var_os("AM_FORCE_PLAIN_SPRITE_LABELS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|labels| labels.split(',').any(|value| value.trim() == label))
+}
+
+fn trace_unified_color_enabled(layer_id: u64) -> bool {
+    std::env::var_os("AM_TRACE_UNIFIED_COLOR_IDS")
+        .and_then(|value| value.into_string().ok())
+        .is_some_and(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .any(|id| id == layer_id)
+        })
+}
+
 #[expect(clippy::too_many_arguments)] // reason: sprite-shape visuals require effect/resource fan-in
 pub(super) fn handle_sprite_shape_visual(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     unified_materials: &mut Assets<crate::masked_sprite::UnifiedEffectMaterial>,
     entity: Entity,
+    layer_id: u64,
     image_uri: &str,
     is_media: bool,
     fill_color: &Option<crate::schema::AmFillColor>,
@@ -102,6 +131,24 @@ pub(super) fn handle_sprite_shape_visual(
         return;
     }
 
+    if let Some(handle) = media_handle.filter(|_| force_plain_sprite_for_label(label)) {
+        commands.entity(entity).insert((
+            Sprite {
+                image: handle.clone(),
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(base_width, base_height)),
+                ..default()
+            },
+            *anchor,
+            AmVisualSpawned,
+        ));
+        bevy::log::warn!(
+            "[VisualDebug] forcing plain sprite path for '{}' via AM_FORCE_PLAIN_SPRITE_LABELS",
+            label
+        );
+        return;
+    }
+
     if let Some(handle) = media_handle.filter(|_| needs_any_effect) {
         let scaled_width = base_width * initial_scale.0.abs();
         let scaled_height = base_height * initial_scale.1.abs();
@@ -178,12 +225,27 @@ pub(super) fn handle_sprite_shape_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
+
+        if trace_unified_color_enabled(layer_id)
+            && let Some(material_ref) = unified_materials.get(&material)
+        {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][spawn-media] id={} label='{}' color={:?} replace_flags={:?} threshold={:?}",
+                layer_id,
+                label,
+                material_ref.uniform_data.color,
+                material_ref.uniform_data.replace_color_flags,
+                material_ref.uniform_data.threshold_params
+            );
+        }
 
         commands.entity(entity).insert((
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
         if unified_uses_transform_scale {
@@ -294,12 +356,27 @@ pub(super) fn handle_sprite_shape_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
+
+        if trace_unified_color_enabled(layer_id)
+            && let Some(material_ref) = unified_materials.get(&material)
+        {
+            bevy::log::warn!(
+                "[UnifiedColorTrace][spawn-fill] id={} label='{}' color={:?} replace_flags={:?} threshold={:?}",
+                layer_id,
+                label,
+                material_ref.uniform_data.color,
+                material_ref.uniform_data.replace_color_flags,
+                material_ref.uniform_data.threshold_params
+            );
+        }
 
         commands.entity(entity).insert((
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
         if unified_uses_transform_scale {

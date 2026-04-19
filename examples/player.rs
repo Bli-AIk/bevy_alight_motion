@@ -1,6 +1,10 @@
-#![allow(dead_code)]
 //! Example player for Alight Motion projects.
 //! 用以播放 Alight Motion 工程的示例播放器。
+//!
+//! This example is the main manual verification harness for the crate. It can run interactively,
+//! expose BRP hooks, benchmark frame rate, or compare rendered frames against reference video.
+//! 这个示例是整个 crate 最主要的人工验证载体。它既可以交互播放，也可以暴露 BRP 控制接口、执行帧率基准，
+//! 或把渲染结果逐帧与参考视频进行对比。
 //!
 //! # Usage / 用法
 //!
@@ -48,6 +52,7 @@
 //!
 //! # Available projects / 可用工程
 //!   - `simple_gb` (default)
+#![allow(dead_code)]
 //!   - `basic_shape`
 //!   - `basic_pivot`
 //!   - `complex_1`
@@ -68,8 +73,10 @@
 #[path = "video_utils.rs"]
 mod video_utils;
 
+use bevy::app::AppExit;
 use bevy::prelude::MeshMaterial2d;
 use bevy::prelude::*;
+use bevy::render::renderer::RenderAdapterInfo;
 #[cfg(feature = "video-comparison")]
 use bevy::render::view::screenshot::{Captured, Capturing, Screenshot};
 use bevy_alight_motion::prelude::*;
@@ -221,7 +228,10 @@ fn main() {
         .init_resource::<DebugOverlaySettings>()
         .init_resource::<MaskDebugSettings>()
         .add_plugins(AlightMotionPlugin)
-        .add_systems(Startup, setup);
+        .add_systems(
+            Startup,
+            (setup, log_render_diagnostics, configure_initial_playback).chain(),
+        );
 
     // Headless: use FixedSize since there's no window to query
     #[cfg(feature = "headless-render")]
@@ -261,22 +271,25 @@ fn main() {
     // Add video comparison systems
     #[cfg(feature = "video-comparison")]
     {
-        #[cfg(feature = "headless-render")]
-        app.add_plugins(headless_capture::HeadlessComparisonCapturePlugin);
+        let diagnostics_only = std::env::var_os("AM_RENDER_DIAGNOSTICS_ONLY").is_some();
+        if !diagnostics_only {
+            #[cfg(feature = "headless-render")]
+            app.add_plugins(headless_capture::HeadlessComparisonCapturePlugin);
 
-        app.init_resource::<video_comparison_systems::ComparisonState>()
-            .add_systems(Startup, video_comparison_systems::setup_comparison)
-            // Pause playback at the very beginning of each frame to prevent time advancing
-            .add_systems(First, video_comparison_systems::ensure_paused_during_load)
-            .add_systems(
-                Update,
-                (
-                    video_comparison_systems::comparison_loop,
-                    trace_comparison_debug_counts_system,
-                )
-                    .chain(),
-            );
-        println!("Video comparison mode enabled: Running automated test...");
+            app.init_resource::<video_comparison_systems::ComparisonState>()
+                .add_systems(Startup, video_comparison_systems::setup_comparison)
+                // Pause playback at the very beginning of each frame to prevent time advancing
+                .add_systems(First, video_comparison_systems::ensure_paused_during_load)
+                .add_systems(
+                    Update,
+                    (
+                        video_comparison_systems::comparison_loop,
+                        trace_comparison_debug_counts_system,
+                    )
+                        .chain(),
+                );
+            println!("Video comparison mode enabled: Running automated test...");
+        }
     }
 
     // Add frame test (FPS benchmark) systems
@@ -348,6 +361,71 @@ fn trace_comparison_debug_counts_system(
         capturing.iter().len(),
         captured.iter().len()
     );
+}
+
+fn configure_initial_playback(mut playback: ResMut<AmPlayback>) {
+    if let Ok(value) = std::env::var("AM_START_TIME_MS")
+        && let Ok(time_ms) = value.parse::<f32>()
+    {
+        playback.current_time_ms = time_ms.max(0.0);
+    }
+
+    if std::env::var_os("AM_START_PAUSED").is_some() {
+        playback.playing = false;
+    }
+}
+
+fn log_render_diagnostics(
+    adapter_info: Res<RenderAdapterInfo>,
+    #[cfg(feature = "headless-render")] headless_render_target: Option<Res<HeadlessRenderTarget>>,
+    #[cfg(feature = "headless-render")] images: Res<Assets<Image>>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let diagnostics_enabled = std::env::var_os("AM_RENDER_DIAGNOSTICS").is_some()
+        || std::env::var_os("AM_RENDER_DIAGNOSTICS_ONLY").is_some();
+    if !diagnostics_enabled {
+        return;
+    }
+
+    println!("[RENDER DIAG] backend={:?}", adapter_info.0.backend);
+    println!("[RENDER DIAG] name={}", adapter_info.0.name);
+    println!("[RENDER DIAG] vendor={:#06x}", adapter_info.0.vendor);
+    println!("[RENDER DIAG] device={:#06x}", adapter_info.0.device);
+    println!("[RENDER DIAG] device_type={:?}", adapter_info.0.device_type);
+    println!("[RENDER DIAG] driver={}", adapter_info.0.driver);
+    println!("[RENDER DIAG] driver_info={}", adapter_info.0.driver_info);
+    println!(
+        "[RENDER DIAG] env WGPU_BACKEND={}",
+        std::env::var("WGPU_BACKEND").unwrap_or_else(|_| "<unset>".to_string())
+    );
+    println!(
+        "[RENDER DIAG] env WGPU_FORCE_FALLBACK_ADAPTER={}",
+        std::env::var("WGPU_FORCE_FALLBACK_ADAPTER").unwrap_or_else(|_| "<unset>".to_string())
+    );
+    println!(
+        "[RENDER DIAG] env WGPU_ADAPTER_NAME={}",
+        std::env::var("WGPU_ADAPTER_NAME").unwrap_or_else(|_| "<unset>".to_string())
+    );
+    println!(
+        "[RENDER DIAG] env WGPU_SETTINGS_PRIO={}",
+        std::env::var("WGPU_SETTINGS_PRIO").unwrap_or_else(|_| "<unset>".to_string())
+    );
+
+    #[cfg(feature = "headless-render")]
+    if let Some(render_target) = headless_render_target
+        && let Some(image) = images.get(&render_target.0)
+    {
+        println!(
+            "[RENDER DIAG] headless_target format={:?} size={}x{}",
+            image.texture_descriptor.format,
+            image.texture_descriptor.size.width,
+            image.texture_descriptor.size.height
+        );
+    }
+
+    if std::env::var_os("AM_RENDER_DIAGNOSTICS_ONLY").is_some() {
+        exit.write(AppExit::Success);
+    }
 }
 
 /// Resource to store the project file path.
@@ -517,6 +595,7 @@ fn debug_position_changes(
     playback: Res<AmPlayback>,
     query: Query<
         (
+            &AmAnimated,
             &AmLayerMarker,
             &Transform,
             &GlobalTransform,
@@ -524,28 +603,88 @@ fn debug_position_changes(
         ),
         With<bevy_alight_motion::masked_sprite::UnifiedEffectMarker>,
     >,
-    _materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
+    materials: Res<Assets<bevy_alight_motion::masked_sprite::UnifiedEffectMaterial>>,
 ) {
-    // Debug output for 长方形 2
-    #[cfg(not(feature = "video-comparison"))]
-    for (marker, transform, global_transform, _material_handle) in query.iter() {
-        if marker.label == "长方形 2"
-            && playback.current_time_ms > 2000.0
-            && playback.current_time_ms < 2200.0
-        {
-            let gt = global_transform.translation();
-            println!(
-                "[PosDebug] time={:.1}ms '{}' local=({:.1},{:.1}) global=({:.1},{:.1}) scale=({:.3},{:.3})",
-                playback.current_time_ms,
-                marker.label,
-                transform.translation.x,
-                transform.translation.y,
-                gt.x,
-                gt.y,
-                transform.scale.x,
-                transform.scale.y,
-            );
+    let trace_all = std::env::var_os("AM_TRACE_POS_ALL").is_some();
+    let labels = std::env::var_os("AM_TRACE_POS_LABELS").and_then(|value| value.into_string().ok());
+    if !trace_all && labels.is_none() {
+        return;
+    }
+    let from_ms = std::env::var("AM_TRACE_POS_FROM_MS")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let to_ms = std::env::var("AM_TRACE_POS_TO_MS")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .unwrap_or(f32::INFINITY);
+    if playback.current_time_ms < from_ms || playback.current_time_ms > to_ms {
+        return;
+    }
+
+    let wanted: Vec<&str> = labels
+        .as_deref()
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect();
+    let global_bounds = std::env::var("AM_TRACE_GLOBAL_BOUNDS")
+        .ok()
+        .and_then(|value| {
+            let parts: Vec<f32> = value
+                .split(',')
+                .filter_map(|part| part.trim().parse::<f32>().ok())
+                .collect();
+            (parts.len() == 4).then_some((parts[0], parts[1], parts[2], parts[3]))
+        });
+    for (animated, marker, transform, global_transform, material_handle) in query.iter() {
+        if !trace_all && !wanted.iter().any(|value| *value == marker.label) {
+            continue;
         }
+
+        let gt = global_transform.translation();
+        if let Some((min_x, min_y, max_x, max_y)) = global_bounds
+            && (gt.x < min_x || gt.x > max_x || gt.y < min_y || gt.y > max_y)
+        {
+            continue;
+        }
+
+        let local_time = animated.calc_local_time(playback.current_time_ms);
+        if !animated.is_active(local_time) {
+            continue;
+        }
+        let layer_time = animated.calc_layer_time(local_time);
+        let material_alpha = materials
+            .get(&material_handle.0)
+            .map(|material| material.uniform_data.color.w)
+            .unwrap_or(-1.0);
+        let (pixelate_enabled, replace_enabled) = materials
+            .get(&material_handle.0)
+            .map(|material| {
+                (
+                    material.uniform_data.pixelate_flags.x > 0.5,
+                    material.uniform_data.replace_color_flags.x > 0.5,
+                )
+            })
+            .unwrap_or((false, false));
+        println!(
+            "[PosDebug] time={:.1}ms label='{}' layer_id={} local_time={:.1} layer_time={:.4} local=({:.1},{:.1}) global=({:.1},{:.1}) scale=({:.3},{:.3}) alpha={:.4} pixelate={} replace={}",
+            playback.current_time_ms,
+            marker.label,
+            marker.id,
+            local_time,
+            layer_time,
+            transform.translation.x,
+            transform.translation.y,
+            gt.x,
+            gt.y,
+            transform.scale.x,
+            transform.scale.y,
+            material_alpha,
+            pixelate_enabled,
+            replace_enabled,
+        );
     }
 }
 

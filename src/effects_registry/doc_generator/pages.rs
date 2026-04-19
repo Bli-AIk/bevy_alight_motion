@@ -1,3 +1,15 @@
+//! Generates per-effect and index Markdown pages from the built-in effect registry.
+//!
+//! 根据内置效果注册表生成单效果页面和索引页 Markdown。
+//!
+//! The registry stores effect metadata in Rust definitions, but contributors and reviewers still
+//! need browsable documentation. The module turns `EffectDef` and `BuiltinDef` entries into concrete
+//! Markdown pages, including support level, field tables, related tests, and bilingual descriptions.
+//!
+//! 效果注册表把元数据保存在 Rust 定义里，但贡献者和审查者仍然需要可浏览的文档。
+//! 该模块会把 `EffectDef` 与 `BuiltinDef` 条目转换成真正的 Markdown 页面，包含支持等级、
+//! 字段表、关联测试和双语说明。
+
 use std::fmt::Write;
 use std::path::Path;
 

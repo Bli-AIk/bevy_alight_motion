@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 
 use crate::animation::AmAnimated;
-use crate::schema::{AmAnimatedFloat, AmAnimatedVec2};
+use crate::schema::AmAnimatedFloat;
 
 use super::components::*;
 use super::effects::*;
@@ -37,6 +37,7 @@ pub(crate) fn collect_image(
     let repeat_effect = extract_repeat_effect(&image.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&image.effects);
+    let linear_repeat_after_stretch_segment = linear_repeat_after_stretch_segment(&image.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&image.effects);
     let swing_effect = extract_swing_effect(&image.effects);
     let oscillate_effect = extract_oscillate_effect(&image.effects);
@@ -56,6 +57,7 @@ pub(crate) fn collect_image(
     let exposure_gamma_effect = extract_exposure_gamma_effect(&image.effects);
     let chromakey_effect = extract_chromakey_effect(&image.effects);
     let (width, height) = get_shape_size(&image.properties, "", &image.fill_type);
+    let size_animation = get_shape_size_animation(&image.properties, "");
 
     // Calculate anchor and position compensation
     let (anchor, comp_x, comp_y) = pivot_to_anchor_and_offset(pivot_x, pivot_y, width, height);
@@ -71,6 +73,7 @@ pub(crate) fn collect_image(
         id: image.id,
         label: image.label.clone(),
         parent: image.parent,
+        is_perspective_null: false,
         start_time: image.start_time,
         end_time: image.end_time,
         transform,
@@ -84,6 +87,7 @@ pub(crate) fn collect_image(
             pivot: image.transform.pivot.clone(),
             rotation: image.transform.rotation.clone(),
             scale: image.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: image.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
@@ -99,7 +103,7 @@ pub(crate) fn collect_image(
             effect_ainv: false,
             extra_transform2: vec![],
             font_y_offset: 0.0,
-            size: AmAnimatedVec2::default(),
+            size: size_animation,
             anchor_offset: Vec2::new(comp_x, comp_y),
             wipe_start: wipe_effect.start,
             wipe_end: wipe_effect.end,
@@ -204,6 +208,7 @@ pub(crate) fn collect_image(
             linear_repeat_invert: linear_repeat_effect.invert,
             linear_repeat_random_order: linear_repeat_effect.random_order,
             linear_repeat_seed: linear_repeat_effect.seed,
+            linear_repeat_after_stretch_segment,
             linear_repeat2: linear_repeat_effect2.map(Box::new),
             // Radial repeat effect
             radial_repeat_count: radial_repeat_effect.count.clone(),
@@ -344,8 +349,7 @@ pub(crate) fn collect_image(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: image.hidden,
     })

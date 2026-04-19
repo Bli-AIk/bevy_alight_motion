@@ -1,6 +1,18 @@
+//! Constructs unified effect materials for image and sprite-shape visuals.
+//! 为图片与 SpriteShape 可视对象构建统一效果材质。
+//!
+//! A large portion of imported effects are implemented in a single shader material rather than
+//! separate ECS systems. This file packs initial color, mask, wipe, stretch, blur, palette, and
+//! replace-color state into that material so spawned visuals start with the same authored effect
+//! configuration the animation systems will later update.
+//! 导入的很多效果不是单独 ECS 系统，而是统一收敛到一个 shader 材质里实现。这个文件负责把初始颜色、
+//! 遮罩、wipe、stretch、blur、调色板和替色等状态打包进材质，让新生成的可视对象从一开始就带着作者
+//! 设置好的效果配置，后续动画系统只需要持续更新即可。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams};
 
 use super::super::visual_helpers::compute_initial_mask_params;
@@ -21,6 +33,7 @@ pub(super) fn create_unified_material(
     fit_scale: f32,
     global_time_ms: u64,
     replace_color_params: Option<(Vec4, Vec4, Vec4, Vec4)>,
+    texture_source_contract: TextureSourceContract,
 ) -> Handle<crate::masked_sprite::UnifiedEffectMaterial> {
     use crate::masked_sprite::{UnifiedEffectMaterial, UnifiedEffectUniform};
 
@@ -28,6 +41,9 @@ pub(super) fn create_unified_material(
 
     let (initial_effect_flags_x, initial_mask_params, initial_mask2_flags_x, initial_mask2_params) =
         compute_initial_mask_params(mask_info, fit_scale, global_time_ms);
+
+    let mut source_flags = texture_source_contract.to_uniform_flags();
+    source_flags.w = color.alpha;
 
     let mut material = UnifiedEffectMaterial {
         uniform_data: UnifiedEffectUniform {
@@ -38,6 +54,7 @@ pub(super) fn create_unified_material(
             mesh_offset: mesh_offset.unwrap_or(Vec4::ZERO),
             mask2_params: initial_mask2_params,
             mask2_flags: Vec4::new(initial_mask2_flags_x, 0.0, 0.0, 0.0),
+            source_flags,
             ..default()
         },
         texture: Some(texture),

@@ -1,3 +1,11 @@
+//! Extracts motion-oriented effects that are not plain transforms.
+//! It covers swing, oscillation, jitter, spin, and related authored effects and
+//! maps them into parameter structs used later by the animation systems.
+//!
+//! 负责提取那些不属于基础 transform 的运动类效果。它覆盖 swing、
+//! oscillate、jitter、spin 等作者侧效果，并把它们映射成后续动画系统要使用的
+//! 参数结构。
+
 use crate::schema::{AmAnimatedFloat, AmEffect};
 
 #[derive(Debug, Clone, Default)]

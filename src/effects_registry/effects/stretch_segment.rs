@@ -60,8 +60,8 @@ define_effect! {
             type: FieldType::Float,
             support: Full,
             default: "0.0",
-            desc_zh: "分割线位置偏移（场景归一化坐标 offset/1000）",
-            desc_en: "Dividing line position offset (scene-normalized: offset/1000)",
+            desc_zh: "分割线位置偏移（像素，运行时除以1000归一化）",
+            desc_en: "Dividing line position offset (pixels, normalized /1000 at runtime)",
         },
         define_field! {
             name: "smooth",

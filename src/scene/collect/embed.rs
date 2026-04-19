@@ -1,3 +1,12 @@
+//! Collects embed-scene layers into pending runtime structures.
+//! It expands nested scenes, applies repeat-copy semantics, extends child
+//! lifecycles when needed, and packages the result so embed scenes behave like
+//! first-class layers in the outer timeline.
+//!
+//! 负责把嵌套场景图层收集成待生成的运行时结构。它会展开子场景、应用
+//! repeat copy 语义、在需要时延长子节点生命周期，并把结果打包成外层时间轴中的
+//! 一级图层表现。
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -97,6 +106,10 @@ fn collect_repeat_copies(
     }
 }
 
+/// Collects an embed-scene layer, expanding standard repeat copies and echo-KF
+/// overlays. Radial repeat is handled via RTT + shader pipeline instead.
+///
+/// 收集嵌入场景图层，展开标准重复副本和 echo-KF 叠加。径向重复通过 RTT + 着色器管线处理。
 pub(super) fn collect_embed_layer(
     pending: &mut Vec<PendingLayer>,
     embed: &AmEmbedScene,
@@ -109,6 +122,7 @@ pub(super) fn collect_embed_layer(
     let max_count = echokf.max_count();
 
     if !echokf.enabled || max_count == 0 {
+        // Check for standard repeat effect (entity copies)
         let repeat = effects::extract_repeat_effect(&embed.effects);
         let repeat_count = repeat.count.value.unwrap_or(0.0) as i32;
 
@@ -125,6 +139,9 @@ pub(super) fn collect_embed_layer(
             );
             return;
         }
+
+        // Radial repeat on embeds is handled via RTT + shader
+        // (params populated in collect_embed.rs, requires_composite set there)
 
         let pl = collect_embed_scene(embed, fonts, font_metrics, config, z);
         bevy::log::trace!(

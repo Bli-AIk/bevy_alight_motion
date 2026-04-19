@@ -5,10 +5,118 @@
 //! Effect parameter types and data structures.
 //! 效果参数类型和数据结构。
 
+use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
+
+use std::sync::atomic::{AtomicU32, Ordering};
+
+/// Adaptive RTT scale stored as f32 bits. Updated each frame by
+/// [`update_adaptive_rtt_scale`] based on active camera count.
+/// Initial value = 1.0f32 = 0x3F80_0000.
+static ADAPTIVE_RTT_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
+
+/// Combined RTT resolution scale: min(env fixed, adaptive).
+///
+/// - **Fixed** component: `AM_RTT_SCALE` env var (default 1.0, range 0.25–1.0).
+/// - **Adaptive** component: automatically adjusted per-frame based on the number
+///   of active RTT cameras. When cameras exceed a threshold, the scale shrinks
+///   linearly so total pixel throughput stays roughly constant.
+///
+/// 综合 RTT 分辨率缩放 = min(环境变量固定值, 自适应值)。
+pub fn rtt_resolution_scale() -> f32 {
+    let env_scale = env_rtt_scale();
+    let adaptive = f32::from_bits(ADAPTIVE_RTT_SCALE.load(Ordering::Relaxed));
+    env_scale.min(adaptive)
+}
+
+/// Fixed env-var scale, cached once at startup.
+fn env_rtt_scale() -> f32 {
+    use std::sync::OnceLock;
+    static SCALE: OnceLock<f32> = OnceLock::new();
+    *SCALE.get_or_init(|| {
+        std::env::var("AM_RTT_SCALE")
+            .ok()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(1.0)
+            .clamp(0.25, 1.0)
+    })
+}
+
+/// Camera count above which adaptive scaling starts reducing resolution.
+/// At the threshold the scale is 1.0; at 2× threshold it is 0.5; etc.
+///
+/// 超过此相机数量时，自适应缩放开始降低 RTT 分辨率。
+const ADAPTIVE_CAMERA_THRESHOLD: usize = 5;
+
+/// Update the adaptive RTT scale based on estimated total camera count.
+/// Uses a one-way ratchet: the scale can only decrease over the scene's
+/// lifetime, preventing texture resize oscillation that triggers costly
+/// GPU pipeline recompilation.
+///
+/// Called once per frame by [`adaptive_rtt_scale_system`].
+pub fn update_adaptive_rtt_scale(estimated_camera_count: usize) {
+    let target = if estimated_camera_count <= ADAPTIVE_CAMERA_THRESHOLD {
+        1.0
+    } else {
+        (ADAPTIVE_CAMERA_THRESHOLD as f32 / estimated_camera_count as f32).clamp(0.25, 1.0)
+    };
+    // One-way ratchet: only decrease, never increase.
+    loop {
+        let current_bits = ADAPTIVE_RTT_SCALE.load(Ordering::Relaxed);
+        let current = f32::from_bits(current_bits);
+        if target >= current {
+            break;
+        }
+        if ADAPTIVE_RTT_SCALE
+            .compare_exchange_weak(
+                current_bits,
+                target.to_bits(),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .is_ok()
+        {
+            break;
+        }
+    }
+}
+
+/// Apply [`rtt_resolution_scale`] to a pixel dimension, returning at least 1.
+pub fn scaled_rtt_dimension(dim: f32) -> u32 {
+    (dim * rtt_resolution_scale()).ceil().max(1.0) as u32
+}
+
+/// Create a render-target `Image` with `data: None` so Bevy allocates GPU
+/// memory without an expensive DMA zero-fill upload (~18 ms per 1080p RGBA8).
+/// The camera will overwrite every pixel on first render anyway.
+///
+/// 创建 `data: None` 的渲染目标纹理。跳过 DMA 零填充上传，GPU 仅分配显存。
+pub fn create_rtt_image(w: u32, h: u32, format: TextureFormat) -> Image {
+    Image {
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: w.max(1),
+                height: h.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        sampler: ImageSampler::nearest(),
+        data: None,
+        ..default()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WipeParams {
@@ -211,30 +319,12 @@ impl PingPongBuffer {
         }
     }
 
-    fn create_rtt(images: &mut Assets<Image>, size: Vec2, label: &'static str) -> Handle<Image> {
-        let extent = Extent3d {
-            width: size.x.max(1.0) as u32,
-            height: size.y.max(1.0) as u32,
-            depth_or_array_layers: 1,
-        };
-
-        let mut image = Image {
-            texture_descriptor: TextureDescriptor {
-                label: Some(label),
-                size: extent,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            ..default()
-        };
-        image.resize(extent);
-        images.add(image)
+    fn create_rtt(images: &mut Assets<Image>, size: Vec2, _label: &'static str) -> Handle<Image> {
+        images.add(create_rtt_image(
+            scaled_rtt_dimension(size.x),
+            scaled_rtt_dimension(size.y),
+            TextureFormat::Rgba8UnormSrgb,
+        ))
     }
 
     /// Get the current read (input) texture

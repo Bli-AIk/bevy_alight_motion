@@ -66,6 +66,7 @@ pub(crate) fn collect_shape(
     let repeat_effect = extract_repeat_effect(&shape.effects);
     let (linear_repeat_effect, linear_repeat_effect2) =
         extract_linear_repeat_effects(&shape.effects);
+    let linear_repeat_after_stretch_segment = linear_repeat_after_stretch_segment(&shape.effects);
     let radial_repeat_effect = extract_radial_repeat_effect(&shape.effects);
     let swing_effect = extract_swing_effect(&shape.effects);
     let oscillate_effect = extract_oscillate_effect(&shape.effects);
@@ -191,6 +192,7 @@ pub(crate) fn collect_shape(
         id: shape.id,
         label: shape.label.clone(),
         parent: shape.parent,
+        is_perspective_null: false,
         start_time: shape.start_time,
         end_time: shape.end_time,
         transform,
@@ -204,6 +206,7 @@ pub(crate) fn collect_shape(
             pivot: shape.transform.pivot.clone(),
             rotation: shape.transform.rotation.clone(),
             scale: shape.transform.scale.clone(),
+            scale_baked_into_mesh: needs_sdf,
             opacity: shape.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
@@ -243,7 +246,14 @@ pub(crate) fn collect_shape(
                 .map_or_else(AmAnimatedFloat::default, |s| s.smooth.clone()),
             blur_strength: gaussian_blur.strength,
             speed_multiplier: config.speed_multiplier,
-            element_speed: shape.speed,
+            // AM serializes media speed via SceneElement speedMap/timeMapping, which
+            // affects source-time trimming rather than transform/effect keyframes.
+            // Applying it to layer_time makes still media shapes animate too slowly.
+            element_speed: if shape.fill_type == "media" {
+                1.0
+            } else {
+                shape.speed
+            },
             scene_fps: config.scene_fps,
             embed_offset: Vec2::ZERO,
             inv_fit_scale: 1.0,
@@ -330,6 +340,7 @@ pub(crate) fn collect_shape(
             linear_repeat_invert: linear_repeat_effect.invert,
             linear_repeat_random_order: linear_repeat_effect.random_order,
             linear_repeat_seed: linear_repeat_effect.seed,
+            linear_repeat_after_stretch_segment,
             linear_repeat2: linear_repeat_effect2.map(Box::new),
             // Radial repeat effect
             radial_repeat_count: radial_repeat_effect.count.clone(),
@@ -471,8 +482,7 @@ pub(crate) fn collect_shape(
         from_deeply_nested_scene: config.nesting_depth > 1,
         echo_runtime: None,
         group_fill: None,
-        embed_requires_composite: false,
-        embed_dynamic_resolution: false,
+        embed_render_plan: None,
         embed_inner_total_time: None,
         hidden: shape.hidden,
     })

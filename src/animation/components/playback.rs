@@ -1,3 +1,12 @@
+//! Defines the global playback resource for Alight Motion timelines.
+//! It keeps the current clock, total duration, looping mode, and stop/play flags
+//! in one place so all animation systems can advance from a shared notion of
+//! project time.
+//!
+//! 定义了 Alight Motion 时间轴的全局播放资源。它把当前时钟、总时长、
+//! 循环模式以及停止/播放标志集中在一起，让所有动画系统都能建立在同一份项目时间
+//! 语义之上推进。
+
 use bevy::prelude::*;
 
 /// Resource to control animation playback.

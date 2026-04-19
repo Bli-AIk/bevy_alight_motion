@@ -1,3 +1,12 @@
+//! Defines the internal plugin that owns effect-buffer and RTT support.
+//! It bundles setup, update, clipping, and cleanup systems related to composite
+//! rendering so the main crate plugin can treat render-to-texture support as a
+//! single dependency.
+//!
+//! 定义了负责特效缓冲区和 RTT 支持的内部插件。它把相关的 setup、update、
+//! clipping 和 cleanup 系统打包起来，让主插件可以把 render-to-texture 支持当成
+//! 一个整体依赖来接入。
+
 use bevy::prelude::*;
 
 use crate::effects::{

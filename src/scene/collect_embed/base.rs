@@ -1,7 +1,13 @@
+//! Builds the shared base state for collected embed scenes.
+//! It computes the outer transform, retime information, and nested child layers
+//! before specialized embed features such as group fill or RTT strategy are added.
+//!
+//! 负责构建嵌套场景收集阶段的公共基础状态。它会先计算外层变换、retime
+//! 信息和嵌套子图层，然后再让 group fill、RTT 策略等更具体的嵌套场景特性叠加上去。
+
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::animation::{AmRetimeInfo, RetimeMode};
 use crate::loader::FontMetrics;
 
 use super::super::collect::collect_pending_layers;
@@ -46,98 +52,33 @@ pub(super) fn collect_embed_base(
         scale: Vec3::new(sx, sy, 1.0),
     };
 
-    let nested_z_spacing = config.z_spacing / 100.0;
-    let in_time = embed.in_time.unwrap_or(0) as f32;
-    let effective_speed = config.speed_multiplier * embed.speed;
-    let global_start = if config.speed_multiplier > 0.0 {
-        config.time_offset + embed.start_time as f32 / config.speed_multiplier
-    } else {
-        config.time_offset + embed.start_time as f32
-    };
-    let half_frame_ms = if config.render_fps > 0.0 {
-        500.0 / config.render_fps
-    } else {
-        0.0
-    };
-
-    let time_offset_with_in_time = if effective_speed > 0.0 {
-        global_start - in_time / effective_speed - half_frame_ms / effective_speed
-    } else {
-        global_start
-    };
-    let lifecycle_offset_with_in_time = global_start - in_time;
-    let nested_speed = effective_speed;
-
-    let retime_mode = RetimeMode::parse(&embed.scene.retime);
-    let retime_info = if retime_mode != RetimeMode::Off {
-        let container_duration = (embed.end_time - embed.start_time) as f32;
-        let nested_total = embed.scene.total_time as f32;
+    let timing = build_embed_scene_timing_plan(embed, config);
+    if let Some(retime) = &timing.nested_config.retime {
         bevy::log::debug!(
             "  [Retime] embed '{}': mode={:?}, container={}, total={}, speed={}",
             embed.label,
-            retime_mode,
-            container_duration,
-            nested_total,
-            effective_speed,
+            retime.mode,
+            retime.container_duration_ms,
+            retime.nested_total_time_ms,
+            retime.embed_speed,
         );
-        Some(AmRetimeInfo {
-            mode: retime_mode,
-            embed_global_start: global_start,
-            container_duration_ms: container_duration,
-            nested_total_time_ms: nested_total,
-            embed_speed: effective_speed,
-        })
-    } else {
-        config.retime.clone()
-    };
+    }
 
     bevy::log::trace!(
-        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
+        "  [TimeOffset] embed '{}': parent_offset={}, start_time={}, global_start={}, in_time={}, speed={}, nested_offset={}, lifecycle_offset={}, nested_speed={}",
         embed.label,
         config.time_offset,
         embed.start_time,
-        in_time,
-        effective_speed,
-        time_offset_with_in_time,
-        lifecycle_offset_with_in_time,
-        nested_speed
+        timing.global_start,
+        timing.in_time,
+        timing.effective_speed,
+        timing.nested_time_offset,
+        timing.nested_lifecycle_offset,
+        timing.nested_config.speed_multiplier
     );
 
-    let element_duration = (embed.end_time - embed.start_time) as f64;
-    let inner_total_time = embed.scene.total_time as f64;
-    let x_z = if inner_total_time > 0.0 {
-        (element_duration / inner_total_time).max(1.0).ceil() as u32
-    } else {
-        1
-    };
-    let coerce_at_least = if effective_speed < 0.99999 {
-        (1.0 / effective_speed.max(1e-6)).round().max(1.0) as u32
-    } else {
-        1
-    };
-    let parent_fphs = (config.render_fps * 100.0) as u32;
-    let nested_fphs = (parent_fphs * x_z * coerce_at_least * 16).min(192000);
-    let nested_render_fps = nested_fphs as f32 / 100.0;
-
-    let nested_config = AmSceneConfig {
-        canvas_width: embed.scene.width as f32,
-        canvas_height: embed.scene.height as f32,
-        time_offset: time_offset_with_in_time,
-        lifecycle_offset: lifecycle_offset_with_in_time as i32,
-        z_spacing: nested_z_spacing,
-        nesting_depth: config.nesting_depth + 1,
-        speed_multiplier: nested_speed,
-        scene_fps: embed.scene.fps as f32,
-        scene_total_time: embed.scene.total_time as f32,
-        retime: retime_info,
-        render_fps: nested_render_fps,
-        repeat_offset: Vec2::ZERO,
-        repeat_rotation_deg: 0.0,
-        repeat_scale_factor: 1.0,
-        ..config.clone()
-    };
-
-    let mut children = collect_pending_layers(&embed.scene, fonts, font_metrics, &nested_config);
+    let mut children =
+        collect_pending_layers(&embed.scene, fonts, font_metrics, &timing.nested_config);
 
     let inner_total = embed.scene.total_time as f32;
     for child in &mut children {
@@ -146,7 +87,7 @@ pub(super) fn collect_embed_base(
     }
 
     let embed_replace = extract_replace_color_effect(&embed.effects);
-    if embed_replace.old_color != Vec4::ZERO {
+    if embed.fill_type != "intrinsic" && embed_replace.old_color != Vec4::ZERO {
         for child in &mut children {
             if child.animated.replace_old_color == Vec4::ZERO {
                 child.animated.replace_old_color = embed_replace.old_color;

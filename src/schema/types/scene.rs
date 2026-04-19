@@ -1,3 +1,12 @@
+//! Defines the top-level scene schema parsed from Alight Motion XML.
+//! It models project metadata, media declarations, and the root layer list, so
+//! every later loader or runtime stage can work from one typed representation of
+//! the exported scene document.
+//!
+//! 定义了从 Alight Motion XML 解析出的顶层场景 schema。它描述项目元数据、
+//! 媒体声明以及根图层列表，让后续所有加载和运行时阶段都能建立在同一份类型化场景
+//! 文档表示之上。
+
 use serde::{Deserialize, Serialize};
 
 use super::layers::AmLayer;

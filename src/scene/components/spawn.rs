@@ -1,3 +1,15 @@
+//! Defines spawn-time layer payloads and filters for collected scene data.
+//!
+//! 定义收集后场景数据在生成阶段使用的图层载荷与过滤规则。
+//!
+//! Scene collection flattens XML layers into runtime-friendly records before anything is spawned.
+//! Contains those records: layer filters, spawn settings, the large `AmLayerSpec` enum,
+//! and the pending layer payload that later animation and visual systems consume.
+//!
+//! scene 收集阶段会先把 XML 图层整理成适合运行时消费的记录，然后才开始真正生成实体。
+//! 保存的就是这些记录：图层过滤器、生成设置、大型 `AmLayerSpec` 枚举，以及后续动画和视觉系统
+//! 都会消费的 pending layer 载荷。
+
 use bevy::prelude::*;
 
 use crate::animation::AmAnimated;
@@ -96,6 +108,7 @@ pub struct PendingLayer {
     pub id: u64,
     pub label: String,
     pub parent: u64,
+    pub is_perspective_null: bool,
     pub start_time: i32,
     pub end_time: i32,
     pub transform: Transform,
@@ -111,8 +124,7 @@ pub struct PendingLayer {
     pub from_deeply_nested_scene: bool,
     pub echo_runtime: Option<crate::animation::AmEchoRuntime>,
     pub group_fill: Option<crate::effects::AmGroupFill>,
-    pub embed_requires_composite: bool,
-    pub embed_dynamic_resolution: bool,
+    pub embed_render_plan: Option<crate::effects::EmbedSceneRenderPlan>,
     pub embed_inner_total_time: Option<f32>,
     pub hidden: bool,
 }
@@ -137,6 +149,7 @@ pub struct AmSceneConfig {
     pub repeat_rotation_deg: f32,
     pub repeat_scale_factor: f32,
     pub render_fps: f32,
+    pub comparison_frame_center_bias_ms: f32,
 }
 
 impl Default for AmSceneConfig {
@@ -160,6 +173,7 @@ impl Default for AmSceneConfig {
             repeat_rotation_deg: 0.0,
             repeat_scale_factor: 1.0,
             render_fps: 30.0,
+            comparison_frame_center_bias_ms: 0.0,
         }
     }
 }

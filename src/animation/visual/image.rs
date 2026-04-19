@@ -1,7 +1,20 @@
+//! Builds runtime visuals for image-backed layers.
+//!
+//! 为图片图层构建运行时可视对象。
+//!
+//! Handles the image branch of the spawn pipeline: it picks the correct
+//! texture handle, creates the anchored mesh, configures unified effect materials when needed, and
+//! marks the entity as having a visual payload. It is the bridge between collected image layer data
+//! and the concrete Bevy components that render it.
+//!
+//! 负责 spawn 管线里的图片分支：选择正确的纹理句柄、创建带锚点的 mesh、在需要时配置统一效果
+//! 材质，并标记实体已经拥有可视载荷。它是收集后的图片图层数据与真正 Bevy 渲染组件之间的桥梁。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::effects::TextureSourceContract;
 use crate::scene::{AmMaskInfo, AmPaletteMapParams, AmVisualSpawned};
 
 use super::material::create_unified_material;
@@ -67,12 +80,14 @@ pub(super) fn handle_image_visual(
             fit_scale,
             global_time_ms,
             replace_color_params,
+            TextureSourceContract::layer_texture(),
         );
 
         commands.entity(entity).insert((
             Mesh2d(mesh),
             MeshMaterial2d(material),
             UnifiedEffectMarker,
+            crate::animation::components::AmUnifiedMeshState::default(),
             AmVisualSpawned,
         ));
 

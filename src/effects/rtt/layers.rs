@@ -1,9 +1,22 @@
+//! Propagates render-layer assignments for embed-scene rendering.
+//! It keeps direct and composite embed content on the correct `RenderLayers`,
+//! and cascades those choices to descendants so cameras and child visuals render
+//! into the intended pass.
+//!
+//! 负责传播嵌套场景渲染所需的 render layer 分配。它会让 direct 和 composite
+//! 两种路径下的 embed 内容都处在正确的 `RenderLayers` 上，并把这个选择级联到子节点，
+//! 确保相机和视觉对象进入预期的渲染通道。
+
 use std::collections::{HashMap, HashSet};
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
 use super::{EmbedSceneRtt, RenderStrategy, propagate_to_descendants};
+
+fn dynamic_render_layer(layer: usize) -> RenderLayers {
+    RenderLayers::from_layers(&[layer])
+}
 
 pub fn propagate_render_layers_system(
     mut commands: Commands,
@@ -15,25 +28,31 @@ pub fn propagate_render_layers_system(
         Option<&RenderLayers>,
         Option<&Visibility>,
     )>,
+    mut composite_layers: Local<HashMap<Entity, usize>>,
+    mut direct_embeds: Local<HashSet<Entity>>,
 ) {
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
 
-    let composite_layers: HashMap<Entity, u8> = composite_embed_query
-        .iter()
-        .map(|(entity, rtt)| (entity, rtt.render_layer))
-        .collect();
+    composite_layers.clear();
+    composite_layers.extend(
+        composite_embed_query
+            .iter()
+            .map(|(entity, rtt)| (entity, rtt.render_layer)),
+    );
 
-    let direct_embeds: HashSet<Entity> = direct_embed_query
-        .iter()
-        .filter(|(_, strategy)| **strategy == RenderStrategy::Direct)
-        .map(|(entity, _)| entity)
-        .collect();
+    direct_embeds.clear();
+    direct_embeds.extend(
+        direct_embed_query
+            .iter()
+            .filter(|(_, strategy)| **strategy == RenderStrategy::Direct)
+            .map(|(entity, _)| entity),
+    );
 
     let mut updates = 0;
 
     for (content_entity, marker, current_layers, current_visibility) in content_query.iter() {
         let target_layer = if let Some(&rtt_layer) = composite_layers.get(&marker.embed_entity) {
-            RenderLayers::layer(rtt_layer as usize)
+            dynamic_render_layer(rtt_layer)
         } else if direct_embeds.contains(&marker.embed_entity) {
             RenderLayers::layer(0)
         } else {
@@ -76,6 +95,77 @@ pub fn propagate_render_layers_system(
     }
 }
 
+pub fn sync_new_sdf_child_render_layers_system(
+    mut commands: Commands,
+    new_sdf_query: Query<
+        (
+            Entity,
+            &ChildOf,
+            Option<&RenderLayers>,
+            Option<&Visibility>,
+            Option<&crate::scene::AmEmbedContentMarker>,
+        ),
+        Added<MeshMaterial2d<crate::sdf_material::SdfMaterial>>,
+    >,
+    parent_query: Query<(
+        Option<&RenderLayers>,
+        Option<&Visibility>,
+        Option<&crate::scene::AmEmbedContentMarker>,
+    )>,
+    force_hidden_query: Query<(), With<crate::scene::AmForceHidden>>,
+) {
+    let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
+
+    for (entity, child_of, current_layers, current_visibility, current_marker) in
+        new_sdf_query.iter()
+    {
+        let parent = child_of.parent();
+        let Ok((parent_layers, parent_visibility, parent_marker)) = parent_query.get(parent) else {
+            continue;
+        };
+
+        let mut entity_commands = commands.entity(entity);
+        let mut updated = false;
+
+        if let Some(parent_layers) = parent_layers
+            && current_layers != Some(parent_layers)
+        {
+            entity_commands.insert(parent_layers.clone());
+            updated = true;
+        }
+
+        let should_force_hidden = parent_visibility
+            .is_some_and(|visibility| *visibility == Visibility::Hidden)
+            || force_hidden_query.get(entity).is_ok();
+        if should_force_hidden {
+            if current_visibility != Some(&Visibility::Hidden) {
+                entity_commands.insert(Visibility::Hidden);
+                updated = true;
+            }
+        } else if current_visibility == Some(&Visibility::Hidden) {
+            entity_commands.insert(Visibility::Inherited);
+            updated = true;
+        }
+
+        if let Some(parent_marker) = parent_marker
+            && current_marker.is_none()
+        {
+            entity_commands.insert(parent_marker.clone());
+            updated = true;
+        }
+
+        if trace_renderlayers && updated {
+            bevy::log::warn!(
+                "[RenderLayers:SdfChildSync] child={:?} parent={:?} layers={:?} marker_embed={:?}",
+                entity,
+                parent,
+                parent_layers,
+                parent_marker.map(|marker| marker.embed_entity),
+            );
+        }
+    }
+}
+
 pub fn propagate_render_layers_to_children_system(
     mut commands: Commands,
     composite_embed_query: Query<(Entity, &EmbedSceneRtt)>,
@@ -94,8 +184,8 @@ pub fn propagate_render_layers_to_children_system(
             continue;
         };
 
-        let target_layer = RenderLayers::layer(rtt.render_layer as usize);
-        total_updates += propagate_to_descendants(
+        let target_layer = dynamic_render_layer(rtt.render_layer);
+        let updates = propagate_to_descendants(
             &mut commands,
             embed_entity,
             children,
@@ -106,6 +196,7 @@ pub fn propagate_render_layers_to_children_system(
             &force_hidden_query,
             &non_embed_query,
         );
+        total_updates += updates;
     }
 
     let layer_0 = RenderLayers::layer(0);

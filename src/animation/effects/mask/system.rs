@@ -1,3 +1,12 @@
+//! Applies active mask state to unified materials each frame.
+//! It looks up the currently active masks for a layer, chooses the correct mask
+//! mode, and then combines direct, embed-scene, and repeat-aware mask data into
+//! the final uniform payload used for rendering.
+//!
+//! 负责在每一帧把活动中的遮罩状态应用到统一材质上。它会查找当前图层正在
+//! 生效的遮罩，选择正确的 mask 模式，并把直接遮罩、嵌套场景遮罩和带重复信息的遮罩
+//! 合并成最终用于渲染的 uniform 数据。
+
 use bevy::prelude::*;
 
 use crate::animation::components::{AmAnimated, AmPlayback};
@@ -7,6 +16,16 @@ use super::compute::{compute_mask_params, mask_type_flag};
 use super::embed::apply_embed_mask_uv;
 use super::repeat::set_mask_repeat_uniforms;
 use super::trace::trace_mask_once;
+
+fn parse_disabled_mask_ids() -> Option<Vec<u64>> {
+    std::env::var_os("AM_DISABLE_MASK_IDS")
+        .and_then(|value| value.into_string().ok())
+        .map(|ids| {
+            ids.split(',')
+                .filter_map(|value| value.trim().parse::<u64>().ok())
+                .collect()
+        })
+}
 
 pub fn update_unified_mask_system(
     playback: Res<AmPlayback>,
@@ -30,12 +49,35 @@ pub fn update_unified_mask_system(
     };
     let fit_scale = 1.0 / pending.inv_fit_scale;
 
+    // Cache env var once per frame instead of per entity
+    let disabled_mask_ids = parse_disabled_mask_ids();
+
     let global_time = playback.current_time_ms as u64;
     for (mask_info, material_handle, marker, _entity_global_transform) in query.iter() {
         let active_masks = mask_info.get_active_masks(global_time);
         let Some(material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
+
+        if disabled_mask_ids
+            .as_ref()
+            .is_some_and(|ids| ids.contains(&marker.id))
+        {
+            material.uniform_data.effect_flags.x = 0.0;
+            material.uniform_data.mask2_flags.x = 0.0;
+            material.uniform_data.mask2_flags.y = 0.0;
+            material.uniform_data.mask2_flags.z = 0.0;
+            material.uniform_data.mask1_lr_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_lr2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+            material.uniform_data.mask1_repeat_params1 = Vec4::ZERO;
+            material.uniform_data.mask1_rr_params1 = Vec4::ZERO;
+            material.mask_texture = None;
+            bevy::log::warn!(
+                "[MaskTrace] layer_id={} mask disabled by AM_DISABLE_MASK_IDS",
+                marker.id
+            );
+            continue;
+        }
 
         trace_mask_once(format!("active-layer:{}", marker.id), || {
             let masks = active_masks

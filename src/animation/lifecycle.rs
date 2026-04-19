@@ -10,6 +10,7 @@
 
 use bevy::asset::Assets;
 use bevy::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::loader::AmProject;
 use crate::plugin::AmWhitePixel;
@@ -18,6 +19,56 @@ use crate::sdf_material::SdfMaterial;
 
 use super::components::AmPlayback;
 use super::spawn::process_pending_layers;
+
+/// Lightweight per-frame diagnostic: tracks wall-clock inter-frame time,
+/// logs when a frame exceeds the configurable threshold (default 16 ms).
+/// Enable with env `AM_FRAME_DIAG=1`. The system runs at the very top
+/// of the Update schedule so it captures the entire previous frame.
+///
+/// 轻量帧诊断：跟踪帧间 wall-clock 时间，当帧耗时超过阈值时输出日志。
+/// 通过环境变量 `AM_FRAME_DIAG=1` 启用。
+pub fn frame_diagnostics_system(playback: Res<AmPlayback>, query: Query<&AmPendingLayers>) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let enabled = *ENABLED.get_or_init(|| std::env::var_os("AM_FRAME_DIAG").is_some());
+    if !enabled {
+        return;
+    }
+
+    use std::sync::Mutex;
+    static PREV_INSTANT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+    static FRAME: AtomicU32 = AtomicU32::new(0);
+    static PREV_TIME_MS: Mutex<Option<f32>> = Mutex::new(None);
+
+    let now = std::time::Instant::now();
+    let frame = FRAME.fetch_add(1, Ordering::Relaxed);
+
+    let mut prev_guard = PREV_INSTANT.lock().unwrap();
+    if let Some(prev) = *prev_guard {
+        let dt_ms = now.duration_since(prev).as_secs_f64() * 1000.0;
+
+        // Detect loop transition
+        let mut prev_time_guard = PREV_TIME_MS.lock().unwrap();
+        let looped = prev_time_guard
+            .map(|pt| playback.current_time_ms < pt - 100.0)
+            .unwrap_or(false);
+        *prev_time_guard = Some(playback.current_time_ms);
+
+        // Count spawned entities
+        let spawned_count: usize = query.iter().map(|p| p.spawned_entities.len()).sum();
+
+        if dt_ms > 16.0 || looped {
+            let loop_marker = if looped { " [LOOP]" } else { "" };
+            bevy::log::warn!(
+                "[FRAME-DIAG] frame={} dt={:.2}ms time={:.1}ms spawned={}{loop_marker}",
+                frame,
+                dt_ms,
+                playback.current_time_ms,
+                spawned_count,
+            );
+        }
+    }
+    *prev_guard = Some(now);
+}
 
 /// System to manage layer lifecycle based on playback time.
 /// - Creates entities when layers enter their time range
@@ -45,6 +96,7 @@ pub fn manage_layer_lifecycle_system(
     )>,
 ) {
     let global_time = playback.current_time_ms;
+    let lifecycle_start = std::time::Instant::now();
 
     // Skip if force stopped
     if playback.force_stopped {
@@ -67,6 +119,8 @@ pub fn manage_layer_lifecycle_system(
             .map(|s| &s.filter)
             .unwrap_or(&crate::scene::LayerFilter::None);
 
+        let before_spawned = pending.spawned_entities.len();
+
         // Process all pending layers (including nested ones)
         process_pending_layers(
             &mut commands,
@@ -83,5 +137,21 @@ pub fn manage_layer_lifecycle_system(
             0.0, // root time offset
             filter,
         );
+
+        let after_spawned = pending.spawned_entities.len();
+        let lifecycle_ms = lifecycle_start.elapsed().as_secs_f64() * 1000.0;
+        let delta = after_spawned as i64 - before_spawned as i64;
+
+        // Log when lifecycle takes significant time or entities changed
+        if lifecycle_ms > 1.0 || delta != 0 {
+            bevy::log::info!(
+                "[Lifecycle] {:.2}ms, time={:.1}ms, entities: {} → {} (Δ{:+})",
+                lifecycle_ms,
+                global_time,
+                before_spawned,
+                after_spawned,
+                delta,
+            );
+        }
     }
 }

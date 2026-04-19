@@ -1,6 +1,16 @@
+//! Evaluates the linear-repeat effect for unified visuals.
+//! It turns the authored repeat count, offsets, ordering, color, and timing
+//! parameters into uniform values and any supporting mesh/entity updates required
+//! by the runtime.
+//!
+//! 负责为统一材质视觉对象求值 linear repeat 效果。它会把作者写下的重复次数、
+//! 位移、顺序、颜色和时间参数转换成 uniform 数据，并在运行时需要时同步更新相关
+//! 网格或辅助实体。
+
 use bevy::prelude::*;
 
 use crate::animation::components::AmAnimated;
+use crate::animation::effects::unified::DebugEnvCache;
 use crate::animation::interpolation::{interpolate_color, interpolate_float, interpolate_vec2};
 
 use super::java_random::compute_java_random_state_packed;
@@ -11,10 +21,36 @@ pub(crate) fn process_linear_repeat_effect(
     material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     orig_width: f32,
     orig_height: f32,
-    entity: Entity,
+    mesh2d: &bevy::mesh::Mesh2d,
     meshes: &mut Assets<Mesh>,
-    commands: &mut Commands,
+    env_cache: &DebugEnvCache,
+    element_scale: [f32; 2],
 ) {
+    let trace_enabled = env_cache.trace_linear_repeat(animated.layer_id);
+    let linear_repeat_after_stretch_segment = animated.linear_repeat_after_stretch_segment;
+    if env_cache.disable_linear_repeat {
+        if trace_enabled {
+            bevy::log::warn!(
+                "[LinearRepeatTrace] layer={} disabled by AM_DISABLE_LINEAR_REPEAT",
+                animated.layer_id
+            );
+        }
+        material.uniform_data.linear_repeat_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
+        material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
+        material.uniform_data.linear_repeat2_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+        material.uniform_data.linear_repeat2_params4 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat2_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        return;
+    }
+
     let has_linear_repeat = animated.linear_repeat_count.value.is_some_and(|v| v > 0.0)
         || animated
             .linear_repeat_count
@@ -27,6 +63,7 @@ pub(crate) fn process_linear_repeat_effect(
         material.uniform_data.linear_repeat_params3 = Vec4::new(0.0, 1.0, 0.0, 0.0);
         material.uniform_data.linear_repeat_params4 = Vec4::ZERO;
         material.uniform_data.linear_repeat_params5 = Vec4::ZERO;
+        material.uniform_data.linear_repeat_source_size = Vec4::ZERO;
         material.uniform_data.linear_repeat_fill_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
         material.uniform_data.linear_repeat2_params1 = Vec4::new(-1.0, 0.0, 0.0, 0.0);
         material.uniform_data.linear_repeat2_params2 = Vec4::new(0.0, 0.0, 1.0, 1.0);
@@ -38,9 +75,18 @@ pub(crate) fn process_linear_repeat_effect(
     }
 
     let count = interpolate_float(&animated.linear_repeat_count, layer_time).unwrap_or(0.0);
-    let position =
+    let raw_position =
         interpolate_vec2(&animated.linear_repeat_position, layer_time).unwrap_or([0.0, 0.0]);
-    let offset = interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+    let raw_offset =
+        interpolate_vec2(&animated.linear_repeat_offset, layer_time).unwrap_or([0.0, 0.0]);
+
+    // AM repeat displacement is in scene/parent space; our shader operates in element-local
+    // pixel_coord space. When the element has negative scale, the local axis is reversed
+    // relative to scene space, so we must flip the displacement to match.
+    let sign_x = element_scale[0].signum();
+    let sign_y = element_scale[1].signum();
+    let position = [raw_position[0] * sign_x, raw_position[1] * sign_y];
+    let offset = [raw_offset[0] * sign_x, raw_offset[1] * sign_y];
     let angle = interpolate_float(&animated.linear_repeat_angle, layer_time).unwrap_or(0.0);
     let scale = interpolate_float(&animated.linear_repeat_scale, layer_time).unwrap_or(1.0);
     let alpha = interpolate_float(&animated.linear_repeat_alpha, layer_time).unwrap_or(1.0);
@@ -79,10 +125,36 @@ pub(crate) fn process_linear_repeat_effect(
     material.uniform_data.linear_repeat_params5 = if animated.linear_repeat_random_order {
         let seed = interpolate_float(&animated.linear_repeat_seed, layer_time).unwrap_or(0.0);
         let (state_lo_bits, state_hi_bits) = compute_java_random_state_packed(seed);
-        Vec4::new(1.0, state_lo_bits, state_hi_bits, 0.0)
+        Vec4::new(
+            1.0,
+            state_lo_bits,
+            state_hi_bits,
+            linear_repeat_after_stretch_segment as u32 as f32,
+        )
     } else {
-        Vec4::ZERO
+        Vec4::new(
+            0.0,
+            0.0,
+            0.0,
+            linear_repeat_after_stretch_segment as u32 as f32,
+        )
     };
+    let linear_repeat_source_width = if linear_repeat_after_stretch_segment {
+        material.uniform_data.original_size.z.max(1.0)
+    } else {
+        orig_width
+    };
+    let linear_repeat_source_height = if linear_repeat_after_stretch_segment {
+        material.uniform_data.original_size.w.max(1.0)
+    } else {
+        orig_height
+    };
+    material.uniform_data.linear_repeat_source_size = Vec4::new(
+        linear_repeat_source_width,
+        linear_repeat_source_height,
+        0.0,
+        0.0,
+    );
     material.uniform_data.linear_repeat_fill_color = fill_color;
 
     let (has_lr2, count2_rounded, position2, offset2, angle2, scale2) =
@@ -90,6 +162,9 @@ pub(crate) fn process_linear_repeat_effect(
             let c2 = interpolate_float(&lr2.count, layer_time).unwrap_or(0.0);
             let p2 = interpolate_vec2(&lr2.position, layer_time).unwrap_or([0.0, 0.0]);
             let o2 = interpolate_vec2(&lr2.offset, layer_time).unwrap_or([0.0, 0.0]);
+            // Flip displacement for negative element scale (same reason as primary repeat)
+            let p2 = [p2[0] * sign_x, p2[1] * sign_y];
+            let o2 = [o2[0] * sign_x, o2[1] * sign_y];
             let a2 = interpolate_float(&lr2.angle, layer_time).unwrap_or(0.0);
             let s2 = interpolate_float(&lr2.scale, layer_time).unwrap_or(1.0);
             let al2 = interpolate_float(&lr2.alpha, layer_time).unwrap_or(1.0);
@@ -136,12 +211,75 @@ pub(crate) fn process_linear_repeat_effect(
             (false, 0.0, [0.0, 0.0], [0.0, 0.0], 0.0, 1.0)
         };
 
+    if trace_enabled {
+        let progress = calc_linear_repeat_progress(
+            0,
+            count_rounded.max(1.0) as i32,
+            start,
+            end,
+            phase,
+            overlap,
+            animated.linear_repeat_shape,
+            animated.linear_repeat_invert,
+            ease_in,
+            ease_out,
+        );
+        let progress2 = has_lr2.then(|| {
+            calc_linear_repeat_progress(
+                0,
+                count2_rounded.max(1.0) as i32,
+                material.uniform_data.linear_repeat2_params3.x,
+                material.uniform_data.linear_repeat2_params3.y,
+                material.uniform_data.linear_repeat2_params3.z,
+                material.uniform_data.linear_repeat2_params3.w,
+                if let Some(ref lr2) = animated.linear_repeat2 {
+                    lr2.shape
+                } else {
+                    0
+                },
+                if let Some(ref lr2) = animated.linear_repeat2 {
+                    lr2.invert
+                } else {
+                    false
+                },
+                material.uniform_data.linear_repeat2_params4.x,
+                material.uniform_data.linear_repeat2_params4.y,
+            )
+        });
+        bevy::log::warn!(
+            "[LinearRepeatTrace] layer={} layer_time={:.6} orig=({:.2},{:.2}) repeat_source=({:.2},{:.2}) count={:.3}->{:.0} pos=({:.2},{:.2}) off=({:.2},{:.2}) angle={:.2} scale={:.3} alpha={:.3} start={:.3} end={:.3} phase={:.3} overlap={:.3} stretch_before_repeat={} p0=({:.3},{:.3}) lr2={:?}",
+            animated.layer_id,
+            layer_time,
+            orig_width,
+            orig_height,
+            linear_repeat_source_width,
+            linear_repeat_source_height,
+            count,
+            count_rounded,
+            position[0],
+            position[1],
+            offset[0],
+            offset[1],
+            angle,
+            scale,
+            alpha,
+            start,
+            end,
+            phase,
+            overlap,
+            linear_repeat_after_stretch_segment,
+            progress.0,
+            progress.1,
+            progress2,
+        );
+    }
+
     let n = count_rounded as i32;
     let angle_rad = angle.to_radians();
-    let mut min_x = -orig_width / 2.0;
-    let mut max_x = orig_width / 2.0;
-    let mut min_y = -orig_height / 2.0;
-    let mut max_y = orig_height / 2.0;
+    let mut min_x = -linear_repeat_source_width / 2.0;
+    let mut max_x = linear_repeat_source_width / 2.0;
+    let mut min_y = -linear_repeat_source_height / 2.0;
+    let mut max_y = linear_repeat_source_height / 2.0;
     let interp_progress = 1.0;
 
     let compute_displacement = |idx: i32, count: i32, pos: [f32; 2], off: [f32; 2]| -> (f32, f32) {
@@ -200,8 +338,8 @@ pub(crate) fn process_linear_repeat_effect(
             let total_scale = cum_scale1 * cum_scale2;
             let total_angle = cum_angle1 + cum_angle2;
 
-            let half_w = orig_width / 2.0 * total_scale;
-            let half_h = orig_height / 2.0 * total_scale;
+            let half_w = linear_repeat_source_width / 2.0 * total_scale;
+            let half_h = linear_repeat_source_height / 2.0 * total_scale;
             let corners = [
                 (-half_w, -half_h),
                 (half_w, -half_h),
@@ -239,10 +377,15 @@ pub(crate) fn process_linear_repeat_effect(
     let new_height = max_y - min_y;
     material.uniform_data.original_size = Vec4::new(orig_width, orig_height, new_width, new_height);
 
-    let uv_min_x = min_x / orig_width + 0.5;
-    let uv_max_x = max_x / orig_width + 0.5;
-    let uv_at_bottom = 0.5 - min_y / orig_height;
-    let uv_at_top = 0.5 - max_y / orig_height;
+    // Keep repeat-space UVs in the same coordinate basis that the shader uses for
+    // `pixel_coord`. When repeat follows stretchsegment, that basis is the stretched
+    // source extent rather than the original media rect.
+    let repeat_uv_width = linear_repeat_source_width.max(1.0);
+    let repeat_uv_height = linear_repeat_source_height.max(1.0);
+    let uv_min_x = min_x / repeat_uv_width + 0.5;
+    let uv_max_x = max_x / repeat_uv_width + 0.5;
+    let uv_at_bottom = 0.5 - min_y / repeat_uv_height;
+    let uv_at_top = 0.5 - max_y / repeat_uv_height;
 
     let vertices = vec![
         [min_x, min_y, 0.0],
@@ -250,7 +393,6 @@ pub(crate) fn process_linear_repeat_effect(
         [max_x, max_y, 0.0],
         [min_x, max_y, 0.0],
     ];
-    let normals = vec![[0.0, 0.0, 1.0]; 4];
     let uvs = vec![
         [uv_min_x, uv_at_bottom],
         [uv_max_x, uv_at_bottom],
@@ -259,22 +401,9 @@ pub(crate) fn process_linear_repeat_effect(
     ];
     let indices = vec![0u32, 1, 2, 0, 2, 3];
 
-    let mut new_mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
-        bevy::asset::RenderAssetUsages::RENDER_WORLD | bevy::asset::RenderAssetUsages::MAIN_WORLD,
-    );
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    new_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    new_mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-    let new_mesh_handle = meshes.add(new_mesh);
-    commands
-        .entity(entity)
-        .insert(bevy::mesh::Mesh2d(new_mesh_handle));
+    super::overwrite_repeat_mesh(meshes, mesh2d, vertices, uvs, indices);
 }
 
-#[expect(dead_code)] // reason: kept as a CPU parity helper while SDF linear-repeat copy displacement is still partial
 fn calc_linear_repeat_progress(
     index: i32,
     count: i32,

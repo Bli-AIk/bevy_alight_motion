@@ -1,3 +1,12 @@
+//! Defines small plugin-level resources shared across the runtime.
+//! It covers project-to-window resolution policy and the single white-pixel image
+//! that solid-color visuals reuse, so startup code and scene spawning can depend
+//! on one centralized definition.
+//!
+//! 定义了运行时共用的少量插件级资源。它包含项目到窗口的分辨率策略，
+//! 以及纯色视觉对象复用的单白像素图片，让启动逻辑和场景生成都可以依赖同一份
+//! 集中定义。
+
 use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::prelude::*;
@@ -19,6 +28,28 @@ pub enum AmProjectResolution {
     /// Scale the project to fit within a fixed viewport size, preserving aspect ratio.
     /// Useful for headless rendering where no window is available.
     FixedSize(f32, f32),
+}
+
+/// Resource holding effect names that should be skipped at runtime.
+///
+/// Inserted by comparison tooling when `disabled_effects` is configured in
+/// `comparison_config.toml`.  The unified-effect system checks this resource
+/// and bypasses any listed effect (e.g. `"pixelate"`).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct DisabledEffects {
+    names: std::collections::HashSet<String>,
+}
+
+impl DisabledEffects {
+    pub fn new(names: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            names: names.into_iter().collect(),
+        }
+    }
+
+    pub fn contains(&self, effect_name: &str) -> bool {
+        self.names.contains(effect_name)
+    }
 }
 
 /// Resource holding the white pixel texture used for solid color sprites.

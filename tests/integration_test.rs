@@ -1,16 +1,30 @@
+//! Integration tests against real Alight Motion project archives.
+//! 针对真实 Alight Motion 工程归档的集成测试。
+//!
+//! These tests open actual `.amproj` files, inspect parsed scene structure, and print hierarchy data
+//! for debugging. They exist to catch importer regressions that only appear when the full archive
+//! format, XML parser, and schema model interact together.
+//! 这些测试会打开真实的 `.amproj` 文件，检查解析后的 scene 结构，并输出层级信息辅助调试。
+//! 它们用于捕获那些只有在完整归档格式、XML 解析器和 schema 模型共同作用时才会暴露出来的导入回归。
+
+mod common;
+
 use std::io::{Cursor, Read};
 
 #[test]
 fn test_6ex_layer_hierarchy() {
-    let amproj_path = "assets/projects/private/USER_chen_pi/6_ex.amproj";
+    let amproj_path = common::fixture_path("assets/projects/private/USER_chen_pi/6_ex.amproj");
 
     // Skip if file doesn't exist
-    if !std::path::Path::new(amproj_path).exists() {
-        eprintln!("Skipping test: amproj file not found at {}", amproj_path);
+    if !amproj_path.exists() {
+        eprintln!(
+            "Skipping test: amproj file not found at {}",
+            amproj_path.display()
+        );
         return;
     }
 
-    let bytes = std::fs::read(amproj_path).expect("Failed to read amproj");
+    let bytes = std::fs::read(&amproj_path).expect("Failed to read amproj");
     let cursor = Cursor::new(&bytes);
     let mut archive = zip::ZipArchive::new(cursor).expect("Failed to open ZIP");
 
@@ -71,10 +85,11 @@ fn test_6ex_layer_hierarchy() {
 
 #[test]
 fn test_parse_real_amproj() {
-    let amproj_path = "/home/aik/Downloads/am/新项目 24 20260105_182938.amproj";
+    let amproj_path =
+        std::path::Path::new("/home/aik/Downloads/am/新项目 24 20260105_182938.amproj");
 
     // Skip if file doesn't exist
-    if !std::path::Path::new(amproj_path).exists() {
+    if !amproj_path.exists() {
         eprintln!("Skipping test: amproj file not found");
         return;
     }

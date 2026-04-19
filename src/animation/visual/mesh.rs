@@ -1,3 +1,15 @@
+//! Creates anchored rectangle meshes for runtime visuals.
+//!
+//! 为运行时可视对象创建带锚点的矩形网格。
+//!
+//! Imported layers often use sprite-style quads, but their authored anchor and blur expansion rules
+//! do not line up with Bevy's defaults. The module centralizes mesh creation so every image, media,
+//! and sprite-shape visual uses the same anchor math and optional blur padding.
+//!
+//! 导入的图层大多会落成 sprite 风格的四边形，但作者设置的锚点和模糊外扩规则并不等同于 Bevy 默认行为。
+//! 该模块把 mesh 创建逻辑统一起来，让所有图片、媒体和 SpriteShape 可视对象都使用同一套锚点计算与
+//! 可选 blur padding。
+
 use bevy::asset::Assets;
 use bevy::prelude::*;
 
@@ -30,7 +42,7 @@ pub(super) fn create_anchored_rectangle_with_blur(
     blur_expansion: f32,
 ) -> Handle<Mesh> {
     if blur_expansion > 0.001 {
-        bevy::log::warn!(
+        bevy::log::trace!(
             "[MESH] create_anchored_rectangle_with_blur: size=({:.1},{:.1}) expansion={:.2}",
             width,
             height,

@@ -1,3 +1,12 @@
+//! Flattens nested pending-layer trees into spawnable layer lists.
+//! It remaps ids and parent links, preserves embed-specific offsets, and keeps
+//! masking and repeat-related relationships coherent after child layers are pulled
+//! up into a single pending collection.
+//!
+//! 负责把嵌套的待生成图层树拍平成可直接生成的图层列表。它会重映射 id 和
+//! 父子关系、保留嵌套场景特有的偏移信息，并在子图层被提升到同一层列表后继续维持
+//! 遮罩与 repeat 相关关系的正确性。
+
 use bevy::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
@@ -29,15 +38,26 @@ fn trace_flatten_once(key: impl Into<String>, message: impl FnOnce() -> String) 
 fn remap_flattened_child(
     child: &mut PendingLayer,
     id_mappings: &[(u64, u64)],
+    latest_id_mapping: &HashMap<u64, u64>,
     layer_id: u64,
     is_embed: bool,
     embed_bevy_pos: Vec3,
     child_embed_id: u64,
 ) {
     let original_parent = child.parent;
+    let preserve_scene_root_animation_parent =
+        original_parent != 0 && child.animated.parent_layer_id == 0 && !child.animated.has_parent;
 
     if original_parent == 0 {
         child.parent = layer_id;
+
+        // Direct children of an embed are Bevy-children for hierarchy/render-layer purposes,
+        // but their authored coordinates still belong to the nested scene root. Keep the
+        // animation-side parent semantics rooted at the scene so transform systems continue to
+        // convert local scene coordinates with canvas centering instead of treating them as
+        // parent-relative offsets.
+        child.animated.parent_layer_id = 0;
+        child.animated.has_parent = false;
 
         if is_embed {
             child.animated.embed_offset = Vec2::new(embed_bevy_pos.x, embed_bevy_pos.y);
@@ -50,21 +70,43 @@ fn remap_flattened_child(
             );
         }
     } else {
-        let new_parent_id = id_mappings
-            .iter()
-            .find(|(old, _new)| *old == original_parent)
-            .map(|(_, new)| *new);
+        let new_parent_id = latest_id_mapping
+            .get(&original_parent)
+            .copied()
+            .or_else(|| {
+                id_mappings
+                    .iter()
+                    .find(|(old, _new)| *old == original_parent)
+                    .map(|(_, new)| *new)
+            });
 
         if let Some(new_parent_id) = new_parent_id {
             child.parent = new_parent_id;
-            child.animated.parent_layer_id = new_parent_id;
+            if preserve_scene_root_animation_parent {
+                // This child was already flattened out of an inner embed once. Keep the Bevy
+                // hierarchy parent for transforms/render-layers, but preserve scene-root
+                // animation semantics so nested embed coordinates stay centered in their own
+                // authored canvas instead of being reinterpreted as raw parent-relative offsets.
+                child.animated.parent_layer_id = 0;
+            } else {
+                child.animated.parent_layer_id = new_parent_id;
+            }
         } else {
             bevy::log::trace!(
                 "[Flatten] Parent {} not found in mapping for '{}', keeping as-is",
                 original_parent,
                 child.label
             );
+            if !preserve_scene_root_animation_parent {
+                child.animated.parent_layer_id = child.parent;
+            }
         }
+
+        child.animated.has_parent = if preserve_scene_root_animation_parent {
+            false
+        } else {
+            child.animated.parent_layer_id != 0
+        };
     }
 
     if child.containing_embed_id != 0 {
@@ -77,10 +119,15 @@ fn remap_flattened_child(
                 layer_id
             );
         } else {
-            let new_embed_id = id_mappings
-                .iter()
-                .find(|(old, _new)| *old == child.containing_embed_id)
-                .map(|(_, new)| *new);
+            let new_embed_id = latest_id_mapping
+                .get(&child.containing_embed_id)
+                .copied()
+                .or_else(|| {
+                    id_mappings
+                        .iter()
+                        .find(|(old, _new)| *old == child.containing_embed_id)
+                        .map(|(_, new)| *new)
+                });
 
             if let Some(new_embed_id) = new_embed_id {
                 child.containing_embed_id = new_embed_id;
@@ -96,10 +143,15 @@ fn remap_flattened_child(
 
     if let Some(ref mut info) = child.mask_info {
         for mask in info.masks.iter_mut() {
-            let new_mask_id = id_mappings
-                .iter()
-                .find(|(old, _new)| *old == mask.mask_layer_id)
-                .map(|(_, new)| *new);
+            let new_mask_id = latest_id_mapping
+                .get(&mask.mask_layer_id)
+                .copied()
+                .or_else(|| {
+                    id_mappings
+                        .iter()
+                        .find(|(old, _new)| *old == mask.mask_layer_id)
+                        .map(|(_, new)| *new)
+                });
 
             if let Some(new_mask_id) = new_mask_id {
                 bevy::log::debug!(
@@ -111,10 +163,15 @@ fn remap_flattened_child(
                 mask.mask_layer_id = new_mask_id;
             }
 
-            let new_mask_parent = id_mappings
-                .iter()
-                .find(|(old, _new)| *old == mask.mask_parent_layer_id)
-                .map(|(_, new)| *new);
+            let new_mask_parent = latest_id_mapping
+                .get(&mask.mask_parent_layer_id)
+                .copied()
+                .or_else(|| {
+                    id_mappings
+                        .iter()
+                        .find(|(old, _new)| *old == mask.mask_parent_layer_id)
+                        .map(|(_, new)| *new)
+                });
 
             if let Some(new_parent_id) = new_mask_parent {
                 mask.mask_parent_layer_id = new_parent_id;
@@ -151,7 +208,15 @@ fn flatten_pending_layers_inner(
         layer_without_children.children = Vec::new();
 
         let should_decouple = embed_depth >= 1 && !is_embed;
-        let assigned_embed_id = if should_decouple { current_embed_id } else { 0 };
+        let assigned_embed_id = if should_decouple {
+            if layer_without_children.containing_embed_id != 0 {
+                layer_without_children.containing_embed_id
+            } else {
+                current_embed_id
+            }
+        } else {
+            0
+        };
         layer_without_children.containing_embed_id = assigned_embed_id;
 
         if should_decouple && assigned_embed_id != 0 {
@@ -167,14 +232,13 @@ fn flatten_pending_layers_inner(
         result.push(layer_without_children);
 
         if !children.is_empty() {
-            instance_counter += 1;
-            let current_instance = instance_counter;
-
             let (child_embed_id, child_depth) = if is_embed {
                 (layer_id, embed_depth + 1)
             } else {
                 (current_embed_id, embed_depth)
             };
+            instance_counter += 1;
+            let current_instance = instance_counter;
 
             let flattened_children = flatten_pending_layers_inner(
                 children,
@@ -206,19 +270,23 @@ fn flatten_pending_layers_inner(
                 .filter(|c| matches!(c.spec, AmLayerSpec::EmbedScene))
                 .map(|c| c.id)
                 .collect();
+            let mut latest_id_mapping = HashMap::new();
 
             for (idx, mut child) in flattened_children.into_iter().enumerate() {
+                let original_id = child.id;
                 let original_parent = child.parent;
                 let old_z = child.transform.translation.z;
                 child.id = id_mappings[idx].1;
                 remap_flattened_child(
                     &mut child,
                     &id_mappings,
+                    &latest_id_mapping,
                     layer_id,
                     is_embed,
                     embed_bevy_pos,
                     child_embed_id,
                 );
+                latest_id_mapping.insert(original_id, child.id);
 
                 let inherit_parent_z =
                     original_parent != 0 && !embed_parent_ids.contains(&original_parent);
@@ -259,10 +327,11 @@ fn flatten_pending_layers_inner(
 
 #[cfg(test)]
 mod tests {
-    use super::remap_flattened_child;
+    use super::{flatten_pending_layers, remap_flattened_child};
     use crate::animation::AmAnimated;
     use crate::scene::{AmBlendingMode, AmLayerSpec, AmMaskEntry, AmMaskInfo, PendingLayer};
     use bevy::prelude::*;
+    use std::collections::HashMap;
 
     fn make_pending_layer(
         id: u64,
@@ -270,14 +339,21 @@ mod tests {
         containing_embed_id: u64,
         label: &str,
     ) -> PendingLayer {
+        let animated = AmAnimated {
+            has_parent: parent != 0,
+            parent_layer_id: parent,
+            ..Default::default()
+        };
+
         PendingLayer {
             id,
             label: label.to_string(),
             parent,
+            is_perspective_null: false,
             start_time: 0,
             end_time: 0,
             transform: Transform::default(),
-            animated: AmAnimated::default(),
+            animated,
             spec: AmLayerSpec::Null,
             z_index: 0.0,
             children: Vec::new(),
@@ -289,8 +365,7 @@ mod tests {
             from_deeply_nested_scene: false,
             echo_runtime: None,
             group_fill: None,
-            embed_requires_composite: false,
-            embed_dynamic_resolution: false,
+            embed_render_plan: None,
             embed_inner_total_time: None,
             hidden: false,
         }
@@ -311,6 +386,7 @@ mod tests {
         remap_flattened_child(
             &mut child,
             &[(nested_embed_old_id, nested_embed_new_id)],
+            &HashMap::new(),
             current_embed_layer_id,
             true,
             Vec3::ZERO,
@@ -319,6 +395,7 @@ mod tests {
 
         assert_eq!(child.parent, nested_embed_new_id);
         assert_eq!(child.animated.parent_layer_id, nested_embed_new_id);
+        assert!(child.animated.has_parent);
         assert_eq!(child.containing_embed_id, nested_embed_new_id);
     }
 
@@ -335,6 +412,7 @@ mod tests {
         remap_flattened_child(
             &mut child,
             &[],
+            &HashMap::new(),
             current_embed_layer_id,
             true,
             Vec3::ZERO,
@@ -342,7 +420,39 @@ mod tests {
         );
 
         assert_eq!(child.parent, current_embed_layer_id);
+        assert_eq!(child.animated.parent_layer_id, 0);
+        assert!(!child.animated.has_parent);
         assert_eq!(child.containing_embed_id, current_embed_layer_id);
+    }
+
+    #[test]
+    fn remap_preserves_scene_root_animation_parent_across_reflatten() {
+        let current_embed_layer_id = 102_373_407;
+        let nested_embed_old_id = 12_372_971;
+        let nested_embed_new_id = 1_000_000_000_021;
+        let mut child = make_pending_layer(
+            12_372_970,
+            nested_embed_old_id,
+            nested_embed_old_id,
+            "nested-direct-child",
+        );
+        child.animated.parent_layer_id = 0;
+        child.animated.has_parent = false;
+
+        remap_flattened_child(
+            &mut child,
+            &[(nested_embed_old_id, nested_embed_new_id)],
+            &HashMap::new(),
+            current_embed_layer_id,
+            true,
+            Vec3::ZERO,
+            nested_embed_old_id,
+        );
+
+        assert_eq!(child.parent, nested_embed_new_id);
+        assert_eq!(child.animated.parent_layer_id, 0);
+        assert!(!child.animated.has_parent);
+        assert_eq!(child.containing_embed_id, nested_embed_new_id);
     }
 
     #[test]
@@ -367,6 +477,7 @@ mod tests {
         remap_flattened_child(
             &mut child,
             &[(original_mask_layer_id, remapped_mask_layer_id)],
+            &HashMap::new(),
             current_embed_layer_id,
             true,
             Vec3::ZERO,
@@ -377,5 +488,45 @@ mod tests {
         assert_eq!(masks.len(), 1);
         assert_eq!(masks[0].mask_layer_id, remapped_mask_layer_id);
         assert_eq!(masks[0].mask_parent_layer_id, current_embed_layer_id);
+    }
+
+    #[test]
+    fn flatten_keeps_repeated_descendants_in_separate_subtrees() {
+        fn make_branch(label: &str) -> PendingLayer {
+            let mut branch = make_pending_layer(100, 0, 0, &format!("branch-{label}"));
+            let mut leaf = make_pending_layer(101, 100, 0, &format!("leaf-{label}"));
+            leaf.transform.translation = Vec3::new(1.0, 0.0, 0.0);
+            branch.children = vec![leaf];
+            branch
+        }
+
+        let mut repeated_parent = make_pending_layer(10, 0, 0, "repeated-parent");
+        repeated_parent.children = vec![make_branch("left"), make_branch("right")];
+
+        let mut root = make_pending_layer(1, 0, 0, "root");
+        root.children = vec![repeated_parent];
+
+        let flattened = flatten_pending_layers(vec![root], 0);
+
+        let left_branch = flattened
+            .iter()
+            .find(|layer| layer.label == "branch-left")
+            .expect("left branch");
+        let right_branch = flattened
+            .iter()
+            .find(|layer| layer.label == "branch-right")
+            .expect("right branch");
+        let left_leaf = flattened
+            .iter()
+            .find(|layer| layer.label == "leaf-left")
+            .expect("left leaf");
+        let right_leaf = flattened
+            .iter()
+            .find(|layer| layer.label == "leaf-right")
+            .expect("right leaf");
+
+        assert_ne!(left_branch.id, right_branch.id);
+        assert_eq!(left_leaf.parent, left_branch.id);
+        assert_eq!(right_leaf.parent, right_branch.id);
     }
 }

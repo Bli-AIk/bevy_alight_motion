@@ -1,3 +1,12 @@
+//! Registers metadata for the built-in Oscillate effect.
+//! 注册内置 Oscillate 效果的元数据。
+//!
+//! Oscillate mixes direction modes, waveform type, and periodic motion parameters. The registry
+//! needs this definition so partial-support fields are documented explicitly instead of being hidden
+//! inside runtime-only assumptions.
+//! Oscillate 同时涉及方向模式、波形类型和周期运动参数。注册表需要这份定义，才能把部分支持的字段明确
+//! 地体现在文档里，而不是把这些差异藏在运行时假设中。
+
 use crate::define_effect;
 use crate::define_field;
 use crate::effects_registry::types::FieldType;

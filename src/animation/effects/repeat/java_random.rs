@@ -1,3 +1,11 @@
+//! Mirrors the Java `Random` seeding logic used by Alight Motion's
+//! repeat effects. The shader path needs identical pseudo-random ordering, so
+//! this helper computes the packed initial state from the authored seed value.
+//!
+//! 复现了 Alight Motion 重复效果依赖的 Java `Random` 初始化逻辑。
+//! 着色器路径需要和原始工具保持一致的伪随机顺序，因此这里会从作者输入的 seed
+//! 计算出打包后的初始随机状态。
+
 /// Compute Java Random initial state from AM seed value.
 /// Returns (state_lo_32bits, state_hi_16bits) packed as f32 via bitcast.
 pub(crate) fn compute_java_random_state_packed(seed: f32) -> (f32, f32) {

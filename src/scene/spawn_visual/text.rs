@@ -1,3 +1,11 @@
+//! Spawns text layers into Bevy text entities.
+//! It resolves fonts, initial text styling, positioning, and the runtime animation
+//! payload so authored AM text layers become Bevy text nodes that later systems
+//! can animate.
+//!
+//! 负责把文本图层生成成 Bevy 文本实体。它会解析字体、初始文本样式、位置以及
+//! 运行时动画载荷，让作者写下的 AM 文本图层变成后续系统可以继续驱动的 Bevy 文本节点。
+
 use bevy::prelude::*;
 use bevy::sprite::Text2d;
 use bevy::text::{TextColor, TextFont, TextLayout};
@@ -102,6 +110,7 @@ pub(crate) fn spawn_text(
             pivot: text.transform.pivot.clone(),
             rotation: text.transform.rotation.clone(),
             scale: text.transform.scale.clone(),
+            scale_baked_into_mesh: false,
             opacity: text.transform.opacity.clone(),
             canvas_width: config.canvas_width,
             canvas_height: config.canvas_height,
@@ -225,6 +234,7 @@ pub(crate) fn spawn_text(
             linear_repeat_invert: false,
             linear_repeat_random_order: false,
             linear_repeat_seed: AmAnimatedFloat::default(),
+            linear_repeat_after_stretch_segment: false,
             linear_repeat2: None,
             radial_repeat_count: AmAnimatedFloat::default(),
             radial_repeat_radius: AmAnimatedFloat::default(),

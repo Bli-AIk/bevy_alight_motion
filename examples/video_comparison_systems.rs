@@ -1,3 +1,12 @@
+//! Systems that compare rendered frames against reference video.
+//! 负责将渲染结果与参考视频逐帧对比的系统集合。
+//!
+//! This module is the execution core behind the example player's video-comparison mode. It drives
+//! capture timing, loads extracted reference frames, computes similarity scores, and writes the
+//! final report that decides whether the render matches the expected video.
+//! 这个模块是示例播放器视频对比模式的执行核心。它负责推进截图时机、加载提取出的参考帧、计算相似度，
+//! 并最终产出用来判定渲染是否符合预期视频的报告。
+
 use super::*;
 use crate::video_utils;
 use bevy::app::AppExit;
@@ -33,6 +42,12 @@ pub struct ComparisonState {
     pub skipped: bool,
     pub pending_time_ms: Option<f32>, // Time to set in next First schedule
     pub render_wait_frames: u32, // Frames to wait after applying time before allowing screenshot
+    pub settle_signature: Option<(usize, usize, usize)>,
+    pub settle_stable_frames: u32,
+    pub prime_capture_requests_remaining: u32,
+    pub expected_capture_serial: Option<u64>,
+    pub black_retry_captures_remaining: u32,
+    pub skipped_first_frame: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -72,6 +87,12 @@ impl Default for ComparisonState {
             skipped: false,
             pending_time_ms: None,
             render_wait_frames: 0,
+            settle_signature: None,
+            settle_stable_frames: 0,
+            prime_capture_requests_remaining: 0,
+            expected_capture_serial: None,
+            black_retry_captures_remaining: 0,
+            skipped_first_frame: false,
         }
     }
 }
@@ -88,7 +109,7 @@ fn default_avg_threshold() -> f32 {
 fn default_frame_threshold() -> f32 {
     0.95
 }
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone)]
 struct ProjectConfig {
     #[serde(default)]
     skip: bool,
@@ -104,10 +125,12 @@ struct ProjectConfig {
     max_failed_rate: f32,
     #[serde(default = "default_max_critical_rate")]
     max_critical_rate: f32,
+    #[serde(default)]
+    disabled_effects: Vec<String>,
 }
 
 // Override config with optional fields for proper inheritance from [default]
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone)]
 struct OverrideConfig {
     #[serde(default)]
     skip: Option<bool>,
@@ -117,6 +140,7 @@ struct OverrideConfig {
     min_frame_similarity: Option<f32>,
     max_failed_rate: Option<f32>,
     max_critical_rate: Option<f32>,
+    disabled_effects: Option<Vec<String>>,
 }
 
 impl OverrideConfig {
@@ -131,6 +155,10 @@ impl OverrideConfig {
                 .unwrap_or(base.min_frame_similarity),
             max_failed_rate: self.max_failed_rate.unwrap_or(base.max_failed_rate),
             max_critical_rate: self.max_critical_rate.unwrap_or(base.max_critical_rate),
+            disabled_effects: self
+                .disabled_effects
+                .clone()
+                .unwrap_or_else(|| base.disabled_effects.clone()),
         }
     }
 }
@@ -147,7 +175,11 @@ fn default_max_critical_rate() -> f32 {
     0.02
 }
 
-pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<ProjectFile>) {
+pub fn setup_comparison(
+    mut commands: Commands,
+    mut state: ResMut<ComparisonState>,
+    project_file: Res<ProjectFile>,
+) {
     // Prepare report dir
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -220,6 +252,16 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
         state.min_frame_similarity = settings.min_frame_similarity;
         state.max_failed_rate = settings.max_failed_rate;
         state.max_critical_rate = settings.max_critical_rate;
+
+        // Insert disabled effects resource for the rendering pipeline
+        if !settings.disabled_effects.is_empty() {
+            let effects_str = settings.disabled_effects.join(", ");
+            commands.insert_resource(bevy_alight_motion::plugin::DisabledEffects::new(
+                settings.disabled_effects.iter().cloned(),
+            ));
+            println!("[COMPARISON] Disabled effects: {}", effects_str.yellow());
+        }
+
         println!(
             "[COMPARISON] Config for '{}': avg_thresh={:.2}, frame_thresh={:.2}, frame_offset={:.2}, min_frame={:.2}, max_failed={:.1}%, max_critical={:.1}%",
             project_name,
@@ -281,8 +323,10 @@ pub fn setup_comparison(mut state: ResMut<ComparisonState>, project_file: Res<Pr
     // For ultra-short videos with only 1 frame, keep it to have something to compare.
     if frame_paths.len() > 1 {
         frame_paths.remove(0);
+        state.skipped_first_frame = true;
         println!("[COMPARISON] Skipped first reference frame (AM video export timing mismatch)");
     } else if frame_paths.len() == 1 {
+        state.skipped_first_frame = false;
         println!("[COMPARISON] Only 1 reference frame available, keeping it (ultra-short video)");
     }
 
@@ -329,6 +373,9 @@ pub fn ensure_paused_during_load(
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(4);
+        state.settle_signature = None;
+        state.settle_stable_frames = 0;
+        state.prime_capture_requests_remaining = 0;
         if trace_time {
             println!(
                 "[COMPARISON TIME] applied current_frame={} time_ms={:.1} render_wait_frames={}",
@@ -392,6 +439,53 @@ pub fn ensure_paused_during_load(
     }
 }
 
+#[cfg(feature = "headless-render")]
+fn request_headless_capture(
+    headless_capture_query: &Query<&headless_capture::HeadlessImageCopier>,
+    headless_capture_state: &mut headless_capture::HeadlessCaptureState,
+    pending_path: Option<PathBuf>,
+) -> Option<u64> {
+    let Ok(image_copier) = headless_capture_query.single() else {
+        return None;
+    };
+
+    let serial = headless_capture_state.next_serial;
+    headless_capture_state.next_serial += 1;
+    image_copier.request(serial);
+
+    if let Some(path) = pending_path {
+        headless_capture_state.pending_serial = Some(serial);
+        headless_capture_state.pending_path = Some(path);
+        headless_capture_state.completed_serial = None;
+    }
+
+    Some(serial)
+}
+
+#[cfg(feature = "headless-render")]
+fn continue_priming_capture(
+    state: &mut ComparisonState,
+    headless_capture_query: &Query<&headless_capture::HeadlessImageCopier>,
+    headless_capture_state: &mut headless_capture::HeadlessCaptureState,
+) -> bool {
+    if state.prime_capture_requests_remaining == 0 {
+        return headless_capture_state.discard_captures > 0
+            || headless_capture_state.pending_path.is_some();
+    }
+
+    let can_request_capture = headless_capture_state.pending_path.is_none()
+        && headless_capture_state.discard_captures == 0;
+    if can_request_capture
+        && request_headless_capture(headless_capture_query, headless_capture_state, None).is_some()
+    {
+        headless_capture_state.discard_captures =
+            headless_capture_state.discard_captures.saturating_add(1);
+        state.prime_capture_requests_remaining -= 1;
+    }
+
+    true
+}
+
 fn print_critical_failures(critical_failed_frames: &[(usize, f32)], min_frame_similarity: f32) {
     if critical_failed_frames.is_empty() {
         return;
@@ -418,6 +512,14 @@ pub fn comparison_loop(
     mut exit: MessageWriter<AppExit>,
     // Query to check if project is loaded
     project_query: Query<&AmProjectRoot>,
+    all_entities: Query<Entity>,
+    am_visuals: Query<Entity, With<AmVisualSpawned>>,
+    pending_layers_query: Query<&bevy_alight_motion::scene::AmPendingLayers>,
+    pending_strategy_query: Query<
+        Entity,
+        With<bevy_alight_motion::effects::NeedsStrategyEvaluation>,
+    >,
+    pending_rtt_query: Query<Entity, With<bevy_alight_motion::effects::NeedsEmbedSceneRtt>>,
     #[cfg(feature = "headless-render")] headless_capture_query: Query<
         &headless_capture::HeadlessImageCopier,
     >,
@@ -446,6 +548,18 @@ pub fn comparison_loop(
         .ok()
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(default_initial_wait_frames);
+    let default_prime_captures: u32 = if cfg!(feature = "headless-render") {
+        2
+    } else {
+        1
+    };
+    let default_black_retry_captures: u32 = if cfg!(feature = "headless-render") {
+        // Remote Vulkan/NVIDIA headless runs can return a few transient all-black
+        // captures even after the scene graph has otherwise settled.
+        6
+    } else {
+        0
+    };
 
     match state.stage {
         TestStage::Initializing => {} // Handled in setup
@@ -482,22 +596,24 @@ pub fn comparison_loop(
             }
 
             // Calculate time for this frame
-            // Add half-frame offset to match AM video export timing
-            // Use config frame_offset, or env var FRAME_OFFSET as override
-            // Note: We add 1 to current_frame because we skipped the first reference frame
-            // So current_frame=0 now corresponds to frame_000002.png which is at t = 1/fps
+            // When the first reference frame was skipped (multi-frame videos), add 1 so
+            // current_frame=0 maps to frame_000002 at t = 1/fps.
+            // For single-frame videos where we kept frame_000001, do NOT add 1
+            // so current_frame=0 maps to frame_000001 at t = 0.
             let frame_offset: f32 = std::env::var("FRAME_OFFSET")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(state.frame_offset);
-            let time_sec = (state.current_frame as f32 + 1.0 + frame_offset) / state.fps;
+            let skip_adjust = if state.skipped_first_frame { 1.0 } else { 0.0 };
+            let time_sec = (state.current_frame as f32 + skip_adjust + frame_offset) / state.fps;
             playback.playing = false; // Ensure paused
 
             // DON'T set time immediately - store it as pending to be applied in next frame's First schedule
             // This ensures lifecycle_system won't run with new time in this frame's Update schedule
-            // AM uses integer millisecond times via frameStartTimeFromFrameNumber which does
-            // integer division: (frame * 100000) / fphs. Floor to match AM's truncation.
-            let time_ms = (time_sec * 1000.0).floor();
+            // Comparison samples should align to the exported frame timestamp, not always the
+            // truncated frame-start millisecond. Rounding avoids systematically sampling a little
+            // too early on borderline layers (for example 16.67ms becoming 16ms).
+            let time_ms = (time_sec * 1000.0).round();
             state.pending_time_ms = Some(time_ms);
 
             // Debug: log time setting for frame 30
@@ -523,8 +639,45 @@ pub fn comparison_loop(
             // This is decremented in ensure_paused_during_load (First schedule)
             // and controls when lifecycle is allowed to run
             if state.render_wait_frames == 0 {
-                state.wait_frames += 1;
-                if state.wait_frames >= wait_frames {
+                let pending_setup =
+                    pending_strategy_query.iter().len() + pending_rtt_query.iter().len();
+                let tracked_spawned_layers: usize = pending_layers_query
+                    .iter()
+                    .map(|pending| pending.spawned_entities.len())
+                    .sum();
+                let settle_signature = (
+                    all_entities.iter().len(),
+                    am_visuals.iter().len(),
+                    tracked_spawned_layers,
+                );
+
+                if pending_setup > 0 {
+                    state.settle_signature = None;
+                    state.settle_stable_frames = 0;
+                    return;
+                }
+
+                if state.settle_signature == Some(settle_signature) {
+                    state.settle_stable_frames += 1;
+                } else {
+                    state.settle_signature = Some(settle_signature);
+                    state.settle_stable_frames = 1;
+                }
+
+                state.wait_frames = state.settle_stable_frames;
+                if state.settle_stable_frames >= wait_frames {
+                    state.settle_signature = None;
+                    state.settle_stable_frames = 0;
+                    state.prime_capture_requests_remaining =
+                        std::env::var("COMPARISON_PRIME_CAPTURES")
+                            .ok()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(default_prime_captures);
+                    state.black_retry_captures_remaining =
+                        std::env::var("COMPARISON_BLACK_RETRY_CAPTURES")
+                            .ok()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(default_black_retry_captures);
                     state.stage = TestStage::PrimingCapture;
                 }
             }
@@ -534,14 +687,12 @@ pub fn comparison_loop(
         TestStage::PrimingCapture => {
             #[cfg(feature = "headless-render")]
             {
-                if headless_capture_state.pending_path.is_none()
-                    && let Ok(image_copier) = headless_capture_query.single()
-                {
-                    let serial = headless_capture_state.next_serial;
-                    headless_capture_state.next_serial += 1;
-                    headless_capture_state.discard_captures =
-                        headless_capture_state.discard_captures.saturating_add(1);
-                    image_copier.request(serial);
+                if continue_priming_capture(
+                    &mut state,
+                    &headless_capture_query,
+                    &mut headless_capture_state,
+                ) {
+                    return;
                 }
             }
 
@@ -559,14 +710,15 @@ pub fn comparison_loop(
             // Trigger screenshot
             #[cfg(feature = "headless-render")]
             {
-                if headless_capture_state.pending_path.is_none()
-                    && let Ok(image_copier) = headless_capture_query.single()
-                {
-                    let serial = headless_capture_state.next_serial;
-                    headless_capture_state.next_serial += 1;
-                    image_copier.request(serial);
-                    headless_capture_state.pending_serial = Some(serial);
-                    headless_capture_state.pending_path = Some(shot_path);
+                if headless_capture_state.pending_path.is_none() {
+                    match request_headless_capture(
+                        &headless_capture_query,
+                        &mut headless_capture_state,
+                        Some(shot_path),
+                    ) {
+                        Some(serial) => state.expected_capture_serial = Some(serial),
+                        None => return,
+                    }
                 }
             }
             #[cfg(not(feature = "headless-render"))]
@@ -579,17 +731,51 @@ pub fn comparison_loop(
         }
 
         TestStage::WaitingForScreenshot => {
-            state.wait_frames += 1;
-            if state.wait_frames < 1 {
-                return;
+            #[cfg(feature = "headless-render")]
+            {
+                let Some(expected_serial) = state.expected_capture_serial else {
+                    return;
+                };
+                if headless_capture_state.completed_serial != Some(expected_serial) {
+                    return;
+                }
+                if !headless_capture_state.last_capture_has_non_black_rgb
+                    && state.black_retry_captures_remaining > 0
+                {
+                    state.black_retry_captures_remaining -= 1;
+                    state.prime_capture_requests_remaining = 1;
+                    state.expected_capture_serial = None;
+                    println!(
+                        "[COMPARISON] Retrying black headless capture for frame {} (remaining retries: {})",
+                        state.current_frame, state.black_retry_captures_remaining
+                    );
+                    state.stage = TestStage::PrimingCapture;
+                    return;
+                }
+                state.stage = TestStage::Comparing;
             }
 
-            state.stage = TestStage::Comparing;
+            #[cfg(not(feature = "headless-render"))]
+            {
+                state.wait_frames += 1;
+                if state.wait_frames < 1 {
+                    return;
+                }
+
+                state.stage = TestStage::Comparing;
+            }
         }
 
         TestStage::Comparing => {
             let frame_idx = state.current_frame;
             let shot_path = state.report_dir.join(format!("shot_{:06}.png", frame_idx));
+
+            #[cfg(feature = "headless-render")]
+            if let Some(expected_serial) = state.expected_capture_serial
+                && headless_capture_state.completed_serial != Some(expected_serial)
+            {
+                return;
+            }
 
             if !shot_path.exists() {
                 return;
@@ -600,7 +786,7 @@ pub fn comparison_loop(
                 Err(_) => return,
             };
 
-            let ref_path = &state.frame_paths[frame_idx];
+            let ref_path = state.frame_paths[frame_idx].clone();
 
             // Debug: log actual paths being compared for frame 30 and copy ref frame
             if frame_idx.is_multiple_of(5) {
@@ -612,12 +798,23 @@ pub fn comparison_loop(
                 );
                 // Copy reference frame to report dir for inspection
                 let ref_copy_path = state.report_dir.join(format!("ref_{:06}.png", frame_idx));
-                let _ = std::fs::copy(ref_path, &ref_copy_path);
+                let _ = std::fs::copy(&ref_path, &ref_copy_path);
             }
 
-            let ref_img = image::open(ref_path)
+            let ref_img = image::open(&ref_path)
                 .expect("Failed to open ref image")
                 .to_rgba8();
+
+            if std::env::var_os("AM_COMPARISON_TRACE_IMAGES").is_some() {
+                let cmp_shot_path = state
+                    .report_dir
+                    .join(format!("cmp_shot_{:06}.png", frame_idx));
+                let cmp_ref_path = state
+                    .report_dir
+                    .join(format!("cmp_ref_{:06}.png", frame_idx));
+                let _ = shot_img.save(&cmp_shot_path);
+                let _ = ref_img.save(&cmp_ref_path);
+            }
 
             // Compare
             let (result, diff_img) = video_utils::compare_images(&shot_img, &ref_img);
@@ -629,8 +826,10 @@ pub fn comparison_loop(
             // Check against configured frame threshold
             let threshold = state.frame_threshold;
 
-            // Save diff if similarity < threshold
+            // Save complete failure artifacts so remote GPU mismatches are debuggable offline.
             if similarity < threshold {
+                let ref_copy_path = state.report_dir.join(format!("ref_{:06}.png", frame_idx));
+                let _ = std::fs::copy(&ref_path, &ref_copy_path);
                 let diff_path = state.report_dir.join(format!("diff_{:06}.png", frame_idx));
                 diff_img.save(diff_path).unwrap();
                 println!(
@@ -656,6 +855,7 @@ pub fn comparison_loop(
             // Clean up shot to save space? Keep it for now.
 
             state.current_frame += 1;
+            state.expected_capture_serial = None;
             state.stage = TestStage::SettingTime;
         }
 

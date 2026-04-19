@@ -1,74 +1,83 @@
+//! Sets up RTT infrastructure for composite embed scenes.
+//! It creates render textures, cameras, render-layer assignments, and any
+//! matching sprite or mesh bindings needed so an embed scene can render off-screen
+//! and then be composited back into its parent layer.
+//!
+//! 负责为 composite 路径的嵌套场景建立 RTT 基础设施。它会创建渲染纹理、
+//! 相机、render layer 分配，以及与之对应的 sprite 或 mesh 绑定，让 embed scene
+//! 可以先离屏渲染，再被合成回父图层里。
+
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureFormat;
 
+use super::setup_helpers::{
+    PendingGroupFillTextureRefresh, composite_camera_order, dynamic_render_layer,
+    flatten_parented_rtt_to_world_enabled, insert_group_fill_debug_sprite, insert_group_fill_mesh,
+    mirrored_capture_root_enabled, parented_camera_uses_local_projection,
+    plain_rtt_uses_straight_alpha, selected_embed_rtt_format, sign_axis, trace_group_fill_mode,
+    trace_rtt_setup_enabled, unparented_camera_uses_full_scale,
+};
 use super::{
     AmEmbedMask, AmGroupFill, EMBED_RTT_CAMERA_FAR, EMBED_RTT_CAMERA_NEAR, EMBED_RTT_CAMERA_Z,
-    EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, GroupFillType,
-    NeedsEmbedSceneRtt,
+    EmbedSceneRenderLayerPool, EmbedSceneRtt, EmbedSceneRttCamera, EmbedSceneRttCaptureRoot,
+    GroupFillType, NeedsEmbedSceneRtt,
 };
 
-#[derive(Component)]
-pub(crate) struct PendingGroupFillTextureRefresh(u8);
-
-fn insert_group_fill_debug_sprite(
-    commands: &mut Commands,
+/// Count how many pending-RTT ancestors an entity has, used to sort embeds
+/// so parents are processed before children within a single frame.
+///
+/// 计算实体有多少个待处理 RTT 的祖先，用于排序使父级先于子级处理。
+fn embed_pending_depth(
     entity: Entity,
-    render_texture_handle: Handle<Image>,
-    scene_width: f32,
-    scene_height: f32,
-) {
-    commands.entity(entity).insert(Sprite {
-        image: render_texture_handle,
-        custom_size: Some(Vec2::new(scene_width, scene_height)),
-        ..default()
-    });
+    parent_query: &Query<&ChildOf>,
+    pending_query: &Query<(), With<NeedsEmbedSceneRtt>>,
+) -> u32 {
+    let mut depth = 0;
+    let mut current = entity;
+    while let Ok(child_of) = parent_query.get(current) {
+        current = child_of.parent();
+        if pending_query.get(current).is_ok() {
+            depth += 1;
+        }
+    }
+    depth
 }
 
-fn insert_group_fill_mesh(
-    commands: &mut Commands,
-    fill: &AmGroupFill,
+/// Walk up the Bevy hierarchy to find the nearest ancestor embed's render
+/// layer. Checks both committed `EmbedSceneRtt` and the local
+/// `processed_layers` map for parents processed earlier in the same frame.
+///
+/// 沿 Bevy 层级向上查找最近的 embed 祖先 render layer，
+/// 同时检查本帧已处理但尚未 commit 的父级。
+fn ancestor_embed_render_layer(
     entity: Entity,
-    render_texture_handle: Handle<Image>,
-    scene_width: f32,
-    scene_height: f32,
-    fill_materials: &mut Assets<crate::group_fill::GroupFillMaterial>,
-    meshes: &mut Assets<Mesh>,
-) {
-    use crate::group_fill::{GroupFillMaterial, GroupFillUniform};
-
-    let uniform = match &fill.fill_type {
-        GroupFillType::Color => GroupFillUniform {
-            fill_color: fill.fill_color,
-            gradient_config: Vec4::ZERO,
-            ..default()
-        },
-        GroupFillType::Gradient {
-            gradient_type,
-            start_color,
-            end_color,
-            points,
-        } => GroupFillUniform {
-            fill_color: Vec4::ONE,
-            gradient_config: Vec4::new(*gradient_type as f32, 0.0, 0.0, 0.0),
-            gradient_start_color: *start_color,
-            gradient_end_color: *end_color,
-            gradient_points: *points,
-        },
-        GroupFillType::None => unreachable!(),
-    };
-    let material = fill_materials.add(GroupFillMaterial {
-        uniform_data: uniform,
-        texture: Some(render_texture_handle),
-    });
-    let mesh = meshes.add(Rectangle::new(scene_width, scene_height));
-    commands.entity(entity).insert((
-        Mesh2d(mesh),
-        MeshMaterial2d(material),
-        PendingGroupFillTextureRefresh(8),
-    ));
+    parent_query: &Query<&ChildOf>,
+    embed_rtt_query: &Query<&EmbedSceneRtt>,
+    processed_layers: &std::collections::HashMap<Entity, usize>,
+) -> RenderLayers {
+    let mut current = entity;
+    while let Ok(child_of) = parent_query.get(current) {
+        let ancestor = child_of.parent();
+        if let Ok(ancestor_rtt) = embed_rtt_query.get(ancestor) {
+            return dynamic_render_layer(ancestor_rtt.render_layer);
+        }
+        if let Some(&ancestor_layer) = processed_layers.get(&ancestor) {
+            return dynamic_render_layer(ancestor_layer);
+        }
+        current = ancestor;
+    }
+    RenderLayers::layer(0)
 }
+
+/// Maximum number of RTT textures to create per frame.
+/// With `data: None` textures GPU allocation is near-free; a high budget lets
+/// all layers initialise in a single frame, avoiding a prolonged ramp-up that
+/// accumulates camera rendering work across many partially-active frames.
+///
+/// 每帧最多创建的 RTT 纹理数量。data:None 使 GPU 分配几乎免费，
+/// 高预算允许所有图层在一帧内初始化。
+const RTT_SETUP_BUDGET_PER_FRAME: usize = 64;
 
 pub fn setup_embed_scene_rtt_system(
     mut commands: Commands,
@@ -87,60 +96,160 @@ pub fn setup_embed_scene_rtt_system(
             Option<&AmGroupFill>,
             &crate::animation::AmAnimated,
             Option<&AmEmbedMask>,
-            Option<&crate::scene::AmMaskInfo>,
+            Option<&Children>,
         ),
         Without<EmbedSceneRtt>,
     >,
     parent_query: Query<&ChildOf>,
     embed_rtt_query: Query<&EmbedSceneRtt>,
+    pending_embed_rtt_query: Query<(), With<NeedsEmbedSceneRtt>>,
+    layer_spec_query: Query<&crate::scene::AmLayerSpec>,
+    mut entities_with_depth: Local<Vec<(Entity, u32)>>,
+    mut processed_layers: Local<std::collections::HashMap<Entity, usize>>,
 ) {
     let debug_show_fill_rtt = std::env::var_os("AM_GROUP_FILL_DEBUG_SHOW_RTT").is_some();
     let trace_renderlayers = std::env::var_os("AM_RENDERLAYER_TRACE").is_some();
     let parent_cameras_to_embed = std::env::var_os("AM_PARENT_RTT_CAMERA_TO_EMBED").is_some();
+    let render_texture_format = selected_embed_rtt_format();
 
-    for (
-        entity,
-        needs_rtt,
-        _embed_transform,
-        embed_global,
-        group_fill,
-        animated,
-        embed_mask,
-        mask_info,
-    ) in query.iter()
-    {
-        let Some(render_layer) = layer_pool.allocate() else {
-            bevy::log::warn!(
-                "No available render layers for embedScene {:?}. Max 31 concurrent embedScenes supported.",
-                entity
-            );
+    // Sort entities by nesting depth (parent before child) so all levels can be
+    // set up in a single pass within one frame instead of deferring child embeds.
+    // 按嵌套深度排序（父先子后），在单帧内一次遍历完成所有层级的 RTT 设置。
+    entities_with_depth.clear();
+    entities_with_depth.extend(query.iter().map(|(e, ..)| {
+        let depth = embed_pending_depth(e, &parent_query, &pending_embed_rtt_query);
+        (e, depth)
+    }));
+    entities_with_depth.sort_by_key(|&(_, depth)| depth);
+    processed_layers.clear();
+
+    let mut rtt_created_this_frame = 0usize;
+
+    for &(entity, _depth) in &*entities_with_depth {
+        // Enforce per-frame budget to avoid GPU upload stutter.
+        if rtt_created_this_frame >= RTT_SETUP_BUDGET_PER_FRAME {
+            break;
+        }
+
+        // Skip if parent is still pending AND wasn't processed in this pass.
+        if let Ok(child_of) = parent_query.get(entity) {
+            let parent = child_of.parent();
+            let parent_pending = pending_embed_rtt_query.get(parent).is_ok();
+            let parent_processed = processed_layers.contains_key(&parent);
+            if parent_pending && !parent_processed {
+                continue;
+            }
+        }
+
+        let Ok((
+            _,
+            needs_rtt,
+            embed_transform,
+            embed_global,
+            group_fill,
+            animated,
+            embed_mask,
+            children,
+        )) = query.get(entity)
+        else {
             continue;
         };
 
-        let render_texture = Image::new_target_texture(
-            needs_rtt.scene_width.max(1.0) as u32,
-            needs_rtt.scene_height.max(1.0) as u32,
-            TextureFormat::Rgba8UnormSrgb,
-            None,
-        );
-        let render_texture_handle = images.add(render_texture);
-        let render_layer_usize = render_layer as usize;
+        let Some(render_layer) = layer_pool.allocate() else {
+            bevy::log::warn!("No available render layer for embedScene {:?}.", entity);
+            continue;
+        };
 
-        let global_scale = embed_global.to_scale_rotation_translation().0;
+        let rtt_scale = crate::effects::rtt_resolution_scale();
+        let tex_w = (needs_rtt.scene_width.max(1.0) * rtt_scale).ceil() as u32;
+        let tex_h = (needs_rtt.scene_height.max(1.0) * rtt_scale).ceil() as u32;
+        let render_texture = crate::effects::create_rtt_image(tex_w, tex_h, render_texture_format);
+        let render_texture_handle = images.add(render_texture);
+        rtt_created_this_frame += 1;
+        let (global_scale, embed_rotation, embed_translation) =
+            embed_global.to_scale_rotation_translation();
         let effective_width = needs_rtt.scene_width * global_scale.x.abs();
         let effective_height = needs_rtt.scene_height * global_scale.y.abs();
-        let parent_camera_to_embed = parent_cameras_to_embed
-            && parent_query
-                .get(entity)
-                .ok()
-                .and_then(|child_of| embed_rtt_query.get(child_of.parent()).ok())
-                .is_some();
+        // Opt-in camera parenting avoids decomposing mirrored/rotated embed globals into a
+        // fresh TRS every frame. Letting the camera inherit the exact embed hierarchy is a more
+        // faithful path for parented embeds, especially when negative scales participate.
+        let parent_camera_to_embed = parent_cameras_to_embed && parent_query.get(entity).is_ok();
+        let mirrored_embed = embed_transform.scale.x < 0.0 || embed_transform.scale.y < 0.0;
+        let flatten_parented_rtt_to_world =
+            parent_camera_to_embed && flatten_parented_rtt_to_world_enabled();
+        let capture_root = if flatten_parented_rtt_to_world
+            || (parent_camera_to_embed && mirrored_embed && mirrored_capture_root_enabled())
+        {
+            let capture_root_transform = if flatten_parented_rtt_to_world {
+                Transform {
+                    translation: embed_translation,
+                    rotation: embed_rotation,
+                    scale: Vec3::new(global_scale.x, global_scale.y, 1.0),
+                }
+            } else {
+                Transform::from_scale(Vec3::new(
+                    sign_axis(embed_transform.scale.x),
+                    sign_axis(embed_transform.scale.y),
+                    1.0,
+                ))
+            };
+            let capture_root_entity = commands
+                .spawn((
+                    Name::new(format!("EmbedSceneRttCaptureRoot[layer={}]", render_layer)),
+                    EmbedSceneRttCaptureRoot {
+                        embed_entity: entity,
+                    },
+                    capture_root_transform,
+                    GlobalTransform::default(),
+                    Visibility::Inherited,
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                    dynamic_render_layer(render_layer),
+                ))
+                .id();
+            if !flatten_parented_rtt_to_world {
+                commands.entity(entity).add_child(capture_root_entity);
+            }
+
+            if let Some(children) = children {
+                commands
+                    .entity(capture_root_entity)
+                    .add_children(children.as_ref());
+            }
+
+            Some(capture_root_entity)
+        } else {
+            None
+        };
+        // Keep the existing world-space projection by default. An embed-local projection path is
+        // still available behind an env gate for debugging camera hierarchy issues.
+        let use_local_projection = (parent_camera_to_embed
+            && parented_camera_uses_local_projection())
+            || (!parent_camera_to_embed && unparented_camera_uses_full_scale());
+        let projection_width = if use_local_projection {
+            needs_rtt.scene_width.max(1.0)
+        } else {
+            effective_width.max(1.0)
+        };
+        let projection_height = if use_local_projection {
+            needs_rtt.scene_height.max(1.0)
+        } else {
+            effective_height.max(1.0)
+        };
 
         let initial_camera_transform = if parent_camera_to_embed {
             Transform::from_translation(Vec3::new(0.0, 0.0, EMBED_RTT_CAMERA_Z))
+        } else if unparented_camera_uses_full_scale() {
+            Transform {
+                translation: Vec3::new(
+                    embed_translation.x,
+                    embed_translation.y,
+                    EMBED_RTT_CAMERA_Z,
+                ),
+                rotation: embed_rotation,
+                scale: Vec3::new(global_scale.x, global_scale.y, 1.0),
+            }
         } else {
-            let (_, embed_rotation, embed_translation) =
-                embed_global.to_scale_rotation_translation();
             Transform {
                 translation: Vec3::new(
                     embed_translation.x,
@@ -151,6 +260,8 @@ pub fn setup_embed_scene_rtt_system(
                 scale: Vec3::new(global_scale.x.signum(), global_scale.y.signum(), 1.0),
             }
         };
+        let camera_order =
+            composite_camera_order(entity, render_layer, &parent_query, &layer_spec_query);
 
         let camera_entity = commands
             .spawn((
@@ -162,45 +273,47 @@ pub fn setup_embed_scene_rtt_system(
                 Camera2d,
                 Camera {
                     clear_color: ClearColorConfig::Custom(Color::NONE),
-                    order: -(render_layer as isize),
+                    order: camera_order,
                     ..default()
                 },
                 RenderTarget::Image(render_texture_handle.clone().into()),
                 Projection::Orthographic(OrthographicProjection {
                     scaling_mode: ScalingMode::Fixed {
-                        width: effective_width,
-                        height: effective_height,
+                        width: projection_width,
+                        height: projection_height,
                     },
                     near: EMBED_RTT_CAMERA_NEAR,
                     far: EMBED_RTT_CAMERA_FAR,
                     ..OrthographicProjection::default_2d()
                 }),
-                RenderLayers::layer(render_layer_usize),
+                dynamic_render_layer(render_layer),
                 initial_camera_transform,
             ))
             .id();
 
-        if parent_camera_to_embed {
+        if let Some(capture_root) = capture_root {
+            commands.entity(capture_root).add_child(camera_entity);
+        } else if parent_camera_to_embed {
             commands.entity(entity).add_child(camera_entity);
         }
 
-        let sprite_render_layer = if let Ok(child_of) = parent_query.get(entity) {
-            let parent = child_of.parent();
-            if let Ok(parent_rtt) = embed_rtt_query.get(parent) {
-                RenderLayers::layer(parent_rtt.render_layer as usize)
-            } else {
-                RenderLayers::layer(0)
-            }
-        } else {
-            RenderLayers::layer(0)
-        };
+        let sprite_render_layer =
+            ancestor_embed_render_layer(entity, &parent_query, &embed_rtt_query, &processed_layers);
 
         if trace_renderlayers {
             bevy::log::warn!(
-                "[RTT-SetupLayer] embed={:?} render_layer={} sprite_layer={:?}",
+                "[RTT-SetupLayer] embed={:?} render_layer={} sprite_layer={:?} camera_order={} parent_camera_to_embed={} dynamic_resolution={}",
                 entity,
                 render_layer,
                 sprite_render_layer,
+                camera_order,
+                parent_camera_to_embed,
+                needs_rtt.render_plan.dynamic_resolution,
+            );
+            bevy::log::warn!(
+                "[RTT-SetupTexture] embed={:?} format={:?}",
+                entity,
+                render_texture_format,
             );
         }
 
@@ -211,10 +324,12 @@ pub fn setup_embed_scene_rtt_system(
                 EmbedSceneRtt {
                     render_texture: render_texture_handle.clone(),
                     camera_entity,
+                    capture_root,
                     render_layer,
                     scene_width: needs_rtt.scene_width,
                     scene_height: needs_rtt.scene_height,
-                    dynamic_resolution: needs_rtt.dynamic_resolution,
+                    dynamic_resolution: needs_rtt.render_plan.dynamic_resolution,
+                    rtt_scale,
                 },
                 sprite_render_layer,
             ));
@@ -227,6 +342,13 @@ pub fn setup_embed_scene_rtt_system(
             );
         } else if let Some(fill) = group_fill.filter(|fill| fill.fill_type != GroupFillType::None) {
             if debug_show_fill_rtt {
+                trace_group_fill_mode(
+                    trace_renderlayers,
+                    entity,
+                    render_layer,
+                    "debug-sprite",
+                    &fill.fill_type,
+                );
                 insert_group_fill_debug_sprite(
                     &mut commands,
                     entity,
@@ -235,6 +357,13 @@ pub fn setup_embed_scene_rtt_system(
                     needs_rtt.scene_height,
                 );
             } else {
+                trace_group_fill_mode(
+                    trace_renderlayers,
+                    entity,
+                    render_layer,
+                    "mesh",
+                    &fill.fill_type,
+                );
                 insert_group_fill_mesh(
                     &mut commands,
                     fill,
@@ -247,7 +376,6 @@ pub fn setup_embed_scene_rtt_system(
                 );
             }
         } else {
-            let has_mask = mask_info.is_some_and(|m| !m.masks.is_empty());
             let has_wipe = animated.wipe_end.value != Some(1.0)
                 || !animated.wipe_end.keyframes.is_empty()
                 || animated.wipe_start.value.is_some()
@@ -283,8 +411,7 @@ pub fn setup_embed_scene_rtt_system(
             let has_replace_color = animated.replace_old_color.w > 0.0
                 || animated.replace_new_color.value.is_some()
                 || !animated.replace_new_color.keyframes.is_empty();
-            let needs_unified = has_mask
-                || has_wipe
+            let needs_unified = has_wipe
                 || has_stretch
                 || has_blur
                 || has_stretch2
@@ -301,32 +428,53 @@ pub fn setup_embed_scene_rtt_system(
                 || animated.rgb_split_enabled
                 || animated.chromakey_enabled;
 
-            if needs_unified {
-                let width = needs_rtt.scene_width;
-                let height = needs_rtt.scene_height;
-                let material = unified_materials.add(crate::masked_sprite::UnifiedEffectMaterial {
-                    uniform_data: crate::masked_sprite::UnifiedEffectUniform {
-                        color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-                        original_size: Vec4::new(width, height, width, height),
-                        ..default()
-                    },
-                    texture: Some(render_texture_handle),
-                    lift_comp_texture: None,
-                    mask_texture: None,
-                });
-                let mesh = meshes.add(Rectangle::new(width, height));
-                commands.entity(entity).insert((
-                    Mesh2d(mesh),
-                    MeshMaterial2d(material),
-                    crate::masked_sprite::UnifiedEffectMarker,
-                ));
-            } else {
-                commands.entity(entity).insert(Sprite {
-                    image: render_texture_handle,
-                    custom_size: Some(Vec2::new(needs_rtt.scene_width, needs_rtt.scene_height)),
-                    ..default()
-                });
+            let trace_replace_setup =
+                std::env::var_os("AM_TRACE_RTT_SETUP_REPLACE").is_some() && has_replace_color;
+            if trace_rtt_setup_enabled(animated.layer_id) || trace_replace_setup {
+                bevy::log::warn!(
+                    "[RTT-SetupTrace] layer={} render_layer={} replace_old={:?} replace_new_static={:?} has_replace={} needs_unified={} has_pixelate={} has_threshold={} has_solidcolor={}",
+                    animated.layer_id,
+                    render_layer,
+                    animated.replace_old_color,
+                    animated.replace_new_color.value,
+                    has_replace_color,
+                    needs_unified,
+                    has_pixelate,
+                    has_threshold,
+                    has_solidcolor,
+                );
             }
+
+            let width = needs_rtt.scene_width;
+            let height = needs_rtt.scene_height;
+            // Composite RTTs carry explicit offscreen/premultiplied contracts.
+            // Keep even plain embeds on the unified mesh path so dynamic-resolution UV sync and
+            // premultiplied-alpha sampling stay consistent across GPUs.
+            let texture_source_contract = if needs_unified || !plain_rtt_uses_straight_alpha() {
+                needs_rtt.render_plan.composite_source_contract
+            } else {
+                crate::effects::TextureSourceContract::layer_texture()
+            };
+            let mut source_flags = texture_source_contract.to_uniform_flags();
+            source_flags.w = 1.0;
+            let material = unified_materials.add(crate::masked_sprite::UnifiedEffectMaterial {
+                uniform_data: crate::masked_sprite::UnifiedEffectUniform {
+                    color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                    original_size: Vec4::new(width, height, width, height),
+                    source_flags,
+                    ..default()
+                },
+                texture: Some(render_texture_handle),
+                lift_comp_texture: None,
+                mask_texture: None,
+            });
+            let mesh = meshes.add(Rectangle::new(width, height));
+            commands.entity(entity).insert((
+                Mesh2d(mesh),
+                MeshMaterial2d(material),
+                crate::masked_sprite::UnifiedEffectMarker,
+                crate::animation::AmUnifiedMeshState::default(),
+            ));
         }
 
         bevy::log::trace!(
@@ -336,6 +484,8 @@ pub fn setup_embed_scene_rtt_system(
             needs_rtt.scene_width,
             needs_rtt.scene_height
         );
+
+        processed_layers.insert(entity, render_layer);
     }
 }
 
@@ -384,7 +534,7 @@ pub fn fix_nested_embed_render_layers_system(
         let Ok(parent_rtt) = embed_rtt_query.get(parent) else {
             continue;
         };
-        let expected_layer = RenderLayers::layer(parent_rtt.render_layer as usize);
+        let expected_layer = dynamic_render_layer(parent_rtt.render_layer);
         if *current_layers != expected_layer {
             if trace_renderlayers {
                 bevy::log::warn!(

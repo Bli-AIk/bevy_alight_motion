@@ -1,5 +1,15 @@
+//! Adjusts the render mesh used by unified-effect visuals.
+//! When blur, stretch, or other geometry-expanding effects are active, the code
+//! here grows or reshapes the quad so shader-side sampling has enough space and
+//! effect edges do not get clipped.
+//!
+//! 负责调整统一特效视觉对象使用的渲染网格。当 blur、stretch 或其他会
+//! 扩张几何边界的效果启用时，这里的逻辑会放大或重塑 quad，确保 shader 采样空间
+//! 足够，特效边缘不会被提前裁掉。
+
 use bevy::prelude::*;
 
+use super::DebugEnvCache;
 use crate::animation::components::AmAnimated;
 use crate::animation::interpolation::{interpolate_float, interpolate_vec2};
 
@@ -12,6 +22,7 @@ pub(super) fn update_blur_mesh(
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
 ) {
     let has_blur =
@@ -37,6 +48,7 @@ pub(super) fn update_blur_mesh(
             update_quad_mesh(
                 meshes,
                 mesh2d,
+                mesh_state,
                 [min_x, max_x, min_y, max_y],
                 [
                     -uv_expand_x,
@@ -65,8 +77,10 @@ pub(super) fn update_stretch_mesh(
     ancestor_scale: [f32; 2],
     orig_width: f32,
     orig_height: f32,
+    layer_scale: Vec2,
     global_transform: &GlobalTransform,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
 ) {
     if has_stretch {
@@ -120,10 +134,20 @@ pub(super) fn update_stretch_mesh(
         let new_width = orig_width + 2.0 * total_dx;
         let new_height = orig_height + 2.0 * total_dy;
 
+        // Convert screen-space dimensions to local-space for mesh vertices and shader.
+        // For SDF layers (layer_scale=1,1): no change.
+        // For non-SDF layers: mesh must be larger in local space so that
+        // mesh_local * Transform.scale covers the correct screen area.
+        let local_orig_w = orig_width / layer_scale.x;
+        let local_orig_h = orig_height / layer_scale.y;
+        let local_new_w = new_width / layer_scale.x;
+        let local_new_h = new_height / layer_scale.y;
+
         let global_scale = global_transform.to_scale_rotation_translation().0;
+        let _ = global_scale;
         trace_stretch_once(animated.layer_id, || {
             format!(
-                "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) mesh=({:.2},{:.2}) angle={:.2} stretch={:.2}",
+                "[STRETCH] layer_id={} parent={} canvas=({:.0},{:.0}) sprite=({:.2},{:.2}) scale=({:.4},{:.4}) ancestor=({:.4},{:.4}) global_scale=({:.4},{:.4}) orig=({:.2},{:.2}) screen_mesh=({:.2},{:.2}) local_mesh=({:.2},{:.2}) layer_scale=({:.4},{:.4}) angle={:.2} stretch={:.2}",
                 animated.layer_id,
                 animated.parent_layer_id,
                 scene_width,
@@ -140,14 +164,18 @@ pub(super) fn update_stretch_mesh(
                 orig_height,
                 new_width,
                 new_height,
+                local_new_w,
+                local_new_h,
+                layer_scale.x,
+                layer_scale.y,
                 angle_deg,
                 stretch_raw,
             )
         });
 
         let aa_pad: f32 = 4.0;
-        let half_nw = new_width / 2.0 + aa_pad;
-        let half_nh = new_height / 2.0 + aa_pad;
+        let half_nw = local_new_w / 2.0 + aa_pad;
+        let half_nh = local_new_h / 2.0 + aa_pad;
 
         if stretch_raw > 0.1 {
             bevy::log::trace!(
@@ -156,15 +184,15 @@ pub(super) fn update_stretch_mesh(
                 scene_width,
                 scene_height,
                 adj_stretch,
-                new_width,
-                new_height,
+                local_new_w,
+                local_new_h,
             );
         }
 
         material.uniform_data.stretch_params =
             Vec4::new(angle_rad, adj_stretch, offset_norm, smooth_raw);
         material.uniform_data.original_size =
-            Vec4::new(orig_width, orig_height, new_width, new_height);
+            Vec4::new(local_orig_w, local_orig_h, local_new_w, local_new_h);
         let stretch_sign_code =
             (if scale[0] < 0.0 { 1.0 } else { 0.0 }) + (if scale[1] < 0.0 { 2.0 } else { 0.0 });
         material.uniform_data.mesh_offset = Vec4::new(
@@ -173,6 +201,9 @@ pub(super) fn update_stretch_mesh(
             scene_width,
             scene_height,
         );
+        // Store layer_scale in solid_color_alpha.yz for the shader's local↔screen conversion
+        material.uniform_data.solid_color_alpha.y = layer_scale.x;
+        material.uniform_data.solid_color_alpha.z = layer_scale.y;
 
         if has_stretch_seg2 {
             material.uniform_data.stretch_seg2_params =
@@ -181,20 +212,25 @@ pub(super) fn update_stretch_mesh(
             material.uniform_data.stretch_seg2_params = Vec4::ZERO;
         }
 
-        let u_pad = aa_pad / new_width;
-        let v_pad = aa_pad / new_height;
+        let u_pad = aa_pad / local_new_w;
+        let v_pad = aa_pad / local_new_h;
         update_quad_mesh(
             meshes,
             mesh2d,
+            mesh_state,
             [-half_nw, half_nw, -half_nh, half_nh],
             [-u_pad, 1.0 + u_pad, -v_pad, 1.0 + v_pad],
         );
     } else {
         material.set_stretch_enabled(false);
+        // Default layer_scale for non-stretch layers
+        material.uniform_data.solid_color_alpha.y = 1.0;
+        material.uniform_data.solid_color_alpha.z = 1.0;
     }
 }
 
 pub(super) fn update_base_mesh(
+    material: &mut crate::masked_sprite::UnifiedEffectMaterial,
     animated: &AmAnimated,
     layer_time: f32,
     has_stretch: bool,
@@ -206,10 +242,13 @@ pub(super) fn update_base_mesh(
     orig_width: f32,
     orig_height: f32,
     mesh2d: &bevy::mesh::Mesh2d,
+    mesh_state: &mut crate::animation::components::AmUnifiedMeshState,
     meshes: &mut Assets<Mesh>,
+    env_cache: &DebugEnvCache,
 ) {
     if !has_stretch && !has_blur {
-        let (s2_expand_x, s2_expand_y, s2_uv_min_x, s2_uv_min_y) =
+        let trace_layer = env_cache.trace_effect(animated.layer_id);
+        let (s2_uv_expand_x, s2_uv_expand_y, s2_uv_min_x, s2_uv_min_y) =
             if has_stretch2 && !animated.stretch2_content_only && (s2_scale - 1.0).abs() > 0.001 {
                 let cos_a = s2_angle_rad.cos();
                 let sin_a = s2_angle_rad.sin();
@@ -233,8 +272,14 @@ pub(super) fn update_base_mesh(
                 (1.0, 1.0, 0.0, 0.0)
             };
 
-        let half_w = orig_width / 2.0 * s2_expand_x;
-        let half_h = orig_height / 2.0 * s2_expand_y;
+        // AM's stretch2 grows the visible footprint more aggressively than the raw UV bbox.
+        // Keep UV remap conservative, but give the mesh twice the overflow so late-frame bars
+        // are not clipped back to the unstretched thickness.
+        let s2_mesh_expand_x = 1.0 + (s2_uv_expand_x - 1.0) * 2.0;
+        let s2_mesh_expand_y = 1.0 + (s2_uv_expand_y - 1.0) * 2.0;
+
+        let half_w = orig_width / 2.0 * s2_mesh_expand_x;
+        let half_h = orig_height / 2.0 * s2_mesh_expand_y;
 
         let orig_size = interpolate_vec2(&animated.size, 0.0).unwrap_or([100.0, 100.0]);
         let orig_w = orig_size[0].abs().max(1.0);
@@ -298,16 +343,30 @@ pub(super) fn update_base_mesh(
         );
         let uv_exp_x = total_expansion / orig_width;
         let uv_exp_y = total_expansion / orig_height;
-        update_quad_mesh(
-            meshes,
-            mesh2d,
-            [lx, rx, by, ty],
-            [
-                s2_uv_min_x - uv_exp_x,
-                (s2_uv_min_x + s2_expand_x) + uv_exp_x,
-                (1.0 - s2_uv_min_y) - s2_expand_y - uv_exp_y,
-                (1.0 - s2_uv_min_y) + uv_exp_y,
-            ],
-        );
+        let bounds = [lx, rx, by, ty];
+        let mesh_width = rx - lx;
+        let mesh_height = ty - by;
+        let uv_rect = [
+            s2_uv_min_x - uv_exp_x,
+            (s2_uv_min_x + s2_uv_expand_x) + uv_exp_x,
+            (1.0 - s2_uv_min_y) - s2_uv_expand_y - uv_exp_y,
+            (1.0 - s2_uv_min_y) + uv_exp_y,
+        ];
+        if trace_layer {
+            bevy::log::warn!(
+                "[UnifiedMeshTrace] layer={} orig=({:.1},{:.1}) anchor_offset=({:.1},{:.1}) total_expansion={:.3} bounds={:?} uv_rect={:?}",
+                animated.layer_id,
+                orig_width,
+                orig_height,
+                animated.anchor_offset.x,
+                animated.anchor_offset.y,
+                total_expansion,
+                bounds,
+                uv_rect
+            );
+        }
+        material.uniform_data.original_size =
+            Vec4::new(orig_width, orig_height, mesh_width, mesh_height);
+        update_quad_mesh(meshes, mesh2d, mesh_state, bounds, uv_rect);
     }
 }

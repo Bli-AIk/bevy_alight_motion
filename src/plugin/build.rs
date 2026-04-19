@@ -1,16 +1,27 @@
+//! Assembles the Bevy-side runtime for `bevy_alight_motion`.
+//! It is the internal plugin wiring layer: material plugins, asset loaders,
+//! core resources, startup hooks, lifecycle system ordering, animation updates,
+//! and post-update cleanup are all registered here so the public plugin surface
+//! can stay thin.
+//!
+//! 负责组装 `bevy_alight_motion` 的 Bevy 运行时。它是内部插件接线层：
+//! 材质插件、资产加载器、核心资源、启动钩子、生命周期系统顺序、动画更新以及
+//! 后处理清理都在这里注册，从而让公开插件入口保持精简。
+
 use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 
 use crate::animation::{
-    AmPlayback, advance_playback_system, animate_am_camera_system, animate_counter_system,
-    animate_opacity_system, animate_path_repeat_system, animate_rtt_blur_system,
-    animate_sdf_opacity_system, animate_sdf_repeat_system, animate_sdf_scale_system,
-    animate_sdf_stretch_system, animate_size_system, animate_text_opacity_system,
-    animate_text_progress_system, animate_text_spacing_system, animate_transform_system,
-    animate_unified_effect_system, apply_mask_clipping_system, apply_parenthelper_system,
-    compensate_sdf_ancestor_scale_for_children_system, compensate_sdf_parent_scale_system,
-    debug_layer_global_z_system, fix_rtl_line_alignment_system, manage_layer_lifecycle_system,
-    update_echo_runtime_system, update_sdf_mask_system, update_unified_mask_system,
+    AmPlayback, ParenthelperScaleContributions, advance_playback_system, animate_am_camera_system,
+    animate_counter_system, animate_opacity_system, animate_path_repeat_system,
+    animate_rtt_blur_system, animate_sdf_opacity_system, animate_sdf_repeat_system,
+    animate_sdf_scale_system, animate_sdf_stretch_system, animate_size_system,
+    animate_text_opacity_system, animate_text_progress_system, animate_text_spacing_system,
+    animate_transform_system, animate_unified_effect_system, apply_mask_clipping_system,
+    apply_parenthelper_system, compensate_sdf_ancestor_scale_for_children_system,
+    compensate_sdf_parent_scale_system, debug_layer_global_z_system, fix_rtl_line_alignment_system,
+    frame_diagnostics_system, manage_layer_lifecycle_system, update_echo_runtime_system,
+    update_sdf_mask_system, update_unified_mask_system,
 };
 use crate::effects::EffectRenderPlugin;
 use crate::gaussian_blur::{GaussianBlurHMaterial, GaussianBlurPlugin, GaussianBlurVMaterial};
@@ -37,7 +48,7 @@ pub(super) fn build_plugin(app: &mut App) {
         .init_asset_loader::<AlightMotionLoader>()
         .init_resource::<AmPlayback>()
         .init_resource::<AmProjectResolution>()
-        .init_resource::<crate::effects::LiftCompositeState>()
+        .init_resource::<ParenthelperScaleContributions>()
         .add_systems(Startup, setup_white_pixel_system)
         .add_systems(Startup, load_system_fonts_for_fallback)
         .add_systems(Update, trace_asset_counts_system);
@@ -62,55 +73,60 @@ fn configure_update_sets(app: &mut App) {
 fn register_lifecycle_systems(app: &mut App) {
     use bevy::ecs::schedule::ApplyDeferred;
 
+    // Frame-level diagnostics — runs before everything else so it
+    // captures the previous frame's total wall-clock time.
+    app.add_systems(
+        Update,
+        frame_diagnostics_system.before(AlightMotionSystemSet::Lifecycle),
+    );
+
     app.add_systems(
         Update,
         (
             spawn_loaded_projects_system,
+            ApplyDeferred,
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,
             crate::effects::evaluate_render_strategy_system,
             ApplyDeferred,
+            crate::effects::adaptive_rtt_scale_system,
             crate::effects::setup_embed_scene_rtt_system,
+            ApplyDeferred,
+            crate::effects::sync_rtt_capture_root_system,
             ApplyDeferred,
             crate::effects::fix_nested_embed_render_layers_system,
             crate::effects::propagate_render_layers_system,
+            crate::effects::sync_new_sdf_child_render_layers_system,
             crate::effects::propagate_render_layers_to_children_system,
             crate::effects::refresh_group_fill_material_texture_system,
-            ApplyDeferred,
-            crate::effects::setup_lift_composite_system,
-            crate::effects::propagate_lift_render_layers_system,
-            crate::effects::update_lift_comp_material_system,
         )
             .chain()
             .in_set(AlightMotionSystemSet::Lifecycle),
     );
-}
 
-fn register_animation_systems(app: &mut App) {
     app.add_systems(
         Update,
         (
-            update_echo_runtime_system,
-            animate_transform_system,
-            compensate_sdf_parent_scale_system,
-            animate_am_camera_system,
-            animate_size_system,
-            animate_sdf_stretch_system,
-            animate_sdf_scale_system,
-            animate_opacity_system,
-            animate_sdf_opacity_system,
-            animate_text_opacity_system,
-            fix_rtl_line_alignment_system,
-            animate_counter_system,
-            animate_text_spacing_system,
-            animate_text_progress_system,
-            animate_unified_effect_system,
-            animate_path_repeat_system,
-            animate_rtt_blur_system,
-            apply_mask_clipping_system,
-            hot_reload_shader_system,
+            crate::effects::setup_lift_composite_system,
+            ApplyDeferred,
+            crate::effects::propagate_lift_render_layers_system,
+            crate::effects::update_lift_comp_material_system,
+            crate::effects::cleanup_lift_composite_system,
         )
+            .chain()
+            .in_set(AlightMotionSystemSet::Lifecycle)
+            .after(crate::effects::refresh_group_fill_material_texture_system),
+    );
+}
+
+fn register_animation_systems(app: &mut App) {
+    // Core transform pipeline (strict sequential: echo writes AmAnimated, transform
+    // reads it and writes Transform, parenthelper corrects Transform and produces
+    // ParenthelperScaleContributions, then SDF compensators adjust SDF transforms).
+    app.add_systems(
+        Update,
+        (update_echo_runtime_system, animate_transform_system)
             .chain()
             .in_set(AlightMotionSystemSet::Animation),
     )
@@ -118,21 +134,66 @@ fn register_animation_systems(app: &mut App) {
         Update,
         apply_parenthelper_system
             .in_set(AlightMotionSystemSet::Animation)
-            .after(animate_transform_system)
-            .before(compensate_sdf_parent_scale_system),
+            .after(animate_transform_system),
     )
     .add_systems(
         Update,
-        animate_sdf_repeat_system
+        compensate_sdf_parent_scale_system
             .in_set(AlightMotionSystemSet::Animation)
-            .after(animate_sdf_stretch_system)
-            .before(animate_sdf_scale_system),
+            .after(apply_parenthelper_system),
     )
     .add_systems(
         Update,
         compensate_sdf_ancestor_scale_for_children_system
             .in_set(AlightMotionSystemSet::Animation)
             .after(compensate_sdf_parent_scale_system),
+    )
+    // SDF material pipeline (sequential: shared ResMut<Assets<SdfMaterial>>).
+    .add_systems(
+        Update,
+        (
+            animate_size_system,
+            animate_sdf_stretch_system,
+            animate_sdf_repeat_system,
+            animate_sdf_scale_system,
+            animate_sdf_opacity_system,
+        )
+            .chain()
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(compensate_sdf_parent_scale_system),
+    )
+    // Unified effect system (needs parenthelper scale contributions + final Transform).
+    .add_systems(
+        Update,
+        animate_unified_effect_system
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(apply_parenthelper_system)
+            .after(compensate_sdf_ancestor_scale_for_children_system),
+    )
+    // Systems that only need echo/transform to be done — can run in parallel
+    // with each other and with unified/SDF pipelines.
+    .add_systems(
+        Update,
+        (
+            animate_am_camera_system,
+            animate_opacity_system,
+            animate_text_opacity_system,
+            fix_rtl_line_alignment_system,
+            animate_counter_system,
+            animate_text_spacing_system,
+            animate_text_progress_system,
+            animate_rtt_blur_system,
+            hot_reload_shader_system,
+        )
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(animate_transform_system),
+    )
+    // Late systems that depend on unified/transform being fully done.
+    .add_systems(
+        Update,
+        (animate_path_repeat_system, apply_mask_clipping_system)
+            .in_set(AlightMotionSystemSet::Animation)
+            .after(animate_unified_effect_system),
     );
 }
 
