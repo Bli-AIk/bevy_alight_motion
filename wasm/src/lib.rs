@@ -3,7 +3,7 @@
 //! WASM entry point for bevy_alight_motion player.
 //! 用于浏览器的 bevy_alight_motion 播放器 WASM 入口。
 //!
-//! 使用 Bevy 原生的 MemoryAssetReader 实现动态资产加载。
+//! 使用 Bevy 原生的 MemoryAssetReader 实现动态资源加载。
 
 use bevy::asset::io::memory::{Dir, MemoryAssetReader};
 use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
@@ -29,7 +29,7 @@ static APP_STATE: Mutex<Option<AppState>> = Mutex::new(None);
 static LOG_BUFFER: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Global memory directory for uploaded assets
-/// 用于上传资产的全局内存目录
+/// 用于上传资源的全局内存目录
 static UPLOAD_DIR: OnceLock<Dir> = OnceLock::new();
 
 /// Application state shared with JavaScript

@@ -14,7 +14,7 @@
 ## 简介
 
 `bevy_alight_motion` 是一个为 [Bevy](https://bevyengine.org/)
-游戏引擎开发的插件，允许你直接从 [Alight Motion](https://alightmotion.com/) 项目文件中导入资产和动画。  
+游戏引擎开发的插件，允许你直接从 [Alight Motion](https://alightmotion.com/) 项目文件中导入资源和动画。  
 它解决了在代码中手动重建动画的问题，让设计师可以在 Alight Motion 中创建复杂的动画，并由开发者在 Bevy 中直接运行。
 
 使用 `bevy_alight_motion`，你只需将 Alight Motion 项目导出为 `.amproj` 文件，然后通过一个函数调用即可加载。  

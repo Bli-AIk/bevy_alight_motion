@@ -3,7 +3,7 @@
 //! scaling, build the layer containers needed for lazy spawning, and attach the
 //! runtime bookkeeping that playback uses afterwards.
 //!
-//! 负责把已经加载好的 `AmProject` 资产接到真实场景实体上。资产加载器
+//! 负责把已经加载好的 `AmProject` 资源接到真实场景实体上。资源加载器
 //! 解析完项目后，这里的系统会应用分辨率缩放、创建懒生成所需的图层容器，并挂上
 //! 后续播放阶段要使用的运行时状态。
 

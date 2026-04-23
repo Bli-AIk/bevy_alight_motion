@@ -4,7 +4,7 @@
 //! code can resolve textures without caring how the media was packaged.
 //!
 //! 负责加载 Alight Motion 项目里嵌入的位图媒体。它会为每个字节块判断
-//! 合适的图片格式，创建 Bevy `Image` 资产，并同时注册原始 URI 与规范化标签，
+//! 合适的图片格式，创建 Bevy `Image` 资源，并同时注册原始 URI 与规范化标签，
 //! 让后续场景代码无需关心媒体最初是如何打包的。
 
 use std::collections::HashMap;

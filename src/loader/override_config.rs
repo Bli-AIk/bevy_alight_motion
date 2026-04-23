@@ -3,7 +3,7 @@
 //! file, which keeps the main loader simpler while still supporting imperfect
 //! exports from real-world Alight Motion projects.
 //!
-//! 定义了 `.amproj` 资产可选的旁路覆盖配置格式。它允许作者用一个小型
+//! 定义了 `.amproj` 资源可选的旁路覆盖配置格式。它允许作者用一个小型
 //! TOML 文件修补缺失或含糊的媒体文件名，从而在保持主加载器简洁的同时，仍能兼容
 //! 现实中并不总是完整的 Alight Motion 导出结果。
 

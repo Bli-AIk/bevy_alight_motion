@@ -42,7 +42,7 @@ define_effect! {
             type: FieldType::Vec2,
             support: Full,
             default: "0.0, 0.0",
-            desc_zh: "射线发射中心点 (AM坐标 ±500)",
+            desc_zh: "射线生成中心点 (AM坐标 ±500)",
             desc_en: "Ray emission center point (AM coords ±500)",
         },
         define_field! {
