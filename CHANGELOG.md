@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.3.1...v0.4.0) - 2026-04-19
+
+### Added
+
+- RTT performance optimization, rendering fixes, and test infrastructure improvements ([#36](https://github.com/Bli-AIk/bevy_alight_motion/pull/36))
+- *(renderer)* add effect coverage and split oversized runtime modules ([#34](https://github.com/Bli-AIk/bevy_alight_motion/pull/34))
+- *(effects)* add z_qq_group_logo basic project
+- *(loader)* support unpacked .amproj directories and content URIs with override config ([#30](https://github.com/Bli-AIk/bevy_alight_motion/pull/30))
+- *(loader)* support unpacked .amproj directories and content URIs
+- group fill, jitter/echo keyframes, embed retime, and SDF fixes ([#28](https://github.com/Bli-AIk/bevy_alight_motion/pull/28))
+
+### Fixed
+
+- update example files
+
+### Miscellaneous Tasks
+
+- *(lint)* improve #[expect] reason detection in tokei scripts
+
+### Refactor
+
+- *(loader)* use is_some_and for extension check
+- *(scene)* split spawn module into specialized files
+
 ## [0.3.1](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.3.0...v0.3.1) - 2026-02-26
 
 ### Added
