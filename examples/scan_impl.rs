@@ -11,32 +11,20 @@
 //! ```
 
 use bevy_alight_motion::effects_registry::impl_scanner;
-use std::collections::HashMap;
 use std::path::Path;
 
 fn main() {
-    // Scan all effect submodules, not just the re-export file
-    // 扫描所有效果子模块，而非仅重导出文件
-    let effect_files = [
-        "src/scene/effects/common.rs",
-        "src/scene/effects/extended.rs",
-        "src/scene/effects/other.rs",
-        "src/scene/effects/repeat.rs",
-    ];
+    let effects_dir = Path::new("src/scene/effects");
 
     println!("扫描源文件... / Scanning source files...");
-
-    let mut all_results = HashMap::new();
-    for file in &effect_files {
-        let path = Path::new(file);
-        println!("路径 / Path: {}", path.display());
-        match impl_scanner::scan_effects_rs(path) {
-            Ok(results) => merge_results(&mut all_results, results),
-            Err(e) => {
-                eprintln!("❌ 扫描 {} 失败 / Scan failed: {}", file, e);
-            }
+    println!("路径 / Path: {}", effects_dir.display());
+    let all_results = match impl_scanner::scan_effects_dir(effects_dir) {
+        Ok(results) => results,
+        Err(e) => {
+            eprintln!("❌ 扫描失败 / Scan failed: {}", e);
+            return;
         }
-    }
+    };
 
     println!();
     impl_scanner::print_scan_results(&all_results);
@@ -52,24 +40,5 @@ fn main() {
         eprintln!("❌ 保存失败 / Failed to save: {}", e);
     } else {
         println!("✅ 已保存到 / Saved to: {}", output_path.display());
-    }
-}
-
-fn merge_results(
-    target: &mut HashMap<String, impl_scanner::EffectImpl>,
-    source: HashMap<String, impl_scanner::EffectImpl>,
-) {
-    for (id, effect) in source {
-        target
-            .entry(id)
-            .and_modify(|existing| {
-                existing
-                    .implemented_fields
-                    .extend(effect.implemented_fields.clone());
-                existing
-                    .pattern_fields
-                    .extend(effect.pattern_fields.clone());
-            })
-            .or_insert(effect);
     }
 }

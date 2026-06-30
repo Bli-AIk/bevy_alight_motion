@@ -38,6 +38,37 @@ pub fn count_total_layers(layers: &[PendingLayer]) -> usize {
         .sum()
 }
 
+/// Compute per-frame spawn budget based on previous frame time.
+///
+/// Adapts to hardware speed: fast GPUs get higher budgets for quick spawn-in,
+/// slow GPUs get lower budgets to stay above 60 FPS. Each spawned entity costs
+/// ~2ms (fast) to ~4ms (slow) of GPU work for mesh + material creation.
+///
+/// `AM_SPAWN_BUDGET` env var overrides with a fixed value.
+fn adaptive_spawn_budget(prev_frame_secs: f32) -> usize {
+    static OVERRIDE: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    if let Some(fixed) = OVERRIDE.get_or_init(|| {
+        std::env::var("AM_SPAWN_BUDGET")
+            .ok()
+            .and_then(|v| v.parse().ok())
+    }) {
+        return *fixed;
+    }
+
+    let target_secs = 1.0 / 60.0; // 16.67ms
+    let headroom = target_secs - prev_frame_secs;
+
+    if headroom > 0.010 {
+        8 // >10ms headroom (prev <6.7ms): fast hardware, spawn aggressively
+    } else if headroom > 0.006 {
+        4 // >6ms headroom (prev <10.7ms): moderate hardware
+    } else if headroom > 0.003 {
+        2 // >3ms headroom (prev <13.7ms): careful
+    } else {
+        1 // minimal or no headroom — still spawn one to avoid stalling
+    }
+}
+
 /// Process pending layers recursively.
 pub(crate) fn process_pending_layers(
     commands: &mut Commands,
@@ -53,6 +84,7 @@ pub(crate) fn process_pending_layers(
     parent_entity: Entity,
     time_offset: f32,
     filter: &crate::scene::LayerFilter,
+    prev_frame_secs: f32,
 ) {
     // We need to collect actions to avoid borrowing issues
     let mut to_spawn: Vec<usize> = Vec::new(); // indices of layers to spawn
@@ -344,29 +376,23 @@ pub(crate) fn process_pending_layers(
         spawn_depths.get(&layer_id).copied().unwrap_or(0)
     });
 
-    // Budget: cap entities spawned per frame to smooth loop-transition spikes.
-    // Parents/roots (depth 0) spawn first; remaining layers naturally pick up
-    // in subsequent frames because lifecycle re-evaluates every frame.
+    // Adaptive budget: scale entities spawned per frame based on previous frame
+    // time, so slower hardware naturally spawns fewer entities.
+    // AM_SPAWN_BUDGET env var overrides with a static value for testing.
     //
-    // After truncation, re-include embed content entities whose EmbedScene parent
-    // survived the cut. Without this, an embed's RTT renders empty for one frame
-    // because content entities haven't spawned yet (causes visible flicker).
-    static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    let budget = *BUDGET.get_or_init(|| {
-        std::env::var("AM_SPAWN_BUDGET")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(8)
-    });
+    // If an EmbedScene parent survives the budget cut, also spawn the content
+    // layers belonging to that embed in the same frame. Splitting those across
+    // frames creates an empty RTT texture that can be captured as a black frame.
+    let budget = adaptive_spawn_budget(prev_frame_secs);
     if to_spawn.len() > budget {
         bevy::log::trace!(
-            "[Lifecycle] Spawn budget: {}/{} entities this frame",
+            "[Lifecycle] Spawn budget: {}/{} entities this frame (prev_frame={:.1}ms)",
             budget,
-            to_spawn.len()
+            to_spawn.len(),
+            prev_frame_secs * 1000.0,
         );
         let cut = to_spawn.split_off(budget);
 
-        // Collect IDs of EmbedScene entities that survived the budget cut.
         let surviving_embed_ids: std::collections::HashSet<u64> = to_spawn
             .iter()
             .filter(|&&idx| {
@@ -378,7 +404,6 @@ pub(crate) fn process_pending_layers(
             .map(|&idx| pending.layers[idx].id)
             .collect();
 
-        // Re-add content entities that belong to surviving embeds.
         to_spawn.extend(cut.into_iter().filter(|&idx| {
             let embed_id = pending.layers[idx].containing_embed_id;
             embed_id != 0 && surviving_embed_ids.contains(&embed_id)

@@ -15,7 +15,7 @@ echo "🔧 Building bevy_alight_motion WASM (单线程/WebGL2 模式)..."
 # Ensure wasm target is installed
 rustup target add wasm32-unknown-unknown
 
-# 创建临时目录，仅包含 shaders（WASM playground 不需要 projects 等测试资产）
+# 创建临时目录，仅包含 shaders（WASM playground 不需要 projects 等测试资源）
 # Create temp directory with only shaders (WASM playground doesn't need test assets)
 WASM_ASSETS_DIR=$(mktemp -d)
 trap "rm -rf $WASM_ASSETS_DIR" EXIT

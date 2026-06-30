@@ -3,7 +3,7 @@
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/bevy_alight_motion.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/bevy_alight_motion.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 
-> Current Status: 🚧 Early Development (Initial version in progress)
+> Current Status: 🚧 Experimental, Evolving
 
 **bevy_alight_motion** — Bevy plugin for loading and playing Alight Motion project files.
 
@@ -13,23 +13,24 @@
 
 ## Introduction
 
-`bevy_alight_motion` is a plugin for the [Bevy](https://bevyengine.org/) game engine that allows you to import and
-animate assets directly from [Alight Motion](https://alightmotion.com/) project files.  
-It solves the problem of manual animation recreation in code, allowing designers to create complex animations in Alight
-Motion and developers to run them directly in Bevy.
+Animation is more than just visuals; it is a form of logic. In many creative circles, complex behaviors and patterns are
+crafted entirely through motion design tools, yet they often lack a direct, loss-less path into modern game engines.
 
-With `bevy_alight_motion`, you only need to export your Alight Motion project as an `.amproj` file and load it with a
-single function call.  
-In the future, it may also support more complex effects and shaders exported from Alight Motion.
+`bevy_alight_motion` is an experimental exploration dedicated to bringing these visually-expressed logics onto a "proper
+track" within the [Bevy](https://bevyengine.org/) engine. It attempts to natively support Alight Motion project files,
+aiming to bridge the gap between the intuition of motion design and the performance of high-level game logic.
+
+Currently, this is a pioneering attempt — a journey to see how we can transform professional motion graphics into
+living, interactive game systems without the friction of manual code recreation.
 
 ## Features
 
-* Load `.amproj` ZIP archives and standalone `.xml` project files.
-* Automatic keyframe animation with cubic-bezier and step easing support.
-* Coordinate system conversion (Alight Motion top-left origin to Bevy center origin).
-* Support for nested scenes (pre-compositions).
-* Customizable playback control via ECS components.
-* (Planned) Support for more shape types and effects.
+* 📂 **Experimental Loading** — Load `.amproj` ZIP archives and standalone `.xml` project files.
+* 🎬 **Motion-to-Logic** — Automatic keyframe animation with cubic-bezier and step easing support.
+* 🗺️ **Coordinate Mapping** — Coordinate system conversion (Alight Motion top-left origin to Bevy center origin).
+* 📦 **Scene Hierarchy** — Support for nested scenes (pre-compositions).
+* ⏯️ **ECS Control** — Customizable playback control via standard components.
+* 🚀 **Future Vision** — Ongoing exploration into supporting more complex shape types and effects.
 
 ## Bevy Version Support
 
@@ -116,7 +117,8 @@ This project uses the following crates:
 
 * **71**: Provided many Alight Motion example projects (including Undertale bullet patterns and visual PVs) during
   testing, provided a great help with this project!
-* **陈皮**: Provided many Alight Motion example projects (mostly Undertale bullet patterns), providing great help for AM integration.
+* **陈皮**: Provided many Alight Motion example projects (mostly Undertale bullet patterns), providing great help for AM
+  integration.
 
 ## Contributing
 

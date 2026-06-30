@@ -333,9 +333,10 @@ pub fn sync_rtt_camera_position_system(
 /// adaptive resolution scale factor. Runs before RTT setup each frame so
 /// newly created textures immediately use the scaled dimensions.
 ///
-/// Pending embeds are counted with a multiplier (each embed ≈ 3 cameras:
-/// main + blur_h + blur_v) to pre-emptively lower the scale before setup
-/// creates the actual cameras and textures.
+/// Pending embeds are counted 1:1 (not multiplied) because blur cameras
+/// are only created for a subset of embeds. Any blur cameras that do get
+/// created are counted once they exist via the `blur_cameras` query, and
+/// the one-way ratchet adjusts the scale downward accordingly.
 ///
 /// 统计活跃 RTT 相机和待创建 embed，更新自适应分辨率缩放因子。
 pub fn adaptive_rtt_scale_system(
@@ -343,9 +344,10 @@ pub fn adaptive_rtt_scale_system(
     blur_cameras: Query<(), With<crate::gaussian_blur::BlurPassCamera>>,
     pending_embeds: Query<(), With<super::NeedsEmbedSceneRtt>>,
 ) {
-    let existing = embed_cameras.iter().count() + blur_cameras.iter().count();
+    let embed_count = embed_cameras.iter().count();
+    let blur_count = blur_cameras.iter().count();
+    let existing = embed_count + blur_count;
     let pending = pending_embeds.iter().count();
-    // Each pending embed creates ~3 cameras (main + blur H + blur V).
-    let estimated_total = existing + pending * 3;
+    let estimated_total = existing + pending;
     crate::effects::update_adaptive_rtt_scale(estimated_total);
 }

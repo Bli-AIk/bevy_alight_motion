@@ -200,22 +200,34 @@ fn main() {
     // Normal mode: windowed rendering via WinitPlugin
     #[cfg(not(feature = "headless-render"))]
     {
-        app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: format!("Alight Motion Player - {}", project_file),
-                resolution: bevy::window::WindowResolution::new(
-                    resolution.x as u32,
-                    resolution.y as u32,
-                ),
-                resizable: false,
-                visible: !cli.headless,
-                // Disable VSync in frame-test mode for accurate FPS measurement
-                #[cfg(feature = "frame-test")]
-                present_mode: bevy::window::PresentMode::AutoNoVsync,
-                ..default()
-            }),
-            ..default()
-        }));
+        // Disable 3D-only plugins that add per-view GPU overhead (prepare_fog,
+        // upload_light_probes, prepare_ssr_settings, …). AM is purely 2D.
+        app.add_plugins(
+            DefaultPlugins
+                .build()
+                .disable::<bevy::anti_alias::AntiAliasPlugin>()
+                .disable::<bevy::gltf::GltfPlugin>()
+                .disable::<bevy::light::LightPlugin>()
+                .disable::<bevy::pbr::PbrPlugin>()
+                .disable::<bevy::post_process::PostProcessPlugin>()
+                .disable::<bevy::scene::ScenePlugin>()
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: format!("Alight Motion Player - {}", project_file),
+                        resolution: bevy::window::WindowResolution::new(
+                            resolution.x as u32,
+                            resolution.y as u32,
+                        ),
+                        resizable: false,
+                        visible: !cli.headless,
+                        // Disable VSync in frame-test mode for accurate FPS measurement
+                        #[cfg(feature = "frame-test")]
+                        present_mode: bevy::window::PresentMode::AutoNoVsync,
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        );
     }
 
     #[cfg(feature = "player-brp")]

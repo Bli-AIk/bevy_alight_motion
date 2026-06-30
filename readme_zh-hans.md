@@ -3,7 +3,7 @@
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/bevy_alight_motion.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/bevy_alight_motion.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 
-> 当前状态: 🚧 早期开发 (初始版本进行中)
+> 当前状态: 🚧 实验性，持续演进中
 
 **bevy_alight_motion** — 用于加载和播放 Alight Motion 项目文件的 Bevy 插件。
 
@@ -13,21 +13,22 @@
 
 ## 简介
 
-`bevy_alight_motion` 是一个为 [Bevy](https://bevyengine.org/)
-游戏引擎开发的插件，允许你直接从 [Alight Motion](https://alightmotion.com/) 项目文件中导入资产和动画。  
-它解决了在代码中手动重建动画的问题，让设计师可以在 Alight Motion 中创建复杂的动画，并由开发者在 Bevy 中直接运行。
+动画不仅仅是视觉效果，它也是逻辑的一种表现形式。在许多创作领域，复杂的行为逻辑完全通过动效设计工具来编排，但这些创意往往缺乏一条进入游戏引擎的“正轨”。
 
-使用 `bevy_alight_motion`，你只需将 Alight Motion 项目导出为 `.amproj` 文件，然后通过一个函数调用即可加载。  
-未来，它还可能支持从 Alight Motion 导出的更复杂的特效和着色器。
+`bevy_alight_motion`
+是一次实验性的探索，致力于将这些以动画表现逻辑的可视化创作方式引入正轨。它尝试在 [Bevy](https://bevyengine.org/) 引擎中提供对
+Alight Motion 工程文件的原生支持，旨在消除动效设计的直觉与高性能游戏逻辑之间的隔阂。
+
+目前，这是一个先行者的尝试——我们正在探索如何将专业的动效设计转化为鲜活的、可交互的游戏系统，而无需经过繁琐且损耗巨大的手工代码还原。
 
 ## 功能
 
-* 加载 `.amproj` ZIP 归档和独立的 `.xml` 项目文件。
-* 自动关键帧动画，支持 cubic-bezier (三次贝塞尔) 和 step (步进) 缓动。
-* 坐标系转换 (Alight Motion 的左上角原点转换为 Bevy 的中心原点)。
-* 支持嵌套场景 (预合成)。
-* 通过 ECS 组件实现可自定义的播放控制。
-* (计划中) 支持更多的形状类型和特效。
+* 📂 **实验性加载** — 加载 `.amproj` ZIP 归档和独立的 `.xml` 项目文件。
+* 🎬 **动效即逻辑** — 自动关键帧动画，支持 cubic-bezier (三次贝塞尔) 和 step (步进) 缓动。
+* 🗺️ **坐标映射** — 坐标系转换 (Alight Motion 的左上角原点转换为 Bevy 的中心原点)。
+* 📦 **场景层级** — 支持嵌套场景 (预合成)。
+* ⏯️ **ECS 控制** — 通过标准组件实现可自定义的播放控制。
+* 🚀 **未来愿景** — 持续探索对更多形状类型和特效的支持。
 
 ## Bevy 版本支持
 

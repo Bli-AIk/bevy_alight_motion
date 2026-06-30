@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: "bevy_alight_motion"
-  text: "直接从 Alight Motion 项目文件导入资产的 Bevy 插件"
+  text: "直接从 Alight Motion 项目文件导入资源的 Bevy 插件"
   tagline: "在专业动画设计与 Rust 高性能生态之间搭建的桥梁。"
   actions:
     - theme: brand

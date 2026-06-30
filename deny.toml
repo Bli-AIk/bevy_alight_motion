@@ -12,7 +12,9 @@ targets = [
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 # paste is marked as unmaintained but is still widely used and has no security issues
-ignore = ["RUSTSEC-2024-0436"]
+# ttf-parser is unmaintained but no viable drop-in replacement yet (skrifa lacks full feature parity)
+# core2 yanked — transitive dep via image→ravif→rav1e, not directly controllable
+ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2026-0192", "RUSTSEC-2026-0105"]
 
 [licenses]
 allow = [

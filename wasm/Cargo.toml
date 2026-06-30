@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bevy_alight_motion = { path = ".." }
+bevy_alight_motion = { path = "..", version = "0.4.0" }
 # 使用 webgl2 + 单线程模式，兼容 GitHub Pages (无需 COOP/COEP 头)
 bevy = { version = "0.18", default-features = false, features = [
     # 核心功能
@@ -33,7 +33,7 @@ bevy = { version = "0.18", default-features = false, features = [
     # WASM 专用：使用 WebGL2，避免 WebGPU 多线程问题
     "webgl2",
 ]}
-# 嵌入式资产：在编译时将 assets 目录嵌入 WASM 文件
+# 嵌入式资源：在编译时将 assets 目录嵌入 WASM 文件
 # Bevy 0.18 对应 bevy_embedded_assets 0.15
 bevy_embedded_assets = "0.15"
 wasm-bindgen = "0.2"

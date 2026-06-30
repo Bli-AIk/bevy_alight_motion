@@ -5,7 +5,7 @@
 //! can stay thin.
 //!
 //! 负责组装 `bevy_alight_motion` 的 Bevy 运行时。它是内部插件接线层：
-//! 材质插件、资产加载器、核心资源、启动钩子、生命周期系统顺序、动画更新以及
+//! 材质插件、资源加载器、核心资源、启动钩子、生命周期系统顺序、动画更新以及
 //! 后处理清理都在这里注册，从而让公开插件入口保持精简。
 
 use bevy::prelude::*;
@@ -85,6 +85,9 @@ fn register_lifecycle_systems(app: &mut App) {
         (
             spawn_loaded_projects_system,
             ApplyDeferred,
+            super::warmup::start_warmup_system,
+            ApplyDeferred,
+            super::warmup::tick_warmup_system,
             advance_playback_system,
             manage_layer_lifecycle_system,
             ApplyDeferred,

@@ -1,0 +1,31 @@
+[package]
+name = "bevy_alight_motion_core"
+version = "0.4.0"
+edition = "2024"
+authors = ["Bli-AIk <haikun2333@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Bli-AIk/bevy_alight_motion"
+description = "Pure Alight Motion project data extraction and C-ABI interface"
+keywords = ["alight-motion", "animation", "ffi", "parser"]
+categories = ["multimedia", "parser-implementations"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+glam = { version = "0.30", features = ["serde"] }
+log = "0.4"
+owo-colors = "4.3"
+quick-xml = { version = "0.39", features = ["serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+zip = { version = "8.1", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["console"] }
+
+[features]
+default = []
+ffi = []

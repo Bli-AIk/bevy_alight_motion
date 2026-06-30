@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-04-18T20:57:26.365047+08:00",
+  "timestamp": "2026-06-30T16:41:48.762616+08:00",
   "summary": {
-    "passed": 190,
+    "passed": 201,
     "warnings": 0,
-    "skipped": 5,
-    "failed": 103
+    "skipped": 8,
+    "failed": 92
   },
   "results": {
     "basic/bezier/bezier": {
@@ -170,7 +170,7 @@
     },
     "effects/echo-keyframes/basic": {
       "status": "fail",
-      "avg_similarity": 0.9703
+      "avg_similarity": 0.9717
     },
     "effects/enlarge-bg/exposure-gamma-layer/test": {
       "status": "fail",
@@ -280,10 +280,11 @@
     },
     "effects/linear-repeat/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.8855
+      "avg_similarity": 0.8886
     },
     "effects/linear-repeat/random": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.9646
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
@@ -549,34 +550,34 @@
     },
     "private/USER_71/2_ex": {
       "status": "fail",
-      "avg_similarity": 0.9629
+      "avg_similarity": 0.9555
     },
     "private/USER_71/2_ex1": {
       "status": "fail",
-      "avg_similarity": 0.8834
+      "avg_similarity": 0.8594
     },
     "private/USER_71/2_ex2": {
       "status": "fail",
-      "avg_similarity": 0.6488
+      "avg_similarity": 0.5362
     },
     "private/USER_71/2_ex3": {
       "status": "pass"
     },
     "private/USER_71/2_ex4": {
       "status": "fail",
-      "avg_similarity": 0.9209
+      "avg_similarity": 0.8813
     },
     "private/USER_71/3_ex": {
       "status": "fail",
-      "avg_similarity": 0.8661
+      "avg_similarity": 0.8501
     },
     "private/USER_71/3_ex1": {
       "status": "fail",
-      "avg_similarity": 0.9002
+      "avg_similarity": 0.8727
     },
     "private/USER_71/3_ex2": {
       "status": "fail",
-      "avg_similarity": 0.9311
+      "avg_similarity": 0.923
     },
     "private/USER_71/3_ex2_1": {
       "status": "fail",
@@ -588,7 +589,7 @@
     },
     "private/USER_aik/0": {
       "status": "fail",
-      "avg_similarity": 0.7091
+      "avg_similarity": 0.7071
     },
     "private/USER_aik/0/split1": {
       "status": "fail",
@@ -596,32 +597,32 @@
     },
     "private/USER_aik/0/split2": {
       "status": "fail",
-      "avg_similarity": 0.78
+      "avg_similarity": 0.7816
     },
     "private/USER_aik/1": {
       "status": "fail",
-      "avg_similarity": 0.9047
+      "avg_similarity": 0.9068
     },
     "private/USER_aik/2": {
       "status": "fail",
-      "avg_similarity": 0.8335
+      "avg_similarity": 0.8309
     },
     "private/USER_aik/3": {
       "status": "pass"
     },
     "private/USER_baby/sans": {
-      "status": "fail"
+      "status": "skip"
     },
     "private/USER_baby/yes": {
-      "status": "fail"
+      "status": "skip"
     },
     "private/USER_bot_205/demo/bullet": {
       "status": "fail",
-      "avg_similarity": 0.8734
+      "avg_similarity": 0.8767
     },
     "private/USER_chen_pi/bullet_train/0": {
       "status": "fail",
-      "avg_similarity": 0.952
+      "avg_similarity": 0.9502
     },
     "private/USER_chen_pi/bullet_train/0/0-30": {
       "status": "pass"
@@ -631,71 +632,67 @@
     },
     "private/USER_chen_pi/bullet_train/0/150-180": {
       "status": "fail",
-      "avg_similarity": 0.9112
+      "avg_similarity": 0.9459
     },
     "private/USER_chen_pi/bullet_train/0/180-210": {
       "status": "fail",
-      "avg_similarity": 0.909
+      "avg_similarity": 0.9619
     },
     "private/USER_chen_pi/bullet_train/0/210-240": {
       "status": "fail",
-      "avg_similarity": 0.9107
+      "avg_similarity": 0.9533
     },
     "private/USER_chen_pi/bullet_train/0/240-270": {
       "status": "fail",
-      "avg_similarity": 0.923
+      "avg_similarity": 0.9221
     },
     "private/USER_chen_pi/bullet_train/0/270-300": {
       "status": "fail",
-      "avg_similarity": 0.923
+      "avg_similarity": 0.9462
     },
     "private/USER_chen_pi/bullet_train/0/30-60": {
-      "status": "fail",
-      "avg_similarity": 0.9611
+      "status": "pass"
     },
     "private/USER_chen_pi/bullet_train/0/300-330": {
       "status": "fail",
-      "avg_similarity": 0.9164
+      "avg_similarity": 0.9332
     },
     "private/USER_chen_pi/bullet_train/0/330-360": {
       "status": "fail",
-      "avg_similarity": 0.9106
+      "avg_similarity": 0.9336
     },
     "private/USER_chen_pi/bullet_train/0/360-390": {
-      "status": "fail",
-      "avg_similarity": 0.9374
+      "status": "pass"
     },
     "private/USER_chen_pi/bullet_train/0/390-420": {
-      "status": "fail",
-      "avg_similarity": 0.9452
+      "status": "pass"
     },
     "private/USER_chen_pi/bullet_train/0/420-450": {
       "status": "fail",
-      "avg_similarity": 0.8215
+      "avg_similarity": 0.8377
     },
     "private/USER_chen_pi/bullet_train/0/450-480": {
       "status": "fail",
-      "avg_similarity": 0.6251
+      "avg_similarity": 0.6338
     },
     "private/USER_chen_pi/bullet_train/0/480-510": {
       "status": "fail",
-      "avg_similarity": 0.5587
+      "avg_similarity": 0.5712
     },
     "private/USER_chen_pi/bullet_train/0/510-540": {
       "status": "fail",
-      "avg_similarity": 0.3811
+      "avg_similarity": 0.3844
     },
     "private/USER_chen_pi/bullet_train/0/540-570": {
       "status": "fail",
-      "avg_similarity": 0.4011
+      "avg_similarity": 0.4028
     },
     "private/USER_chen_pi/bullet_train/0/570-600": {
       "status": "fail",
-      "avg_similarity": 0.5449
+      "avg_similarity": 0.5454
     },
     "private/USER_chen_pi/bullet_train/0/60-90": {
-      "status": "fail",
-      "avg_similarity": 0.9583
+      "status": "pass"
     },
     "private/USER_chen_pi/bullet_train/0/600-630": {
       "status": "pass"
@@ -705,30 +702,28 @@
     },
     "private/USER_chen_pi/bullet_train/0/660-690": {
       "status": "fail",
-      "avg_similarity": 0.9298
+      "avg_similarity": 0.9368
     },
     "private/USER_chen_pi/bullet_train/0/690-720": {
       "status": "fail",
-      "avg_similarity": 0.8987
+      "avg_similarity": 0.8936
     },
     "private/USER_chen_pi/bullet_train/0/720-746": {
       "status": "fail",
-      "avg_similarity": 0.8973
+      "avg_similarity": 0.9098
     },
     "private/USER_chen_pi/bullet_train/0/90-120": {
-      "status": "fail",
-      "avg_similarity": 0.9535
+      "status": "pass"
     },
     "private/USER_chen_pi/bullet_train/0_group": {
       "status": "fail",
-      "avg_similarity": 0.868
+      "avg_similarity": 0.8945
     },
     "private/USER_chen_pi/bullet_train/0_min": {
       "status": "pass"
     },
     "private/USER_chen_pi/distrust/13_ex": {
-      "status": "fail",
-      "avg_similarity": 0.9683
+      "status": "pass"
     },
     "private/USER_chen_pi/distrust/13_ex1": {
       "status": "pass"
@@ -759,7 +754,7 @@
     },
     "private/USER_chen_pi/distrust/9": {
       "status": "fail",
-      "avg_similarity": 0.8891
+      "avg_similarity": 0.8982
     },
     "private/USER_chen_pi/distrust/9_ex": {
       "status": "pass"
@@ -775,60 +770,68 @@
       "status": "pass"
     },
     "private/USER_chen_pi/misc/simple_gb": {
-      "status": "fail",
-      "avg_similarity": 0.97
+      "status": "pass"
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_all_group3": {
       "status": "fail",
-      "avg_similarity": 0.7661
+      "avg_similarity": 0.7974
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_all_group3copy": {
       "status": "fail",
-      "avg_similarity": 0.4713
+      "avg_similarity": 0.478
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_copy2_group3_left": {
       "status": "fail",
-      "avg_similarity": 0.8671
+      "avg_similarity": 0.8817
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_copy2_group3_pair": {
       "status": "fail",
-      "avg_similarity": 0.8831
+      "avg_similarity": 0.899
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_copy2_group3_right": {
       "status": "fail",
-      "avg_similarity": 0.8663
+      "avg_similarity": 0.8825
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_copy2_group3copy_pair": {
       "status": "fail",
-      "avg_similarity": 0.7204
+      "avg_similarity": 0.7276
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_group10": {
       "status": "fail",
-      "avg_similarity": 0.6593
+      "avg_similarity": 0.6791
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_group10_copy": {
       "status": "fail",
-      "avg_similarity": 0.66
+      "avg_similarity": 0.6828
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_group10_copy2": {
       "status": "fail",
-      "avg_similarity": 0.7389
+      "avg_similarity": 0.7715
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_no_group10_copy3": {
       "status": "fail",
-      "avg_similarity": 0.735
+      "avg_similarity": 0.7434
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_nomask": {
       "status": "fail",
-      "avg_similarity": 0.5882
+      "avg_similarity": 0.5829
     },
     "private/USER_hong_jiao/_diag_rect_subdiv_3/target1_minimal_norepeat": {
       "status": "fail",
-      "avg_similarity": 0.8472
+      "avg_similarity": 0.8602
     },
     "private/USER_hong_jiao/test": {
       "status": "fail",
-      "avg_similarity": 0.9465
+      "avg_similarity": 0.9507
+    },
+    "private/USER_hong_jiao/test/bone_circle": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/bone_circle_lot": {
+      "status": "pass"
+    },
+    "private/USER_hong_jiao/test/bone_circle_lot_hidden": {
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/detail_subdiv": {
       "status": "pass"
@@ -857,18 +860,17 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1": {
       "status": "fail",
-      "avg_similarity": 0.955
+      "avg_similarity": 0.9906
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal": {
       "status": "fail",
-      "avg_similarity": 0.8515
+      "avg_similarity": 0.873
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_minimal_noeffects": {
       "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_nomask": {
-      "status": "fail",
-      "avg_similarity": 0.9567
+      "status": "pass"
     },
     "private/USER_hong_jiao/test/rect_subdiv_3/target1_pure": {
       "status": "pass"
@@ -893,14 +895,14 @@
     },
     "private/USER_hong_jiao/test/rect_subdiv_4": {
       "status": "fail",
-      "avg_similarity": 0.8918
+      "avg_similarity": 0.9374
     },
     "private/USER_hong_jiao/test/rect_subdiv_5": {
       "status": "pass"
     },
     "private/USER_little_black/test0": {
       "status": "fail",
-      "avg_similarity": 0.9359
+      "avg_similarity": 0.9374
     },
     "private/USER_mortis/revenge": {
       "status": "pass"
@@ -931,11 +933,11 @@
     },
     "private/USER_mortis/revenge/split4": {
       "status": "fail",
-      "avg_similarity": 0.7841
+      "avg_similarity": 0.7446
     },
     "private/USER_mortis/revenge/split5": {
       "status": "fail",
-      "avg_similarity": 0.7827
+      "avg_similarity": 0.7881
     },
     "private/USER_mortis/revenge/split5_sub1": {
       "status": "pass"
@@ -948,18 +950,18 @@
     },
     "private/USER_mortis/revenge/split6": {
       "status": "fail",
-      "avg_similarity": 0.7024
+      "avg_similarity": 0.7742
     },
     "private/USER_mortis/revenge/split7": {
       "status": "pass"
     },
     "private/USER_mortis/revenge/split8": {
       "status": "fail",
-      "avg_similarity": 0.947
+      "avg_similarity": 0.944
     },
     "private/USER_mortis/revenge/split9": {
       "status": "fail",
-      "avg_similarity": 0.9547
+      "avg_similarity": 0.9628
     },
     "private/USER_mortis/sans": {
       "status": "skip"
@@ -968,7 +970,7 @@
       "status": "skip"
     },
     "private/USER_qiu/monster": {
-      "status": "fail"
+      "status": "skip"
     },
     "test/group-split": {
       "status": "pass"

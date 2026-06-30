@@ -82,6 +82,7 @@ pub fn frame_diagnostics_system(playback: Res<AmPlayback>, query: Query<&AmPendi
 pub fn manage_layer_lifecycle_system(
     mut commands: Commands,
     playback: Res<AmPlayback>,
+    time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut unified_materials: ResMut<Assets<crate::masked_sprite::UnifiedEffectMaterial>>,
     mut color_materials: ResMut<Assets<ColorMaterial>>,
@@ -136,6 +137,7 @@ pub fn manage_layer_lifecycle_system(
             parent_for_layers,
             0.0, // root time offset
             filter,
+            time.delta_secs(),
         );
 
         let after_spawned = pending.spawned_entities.len();
