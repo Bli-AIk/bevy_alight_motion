@@ -27,7 +27,7 @@ exclude = [
 autoexamples = false
 
 [dependencies]
-bevy_alight_motion_core = { path = "am_core", version = "0.4.0" }
+bevy_alight_motion_core = { path = "am_core", version = "0.5.0" }
 bevy = { version = "0.18", default-features = false, features = [
     "std",
     "multi_threaded",
