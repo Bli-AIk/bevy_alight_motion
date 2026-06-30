@@ -525,10 +525,11 @@ dependencies = [
 
 [[package]]
 name = "bevy_alight_motion"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bevy",
  "bevy-inspector-egui",
+ "bevy_alight_motion_core",
  "bevy_brp_extras",
  "chrono",
  "console_error_panic_hook",
@@ -544,6 +545,22 @@ dependencies = [
  "tracing-tracy",
  "ttf-parser",
  "wasm-bindgen",
+ "web-sys",
+ "zip",
+]
+
+[[package]]
+name = "bevy_alight_motion_core"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "glam",
+ "log",
+ "owo-colors",
+ "quick-xml 0.39.2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "web-sys",
  "zip",
 ]

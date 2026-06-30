@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.4.0...v0.5.0) - 2026-06-30
+
+### Refactor
+
+- *(core)* extract AM data layer into am_core dylib crate + FFI module split ([#47](https://github.com/Bli-AIk/bevy_alight_motion/pull/47))
+
 ## [0.4.0](https://github.com/Bli-AIk/bevy_alight_motion/compare/v0.3.1...v0.4.0) - 2026-04-19
 
 ### Added
