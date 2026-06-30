@@ -379,6 +379,10 @@ pub(crate) fn process_pending_layers(
     // Adaptive budget: scale entities spawned per frame based on previous frame
     // time, so slower hardware naturally spawns fewer entities.
     // AM_SPAWN_BUDGET env var overrides with a static value for testing.
+    //
+    // If an EmbedScene parent survives the budget cut, also spawn the content
+    // layers belonging to that embed in the same frame. Splitting those across
+    // frames creates an empty RTT texture that can be captured as a black frame.
     let budget = adaptive_spawn_budget(prev_frame_secs);
     if to_spawn.len() > budget {
         bevy::log::trace!(
@@ -387,7 +391,23 @@ pub(crate) fn process_pending_layers(
             to_spawn.len(),
             prev_frame_secs * 1000.0,
         );
-        to_spawn.truncate(budget);
+        let cut = to_spawn.split_off(budget);
+
+        let surviving_embed_ids: std::collections::HashSet<u64> = to_spawn
+            .iter()
+            .filter(|&&idx| {
+                matches!(
+                    pending.layers[idx].spec,
+                    crate::scene::AmLayerSpec::EmbedScene
+                )
+            })
+            .map(|&idx| pending.layers[idx].id)
+            .collect();
+
+        to_spawn.extend(cut.into_iter().filter(|&idx| {
+            let embed_id = pending.layers[idx].containing_embed_id;
+            embed_id != 0 && surviving_embed_ids.contains(&embed_id)
+        }));
     }
 
     let trace_spawn_order = std::env::var_os("AM_SPAWN_ORDER_TRACE").is_some();
