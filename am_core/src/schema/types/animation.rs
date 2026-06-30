@@ -7,7 +7,7 @@
 //! 带关键帧的标量、向量、颜色，以及 effect/property 的数据结构，让更高层的
 //! 图层结构可以复用时间轴字段，而不必重复书写 XML 映射逻辑。
 
-use bevy::prelude::Vec4;
+use glam::Vec4;
 use serde::{Deserialize, Serialize};
 
 use super::serde_helpers::{

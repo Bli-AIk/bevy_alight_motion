@@ -5,7 +5,7 @@
 //! Effect implementation scanner - scans source code to extract implemented fields.
 //! 效果实现扫描器 - 扫描源代码提取已实现的字段。
 //!
-//! This tool scans `src/scene/effects.rs` to automatically detect which effect
+//! This tool scans `src/scene/effects/**/*.rs` to automatically detect which effect
 //! properties are actually implemented in code, without manual maintenance.
 //!
 //! Usage / 使用方法:
@@ -308,6 +308,67 @@ pub fn scan_effects_rs(source_path: &Path) -> Result<HashMap<String, EffectImpl>
     Ok(effects)
 }
 
+/// 扫描效果实现目录 / Scan an effect implementation directory.
+pub fn scan_effects_dir(source_dir: &Path) -> Result<HashMap<String, EffectImpl>, String> {
+    if source_dir.is_file() {
+        return scan_effects_rs(source_dir);
+    }
+    if !source_dir.is_dir() {
+        return Err(format!("Directory not found: {}", source_dir.display()));
+    }
+
+    let mut files = Vec::new();
+    collect_rs_files(source_dir, &mut files)?;
+    files.sort();
+
+    let mut effects = HashMap::new();
+    for file in files {
+        let file_effects = scan_effects_rs(&file)?;
+        merge_effect_impls(&mut effects, file_effects);
+    }
+
+    Ok(effects)
+}
+
+fn collect_rs_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<(), String> {
+    for entry in fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?
+        .flatten()
+    {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rs_files(&path, files)?;
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn merge_effect_impls(
+    target: &mut HashMap<String, EffectImpl>,
+    source: HashMap<String, EffectImpl>,
+) {
+    for (id, mut effect) in source {
+        target
+            .entry(id)
+            .and_modify(|existing| {
+                for field in effect.implemented_fields.drain(..) {
+                    if !existing.implemented_fields.contains(&field) {
+                        existing.implemented_fields.push(field);
+                    }
+                }
+                for field in effect.pattern_fields.drain(..) {
+                    if !existing.pattern_fields.contains(&field) {
+                        existing.pattern_fields.push(field);
+                    }
+                }
+                existing.source_lines.extend(effect.source_lines.iter().copied());
+            })
+            .or_insert(effect);
+    }
+}
+
 /// Extract const effect ID declaration like `const FADE_ID: &str = "com.alightcreative...";`
 /// Returns (constant_name, effect_id)
 fn extract_const_effect_id(trimmed: &str) -> Option<(String, String)> {
@@ -491,21 +552,11 @@ mod tests {
 
     #[test]
     fn test_scan_effects() {
-        // effects.rs was refactored into a directory with sub-files
-        let effect_files = [
-            "src/scene/effects/common.rs",
-            "src/scene/effects/other.rs",
-            "src/scene/effects/repeat.rs",
-        ];
-
-        let mut all_results: HashMap<String, EffectImpl> = HashMap::new();
-        for file in &effect_files {
-            let path = Path::new(file);
-            if path.exists() {
-                let results = scan_effects_rs(path).unwrap();
-                all_results.extend(results);
-            }
-        }
+        let effects_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("src/scene/effects");
+        let all_results = scan_effects_dir(&effects_dir).unwrap();
         assert!(!all_results.is_empty());
 
         // 验证 transform2 效果 / Verify transform2 effect

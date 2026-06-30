@@ -8,12 +8,15 @@
 //! 构建运行时要消费的完整 `AmProject` 资源。
 
 use std::collections::{HashMap, HashSet};
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use bevy::asset::LoadContext;
 use bevy::asset::io::Reader;
 use bevy::prelude::*;
+use bevy_alight_motion_core::loader::{
+    RawProjectContent, read_amproj_archive, read_amproj_directory, read_xml_bytes,
+};
 
 use crate::error::AmError;
 use crate::loader::AmProject;
@@ -21,12 +24,6 @@ use crate::loader::font_loading::{load_embedded_fonts, resolve_google_fonts};
 use crate::loader::image_loading::load_embedded_images;
 use crate::loader::override_config::AmProjectOverride;
 use crate::schema::AmScene;
-
-struct RawProjectContent {
-    scene: AmScene,
-    embedded_images: HashMap<String, Vec<u8>>,
-    embedded_fonts: HashMap<String, Vec<u8>>,
-}
 
 pub(super) async fn load_asset(
     reader: &mut dyn Reader,
@@ -75,49 +72,6 @@ fn resolve_asset_fs_path(asset_path: &Path) -> PathBuf {
     base.join("assets").join(asset_path)
 }
 
-fn read_amproj_archive(bytes: &[u8]) -> Result<RawProjectContent, AmError> {
-    let cursor = Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(cursor)?;
-
-    let mut xml_content = None;
-    let mut embedded_images = HashMap::new();
-    let mut embedded_fonts = HashMap::new();
-
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
-        let name = match std::str::from_utf8(file.name_raw()) {
-            Ok(utf8_name) => utf8_name.to_string(),
-            Err(_) => file.name().to_string(),
-        };
-
-        if name.ends_with(".xml") {
-            let mut content = String::new();
-            file.read_to_string(&mut content)?;
-            xml_content = Some(content);
-        } else if is_supported_image(&name) {
-            let mut data = Vec::new();
-            file.read_to_end(&mut data)?;
-            let uri = format!("amproj:{}", name);
-            debug!("Loaded embedded image: {}", uri);
-            embedded_images.insert(uri, data);
-        } else if is_supported_font(&name) {
-            let mut data = Vec::new();
-            file.read_to_end(&mut data)?;
-            embedded_fonts.insert(name, data);
-        }
-    }
-
-    let xml_content = xml_content
-        .ok_or_else(|| AmError::InvalidFormat("No XML file found in amproj archive".to_string()))?;
-    let scene: AmScene = quick_xml::de::from_str(&xml_content)?;
-
-    Ok(RawProjectContent {
-        scene,
-        embedded_images,
-        embedded_fonts,
-    })
-}
-
 async fn load_amproj_dir(
     dir_path: &Path,
     load_context: &mut LoadContext<'_>,
@@ -126,47 +80,6 @@ async fn load_amproj_dir(
     let project = build_project(content, load_context, Some(dir_path))?;
     info!("Loaded amproj directory: {:?}", dir_path);
     Ok(project)
-}
-
-fn read_amproj_directory(dir_path: &Path) -> Result<RawProjectContent, AmError> {
-    let mut xml_content = None;
-    let mut embedded_images = HashMap::new();
-    let mut embedded_fonts = HashMap::new();
-
-    let entries = std::fs::read_dir(dir_path)
-        .map_err(|e| AmError::InvalidFormat(format!("Failed to read amproj directory: {}", e)))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-        if name.ends_with(".xml") {
-            let content = std::fs::read_to_string(&path)
-                .map_err(|e| AmError::InvalidFormat(format!("Failed to read XML file: {}", e)))?;
-            xml_content = Some(content);
-        } else if is_supported_image(name) {
-            let data = std::fs::read(&path)
-                .map_err(|e| AmError::InvalidFormat(format!("Failed to read image file: {}", e)))?;
-            let uri = format!("amproj:{}", name);
-            debug!("Loaded image from directory: {}", uri);
-            embedded_images.insert(uri, data);
-        } else if is_supported_font(name) {
-            let data = std::fs::read(&path)
-                .map_err(|e| AmError::InvalidFormat(format!("Failed to read font file: {}", e)))?;
-            embedded_fonts.insert(name.to_string(), data);
-        }
-    }
-
-    let xml_content = xml_content.ok_or_else(|| {
-        AmError::InvalidFormat("No XML file found in amproj directory".to_string())
-    })?;
-    let scene: AmScene = quick_xml::de::from_str(&xml_content)?;
-
-    Ok(RawProjectContent {
-        scene,
-        embedded_images,
-        embedded_fonts,
-    })
 }
 
 fn build_project(
@@ -253,8 +166,12 @@ fn apply_directory_image_aliases(
 }
 
 fn load_xml(bytes: &[u8]) -> Result<AmProject, AmError> {
-    let content = String::from_utf8_lossy(bytes);
-    let scene: AmScene = quick_xml::de::from_str(&content)?;
+    let content = read_xml_bytes(bytes)?;
+    let RawProjectContent {
+        scene,
+        embedded_images,
+        embedded_fonts,
+    } = content;
 
     let validation_report = crate::validation::ValidationReport::validate(&scene);
     #[cfg(not(target_arch = "wasm32"))]
@@ -267,19 +184,8 @@ fn load_xml(bytes: &[u8]) -> Result<AmProject, AmError> {
         images: HashMap::new(),
         fonts: HashMap::new(),
         font_metrics: HashMap::new(),
-        embedded_images: HashMap::new(),
-        embedded_fonts: HashMap::new(),
+        embedded_images,
+        embedded_fonts,
         validation_report,
     })
-}
-
-fn is_supported_image(name: &str) -> bool {
-    name.ends_with(".png")
-        || name.ends_with(".jpg")
-        || name.ends_with(".jpeg")
-        || name.ends_with(".webp")
-}
-
-fn is_supported_font(name: &str) -> bool {
-    name.ends_with(".ttf") || name.ends_with(".otf")
 }

@@ -22,14 +22,14 @@ use std::path::Path;
 fn main() {
     let output_dir = Path::new("doc");
     let test_results_path = Path::new(DEFAULT_TEST_RESULTS_PATH);
-    let effects_rs_path = Path::new("src/scene/effects.rs");
+    let effects_rs_path = Path::new("src/scene/effects");
     let assets_dir = Path::new("assets");
 
     println!("正在生成文档...");
     println!("Generating documentation...\n");
 
     // 扫描代码实现状态 / Scan code implementation status
-    let impl_status = match impl_scanner::scan_effects_rs(effects_rs_path) {
+    let impl_status = match impl_scanner::scan_effects_dir(effects_rs_path) {
         Ok(status) => {
             println!("✅ 已扫描代码实现状态 / Implementation status scanned");
             println!(
