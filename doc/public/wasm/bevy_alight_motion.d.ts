@@ -2,6 +2,28 @@
 /* eslint-disable */
 
 /**
+ * Chroma subsampling format
+ */
+export enum ChromaSampling {
+    /**
+     * Both vertically and horizontally subsampled.
+     */
+    Cs420 = 0,
+    /**
+     * Horizontally subsampled.
+     */
+    Cs422 = 1,
+    /**
+     * Not subsampled.
+     */
+    Cs444 = 2,
+    /**
+     * Monochrome.
+     */
+    Cs400 = 3,
+}
+
+/**
  * Download runtime logs as a text file
  * 下载运行时日志为文本文件 (兼容移动端)
  */
@@ -87,12 +109,12 @@ export interface InitOutput {
     readonly seek: (a: number) => void;
     readonly start_app: () => void;
     readonly wasm_init: () => void;
-    readonly wasm_bindgen__closure__destroy__h07aa81d6da615279: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__h38046e54fe5330f7: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__hf8ac97678b257160: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h58816ab24383e09a: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h2f7f4daf63d4d5ba: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h6bf14f86a9d7779d: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h4e87177147f916d8: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h0447ceee9178dc25: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__he281c57cfff14ae6: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h9c70abf454397167: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h151d69213d154004: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h8006ac1650f1946c: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __externref_table_alloc: () => number;

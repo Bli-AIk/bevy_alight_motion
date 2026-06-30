@@ -386,9 +386,10 @@ dependencies = [
 
 [[package]]
 name = "bevy_alight_motion"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bevy",
+ "bevy_alight_motion_core",
  "chrono",
  "console_error_panic_hook",
  "cosmic-text",
@@ -402,6 +403,22 @@ dependencies = [
  "toml",
  "ttf-parser",
  "wasm-bindgen",
+ "web-sys",
+ "zip",
+]
+
+[[package]]
+name = "bevy_alight_motion_core"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "glam",
+ "log",
+ "owo-colors",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "web-sys",
  "zip",
 ]

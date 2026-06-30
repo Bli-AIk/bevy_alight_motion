@@ -1,6 +1,6 @@
 {
-  "build_time": "2026-03-11T04:46:41Z",
-  "git_hash": "b9623d3",
+  "build_time": "2026-06-30T09:56:35Z",
+  "git_hash": "cc3ce2e",
   "git_branch": "main",
-  "wasm_size_bytes": 25628864
+  "wasm_size_bytes": 26545759
 }
