@@ -21,11 +21,13 @@ exclude = [
     "wasm/*",
     "debug_comparison/*",
     "assets/projects/*",
+    # am_core is a separate crate published independently
+    "am_core/*",
 ]
 autoexamples = false
 
 [dependencies]
-bevy_alight_motion_core = { path = "am_core" }
+bevy_alight_motion_core = { path = "am_core", version = "0.4.0" }
 bevy = { version = "0.18", default-features = false, features = [
     "std",
     "multi_threaded",
