@@ -353,19 +353,20 @@ fn merge_effect_impls(
         target
             .entry(id)
             .and_modify(|existing| {
-                for field in effect.implemented_fields.drain(..) {
-                    if !existing.implemented_fields.contains(&field) {
-                        existing.implemented_fields.push(field);
-                    }
-                }
-                for field in effect.pattern_fields.drain(..) {
-                    if !existing.pattern_fields.contains(&field) {
-                        existing.pattern_fields.push(field);
-                    }
-                }
+                extend_unique_fields(&mut existing.implemented_fields, effect.implemented_fields.drain(..));
+                extend_unique_fields(&mut existing.pattern_fields, effect.pattern_fields.drain(..));
                 existing.source_lines.extend(effect.source_lines.iter().copied());
             })
             .or_insert(effect);
+    }
+}
+
+fn extend_unique_fields(target: &mut Vec<String>, source: impl Iterator<Item = String>) {
+    for field in source {
+        if target.contains(&field) {
+            continue;
+        }
+        target.push(field);
     }
 }
 
