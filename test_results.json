@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-19T15:02:51.283645+08:00",
+  "timestamp": "2026-06-30T16:41:48.762616+08:00",
   "summary": {
     "passed": 201,
     "warnings": 0,
@@ -170,7 +170,7 @@
     },
     "effects/echo-keyframes/basic": {
       "status": "fail",
-      "avg_similarity": 0.9703
+      "avg_similarity": 0.9717
     },
     "effects/enlarge-bg/exposure-gamma-layer/test": {
       "status": "fail",
@@ -280,10 +280,11 @@
     },
     "effects/linear-repeat/mask_nested": {
       "status": "fail",
-      "avg_similarity": 0.8855
+      "avg_similarity": 0.8886
     },
     "effects/linear-repeat/random": {
-      "status": "fail"
+      "status": "fail",
+      "avg_similarity": 0.9646
     },
     "effects/linear-repeat/random_generated1/1": {
       "status": "fail",
