@@ -1,6 +1,6 @@
 [package]
 name = "bevy_alight_motion"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 authors = ["Bli-AIk <haikun2333@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -21,13 +21,11 @@ exclude = [
     "wasm/*",
     "debug_comparison/*",
     "assets/projects/*",
-    # am_core is a separate crate published independently
-    "am_core/*",
 ]
 autoexamples = false
 
 [dependencies]
-bevy_alight_motion_core = { path = "am_core", version = "0.5.0" }
+amproj = { path = "../amproj", version = "0.5.0" }
 bevy = { version = "0.18", default-features = false, features = [
     "std",
     "multi_threaded",
@@ -81,7 +79,7 @@ optional = true
 [features]
 default = []
 debug = ["bevy-inspector-egui"]
-ffi = ["bevy_alight_motion_core/ffi"]
+ffi = ["amproj/ffi"]
 player-brp = ["dep:bevy_brp_extras", "bevy/bevy_remote"]
 video-debug = []
 video-comparison = []
