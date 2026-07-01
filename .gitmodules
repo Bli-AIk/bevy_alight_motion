@@ -1,3 +1,3 @@
-[submodule "amproj"]
-	path = amproj
+[submodule "crates/amproj"]
+	path = crates/amproj
 	url = git@github.com:Bli-AIk/amproj.git
