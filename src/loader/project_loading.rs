@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use bevy::asset::LoadContext;
 use bevy::asset::io::Reader;
 use bevy::prelude::*;
-use bevy_alight_motion_core::loader::{
+use amproj::loader::{
     RawProjectContent, read_amproj_archive, read_amproj_directory, read_xml_bytes,
 };
 

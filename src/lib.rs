@@ -54,7 +54,7 @@ pub mod sdf;
 pub mod sdf_material;
 pub mod validation;
 
-pub use bevy_alight_motion_core::{define_builtin, define_effect, define_field};
+pub use amproj::{define_builtin, define_effect, define_field};
 
 /// Prelude module for convenient imports.
 pub mod prelude {
