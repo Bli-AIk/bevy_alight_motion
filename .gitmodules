@@ -1,0 +1,3 @@
+[submodule "amproj"]
+	path = amproj
+	url = git@github.com:Bli-AIk/amproj.git

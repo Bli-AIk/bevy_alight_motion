@@ -21,11 +21,13 @@ exclude = [
     "wasm/*",
     "debug_comparison/*",
     "assets/projects/*",
+    # amproj is a separate crate published independently
+    "amproj/*",
 ]
 autoexamples = false
 
 [dependencies]
-amproj = { path = "../amproj", version = "0.1.0" }
+amproj = { path = "amproj", version = "0.1.0" }
 bevy = { version = "0.18", default-features = false, features = [
     "std",
     "multi_threaded",
