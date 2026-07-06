@@ -59,7 +59,7 @@ fontdb = "0.23"
 cosmic-text = "0.19"
 owo-colors = "4.3"
 bevy-inspector-egui = { version = "0.36.0", optional = true }
-bevy_brp_extras = { version = "0.18", optional = true }
+bevy_brp_extras = { version = "0.20", optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
 image = "0.25"
