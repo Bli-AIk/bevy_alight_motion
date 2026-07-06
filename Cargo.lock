@@ -148,6 +148,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "amproj"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "glam",
+ "log",
+ "owo-colors",
+ "quick-xml 0.39.4",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "web-sys",
+ "zip",
+]
+
+[[package]]
 name = "android-activity"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -525,11 +541,11 @@ dependencies = [
 
 [[package]]
 name = "bevy_alight_motion"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
+ "amproj",
  "bevy",
  "bevy-inspector-egui",
- "bevy_alight_motion_core",
  "bevy_brp_extras",
  "chrono",
  "console_error_panic_hook",
@@ -537,7 +553,7 @@ dependencies = [
  "fontdb",
  "image",
  "owo-colors",
- "quick-xml 0.39.2",
+ "quick-xml 0.41.0",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -545,22 +561,6 @@ dependencies = [
  "tracing-tracy",
  "ttf-parser",
  "wasm-bindgen",
- "web-sys",
- "zip",
-]
-
-[[package]]
-name = "bevy_alight_motion_core"
-version = "0.4.0"
-dependencies = [
- "chrono",
- "glam",
- "log",
- "owo-colors",
- "quick-xml 0.39.2",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
  "web-sys",
  "zip",
 ]
@@ -4774,9 +4774,19 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.39.2"
+version = "0.39.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
+checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
+dependencies = [
+ "memchr",
+ "serde",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
  "serde",
